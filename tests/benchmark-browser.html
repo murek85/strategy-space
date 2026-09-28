@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="pl">
+	<head>
+		<meta charset="utf-8" />
+		<title>Pomiar płynności bitwy</title>
+		<style>
+			body {
+				background: #0b141c;
+				color: #d7e4e6;
+				font: 14px "Segoe UI", sans-serif;
+				padding: 16px;
+				margin: 0;
+			}
+			button,
+			select {
+				font: inherit;
+				margin-right: 8px;
+			}
+			.board {
+				position: relative;
+				margin: 10px 0;
+				border: 1px solid #33505a;
+			}
+			.board canvas#game {
+				position: absolute;
+				inset: 0;
+				width: 100%;
+				height: 100%;
+			}
+			table {
+				border-collapse: collapse;
+				margin-top: 8px;
+			}
+			td,
+			th {
+				border: 1px solid #33505a;
+				padding: 4px 10px;
+				text-align: right;
+			}
+			th:first-child,
+			td:first-child {
+				text-align: left;
+			}
+			#minimap {
+				display: none;
+			}
+		</style>
+	</head>
+	<body>
+		<p>
+			Prawdziwa pętla gry: symulacja bitwy (ok. 60 jednostek, dosyłanych na bieżąco, nocna ulewa z piorunami na Świetlistym Gąszczu) i rysowanie w
+			<code>requestAnimationFrame</code>, kolejno w trybach Canvas 2D, WebGL i WebGPU. Mierzone są rzeczywiste odstępy między klatkami (także praca karty
+			graficznej) i czas rysowania na procesorze. Karta musi być widoczna przez cały pomiar. Wyniki zależą od komputera — tę stronę można otworzyć na
+			dowolnym sprzęcie (<code>npm start</code>, potem <code>/tests/benchmark-browser.html</code>).
+		</p>
+		<label>Plansza <select id="size">
+				<option value="window">jak okno</option>
+				<option value="1280x720">1280 × 720</option>
+				<option value="1920x1080" selected>1920 × 1080</option>
+			</select></label>
+		<label>Czas na tryb <select id="seconds">
+				<option value="6">6 s</option>
+				<option value="10" selected>10 s</option>
+				<option value="20">20 s</option>
+			</select></label>
+		<button id="run">Zmierz</button>
+		<div id="out" role="status"></div>
+		<div class="board" id="board"><canvas id="game"></canvas></div>
+		<canvas id="minimap" width="220" height="135"></canvas>
+		<script src="../engine.js"></script>
+		<script src="../advanced-rules.js"></script>
+		<script src="../army-rules.js"></script>
+		<script src="../campaign-act2.js"></script>
+		<script src="../scenario-modes.js"></script>
+		<script src="../frontier-maps.js"></script>
+		<script src="../themed-maps.js"></script>
+		<script src="../support-rules.js"></script>
+		<script src="../scenario-setup.js"></script>
+		<script src="../scenario-challenges.js"></script>
+		<script src="../enemy-ai.js"></script>
+		<script src="../teams-rules.js"></script>
+		<script src="../factions-rules.js"></script>
+		<script src="../swarm-rules.js"></script>
+		<script src="../campaign-act3.js"></script>
+		<script src="../scene-fx.js"></script>
+		<script src="../art.js"></script>
+		<script src="../planet-art.js"></script>
+		<script src="../advanced-art.js"></script>
+		<script src="../act2-art.js"></script>
+		<script src="../support-art.js"></script>
+		<script src="../fx-art.js"></script>
+		<script src="../faction-art.js"></script>
+		<script src="../swarm-art.js"></script>
+		<script src="../map-art.js"></script>
+		<script src="../themed-art.js"></script>
+		<script src="../render-canvas.js"></script>
+		<script src="../vendor/pixi.min.js"></script>
+		<script src="../webgl/model-light.js"></script>
+		<script src="../webgl/terrain-height.js"></script>
+		<script src="../webgl/ground-native.js"></script>
+		<script src="../webgl/models-native.js"></script>
+		<script src="../webgl/fauna-native.js"></script>
+		<script src="../webgl/canvas-replay.js"></script>
+		<script src="../webgl/pixi-game-renderer.js"></script>
+		<script>
+			const $ = (id) => document.getElementById(id),
+				canvas = $("game"),
+				board = $("board"),
+				mini = $("minimap"),
+				canvasRenderer = createCanvasRenderer(canvas, mini),
+				TYPES = ["trooper", "rocket", "tank", "trooper", "raider", "worker"];
+			// A battle that keeps going: two armies meet in the middle and fresh units keep arriving.
+			function battle() {
+				const g = new RTS.Game(11, "lumen");
+				g.configureSkirmish({ players: 2 });
+				const cx = g.W / 2,
+					cy = g.H / 2;
+				g.explored.fill(1);
+				// Night storm, whatever the clock says.
+				Object.defineProperty(g, "night", { value: 1, configurable: true });
+				const storm = { kind: "rain", name: "Ulewa", intensity: 1, until: 0, remaining: 50, cycle: 0 };
+				Object.defineProperty(g, "weather", { get: () => storm, configurable: true });
+				const reinforce = () => {
+					const alive = g.entities.filter((e) => TYPES.includes(e.type) && e.hp > 0);
+					for (let team = 0; team < 2; team++) {
+						const mine = alive.filter((e) => e.team === team).length;
+						for (let i = mine; i < 30; i++) {
+							const e = g.spawn(TYPES[i % TYPES.length], team, cx + (team ? 360 : -360) + (Math.random() - 0.5) * 160, cy + (Math.random() - 0.5) * 300);
+							g.command([e.id], cx + (team ? -200 : 200), cy + (Math.random() - 0.5) * 200);
+						}
+					}
+				};
+				reinforce();
+				return { g, cx, cy, reinforce };
+			}
+			function sizeBoard() {
+				const choice = $("size").value,
+					[w, h] = choice === "window" ? [window.innerWidth - 40, Math.round((window.innerWidth - 40) * 0.5)] : choice.split("x").map(Number);
+				board.style.width = w + "px";
+				board.style.height = h + "px";
+				const dpr = Math.min(window.devicePixelRatio || 1, 2);
+				canvas.width = Math.round(w * dpr);
+				canvas.height = Math.round(h * dpr);
+				return { width: w, height: h, dpr };
+			}
+			const frameOnce = () => new Promise((r) => requestAnimationFrame(r));
+			async function measure(name, make, seconds) {
+				const size = sizeBoard(),
+					fight = battle(),
+					g = fight.g;
+				let renderer;
+				try {
+					renderer = await make();
+				} catch (error) {
+					return { name, error: String(error) };
+				}
+				renderer.setGame(g);
+				const camera = { x: fight.cx, y: fight.cy, zoom: 2.2 },
+					scale = Math.min(size.width / g.W, size.height / g.H) * camera.zoom,
+					view = () => ({ game: g, width: size.width, height: size.height, dpr: size.dpr, scale, camera, selected: new Set(), colors: [g.colorFor(0), "#f07d78", "#e4b968", "#819dff", "#d2a1ef"], mouse: { x: 0, y: 0 }, drag: null, building: false, wallDrag: null });
+				let last = performance.now(),
+					accumulator = 0,
+					fog = 0;
+				const intervals = [],
+					cpu = [],
+					start = performance.now(),
+					warm = 2000;
+				while (performance.now() - start < warm + seconds * 1000) {
+					const now = await frameOnce(),
+						dt = Math.min((now - last) / 1000, 0.1);
+					if (performance.now() - start > warm) intervals.push(now - last);
+					last = now;
+					accumulator += dt;
+					for (let steps = 0; accumulator >= 1 / 30 && steps < 4; steps++) {
+						g.tick(1 / 30);
+						accumulator -= 1 / 30;
+					}
+					if ((fog += dt) > 0.25) {
+						fight.reinforce();
+						g.explored.fill(1);
+						renderer.refreshFog(g);
+						fog = 0;
+					}
+					const t0 = performance.now();
+					renderer.render(view());
+					if (performance.now() - start > warm) cpu.push(performance.now() - t0);
+				}
+				const units = g.entities.filter((e) => e.hp > 0 && RTS.TYPES[e.type].speed).length,
+					kind = renderer.kind;
+				renderer.destroy?.();
+				intervals.sort((a, b) => a - b);
+				cpu.sort((a, b) => a - b);
+				const mean = (a) => a.reduce((s, v) => s + v, 0) / a.length,
+					pick = (a, q) => a[Math.min(a.length - 1, Math.floor(a.length * q))];
+				return {
+					name: name + (kind && kind !== name.toLowerCase() && name !== "Canvas 2D" ? ` (${kind})` : ""),
+					fps: 1000 / mean(intervals),
+					p95: pick(intervals, 0.95),
+					slow: (100 * intervals.filter((v) => v > 20).length) / intervals.length,
+					cpu: mean(cpu),
+					cpu95: pick(cpu, 0.95),
+					units,
+					size: `${size.width}×${size.height} @${size.dpr}`,
+				};
+			}
+			function show(rows) {
+				$("out").innerHTML =
+					"<table><tr><th>Tryb</th><th>kl./s</th><th>95% klatek do</th><th>klatki &gt; 20 ms</th><th>rysowanie CPU (śr. / 95%)</th><th>jednostek</th><th>plansza</th></tr>" +
+					rows
+						.map((r) =>
+							r.error
+								? `<tr><td>${r.name}</td><td colspan="6">niedostępny: ${r.error}</td></tr>`
+								: `<tr><td>${r.name}</td><td>${r.fps.toFixed(1)}</td><td>${r.p95.toFixed(1)} ms</td><td>${r.slow.toFixed(1)}%</td><td>${r.cpu.toFixed(2)} / ${r.cpu95.toFixed(2)} ms</td><td>${r.units}</td><td>${r.size}</td></tr>`,
+						)
+						.join("") +
+					"</table>";
+			}
+			window.benchmark = async () => {
+				const seconds = +$("seconds").value,
+					rows = [];
+				for (const [name, make] of [
+					["Canvas 2D", async () => canvasRenderer],
+					["WebGL", () => createPixiGameRenderer({ gameCanvas: canvas, canvasRenderer, preference: "webgl" })],
+					["WebGPU", () => createPixiGameRenderer({ gameCanvas: canvas, canvasRenderer, preference: "webgpu" })],
+				]) {
+					$("out").textContent = "Pomiar: " + name + "…";
+					rows.push(await measure(name, make, seconds));
+					show(rows);
+				}
+				return rows;
+			};
+			$("run").onclick = () => window.benchmark();
+		</script>
+	</body>
+</html>

@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="pl">
+	<meta charset="utf-8" /><title>Test drzewa rozwoju</title
+	><link rel="stylesheet" href="../development.css" /><style>
+		body {
+			background: #13212e;
+			color: #eee;
+			font: 15px system-ui;
+			padding: 20px;
+		}
+		button {
+			padding: 12px;
+		}
+		pre {
+			white-space: pre-wrap;
+		}
+	</style>
+	<button id="run">Testuj drzewo</button
+	><button id="preview">Otwórz podgląd</button>
+	<pre id="result">Gotowy</pre>
+	<script src="../engine.js"></script>
+	<script src="../advanced-rules.js"></script>
+	<script src="../army-rules.js"></script>
+	<script src="../support-rules.js"></script>
+	<script src="../scenario-setup.js"></script>
+	<script src="../scenario-challenges.js"></script>
+	<script src="../enemy-ai.js"></script>
+	<script src="../teams-rules.js"></script>
+	<script src="../factions-rules.js"></script>
+	<script src="../swarm-rules.js"></script>
+	<script src="../campaign-act3.js"></script>
+	<script src="../art.js"></script>
+	<script src="../planet-art.js"></script>
+	<script src="../advanced-art.js"></script>
+	<script src="../act2-art.js"></script>
+	<script src="../support-art.js"></script>
+	<script src="../fx-art.js"></script>
+	<script src="../faction-art.js"></script>
+	<script src="../swarm-art.js"></script>
+	<script src="../development.js"></script>
+	<script>
+		const g = new RTS.Game(42, "solar");
+		g.configureSkirmish({ faction: "colonies" });
+		g.credits = 5000;
+		g.gas = 500;
+		g.crystals = 500;
+		g.spawn("lab", 0, 900, 900);
+		g.spawn("depot", 0, 1100, 900);
+		let paused = false,
+			placed = null;
+		const view = new DevelopmentTree.View({
+			game: () => g,
+			freeze: () => {
+				const p = paused;
+				paused = true;
+				return p;
+			},
+			resume: (p) => {
+				paused = p;
+			},
+			changed: () => {},
+			build: (id) => (placed = id),
+		});
+		document.querySelector("#preview").onclick = () => view.open();
+		document.querySelector("#run").onclick = async () => {
+			const lines = [],
+				check = (name, value) => {
+					if (!value) throw Error(name);
+					lines.push("OK " + name);
+				};
+			try {
+				view.open();
+				check(
+					"Otwarcie pauzuje i pokazuje modal",
+					view.active && paused,
+				);
+				view.navigate("research:cargo");
+				const before = g.credits;
+				document.querySelector('[data-dev-action="start"]').click();
+				check(
+					"Badanie z drzewa odejmuje koszt",
+					g.research?.kind === "cargo" && g.credits === before - 150,
+				);
+				check(
+					"Widoczny postęp",
+					!!document.querySelector("#development-detail progress"),
+				);
+				document.querySelector('[data-dev-action="cancel"]').click();
+				check(
+					"Anulowanie zwraca koszt",
+					!g.research && g.credits === before,
+				);
+				view.navigate("unit:trooper");
+				document.querySelector('[data-dev-action="start"]').click();
+				check(
+					"Jednostka trafia do kolejki",
+					g.queue.some((q) => q.type === "trooper"),
+				);
+				view.navigate("research:guidance");
+				document.querySelector("[data-dev-requirement]").click();
+				check(
+					"Wymaganie prowadzi do laboratorium",
+					view.selected === "building:lab",
+				);
+				for (const tab of ["economy", "infrastructure", "army"]) {
+					view.selectTab(tab);
+					for (const branch of DevelopmentTree.groups(g, tab))
+						for (const key of [branch.root, ...branch.leaves]) {
+							view.selected = key;
+							view.render();
+							const c = document.querySelector(
+								"#development-preview",
+							);
+							check(
+								"Model " + key,
+								c
+									.getContext("2d")
+									.getImageData(0, 0, c.width, c.height)
+									.data.some((v, i) => i % 4 === 3 && v > 0),
+							);
+						}
+				}
+				view.navigate("building:reactor");
+				document.querySelector('[data-dev-action="start"]').click();
+				await new Promise((resolve) => setTimeout(resolve, 0));
+				check(
+					"Budowa wraca na planszę i przywraca czas",
+					!view.active && !paused && placed === "reactor",
+				);
+				paused = true;
+				view.open();
+				view.close();
+				await new Promise((resolve) => setTimeout(resolve, 0));
+				check("Zachowana wcześniejsza pauza", paused);
+				document.querySelector("#result").textContent =
+					"PASS — " + lines.length + "\n" + lines.join("\n");
+			} catch (e) {
+				view.close();
+				document.querySelector("#result").textContent =
+					"FAIL " + e.message + "\n" + lines.join("\n");
+			}
+		};
+	</script>
+</html>

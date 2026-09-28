@@ -1,0 +1,18 @@
+#game-pointer {
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 28px;
+	height: 34px;
+	z-index: 2147483647;
+	pointer-events: none;
+	filter: drop-shadow(0 1px 3px #000b);
+	will-change: transform;
+}
+#game-pointer[hidden] {
+	display: none;
+}
+html.software-cursor-active,
+html.software-cursor-active * {
+	cursor: none !important;
+}

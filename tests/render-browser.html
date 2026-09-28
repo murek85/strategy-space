@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="pl">
+	<head>
+		<meta charset="utf-8" />
+		<title>Test renderera Canvas 2D</title>
+		<style>
+			body {
+				background: #0b141c;
+				color: #d7e4e6;
+				font: 14px "Segoe UI", sans-serif;
+				padding: 16px;
+			}
+			button {
+				font: inherit;
+				margin-right: 8px;
+			}
+			canvas {
+				display: block;
+				margin: 10px 0;
+				border: 1px solid #33505a;
+				max-width: 100%;
+			}
+			#out p {
+				margin: 2px 0;
+			}
+			code {
+				color: #9fd8c8;
+			}
+		</style>
+	</head>
+	<body>
+		<p>
+			Renderer z <code>render-canvas.js</code> rysuje stałe sceny (różne mapy, noc i ulewa, efekty walki, zaznaczenie ze ścieżkami, prostokąt zaznaczania,
+			podgląd budowy, przeciąganie muru, punkt zbiórki, znaczniki kampanii, częściowa mgła). Sprawdzenia automatyczne: interfejs, niepusty obraz i
+			powtarzalność. Wzorzec obrazu zapisuje się w tej przeglądarce — porównanie wykrywa każdą zmianę pikseli po modyfikacji renderera.
+		</p>
+		<button id="run">Sprawdź renderer</button><button id="save">Zapisz wzorzec</button><button id="compare">Porównaj z wzorcem</button>
+		<div id="out" role="status"></div>
+		<canvas id="game" width="1130" height="522"></canvas>
+		<canvas id="minimap" width="220" height="135"></canvas>
+		<script src="../engine.js"></script>
+		<script src="../advanced-rules.js"></script>
+		<script src="../army-rules.js"></script>
+		<script src="../campaign-act2.js"></script>
+		<script src="../scenario-modes.js"></script>
+		<script src="../frontier-maps.js"></script>
+		<script src="../themed-maps.js"></script>
+		<script src="../support-rules.js"></script>
+		<script src="../scenario-setup.js"></script>
+		<script src="../scenario-challenges.js"></script>
+		<script src="../enemy-ai.js"></script>
+		<script src="../teams-rules.js"></script>
+		<script src="../factions-rules.js"></script>
+		<script src="../swarm-rules.js"></script>
+		<script src="../campaign-act3.js"></script>
+		<script src="../scene-fx.js"></script>
+		<script src="../art.js"></script>
+		<script src="../planet-art.js"></script>
+		<script src="../advanced-art.js"></script>
+		<script src="../act2-art.js"></script>
+		<script src="../support-art.js"></script>
+		<script src="../fx-art.js"></script>
+		<script src="../faction-art.js"></script>
+		<script src="../swarm-art.js"></script>
+		<script src="../map-art.js"></script>
+		<script src="../themed-art.js"></script>
+		<script src="../render-canvas.js"></script>
+		<script src="render-scenes.js"></script>
+		<script>
+			const $ = (id) => document.getElementById(id),
+				canvas = $("game"),
+				mini = $("minimap"),
+				renderer = createCanvasRenderer(canvas, mini),
+				KEY = "pogranicze-render-baseline-v1";
+			function draw(scene) {
+				const g = scene.game,
+					width = canvas.width,
+					height = canvas.height;
+				renderer.setGame(g);
+				renderer.refreshFog(g);
+				renderer.render({
+					game: g,
+					width,
+					height,
+					dpr: 1,
+					scale: Math.min(width / g.W, height / g.H) * scene.camera.zoom,
+					camera: scene.camera,
+					selected: new Set(scene.selected || []),
+					colors: [g.colorFor(0), "#f07d78", "#e4b968", "#819dff", "#d2a1ef"],
+					mouse: scene.mouse || { x: 0, y: 0 },
+					drag: scene.drag || null,
+					building: scene.building || false,
+					wallDrag: scene.wallDrag || null,
+				});
+				const hash = (data) => {
+					let h = 2166136261;
+					for (let i = 0; i < data.length; i++) h = Math.imul(h ^ data[i], 16777619);
+					return (h >>> 0).toString(16);
+				};
+				const pixels = canvas.getContext("2d").getImageData(0, 0, width, height).data;
+				let lit = 0;
+				for (let i = 3; i < pixels.length; i += 4000) if (pixels[i] > 0) lit++;
+				return { image: hash(pixels), mini: hash(mini.getContext("2d").getImageData(0, 0, mini.width, mini.height).data), lit };
+			}
+			function results() {
+				const list = renderScenes();
+				for (const s of list) draw(s); // warm the model caches first
+				return list.map((s) => ({ name: s.name, first: draw(s), second: draw(s) }));
+			}
+			const report = (rows, title) => ($("out").innerHTML = `<p>${rows.every((r) => r.ok) ? "PASS" : "FAIL"} — ${title}</p>` + rows.map((r) => `<p>${r.ok ? "OK" : "FAIL"} ${r.name}${r.note ? " — " + r.note : ""}</p>`).join(""));
+			$("run").onclick = () => {
+				const rows = [{ name: "interfejs: kind, fogCanvas, setGame, refreshFog, render", ok: renderer.kind === "canvas" && renderer.fogCanvas instanceof HTMLCanvasElement && ["setGame", "refreshFog", "render"].every((k) => typeof renderer[k] === "function") }];
+				for (const r of results()) rows.push({ name: r.name, ok: r.first.lit > 500 && r.first.image === r.second.image && r.first.mini === r.second.mini, note: `obraz ${r.first.image}, minimapa ${r.first.mini}` });
+				report(rows, "renderer Canvas 2D");
+			};
+			$("save").onclick = () => {
+				const data = Object.fromEntries(results().map((r) => [r.name, [r.first.image, r.first.mini]]));
+				try {
+					localStorage.setItem(KEY, JSON.stringify(data));
+					report([{ name: "Zapisano wzorzec " + Object.keys(data).length + " scen w tej przeglądarce", ok: true }], "wzorzec");
+				} catch {
+					report([{ name: "Brak dostępu do pamięci lokalnej", ok: false }], "wzorzec");
+				}
+			};
+			$("compare").onclick = () => {
+				let base = null;
+				try {
+					base = JSON.parse(localStorage.getItem(KEY));
+				} catch {}
+				if (!base) return report([{ name: "Najpierw zapisz wzorzec", ok: false }], "porównanie");
+				report(
+					results().map((r) => ({ name: r.name, ok: base[r.name]?.[0] === r.first.image && base[r.name]?.[1] === r.first.mini, note: base[r.name] ? (base[r.name][0] === r.first.image ? "" : "obraz się zmienił") : "brak we wzorcu" })),
+					"porównanie z wzorcem",
+				);
+			};
+		</script>
+	</body>
+</html>

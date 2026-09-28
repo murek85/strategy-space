@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="pl">
+	<meta charset="utf-8" /><title>Etap D — pomiar rysowania</title
+	><style>
+		body {
+			background: #14252b;
+			color: #def;
+			font: 14px system-ui;
+		}
+		canvas {
+			max-width: 100%;
+		}
+		button {
+			padding: 12px;
+		}
+	</style>
+	<h1>Etap D · 200 jednostek, pogoda, etapy budowy</h1>
+	<button id="run">Uruchom pomiar</button>
+	<pre id="result">
+Pomiar obejmuje wywołania Canvas CPU, bez symulacji i czasu GPU.</pre
+	>
+	<canvas width="1200" height="700"></canvas>
+	<script src="../engine.js"></script>
+	<script src="../advanced-rules.js"></script>
+	<script src="../army-rules.js"></script>
+	<script src="../support-rules.js"></script>
+	<script src="../scenario-setup.js"></script>
+	<script src="../scenario-challenges.js"></script>
+	<script src="../enemy-ai.js"></script>
+	<script src="../teams-rules.js"></script>
+	<script src="../factions-rules.js"></script>
+	<script src="../swarm-rules.js"></script>
+	<script src="../campaign-act3.js"></script>
+	<script src="../scene-fx.js"></script>
+	<script src="../art.js"></script>
+	<script src="../planet-art.js"></script>
+	<script src="../advanced-art.js"></script>
+	<script>
+		const g = new RTS.Game(42, "solar"),
+			c = document.querySelector("canvas").getContext("2d"),
+			out = document.querySelector("#result");
+		g.entities = [];
+		g.isVisible = () => true;
+		for (let i = 0; i < 200; i++)
+			g.spawn(
+				i % 4 ? "trooper" : "transport",
+				i % 2,
+				30 + (i % 25) * 46,
+				200 + Math.floor(i / 25) * 55,
+			);
+		const cache = document.createElement("canvas");
+		cache.width = RTS.W;
+		cache.height = RTS.H;
+		const tc = cache.getContext("2d");
+		tc.fillStyle = "#807852";
+		tc.fillRect(0, 0, cache.width, cache.height);
+		PlanetArt.terrain(tc, g);
+		SceneFX.terrain(tc, g);
+		function draw(t) {
+			g.time = t;
+			c.drawImage(cache, 0, 0);
+			for (const e of g.entities) {
+				c.save();
+				c.translate(e.x, e.y);
+				e.path = [{ x: 1, y: 1 }];
+				if (!AdvancedArt.body(c, e, t, "dust"))
+					BoardArt.body(c, e, t, null, false);
+				c.restore();
+			}
+			for (let i = 0; i < 3; i++) {
+				const s = RTS.TYPES.factory,
+					e = {
+						type: "factory",
+						team: 0,
+						hp: s.hp,
+						maxHp: s.hp,
+						id: 1000 + i,
+						constructionLeft:
+							s.construction * (1 - [0.1, 0.45, 0.8][i]),
+					};
+				c.save();
+				c.translate(150 + i * 280, 95);
+				if (!SceneFX.construction(c, e))
+					BoardArt.body(c, e, t, null, false);
+				if (i) BoardArt.scaffold(c, e, t);
+				c.restore();
+				c.fillStyle = "#fff";
+				c.fillText(
+					["Fundament", "Szkielet", "Wykończenie"][i],
+					110 + i * 280,
+					155,
+				);
+			}
+			PlanetArt.atmosphere(c, g, 1200, 700);
+		}
+		draw(110);
+		document.querySelector("#run").onclick = async () => {
+			const button = document.querySelector("#run");
+			button.disabled = true;
+			out.textContent = "Pomiar w toku…";
+			const old = SceneFX.options.particles,
+				lines = [];
+			try {
+				for (const quality of ["high", "low"]) {
+					SceneFX.options.particles = quality;
+					const times = [];
+					for (let i = 0; i < 150; i++) {
+						await new Promise(requestAnimationFrame);
+						const start = performance.now();
+						draw(110 + i / 60);
+						const elapsed = performance.now() - start;
+						if (i >= 30) times.push(elapsed);
+					}
+					times.sort((a, b) => a - b);
+					lines.push(
+						`${quality}: średnia ${(times.reduce((a, b) => a + b, 0) / times.length).toFixed(2)} ms, p95 ${times[113].toFixed(2)} ms · 120 próbek`,
+					);
+				}
+				out.textContent =
+					lines.join("\n") +
+					"\nCanvas CPU, bez symulacji i czasu GPU.";
+			} catch (e) {
+				out.textContent = "BŁĄD: " + e.stack;
+			} finally {
+				SceneFX.options.particles = old;
+				button.disabled = false;
+			}
+		};
+	</script>
+</html>

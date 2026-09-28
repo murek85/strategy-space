@@ -1,0 +1,62 @@
+<!doctype html><meta charset="utf-8" /><title>Optyka nocy</title
+><style>
+	body {
+		background: #15232b;
+		color: #cde1e8;
+		font: 16px sans-serif;
+	}
+	canvas {
+		max-width: 100%;
+	}
+</style>
+<h1>Księżyc i światła lotnictwa</h1>
+<canvas id="optics" width="1000" height="420"></canvas>
+<p id="result"></p>
+<script src="../engine.js"></script>
+<script src="../advanced-rules.js"></script>
+<script src="../army-rules.js"></script>
+<script src="../support-rules.js"></script>
+<script src="../scenario-setup.js"></script>
+<script src="../scenario-challenges.js"></script>
+<script src="../enemy-ai.js"></script>
+<script src="../teams-rules.js"></script>
+<script src="../factions-rules.js"></script>
+<script src="../swarm-rules.js"></script>
+<script src="../campaign-act3.js"></script>
+<script src="../art.js"></script>
+<script src="../planet-art.js"></script>
+<script src="../advanced-art.js"></script>
+<script>
+	try {
+		const c = document.getElementById("optics").getContext("2d"),
+			g = new RTS.Game(42, "solar");
+		g.entities = [];
+		g.time = 180;
+		g.visible.fill(1);
+		c.fillStyle = "#536564";
+		c.fillRect(0, 0, 1000, 420);
+		for (const [type, x, y] of [
+			["interceptor", 260, 200],
+			["bomber", 470, 200],
+			["tank", 700, 200],
+		]) {
+			const e = g.spawn(type, 0, x, y);
+			e.angle = -0.3;
+			c.save();
+			c.translate(x, y);
+			if (!AdvancedArt.body(c, e, g.time, "dust"))
+				BoardArt.body(c, e, g.time, null, false);
+			c.restore();
+		}
+		PlanetArt.lighting(c, g, { x: 500, y: 210, w: 1000, h: 420 });
+		PlanetArt.atmosphere(c, g, 1000, 420);
+		c.fillStyle = "#cfdee3";
+		c.font = "16px sans-serif";
+		c.fillText("Myśliwiec: światła na skrzydłach", 135, 290);
+		c.fillText("Bombowiec", 430, 290);
+		c.fillText("Czołg: reflektor na ziemi", 650, 290);
+		document.getElementById("result").textContent = "PASS";
+	} catch (e) {
+		document.getElementById("result").textContent = "FAIL " + e.stack;
+	}
+</script>

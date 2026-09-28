@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="pl">
+	<meta charset="utf-8" /><title>Przegląd klimatu</title
+	><style>
+		body {
+			background: #16242c;
+			color: #d7e3df;
+			font: 15px system-ui;
+		}
+		section {
+			display: inline-block;
+			margin: 8px;
+		}
+		canvas {
+			display: block;
+			width: 480px;
+			height: 310px;
+		}
+	</style>
+	<h1>Pogoda, fauna i światła</h1>
+	<main></main>
+	<script src="../engine.js"></script>
+	<script src="../advanced-rules.js"></script>
+	<script src="../army-rules.js"></script>
+	<script src="../support-rules.js"></script>
+	<script src="../scenario-setup.js"></script>
+	<script src="../scenario-challenges.js"></script>
+	<script src="../enemy-ai.js"></script>
+	<script src="../teams-rules.js"></script>
+	<script src="../factions-rules.js"></script>
+	<script src="../swarm-rules.js"></script>
+	<script src="../campaign-act3.js"></script>
+	<script src="../art.js"></script>
+	<script src="../planet-art.js"></script>
+	<script>
+		for (const [id, time, label] of [
+			["solar", 0, "Dzień: ptaki i ryby"],
+			["solar", 180, "Noc: księżyc, gwiazdy i reflektory"],
+			["horizon", 119.1, "Burza piaskowa"],
+			["frost", 119.1, "Śnieżyca"],
+			["ember", 119.1, "Ulewa i błyskawica"],
+		]) {
+			const g = new RTS.Game(42, id);
+			g.time = time;
+			g.visible.fill(1);
+			const base = g.hq(0),
+				view = { x: base.x + 100, y: base.y, w: 800, h: 517 };
+			g.waters = [{ x: base.x + 250, y: base.y + 120, rx: 110, ry: 70 }];
+			const section = document.createElement("section");
+			section.textContent = label;
+			const canvas = document.createElement("canvas");
+			canvas.width = 480;
+			canvas.height = 310;
+			section.append(canvas);
+			document.querySelector("main").append(section);
+			const terrain = document.createElement("canvas");
+			terrain.width = RTS.W;
+			terrain.height = RTS.H;
+			const tc = terrain.getContext("2d");
+			tc.fillStyle =
+				id === "frost"
+					? "#526d78"
+					: id === "ember"
+						? "#383034"
+						: "#766847";
+			tc.fillRect(0, 0, RTS.W, RTS.H);
+			PlanetArt.terrain(tc, g);
+			const c = canvas.getContext("2d");
+			c.save();
+			c.scale(0.6, 0.6);
+			c.translate(-view.x + 400, -view.y + 258.5);
+			c.drawImage(terrain, 0, 0);
+			PlanetArt.ground(c, g, view);
+			for (const e of g.entities) {
+				c.save();
+				c.translate(e.x, e.y);
+				if (!PlanetArt.body(c, e, g.time, RTS.MISSIONS[id].biome))
+					BoardArt.body(c, e, g.time, null, false);
+				c.restore();
+			}
+			PlanetArt.fauna(c, g);
+			PlanetArt.lighting(c, g, view);
+			PlanetArt.precipitation(c, g, view);
+			c.restore();
+			PlanetArt.atmosphere(c, g, 480, 310);
+		}
+	</script>
+</html>

@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="pl">
+	<head>
+		<meta charset="utf-8" />
+		<title>Podgląd map scenariuszy</title>
+		<style>
+			body {
+				margin: 0;
+				background: #0b141c;
+				color: #d7e4e6;
+				font:
+					14px Segoe UI,
+					sans-serif;
+				padding: 16px;
+			}
+			.bar {
+				display: flex;
+				gap: 10px;
+				align-items: center;
+				flex-wrap: wrap;
+				margin-bottom: 10px;
+			}
+			select,
+			button,
+			label {
+				font: inherit;
+			}
+			canvas {
+				display: block;
+				border: 1px solid #33505a;
+				max-width: 100%;
+				margin-bottom: 10px;
+			}
+			#checks p {
+				margin: 2px 0;
+			}
+		</style>
+	</head>
+	<body>
+		<div class="bar">
+			<label
+				>Mapa
+				<select id="map"></select
+			></label>
+			<label
+				>Rozmiar
+				<select id="size">
+					<option value="medium">Średnia</option>
+					<option value="small">Mała</option>
+					<option value="large">Duża</option>
+				</select></label
+			>
+			<label><input id="night" type="checkbox" /> Noc</label>
+			<button id="run">Sprawdź wszystkie mapy</button>
+		</div>
+		<canvas
+			id="overview"
+			width="960"
+			height="617"
+			aria-label="Cała mapa"
+		></canvas>
+		<canvas
+			id="detail"
+			width="1200"
+			height="700"
+			aria-label="Środek mapy w skali 1:1"
+		></canvas>
+		<div id="checks" role="status"></div>
+		<script src="../engine.js"></script>
+		<script src="../advanced-rules.js"></script>
+		<script src="../army-rules.js"></script>
+		<script src="../campaign-act2.js"></script>
+		<script src="../scenario-modes.js"></script>
+		<script src="../frontier-maps.js"></script><script src="../themed-maps.js"></script>
+<script src="../support-rules.js"></script>
+<script src="../scenario-setup.js"></script>
+<script src="../scenario-challenges.js"></script>
+<script src="../enemy-ai.js"></script>
+<script src="../teams-rules.js"></script>
+<script src="../factions-rules.js"></script>
+<script src="../swarm-rules.js"></script>
+<script src="../campaign-act3.js"></script>
+		<script src="../scene-fx.js"></script>
+		<script src="../art.js"></script>
+		<script src="../planet-art.js"></script>
+		<script src="../advanced-art.js"></script>
+		<script src="../map-art.js"></script><script src="../themed-art.js"></script>
+		<script>
+			const $ = (id) => document.getElementById(id);
+			const maps = Object.entries(RTS.MISSIONS).filter(
+				([, m]) => !m.campaign,
+			);
+			const chapters = Object.entries(RTS.MISSIONS).filter(
+				([, m]) => m.campaign,
+			);
+			const option = ([id, m]) =>
+				`<option value="${id}">${m.name} / ${m.planet}</option>`;
+			$("map").innerHTML =
+				`<optgroup label="Scenariusze">${maps.map(option).join("")}</optgroup>` +
+				`<optgroup label="Kampania (tylko wygląd)">${chapters.map(option).join("")}</optgroup>`;
+			$("map").value = "lumen";
+			function build(id, size) {
+				const g = new RTS.Game(42, id);
+				// Campaign chapters keep their own layout; only scenarios are configured.
+				if (!RTS.MISSIONS[id].campaign)
+					g.configureSkirmish({ size, players: 2 });
+				return g;
+			}
+			// Terrain layers in the same order as the game; fog and units are left out on purpose.
+			function terrain(g) {
+				const t = document.createElement("canvas");
+				t.width = g.W;
+				t.height = g.H;
+				const c = t.getContext("2d"),
+					biome = RTS.MISSIONS[g.missionId].biome;
+				c.fillStyle =
+					MapArt.baseColor(g) ||
+					(RTS.MISSIONS[g.missionId].sunny
+						? "#766847"
+						: biome === "ice"
+							? "#526d78"
+							: biome === "ash"
+								? "#383034"
+								: "#283334");
+				c.fillRect(0, 0, g.W, g.H);
+				for (const r of g.obstacles.filter((o) => !o.kind)) {
+					c.fillStyle = "#4a5144";
+					c.fillRect(r.x, r.y, r.w, r.h);
+				}
+				BoardArt.terrain(c, g);
+				PlanetArt.terrain(c, g);
+				AdvancedArt.terrain(c, g);
+				SceneFX.terrain(c, g);
+				MapArt.terrain(c, g);
+				return t;
+			}
+			function draw() {
+				const g = build($("map").value, $("size").value);
+				g.time = $("night").checked ? 180 : 40;
+				const tex = terrain(g),
+					o = $("overview").getContext("2d");
+				o.clearRect(0, 0, 960, 617);
+				o.drawImage(tex, 0, 0, 960, 617);
+				o.save();
+				o.scale(960 / g.W, 617 / g.H);
+				for (const b of g.entities.filter((e) => e.type === "hq")) {
+					o.fillStyle = b.team ? "#f07d78" : "#b0efd0";
+					o.beginPath();
+					o.arc(b.x, b.y, 60, 0, Math.PI * 2);
+					o.fill();
+				}
+				for (const n of g.nodes) {
+					o.fillStyle = "#efd17e";
+					o.beginPath();
+					o.arc(n.x, n.y, 30, 0, Math.PI * 2);
+					o.fill();
+				}
+				MapArt.sky(o, g, null);
+				o.restore();
+				const d = $("detail").getContext("2d"),
+					view = { x: g.W / 2, y: g.H / 2, w: 1200, h: 700 };
+				d.save();
+				d.translate(600 - view.x, 350 - view.y);
+				d.drawImage(tex, 0, 0);
+				PlanetArt.ground(d, g, view);
+				MapArt.effects(d, g, view);
+				MapArt.sky(d, g, view);
+				PlanetArt.lighting(d, g, view);
+				MapArt.glow(d, g, view);
+				d.restore();
+				MapArt.atmosphere(d, g, 1200, 700);
+				return g;
+			}
+			for (const id of ["map", "size", "night"]) $(id).onchange = draw;
+			$("run").onclick = () => {
+				const rows = [];
+				for (const [id] of maps)
+					for (const size of ["small", "medium", "large"]) {
+						let ok = true,
+							error = "";
+						try {
+							$("map").value = id;
+							$("size").value = size;
+							const g = draw();
+							const px = $("detail")
+								.getContext("2d")
+								.getImageData(0, 0, 1200, 700).data;
+							let lit = 0;
+							for (let i = 3; i < px.length; i += 400)
+								if (px[i] > 0) lit++;
+							ok = lit > 1000 && g.W === RTS.MAP_SIZES[size].w;
+						} catch (e) {
+							ok = false;
+							error = e.message;
+						}
+						rows.push(
+							`<p>${ok ? "OK" : "FAIL"} ${id} / ${size} ${error}</p>`,
+						);
+					}
+				$("checks").innerHTML =
+					`<p>${rows.every((r) => r.startsWith("<p>OK")) ? "PASS" : "FAIL"} — ${rows.length}</p>` +
+					rows.join("");
+				$("map").value = "lumen";
+				$("size").value = "medium";
+				draw();
+			};
+			draw();
+		</script>
+	</body>
+</html>

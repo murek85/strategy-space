@@ -1,0 +1,34 @@
+<!doctype html><meta charset="utf-8" /><title>Ujęcia prologu</title
+><style>
+	body {
+		background: #07121c;
+		color: #def;
+		font: 16px sans-serif;
+	}
+	section {
+		display: inline-block;
+		margin: 10px;
+	}
+	canvas {
+		display: block;
+		width: 480px;
+	}
+</style>
+<h1>Sześć ujęć / 30 sekund</h1>
+<main></main>
+<script src="../campaign-film.js"></script>
+<script>
+	for (let i = 0; i < 6; i++) {
+		const s = document.createElement("section"),
+			c = document.createElement("canvas");
+		c.width = 960;
+		c.height = 400;
+		s.append(c);
+		const shot = CampaignFilm.draw(c.getContext("2d"), i * 5 + 2.5);
+		const p = document.createElement("p");
+		p.textContent = shot.caption;
+		p.style.maxWidth = "480px";
+		s.append(p);
+		document.querySelector("main").append(s);
+	}
+</script>

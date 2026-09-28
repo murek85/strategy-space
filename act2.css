@@ -1,0 +1,117 @@
+/* Stage C: act II objectives, radio lines, decision dialog and mission report. */
+.act2-objectives {
+	list-style: none;
+	margin: 0 0 6px;
+	padding: 0;
+}
+.act2-objectives li {
+	position: relative;
+	padding: 2px 0 2px 16px;
+	color: #c5d7d9;
+}
+.act2-objectives li::before {
+	content: "▸";
+	position: absolute;
+	left: 2px;
+	color: #f0cf8a;
+}
+.act2-objectives li.done {
+	color: #8fa6a3;
+}
+.act2-objectives li.done::before {
+	content: "✓";
+	color: #8fe3c4;
+}
+.act2-objectives li.failed {
+	color: #c98f7a;
+	text-decoration: line-through;
+}
+.act2-objectives li.failed::before {
+	content: "✕";
+	color: #f09b72;
+}
+.act2-objectives li.secondary::before {
+	content: "◇";
+	color: #9cc6f2;
+}
+.act2-objectives li.secondary.done::before {
+	content: "◆";
+}
+.act2-status {
+	margin: 4px 0;
+	color: #f0cf8a;
+}
+.act2-line {
+	margin: 6px 0 0;
+	padding-top: 6px;
+	border-top: 1px solid #3c4e5688;
+	color: #d6e2e1;
+}
+#command-menu .act-heading {
+	font-size: 11px;
+	letter-spacing: 2px;
+	text-transform: uppercase;
+	color: #8da1ae;
+	margin: 14px 0 4px;
+}
+.act2-badge {
+	font-style: normal;
+	color: #9cc6f2;
+}
+.act2-radio {
+	list-style: none;
+	padding: 0;
+	margin: 0 0 18px;
+	max-height: 260px;
+	overflow-y: auto;
+	font-size: 13px;
+	line-height: 1.5;
+}
+.act2-radio li {
+	padding: 6px 0;
+	border-bottom: 1px solid #3c4e5655;
+}
+.act2-radio small {
+	color: #7f939e;
+}
+.act2-choice {
+	width: 520px;
+}
+.act2-choice .primary-button {
+	display: block;
+	width: 100%;
+	text-align: left;
+	margin-top: 12px;
+	padding: 12px 14px;
+}
+.act2-choice .primary-button b {
+	display: block;
+	font-size: 13px;
+	letter-spacing: 1px;
+}
+.act2-choice .primary-button small {
+	display: block;
+	font-size: 11px;
+	line-height: 1.5;
+	margin-top: 4px;
+	font-weight: 400;
+	text-transform: none;
+	letter-spacing: 0;
+}
+.act2-report {
+	width: 520px;
+	max-height: 92vh;
+	overflow-y: auto;
+}
+.act2-report .act2-objectives {
+	font-size: 12px;
+	margin-bottom: 14px;
+}
+.act2-summary {
+	grid-template-columns: 1fr 1fr 1fr;
+}
+@media (max-width: 600px) {
+	.act2-summary {
+		grid-template-columns: 1fr 1fr;
+	}
+}

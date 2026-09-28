@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="pl">
+	<meta charset="utf-8" /><title>Etap B — podgląd i próba transportu</title
+	><style>
+		body {
+			background: #14252b;
+			color: #d6e6d9;
+			font: 14px system-ui;
+			padding: 20px;
+		}
+		canvas {
+			background: #52605c;
+			border: 1px solid #81958d;
+			max-width: 100%;
+		}
+		button {
+			padding: 12px;
+			background: #263e44;
+			color: #d6e6d9;
+			border: 1px solid #9bb7a8;
+			margin: 5px;
+		}
+		#status {
+			padding: 12px;
+		}
+		h1 {
+			font-size: 22px;
+		}
+	</style>
+	<h1>Etap B · Kolonie / Dominium</h1>
+	<canvas
+		id="models"
+		width="1000"
+		height="440"
+		aria-label="Modele obu frakcji: piechota, transporter, bateria i centrum"
+	></canvas>
+	<div>
+		<button id="board">Załaduj 4 piechurów</button
+		><button id="save">Zapisz i wczytaj</button
+		><button id="unload">Wyładuj</button
+		><button id="destroy">Awaryjny desant</button>
+	</div>
+	<p id="status"></p>
+	<script src="../engine.js"></script>
+	<script src="../advanced-rules.js"></script>
+	<script src="../army-rules.js"></script>
+	<script src="../support-rules.js"></script>
+	<script src="../scenario-setup.js"></script>
+	<script src="../scenario-challenges.js"></script>
+	<script src="../enemy-ai.js"></script>
+	<script src="../teams-rules.js"></script>
+	<script src="../factions-rules.js"></script>
+	<script src="../swarm-rules.js"></script>
+	<script src="../campaign-act3.js"></script>
+	<script src="../art.js"></script>
+	<script src="../planet-art.js"></script>
+	<script src="../advanced-art.js"></script>
+	<script>
+		let game = new RTS.Game(42, "solar");
+		game.entities = [];
+		game.obstacles = [];
+		game.waters = [];
+		game.nodes = [];
+		game.spawn("hq", 0, 200, 200);
+		game.spawn("hq", 1, 3000, 1900);
+		const carrier = game.spawn("transport", 0, 600, 600),
+			cid = carrier.id;
+		const ids = Array.from(
+			{ length: 4 },
+			() => game.spawn("trooper", 0, 620, 600).id,
+		);
+		const status = () =>
+			(document.querySelector("#status").textContent =
+				`Na pokładzie: ${game.get(cid)?.passengers?.length || 0}/4 · Liczebność: ${game.population(0)} · Piechota na mapie: ${game.units(0).filter((e) => e.type === "trooper").length}`);
+		document.querySelector("#board").onclick = () => {
+			game.board(ids, cid);
+			game.boardingTick();
+			status();
+		};
+		document.querySelector("#save").onclick = () => {
+			game = RTS.Game.fromSave(game.serialize());
+			status();
+		};
+		document.querySelector("#unload").onclick = () => {
+			game.unload(cid);
+			status();
+		};
+		document.querySelector("#destroy").onclick = () => {
+			if (game.get(cid))
+				game.applyDamage(game.hq(1), game.get(cid), 99999);
+			status();
+		};
+		status();
+		function frame(now) {
+			const c = document.querySelector("canvas").getContext("2d");
+			c.clearRect(0, 0, 1000, 440);
+			for (let row = 0; row < 2; row++) {
+				c.fillStyle = "#e2ecd8";
+				c.font = "16px system-ui";
+				c.fillText(
+					row ? "DOMINIUM" : "WOLNE KOLONIE",
+					20,
+					25 + row * 220,
+				);
+				["trooper", "rocket", "transport", "flak", "hq"].forEach(
+					(type, i) => {
+						const s = RTS.TYPES[type],
+							e = {
+								id: 1,
+								type,
+								team: row,
+								faction: row ? "dominion" : "colonies",
+								tint: row ? "#ee9783" : "#8ee1bd",
+								x: 0,
+								y: 0,
+								hp: s.hp,
+								maxHp: s.hp,
+								angle: -0.3,
+								path: [{ x: 1, y: 1 }],
+								cooldown: (now / 1000) % s.cooldown,
+								target: 2,
+								passengers: game.get(cid)?.passengers || [],
+							};
+						c.save();
+						c.translate(95 + i * 195, 135 + row * 220);
+						const scale =
+							type === "trooper" || type === "rocket" ? 3 : 1.2;
+						c.scale(scale, scale);
+						if (!AdvancedArt.body(c, e, now / 1000, "dust"))
+							BoardArt.body(c, e, now / 1000, null, false);
+						AdvancedArt.factionDetails(c, e, now / 1000);
+						c.restore();
+						c.fillStyle = "#e3e9db";
+						c.font = "13px system-ui";
+						c.fillText(s.name, 15 + i * 195, 205 + row * 220);
+					},
+				);
+			}
+			requestAnimationFrame(frame);
+		}
+		requestAnimationFrame(frame);
+	</script>
+</html>

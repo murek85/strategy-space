@@ -1,0 +1,86 @@
+<!doctype html><meta charset="utf-8" /><title>Ekologia — podgląd biomów</title>
+<style>
+	body {
+		background: #101e29;
+		color: #dae8e4;
+		font: 15px system-ui;
+		margin: 20px;
+	}
+	canvas {
+		max-width: 100%;
+		height: auto;
+		border: 1px solid #789;
+	}
+	button {
+		padding: 10px;
+		margin: 5px;
+	}
+</style>
+<h1>Roślinność, jeziora i siedliska</h1>
+<button data-id="solar">Pustynia</button><button data-id="frost">Lód</button
+><button data-id="ember">Popiół</button>
+<p id="status"></p>
+<canvas width="1100" height="650"></canvas>
+<script src="../engine.js"></script>
+<script src="../advanced-rules.js"></script>
+<script src="../army-rules.js"></script>
+<script src="../support-rules.js"></script>
+<script src="../scenario-setup.js"></script>
+<script src="../scenario-challenges.js"></script>
+<script src="../enemy-ai.js"></script>
+<script src="../teams-rules.js"></script>
+<script src="../factions-rules.js"></script>
+<script src="../swarm-rules.js"></script>
+<script src="../campaign-act3.js"></script>
+<script src="../art.js"></script>
+<script src="../planet-art.js"></script>
+<script src="../advanced-art.js"></script>
+<script>
+	function show(id) {
+		const g = new RTS.Game(73, id),
+			biome = RTS.MISSIONS[id].biome,
+			c = document.querySelector("canvas").getContext("2d");
+		g.entities = [];
+		g.nodes = [];
+		g.ores = [];
+		g.crystalFields = [];
+		g.gasFields = [];
+		g.obstacles = [];
+		g.waters = [{ x: 550, y: 320, rx: 270, ry: 175 }];
+		g.isVisible = () => true;
+		g.time = 12;
+		const type =
+			biome === "dust"
+				? "duneMaw"
+				: biome === "ice"
+					? "frostTusk"
+					: "ashCrawler";
+		for (let i = 0; i < 2; i++) {
+			const e = g.spawn(type, 2, 190 + i * 710, 400);
+			e.home = { x: e.x, y: e.y };
+			e.target = i ? 1 : null;
+		}
+		c.fillStyle =
+			biome === "dust"
+				? "#85734f"
+				: biome === "ice"
+					? "#8bafb7"
+					: "#655e65";
+		c.fillRect(0, 0, 1100, 650);
+		PlanetArt.terrain(c, g);
+		PlanetArt.ground(c, g, { x: 0, y: 0, w: 1100, h: 650 });
+		AdvancedArt.habitats(c, g);
+		for (const e of g.entities) {
+			c.save();
+			c.translate(e.x, e.y);
+			AdvancedArt.body(c, e, g.time, biome);
+			c.restore();
+		}
+		document.getElementById("status").textContent =
+			RTS.MISSIONS[id].planet + " · " + RTS.TYPES[type].name;
+	}
+	document
+		.querySelectorAll("button")
+		.forEach((b) => (b.onclick = () => show(b.dataset.id)));
+	show("solar");
+</script>

@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="pl">
+	<head>
+		<meta charset="utf-8" />
+		<title>Test gry wieloosobowej</title>
+		<style>
+			body {
+				margin: 0;
+				background: #0b141c;
+				color: #d7e4e6;
+				font: 14px "Segoe UI", sans-serif;
+			}
+			header {
+				padding: 10px 14px;
+			}
+			button {
+				font: inherit;
+			}
+			#out p {
+				margin: 2px 0;
+			}
+			.games {
+				display: flex;
+				height: 70vh;
+			}
+			iframe {
+				flex: 1;
+				border: 0;
+				border-right: 2px solid #33505a;
+			}
+		</style>
+	</head>
+	<body>
+		<header>
+			<p>
+				Dwie gry obok siebie łączą się jak dwaj gracze (WebRTC w tej samej przeglądarce, bez serwera STUN): kod zaproszenia i odpowiedzi, lobby z
+				zasadami i czatem, bitwa z czatem, wspólną pauzą i rozkazami obu stron, rewanż, porównanie stanu na tej samej turze, poddanie się i rozłączenie. Działa także w ukrytej karcie.
+			</p>
+			<button id="run">Sprawdź grę wieloosobową</button>
+			<div id="out" role="status"></div>
+		</header>
+		<div class="games"><iframe id="a" src="../index.html"></iframe><iframe id="b" src="../index.html"></iframe></div>
+		<script>
+			const $ = (id) => document.getElementById(id);
+			const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+			const until = async (f, ms = 15000) => {
+				const t0 = Date.now();
+				while (!f() && Date.now() - t0 < ms) await wait(100);
+				return f();
+			};
+			const set = (W, id, v) => {
+				const el = W.document.querySelector("#" + id);
+				el.value = v;
+				el.dispatchEvent(new W.Event("change"));
+			};
+			async function connect(A, B) {
+				await until(() => A.document.querySelector("#menu-multi") && B.document.querySelector("#menu-multi"));
+				for (const W of [A, B]) {
+					W.document.querySelector("#menu-multi").click();
+					await wait(200);
+					const stun = W.document.querySelector("#net-stun");
+					if (stun.checked) stun.click();
+				}
+				set(A, "net-name", "Ala");
+				set(A, "net-faction", "colonies");
+				A.document.querySelector("#menu-net-host").click();
+				await until(() => A.document.querySelector("#net-invite")?.value.startsWith("RTS1."));
+				const invite = A.document.querySelector("#net-invite").value;
+				B.document.querySelector("#menu-net-join").click();
+				await wait(200);
+				B.document.querySelector("#net-offer").value = invite;
+				B.document.querySelector("#net-reply").click();
+				await until(() => B.document.querySelector("#net-answer-out")?.value.startsWith("RTS1."));
+				const reply = B.document.querySelector("#net-answer-out").value;
+				A.document.querySelector("#net-answer").value = reply;
+				A.document.querySelector("#net-connect").click();
+				await until(() => A.document.querySelector("#menu-net-start") && B.document.querySelector("#menu-net-ready"));
+				return { invite, reply };
+			}
+			$("run").onclick = async () => {
+				const rows = [],
+					row = (ok, text) => rows.push((ok ? "OK " : "FAIL ") + text),
+					report = () => ($("out").innerHTML = `<p>${rows.every((r) => r.startsWith("OK")) ? "PASS" : "FAIL"} — gra wieloosobowa</p>` + rows.map((r) => `<p>${r}</p>`).join(""));
+				$("out").textContent = "Łączenie…";
+				try {
+					// Fresh games (the profile is shared by both frames: each sets its own data).
+					for (const id of ["a", "b"]) $(id).src = "../index.html?" + Date.now();
+					await wait(1500);
+					const A = $("a").contentWindow,
+						B = $("b").contentWindow;
+					const codes = await connect(A, B);
+					row(codes.invite.length < 2500 && codes.reply.length < 2500, `kody zaproszenia i odpowiedzi (${codes.invite.length} i ${codes.reply.length} znaków), połączenie i lobby`);
+					// Lobby chat: the host writes, the guest reads.
+					A.document.querySelector("#net-chat-input").value = "Cześć, gotowy?";
+					A.document.querySelector("#net-chat-send").click();
+					await until(() => /Cześć, gotowy\?/.test(B.document.querySelector("#net-chat-log")?.textContent || ""), 3000);
+					row(/Ala: Cześć, gotowy\?/.test(B.document.querySelector("#net-chat-log").textContent) && /Cześć/.test(A.document.querySelector("#net-chat-log").textContent), "czat w lobby: wiadomość gospodarza u obu graczy");
+					set(B, "lobby-name", "Bartek");
+					await wait(300);
+					set(B, "lobby-faction", "dominion");
+					await wait(300);
+					set(B, "lobby-color", "#72b7ff");
+					await wait(300);
+					set(A, "net-rule-size", "small");
+					await wait(300);
+					set(A, "net-rule-weather", "calm");
+					await wait(300);
+					const guestSees = B.document.querySelector("#net-rule-size").value + "/" + B.document.querySelector("#net-rule-weather").value,
+						lockedBefore = A.document.querySelector("#menu-net-start").disabled;
+					B.document.querySelector("#menu-net-ready").click();
+					await wait(500);
+					row(guestSees === "small/calm" && lockedBefore && !A.document.querySelector("#menu-net-start").disabled, `zasady gospodarza u gościa (${guestSees}), start dopiero po gotowości gościa`);
+					A.document.querySelector("#menu-net-start").click();
+					await until(() => A.currentGame?.()?.network && B.currentGame?.()?.network);
+					const a = A.currentGame(),
+						b = B.currentGame();
+					row(a.viewer === 0 && b.viewer === 1 && a.players[1].name === "Bartek" && b.factionFor(1).key === "dominion" && a.factionFor(0).key === "colonies", `bitwa: widoki ${a.viewer}/${b.viewer}, gracze ${a.players[0].name} (${a.factionFor(0).key}) i ${a.players[1].name} (${a.factionFor(1).key})`);
+					await wait(2000);
+					row(a.time > 1.5 && Math.abs(a.time - b.time) < 0.35, `symulacja biegnie u obu (${a.time.toFixed(1)} s i ${b.time.toFixed(1)} s)`);
+					// Orders from both sides.
+					A.gameAct("command", a.units(0).filter((e) => e.type !== "worker").map((e) => e.id), a.hq(1).x, a.hq(1).y, null, true);
+					B.gameAct("command", b.units(1).filter((e) => e.type !== "worker").map((e) => e.id), b.hq(0).x, b.hq(0).y, null, true);
+					for (let i = 0; i < 4; i++) {
+						A.gameAct("enqueue", i % 2 ? "rocket" : "trooper");
+						B.gameAct("enqueue", i % 2 ? "rocket" : "trooper");
+					}
+					await wait(25000);
+					// Compare both computers at the same simulated moment: record checksums per time.
+					const seen = { a: new Map(), b: new Map() };
+					const probe = setInterval(() => {
+						seen.a.set(a.time.toFixed(2), a.checksum());
+						seen.b.set(b.time.toFixed(2), b.checksum());
+					}, 5);
+					await wait(3000);
+					clearInterval(probe);
+					const common = [...seen.a.keys()].filter((k) => seen.b.has(k));
+					const same = common.filter((k) => seen.a.get(k) === seen.b.get(k)).length;
+					row(common.length > 0 && same === common.length && !A.currentNetwork().desync && !B.currentNetwork().desync, `ten sam stan w tych samych chwilach (${same}/${common.length} porównań), bez rozsynchronizowania; zniszczenia ${a.sideOf(0).kills}/${a.sideOf(1).kills} i ${b.sideOf(0).kills}/${b.sideOf(1).kills}`);
+					// Battle chat: Enter opens the line, the text arrives as plain text (no HTML), Esc closes the line.
+					B.document.body.dispatchEvent(new B.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+					const line = B.document.querySelector(".battle-chat-input");
+					const opened = !line.hidden;
+					line.value = "<img src=x onerror=alert(1)> atak od północy";
+					line.dispatchEvent(new B.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+					await until(() => /atak od północy/.test(A.document.querySelector(".battle-chat-log")?.textContent || ""), 3000);
+					const log = A.document.querySelector(".battle-chat-log");
+					B.document.body.dispatchEvent(new B.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+					line.dispatchEvent(new B.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+					row(opened && /Bartek: <img src=x onerror=alert\(1\)> atak od północy/.test(log.textContent) && !log.querySelector("img") && line.hidden && B.document.querySelector("#command-menu").hidden, "czat w bitwie: Enter otwiera, wiadomość jako zwykły tekst u przeciwnika, Esc zamyka bez menu pauzy");
+					// Tactical intel: the opponent and the connection instead of landings (no "Infinity:NaN").
+					const intel = A.document.querySelector(".intel").textContent;
+					row(!/NaN|Infinity/.test(intel) && /Bartek/.test(intel) && /Opóźnienie sieci/.test(intel), "wywiad taktyczny: przeciwnik i opóźnienie sieci zamiast desantu");
+					// Shared pause: Space on the guest stops both games on the same step; the host resumes from the panel.
+					B.document.body.dispatchEvent(new B.KeyboardEvent("keydown", { key: " ", bubbles: true }));
+					await until(() => a.netPause && b.netPause, 3000);
+					const tA = a.time,
+						tB = b.time;
+					await wait(1500);
+					const panel = A.document.querySelector(".net-pause");
+					const stood = a.netPause?.by === 1 && a.time === tA && b.time === tB && panel && !panel.hidden && /Bartek/.test(panel.textContent) && b.pausesLeft[1] === 2;
+					panel?.querySelector("button").click();
+					await until(() => !a.netPause && !b.netPause, 8000);
+					await wait(500);
+					row(stood && a.time > tA && b.time > tB && panel.hidden && !A.currentNetwork().desync, `wspólna pauza: obie gry stoją (${tA.toFixed(1)} s), wznowienie z odliczaniem, zostały 2 z 3 pauz gościa`);
+					B.gameAct("surrender");
+					await until(() => a.result && b.result, 5000);
+					row(a.resultFor() === "victory" && b.resultFor() === "defeat", `poddanie się gościa: gospodarz ${a.resultFor()}, gość ${b.resultFor()}`);
+					// Rematch with one button: the host offers, the guest sees the offer and accepts; a new battle on the
+					// same connection, same rules and factions, a new map seed, both games identical.
+					await until(() => A.document.querySelector("#rematch") && B.document.querySelector("#rematch"), 4000);
+					A.document.querySelector("#rematch").click();
+					await until(() => /proponuje rewanż/.test(B.document.querySelector("#rematch-status")?.textContent || ""), 3000);
+					const offer = B.document.querySelector("#rematch").textContent,
+						waiting = A.document.querySelector("#rematch").disabled;
+					B.document.querySelector("#rematch").click();
+					await until(() => A.currentGame() !== a && B.currentGame() !== b && A.currentNetwork() && B.currentNetwork(), 5000);
+					const a2 = A.currentGame(),
+						b2 = B.currentGame();
+					await wait(1500);
+					row(/PRZYJMIJ/.test(offer) && waiting && a2.network && a2.scenario.seed === b2.scenario.seed && a2.scenario.seed !== a.scenario.seed && a2.factionFor(1).key === "dominion" && a2.players[1].name === "Bartek" && a2.time > 0.5 && !a2.result && a2.checksum !== undefined && !A.currentNetwork().desync && A.document.querySelector("#overlay").hidden, `rewanż jednym przyciskiem: propozycja u gościa („${offer.trim()}”), nowa bitwa u obu (${a2.time.toFixed(1)} s, ${a2.players[1].name}/${a2.factionFor(1).key}), nowe ziarno mapy ${a2.scenario.seed}${a2.scenario.seed === b2.scenario.seed ? "" : " ≠ " + b2.scenario.seed}${waiting ? "" : ", przycisk gospodarza nie czekał"}${A.document.querySelector("#overlay").hidden ? "" : ", ekran końcowy nie zniknął"}`);
+					// The rematch ends; the guest goes to the menu: the host can no longer ask for another one.
+					B.gameAct("surrender");
+					await until(() => a2.result && b2.result && !A.document.querySelector("#overlay").hidden && !B.document.querySelector("#overlay").hidden, 5000);
+					B.document.querySelector("#end-menu").click();
+					await until(() => A.document.querySelector("#rematch")?.disabled, 4000);
+					row(A.document.querySelector("#rematch").disabled && /opuszcza grę/.test(A.document.querySelector("#rematch-status").textContent), "po wyjściu przeciwnika rewanż jest niemożliwy");
+					// A new battle, then the guest leaves: the host sees the lost connection.
+					for (const id of ["a", "b"]) $(id).src = "../index.html?" + Date.now();
+					await wait(1500);
+					const A2 = $("a").contentWindow,
+						B2 = $("b").contentWindow;
+					await connect(A2, B2);
+					B2.document.querySelector("#menu-net-ready").click();
+					await wait(400);
+					A2.document.querySelector("#menu-net-start").click();
+					await until(() => A2.currentGame?.()?.network && B2.currentGame?.()?.network);
+					await wait(1000);
+					B2.menuApi?.leave?.() ?? B2.currentNetwork().link.close();
+					await until(() => !A2.currentNetwork(), 6000);
+					row(!A2.currentNetwork() && !A2.document.querySelector("#overlay").hidden && /zerwane/.test(A2.document.querySelector("#overlay").textContent), "gość opuszcza bitwę: gospodarz widzi zerwane połączenie");
+					// Leaving the page after a network battle does not overwrite the single-player save.
+					const saved = localStorage.getItem("pogranicze-save-v2");
+					A2.dispatchEvent(new A2.Event("pagehide"));
+					row(localStorage.getItem("pogranicze-save-v2") === saved, "bitwa sieciowa nie trafia do zapisu gry jednoosobowej (także po jej końcu)");
+				} catch (error) {
+					row(false, "wyjątek: " + (error.stack || error.message || error));
+				}
+				try {
+					localStorage.removeItem("pogranicze-network-v1");
+				} catch {}
+				report();
+			};
+		</script>
+	</body>
+</html>

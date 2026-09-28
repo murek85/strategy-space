@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="pl">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width,initial-scale=1" />
+		<title>Pogranicze Galaktyki — RTS</title>
+		<link rel="stylesheet" href="style.css" />
+		<link rel="stylesheet" href="cursor.css" />
+		<link rel="stylesheet" href="expansion.css" />
+		<link rel="stylesheet" href="menu.css" />
+		<link rel="stylesheet" href="development.css" />
+		<link rel="stylesheet" href="act2.css" />
+	</head>
+	<body>
+		<header class="topbar">
+			<a class="brand" href="./" aria-label="Pogranicze Galaktyki"
+				><span class="brand-icon">◈</span
+				><span>POGRANICZE<small>GALAKTYKI</small></span></a
+			>
+			<div class="mission-heading">
+				<span class="live-dot"></span
+				><span
+					>OPERACJA: CICHY HORYZONT<small
+						>Khepri IV · sektor zewnętrzny</small
+					></span
+				>
+			</div>
+			<div class="resource">
+				<span class="resource-icon">◇</span>
+				<div>
+					<strong id="credits">400</strong
+					><small>STOP METALU <span id="income">+8/s</span></small>
+				</div>
+			</div>
+			<div class="audio-controls">
+				<button
+					id="sound-toggle"
+					class="icon-button"
+					aria-label="Wycisz dźwięk"
+					aria-pressed="true"
+					title="Dźwięk [M]"
+				>
+					♪</button
+				><input
+					id="sound-volume"
+					type="range"
+					min="0"
+					max="100"
+					value="35"
+					aria-label="Głośność dźwięków"
+					title="Głośność dźwięków"
+				/><button
+					id="save-game"
+					class="icon-button"
+					title="Zapisz grę [Ctrl+S]"
+					aria-label="Zapisz grę"
+				>
+					▣
+				</button>
+			</div>
+			<button
+				id="pause"
+				class="icon-button"
+				title="Pauza [Spacja]"
+				aria-label="Wstrzymaj grę"
+			>
+				Ⅱ
+			</button>
+		</header>
+		<main class="workspace">
+			<aside class="sidebar">
+				<div class="section-label">DOWÓDZTWO <span>01</span></div>
+				<div class="operation-card">
+					<span class="eyebrow">WOLNE TWOJE SIŁY</span>
+					<h1>Przejmij<br />pogranicze.</h1>
+					<p>
+						Zbuduj armię. Zabezpiecz złoża.<br />Zniszcz centrum
+						Dominium.
+					</p>
+					<div class="planet-tag">
+						<span>◉</span> KHEPRI IV
+						<span class="tag-right">RTS / 2D</span>
+					</div>
+				</div>
+				<div class="section-label">CELE OPERACJI</div>
+				<div class="objective" id="obj-capture">
+					<span class="objective-check">01</span>
+					<div>
+						Zabezpiecz przekaźnik<small
+							>Każdy punkt zapewnia +5 metalu/s</small
+						>
+					</div>
+				</div>
+				<div class="objective" id="obj-army">
+					<span class="objective-check">02</span>
+					<div>
+						Rozbuduj siły do 12 jednostek<small
+							>Wybierz produkcję na dolnym panelu</small
+						>
+					</div>
+				</div>
+				<div class="objective" id="obj-hq">
+					<span class="objective-check">03</span>
+					<div>
+						Zniszcz wrogie dowództwo<small
+							>Czerwony kompleks na północnym wschodzie</small
+						>
+					</div>
+				</div>
+				<div class="economy-card">
+					<span class="eyebrow">LOGISTYKA KOLONII</span>
+					<div>
+						<span>Roboty przy pracy</span
+						><strong id="workers-status">2 / 2</strong>
+					</div>
+					<div>
+						<span>Dostarczona ruda</span
+						><strong id="mined-status">0</strong>
+					</div>
+					<div>
+						<span>Rozpoznanie sektora</span
+						><strong id="explored-status">0%</strong>
+					</div>
+					<p id="economy-tip">
+						R zaznacza roboty. PPM na błękitnej rudzie rozpoczyna
+						wydobycie.
+					</p>
+				</div>
+				<div class="intel">
+					<span class="eyebrow">WYWIAD TAKTYCZNY</span>
+					<div class="wave-row">
+						<span>Następny desant</span
+						><strong id="wave">00:55</strong>
+					</div>
+					<div class="thin-track"><i id="wave-progress"></i></div>
+					<p id="intel-text">
+						Wróg gromadzi siły. Przejmij pobliskie złoża, zanim
+						nadejdą posiłki.
+					</p>
+				</div>
+				<div class="sidebar-bottom">
+					<span class="signal-bars">▂▄▆█</span> ŁĄCZNOŚĆ AKTYWNA
+					<span id="clock">00:00</span>
+				</div>
+			</aside>
+			<section class="battlefield" id="battlefield">
+				<canvas
+					id="game"
+					aria-label="Pole bitwy. Zaznacz oddziały lewym przyciskiem, wydawaj rozkazy prawym."
+					tabindex="0"
+				></canvas>
+				<div class="map-heading">
+					<span class="eyebrow">WIDOK TAKTYCZNY</span
+					><span>SEKTOR 07 <b>/</b> PUSTKOWIA KHEPRI</span>
+				</div>
+				<div class="map-tools">
+					<button id="zoom-out" title="Oddal">−</button
+					><button id="center" title="Pokaż całą mapę [Home]">
+						⌖</button
+					><button id="zoom-in" title="Przybliż">+</button>
+				</div>
+				<div id="toast" class="toast" role="status"></div>
+				<div id="placement" class="placement" hidden>
+					Wybierz miejsce przy bazie · Esc anuluje
+				</div>
+				<div class="map-legend">
+					<span><i class="friendly"></i> KOLONIE</span
+					><span><i class="hostile"></i> PRZECIWNICY</span
+					><span><i class="neutral"></i> PRZEKAŹNIK</span>
+				</div>
+				<div class="minimap-wrap">
+					<div>SKAN SEKTORA <span>LIVE</span></div>
+					<canvas
+						id="minimap"
+						width="220"
+						height="135"
+						aria-label="Minimapa — kliknij, aby przesunąć kamerę"
+					></canvas>
+				</div>
+				<div id="overlay" class="overlay">
+					<div class="briefing">
+						<span class="eyebrow"
+							>SYGNAŁ PRZYCHODZĄCY / KHEPRI IV</span
+						>
+						<div class="briefing-symbol">◈</div>
+						<h2>Dowódco,<br />sektor czeka.</h2>
+						<p>
+							Dominium zajęło północny kompleks. Przejmij
+							przekaźniki, rozbuduj oddział i odzyskaj planetę.
+						</p>
+						<div class="briefing-controls">
+							<span
+								><b>LPM / przeciągnij</b>Zaznacz jednostki</span
+							><span><b>PPM na mapie / wrogu</b>Ruch / atak</span
+							><span><b>Q · W · E</b>Produkuj jednostki</span
+							><span><b>Spacja</b>Pauza taktyczna</span>
+						</div>
+						<button id="start" class="primary-button">
+							ROZPOCZNIJ OPERACJĘ <span>↗</span></button
+						><small
+							>Prototyp 0.1 · lokalna rozgrywka · bez konta</small
+						>
+					</div>
+				</div>
+			</section>
+		</main>
+		<footer class="command-bar">
+			<div class="selection-panel">
+				<span class="section-label">WYBRANY ODDZIAŁ</span>
+				<div class="selection-main">
+					<div id="selection-icon" class="selection-icon">⌁</div>
+					<div>
+						<strong id="selection-title">Grupa ekspedycyjna</strong
+						><span id="selection-detail"
+							>6 jednostek · gotowe do działania</span
+						>
+					</div>
+				</div>
+				<div class="selection-actions">
+					<button id="select-all">Wszystkie <kbd>F</kbd></button
+					><button id="stop">Zatrzymaj <kbd>S</kbd></button>
+				</div>
+			</div>
+			<div class="production">
+				<div class="production-heading">
+					<span class="section-label">PRODUKCJA JEDNOSTEK</span
+					><span id="queue-status">KOLEJKA PUSTA</span>
+				</div>
+				<div class="unit-cards">
+					<button class="unit-card" data-unit="trooper">
+						<span class="unit-symbol">♟</span
+						><span class="unit-copy"
+							><strong>Piechota</strong
+							><small>Przeciw piechocie</small
+							><b>◇ 60 <em>· 3 s</em></b></span
+						><kbd>Q</kbd></button
+					><button class="unit-card" data-unit="rocket">
+						<span class="unit-symbol">⌁</span
+						><span class="unit-copy"
+							><strong>Rakietowiec</strong
+							><small>Przeciw pojazdom</small
+							><b>◇ 100 <em>· 5 s</em></b></span
+						><kbd>W</kbd></button
+					><button class="unit-card" data-unit="tank">
+						<span class="unit-symbol tank-symbol">⬡</span
+						><span class="unit-copy"
+							><strong>Czołg zwiadowczy</strong
+							><small>Pancerz i siła ognia</small
+							><b>◇ 180 <em>· 7 s</em></b></span
+						><kbd>E</kbd></button
+					><button class="unit-card build" id="build-turret">
+						<span class="unit-symbol">⌖</span
+						><span class="unit-copy"
+							><strong>Wieżyczka</strong><small>Obrona bazy</small
+							><b>◇ 150</b></span
+						><kbd>T</kbd>
+					</button>
+				</div>
+				<div class="queue-track"><i id="queue-progress"></i></div>
+			</div>
+			<div class="controls-note">
+				<span class="eyebrow">ROZKAZY</span>
+				<p>
+					<b>LPM</b> wybierz · <b>PPM</b> ruch / atak<br /><b
+						>Strzałki</b
+					>
+					kamera · <b>Kółko</b> zoom<br /><b>A + PPM</b> atak w marszu
+					· <b>H</b> baza
+				</p>
+				<button id="restart">↻ Nowa operacja</button>
+			</div>
+		</footer>
+		<script src="engine.js"></script>
+		<script src="advanced-rules.js"></script>
+		<script src="army-rules.js"></script>
+		<script src="campaign-act2.js"></script>
+		<script src="scenario-modes.js"></script>
+		<script src="frontier-maps.js"></script>
+        <script src="themed-maps.js"></script>
+        <script src="support-rules.js"></script>
+        <script src="scenario-setup.js"></script>
+        <script src="scenario-challenges.js"></script>
+        <script src="enemy-ai.js"></script>
+        <script src="teams-rules.js"></script>
+        <script src="factions-rules.js"></script>
+        <script src="swarm-rules.js"></script>
+        <script src="campaign-act3.js"></script>
+        <script src="trade-rules.js"></script>
+        <script src="network-rules.js"></script>
+		<script src="scene-fx.js"></script>
+		<script src="audio.js"></script>
+		<script src="audio-hq.js"></script>
+		<script src="campaign.js"></script>
+		<script src="campaign-film.js"></script>
+		<script src="act2-film.js"></script>
+		<script src="knowledge.js"></script>
+		<script src="galaxy-map.js"></script>
+		<script src="menu.js"></script>
+		<script src="netplay.js"></script>
+		<script src="netplay-menu.js"></script>
+		<script src="art.js"></script>
+		<script src="planet-art.js"></script>
+		<script src="advanced-art.js"></script>
+		<script src="act2-art.js"></script>
+		<script src="support-art.js"></script>
+		<script src="fx-art.js"></script>
+		<script src="faction-art.js"></script>
+		<script src="swarm-art.js"></script>
+		<script src="map-art.js"></script>
+<script src="themed-art.js"></script>
+		<script src="development.js"></script>
+		<script src="economy-panel.js"></script>
+		<script src="render-canvas.js"></script>
+		<script src="vendor/pixi.min.js"></script>
+		<script src="webgl/model-light.js"></script>
+		<script src="webgl/terrain-height.js"></script>
+		<script src="webgl/ground-native.js"></script>
+		<script src="webgl/models-native.js"></script>
+		<script src="webgl/fauna-native.js"></script>
+		<script src="webgl/canvas-replay.js"></script>
+		<script src="webgl/pixi-game-renderer.js"></script>
+		<script src="app.js"></script>
+		<script src="cursor.js"></script>
+	</body>
+</html>

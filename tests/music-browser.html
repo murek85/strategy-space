@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="pl">
+	<meta charset="utf-8" /><title>Kontrola muzyki</title
+	><style>
+		body {
+			background: #17252c;
+			color: #d4eadf;
+			font: 17px system-ui;
+			padding: 30px;
+		}
+		button {
+			padding: 15px;
+			margin: 8px;
+		}
+	</style>
+	<h1>Muzyka sci-fi</h1>
+	<button id="verify">Sprawdź renderowanie 6 motywów</button>
+	<p id="live-status"></p>
+	<pre id="result">Gotowe do testu</pre>
+	<button data-mode="intro">Prolog kampanii</button
+	><button data-mode="menu">Menu</button
+	><button data-mode="game:dust">Pustynia</button
+	><button data-mode="game:ice">Lód</button
+	><button data-mode="game:ash">Wulkan</button
+	><button data-mode="game:sun">Helion</button
+	><button id="stop">Stop</button>
+	<script src="../audio.js"></script>
+	<script>
+		const live = new GameAudio();
+		setInterval(() => {
+			document.getElementById("live-status").textContent =
+				"Stan: " +
+				(live.context?.state || "nie uruchomiono") +
+				" · motyw " +
+				live.musicMode +
+				" · takt " +
+				live.musicBeat +
+				" · głosy " +
+				live.musicNodes.size +
+				" · błąd " +
+				live.failed;
+		}, 500);
+		document.querySelectorAll("[data-mode]").forEach(
+			(b) =>
+				(b.onclick = async () => {
+					live.setMusicMode(b.dataset.mode);
+					live.setMuted(false);
+					await live.unlock();
+				}),
+		);
+		document.getElementById("stop").onclick = () => live.setMuted(true);
+		document.getElementById("verify").onclick = async () => {
+			const out = document.getElementById("result");
+			out.textContent = "Renderowanie…";
+			try {
+				const results = [];
+				for (const mode of [
+					"intro",
+					"menu",
+					"game:dust",
+					"game:ice",
+					"game:ash",
+					"game:sun",
+				]) {
+					const c = new OfflineAudioContext(2, 44100 * 32, 44100),
+						a = new GameAudio();
+					a.context = c;
+					a.master = c.createGain();
+					a.master.gain.value = 0.35;
+					a.master.connect(c.destination);
+					a.musicGain = c.createGain();
+					a.musicGain.gain.value = 0.65;
+					a.musicGain.connect(a.master);
+					a.setupMusicSpace();
+					a.musicMode = mode;
+					let t = 0.08,
+						step = 0;
+					const schedule = (end) => {
+						while (t < end) t += a.musicStep(step++, t);
+					};
+					schedule(4);
+					const pauses = [4, 8, 12, 16, 20, 24, 28].map((sec) =>
+						c.suspend(sec).then(() => {
+							schedule(Math.min(30, sec + 4));
+							return c.resume();
+						}),
+					);
+					const b = await c.startRendering();
+					await Promise.all(pauses);
+					let peak = 0,
+						sum = 0,
+						stereo = 0;
+					const left = b.getChannelData(0),
+						right = b.getChannelData(1);
+					for (let i = 0; i < left.length; i++) {
+						peak = Math.max(
+							peak,
+							Math.abs(left[i]),
+							Math.abs(right[i]),
+						);
+						sum += left[i] * left[i];
+						stereo += Math.abs(left[i] - right[i]);
+					}
+					if (
+						!Number.isFinite(peak) ||
+						peak <= 0 ||
+						peak >= 0.95 ||
+						stereo === 0
+					)
+						throw Error(mode + " invalid output");
+					results.push(
+						mode +
+							": PASS · peak " +
+							peak.toFixed(4) +
+							" · RMS " +
+							Math.sqrt(sum / left.length).toFixed(4) +
+							" · stereo OK",
+					);
+				}
+				out.textContent = results.join("\n");
+			} catch (e) {
+				out.textContent = "FAIL " + e.message;
+				console.error(e);
+			}
+		};
+	</script>
+</html>

@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="pl">
+	<meta charset="utf-8" /><title>Helion — pogoda</title
+	><style>
+		body {
+			background: #14222a;
+			color: #dcebdc;
+			font: 16px system-ui;
+		}
+		section {
+			display: inline-block;
+			margin: 8px;
+		}
+		canvas {
+			display: block;
+			width: 520px;
+			height: 420px;
+		}
+	</style>
+	<h1>Helion: roślinność i burza</h1>
+	<section>
+		Spokojna pogoda<canvas id="clear" width="520" height="420"></canvas>
+	</section>
+	<section>
+		Burza pustynna<canvas id="storm" width="520" height="420"></canvas>
+	</section>
+	<script src="../engine.js"></script>
+	<script src="../advanced-rules.js"></script>
+	<script src="../army-rules.js"></script>
+	<script src="../support-rules.js"></script>
+	<script src="../scenario-setup.js"></script>
+	<script src="../scenario-challenges.js"></script>
+	<script src="../enemy-ai.js"></script>
+	<script src="../teams-rules.js"></script>
+	<script src="../factions-rules.js"></script>
+	<script src="../swarm-rules.js"></script>
+	<script src="../campaign-act3.js"></script>
+	<script src="../planet-art.js"></script>
+	<script>
+		const g = new RTS.Game(42, "solar");
+		const terrain = document.createElement("canvas");
+		terrain.width = RTS.W;
+		terrain.height = RTS.H;
+		const tc = terrain.getContext("2d");
+		tc.fillStyle = "#766847";
+		tc.fillRect(0, 0, RTS.W, RTS.H);
+		PlanetArt.terrain(tc, g);
+		function frame(time) {
+			for (const id of ["clear", "storm"]) {
+				const c = document.getElementById(id).getContext("2d");
+				c.drawImage(terrain, 500, 1300, 1000, 808, 0, 0, 520, 420);
+				g.time =
+					id === "storm"
+						? 110 + ((time / 1000) % 10)
+						: (time / 1000) % 20;
+				PlanetArt.atmosphere(c, g, 520, 420);
+			}
+			requestAnimationFrame(frame);
+		}
+		requestAnimationFrame(frame);
+	</script>
+</html>

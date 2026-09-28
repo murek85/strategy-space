@@ -1,0 +1,91 @@
+<!doctype html><meta charset="utf-8" /><title>Test syntezy audio</title>
+<style>
+	body {
+		background: #101825;
+		color: #e1f4ff;
+		font: 16px monospace;
+		padding: 30px;
+	}
+	button {
+		padding: 15px;
+	}
+	pre {
+		white-space: pre-wrap;
+	}
+</style>
+<button id="run">Uruchom test audio</button>
+<pre id="result">Gotowy</pre>
+<script src="../audio.js"></script>
+<script>
+	document.querySelector("#run").onclick = async () => {
+		const result = document.querySelector("#result");
+		result.textContent = "Testowanie…";
+		try {
+			const kinds = [
+					"engine",
+					"footstep",
+					"robot-move",
+					"robot-build",
+					"robot-mine",
+					"robot-gas",
+					"shot",
+					"rocket",
+					"explosion",
+					"alarm",
+					"ready",
+					"capture",
+					"research",
+					"victory",
+					"defeat",
+					"start",
+					"command",
+					"select",
+					"click",
+					"muted",
+				],
+				rows = [];
+			for (const kind of kinds) {
+				const context = new OfflineAudioContext(2, 44100 * 2, 44100);
+				const facade = new Proxy(context, {
+					get(target, key) {
+						if (key === "state") return "running";
+						const value = Reflect.get(target, key, target);
+						return typeof value === "function"
+							? value.bind(target)
+							: value;
+					},
+				});
+				const audio = new GameAudio({ contextFactory: () => facade });
+				audio.musicMode = null;
+				if (!(await audio.unlock())) throw Error("unlock failed");
+				if (kind === "muted") audio.setMuted(true);
+				audio.play(kind === "muted" ? "explosion" : kind);
+				const buffer = await context.startRendering(),
+					data = buffer.getChannelData(0);
+				let sum = 0,
+					peak = 0;
+				for (const value of data) {
+					if (!Number.isFinite(value))
+						throw Error(kind + ": invalid sample");
+					sum += value * value;
+					peak = Math.max(peak, Math.abs(value));
+				}
+				const rms = Math.sqrt(sum / data.length);
+				if (kind === "muted" ? peak !== 0 : rms < 0.00001 || peak >= 1)
+					throw Error(kind + ": invalid amplitude " + peak);
+				if (audio.voices !== 0)
+					throw Error(kind + ": leaked voices " + audio.voices);
+				rows.push(
+					kind +
+						" OK RMS=" +
+						rms.toFixed(5) +
+						" peak=" +
+						peak.toFixed(5),
+				);
+			}
+			result.textContent = "PASS — 20/20\n" + rows.join("\n");
+		} catch (error) {
+			result.textContent = "FAIL — " + error.message;
+		}
+	};
+</script>

@@ -1,0 +1,361 @@
+<!doctype html><meta charset="utf-8" /><title>Test nawigacji menu</title>
+<style>
+	body {
+		font: 16px monospace;
+		background: #101825;
+		color: white;
+		padding: 24px;
+	}
+	#command-menu {
+		display: none;
+	}
+	pre {
+		white-space: pre-wrap;
+	}
+</style>
+<button id="run">Testuj menu</button>
+<pre id="result">Gotowy</pre>
+<canvas id="game" tabindex="0"></canvas>
+<script src="../engine.js"></script>
+<script src="../advanced-rules.js"></script>
+<script src="../army-rules.js"></script>
+<script src="../campaign-act2.js"></script>
+<script src="../scenario-modes.js"></script>
+<script src="../frontier-maps.js"></script><script src="../themed-maps.js"></script>
+<script src="../support-rules.js"></script>
+<script src="../scenario-setup.js"></script>
+<script src="../scenario-challenges.js"></script>
+<script src="../enemy-ai.js"></script>
+<script src="../teams-rules.js"></script>
+<script src="../factions-rules.js"></script>
+<script src="../swarm-rules.js"></script>
+<script src="../campaign-act3.js"></script>
+<script src="../campaign-film.js"></script>
+<script src="../act2-film.js"></script>
+<script src="../art.js"></script>
+<script src="../planet-art.js"></script>
+<script src="../advanced-art.js"></script>
+<script src="../act2-art.js"></script>
+<script src="../support-art.js"></script>
+<script src="../fx-art.js"></script>
+<script src="../faction-art.js"></script>
+<script src="../swarm-art.js"></script>
+<script src="../map-art.js"></script><script src="../themed-art.js"></script>
+<script src="../knowledge.js"></script>
+<script src="../galaxy-map.js"></script>
+<script src="../menu.js"></script>
+<script>
+	document.getElementById("run").onclick = () => {
+		const lines = [];
+		let menu,
+			save = { exists: false, valid: false },
+			writes = 0,
+			starts = 0,
+			leaves = 0,
+			resumes = 0,
+			saveOK = true,
+			loads = 0,
+			freezes = 0,
+			mission = null;
+		const slots = Array.from({ length: 5 }, () => ({
+				exists: false,
+				valid: false,
+			})),
+			progress = {};
+		let slotWrites = 0,
+			slotLoads = 0;
+		const musicModes = [];
+		const audio = {
+			volume: 0.35,
+			musicVolume: 0.35,
+			muted: false,
+			setMusicVolume(v) {
+				this.musicVolume = v;
+			},
+		};
+		const check = (name, ok) => {
+			if (!ok) throw Error(name);
+			lines.push("OK " + name);
+		};
+		const click = (id) => document.getElementById("menu-" + id).click();
+		try {
+			menu = new CommandMenu({
+				music: (mode) => musicModes.push(mode),
+				campaign: () => progress,
+				slots: () => slots,
+				saveSlot: (n) => {
+					slotWrites++;
+					slots[n - 1] = {
+						exists: true,
+						valid: true,
+						missionId: "horizon",
+						date: "test",
+						time: "00:12",
+					};
+					return saveOK;
+				},
+				loadSlot: (n) => {
+					slotLoads++;
+					return slots[n - 1].valid;
+				},
+				inspectSave: () => save,
+				freeze: () => freezes++,
+				audio: () => audio,
+				toggleSound: () => {},
+				volume: (v) => (audio.volume = v),
+				mute: (v) => (audio.muted = v),
+				start: (id) => {
+					starts++;
+					mission = id;
+				},
+				load: () => {
+					loads++;
+					return true;
+				},
+				resume: () => resumes++,
+				save: () => {
+					writes++;
+					return saveOK;
+				},
+				leave: () => leaves++,
+			});
+			click("knowledge");
+			check(
+				"Armia ma modele i nie zawiera budynków",
+				document.querySelectorAll("[data-model]").length > 0 &&
+					[...document.querySelectorAll("[data-model]")].every(
+						(c) =>
+							RTS.TYPES[c.dataset.model].speed > 0 &&
+							c.dataset.model !== "beast",
+					),
+			);
+			document.getElementById("knowledge-tab-buildings").click();
+			check(
+				"Infrastruktura zawiera wszystkie budynki",
+				document.querySelectorAll("[data-model]").length ===
+					Object.values(RTS.TYPES).filter(
+						(s) => !s.speed && !s.threat,
+					).length,
+			);
+			check(
+				"Każdy model budynku został narysowany",
+				[...document.querySelectorAll("[data-model]")].every((c) =>
+					c
+						.getContext("2d")
+						.getImageData(0, 0, c.width, c.height)
+						.data.some((v, i) => i % 4 === 3 && v > 0),
+				),
+			);
+			document
+				.getElementById("knowledge-tab-buildings")
+				.dispatchEvent(
+					new KeyboardEvent("keydown", {
+						key: "ArrowRight",
+						bubbles: true,
+					}),
+				);
+			check(
+				"Strzałka zmienia zakładkę",
+				document
+					.getElementById("knowledge-tab-wildlife")
+					.getAttribute("aria-selected") === "true" &&
+					document.querySelectorAll('[data-model="beast"]').length ===
+						3,
+			);
+			document.getElementById("knowledge-tab-guide").click();
+			check(
+				"Poradnik zachowuje zasady gospodarki",
+				document
+					.getElementById("knowledge-panel")
+					.textContent.includes("Moc i kryształy"),
+			);
+			click("back");
+			check("Powrót z katalogu do menu", menu.screen === "home");
+			check(
+				"Brak zapisu ukrywa Kontynuuj",
+				!document.getElementById("menu-continue"),
+			);
+			click("single");
+			click("back");
+			check(
+				"Odprawa nie zapisuje ani nie uruchamia gry",
+				writes === 0 && starts === 0 && menu.screen === "home",
+			);
+			click("single");
+			click("scenarios");
+			document.getElementById("scenario-map").value = "horizon";
+			document
+				.getElementById("scenario-map")
+				.dispatchEvent(new Event("change"));
+			click("launch");
+			check(
+				"Pierwsza operacja startuje bez potwierdzenia",
+				starts === 1 && !menu.active,
+			);
+			save = { exists: true, valid: true, time: "01:23", date: "test" };
+			menu.show("home");
+			click("single");
+			click("scenarios");
+			document.getElementById("scenario-map").value = "horizon";
+			document
+				.getElementById("scenario-map")
+				.dispatchEvent(new Event("change"));
+			click("launch");
+			check(
+				"Istniejący zapis wymaga potwierdzenia",
+				menu.screen === "replace" && starts === 1,
+			);
+			click("cancel");
+			click("campaign-back");
+			click("back");
+			check(
+				"Anulowanie zachowuje zapis",
+				writes === 0 && starts === 1 && menu.screen === "home",
+			);
+			click("continue");
+			check(
+				"Kontynuuj otwiera pauzę",
+				loads === 1 && menu.screen === "pause",
+			);
+			click("settings");
+			const music = document.getElementById("menu-music-volume");
+			music.value = "17";
+			music.dispatchEvent(new Event("input"));
+			check(
+				"Osobny suwak muzyki",
+				audio.musicVolume === 0.17 && audio.volume === 0.35,
+			);
+			menu.escape();
+			check(
+				"Esc z ustawień wraca do pauzy",
+				menu.screen === "pause" && resumes === 0,
+			);
+			menu.escape();
+			check("Esc z pauzy wznawia bitwę", !menu.active && resumes === 1);
+			menu.show("pause");
+			saveOK = false;
+			click("home");
+			check(
+				"Błąd zapisu blokuje opuszczenie",
+				menu.screen === "save-error" && leaves === 0,
+			);
+			click("pause");
+			saveOK = true;
+			click("home");
+			check(
+				"Poprawny zapis pozwala wrócić do menu",
+				menu.screen === "home" && leaves === 1,
+			);
+			menu.show("pause");
+			saveOK = false;
+			click("home");
+			click("leave");
+			check(
+				"Jawne opuszczenie bez zapisu",
+				menu.screen === "home" && leaves === 2,
+			);
+			save = { exists: true, valid: false, error: "Zapis uszkodzony" };
+			menu.show("home");
+			check(
+				"Uszkodzony zapis nie udaje poprawnego",
+				!document.getElementById("menu-continue") &&
+					menu.root.textContent.includes("Zapis uszkodzony"),
+			);
+			click("single");
+			click("scenarios");
+			document.getElementById("scenario-map").value = "horizon";
+			document
+				.getElementById("scenario-map")
+				.dispatchEvent(new Event("change"));
+			click("launch");
+			check(
+				"Uszkodzony zapis także chroniony przed zastąpieniem",
+				menu.screen === "replace",
+			);
+			click("confirm");
+			check("Potwierdzony nowy start", starts === 2 && !menu.active);
+			menu.show("single");
+			click("campaign");
+			check("Kampania otwiera intro", menu.screen === "intro");
+			check("Intro wybiera osobny motyw", musicModes.at(-1) === "intro");
+			click("skip-intro");
+			check(
+				"Pominięcie przywraca muzykę menu",
+				musicModes.at(-1) === "menu",
+			);
+			document.querySelector('[data-mission="colony1"]').click();
+			click("launch");
+			click("confirm");
+			check("Kampania uruchamia właściwą misję", mission === "colony1");
+			menu.show("single");
+			click("scenarios");
+			check(
+				"Scenariusze od razu pokazują ustawienia i listę map",
+				document.querySelectorAll("#scenario-map option").length ===
+					Object.values(RTS.MISSIONS).filter((m) => !m.campaign)
+						.length &&
+					!!document.getElementById("scenario-faction") &&
+					!!document.getElementById("map-preview"),
+			);
+			menu.show("campaign");
+			check(
+				"Dalsze rozdziały zablokowane",
+				document.querySelector("[data-mission=colony2]").disabled &&
+					document.querySelector("[data-mission=colony3]").disabled,
+			);
+			progress.colony1 = true;
+			menu.show("campaign");
+			check(
+				"Zwycięstwo odblokowuje rozdział II",
+				!document.querySelector("[data-mission=colony2]").disabled,
+			);
+			progress.colony2 = true;
+			menu.show("campaign");
+			check(
+				"Zwycięstwo odblokowuje rozdział III",
+				!document.querySelector("[data-mission=colony3]").disabled,
+			);
+			menu.show("pause");
+			saveOK = true;
+			click("save");
+			document.querySelector('[data-slot="1"]').click();
+			check(
+				"Zapis do pustego slotu",
+				slotWrites === 1 && menu.screen === "slots",
+			);
+			document.querySelector('[data-slot="1"]').click();
+			check(
+				"Nadpisanie wymaga potwierdzenia",
+				menu.screen === "slot-confirm" && slotWrites === 1,
+			);
+			click("slot-cancel");
+			check("Anulowanie nie nadpisuje", slotWrites === 1);
+			document.querySelector('[data-slot="1"]').click();
+			click("slot-confirm");
+			check("Potwierdzony zapis", slotWrites === 2);
+			click("slots-back");
+			click("slots");
+			document.querySelector('[data-slot="1"]').click();
+			check(
+				"Wczytanie slotu otwiera pauzę",
+				menu.screen === "pause" && slotLoads === 1,
+			);
+			click("slots");
+			check(
+				"Puste sloty nie pozwalają wczytać",
+				document.querySelector('[data-slot="2"]').disabled,
+			);
+			menu.escape();
+			check("Esc ze slotów wraca do pauzy", menu.screen === "pause");
+			check("Każde menu zatrzymuje symulację", freezes > 10);
+			document.getElementById("result").textContent =
+				"PASS — " + lines.length + "\n" + lines.join("\n");
+		} catch (e) {
+			document.getElementById("result").textContent =
+				"FAIL — " + e.message + "\n" + lines.join("\n");
+		} finally {
+			menu?.root.remove();
+			document.body.classList.remove("in-menu");
+		}
+	};
+</script>

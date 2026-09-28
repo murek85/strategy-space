@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="pl">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Prototyp renderera WebGL · Pogranicze Galaktyki</title>
+		<style>
+			html,
+			body {
+				margin: 0;
+				height: 100%;
+				background: #0b141c;
+				color: #d7e4e6;
+				font: 14px "Segoe UI", sans-serif;
+				overflow: hidden;
+			}
+			#view {
+				position: fixed;
+				inset: 0;
+				cursor: grab;
+			}
+			#panel {
+				position: fixed;
+				left: 16px;
+				top: 16px;
+				width: 300px;
+				max-height: calc(100vh - 32px);
+				overflow: auto;
+				background: #0a1524e6;
+				border: 1px solid #3b535d;
+				border-radius: 8px;
+				padding: 14px 16px;
+				box-sizing: border-box;
+			}
+			#panel h1 {
+				font-size: 18px;
+				font-weight: 500;
+				margin: 0 0 4px;
+			}
+			#panel p {
+				margin: 4px 0 10px;
+				color: #9fb2bb;
+				font-size: 12px;
+				line-height: 1.5;
+			}
+			.row {
+				display: flex;
+				gap: 6px;
+				flex-wrap: wrap;
+				margin: 8px 0;
+			}
+			button {
+				font: inherit;
+				font-size: 13px;
+				background: #172b37;
+				color: #d7e4e6;
+				border: 1px solid #39525e;
+				border-radius: 5px;
+				padding: 6px 10px;
+				cursor: pointer;
+			}
+			button[aria-pressed="true"] {
+				background: #28473f;
+				border-color: #aee5c7;
+			}
+			label {
+				display: flex;
+				align-items: center;
+				gap: 8px;
+				font-size: 13px;
+				margin: 4px 0;
+			}
+			input[type="range"] {
+				width: 100%;
+			}
+			#stats {
+				font: 12px Consolas, monospace;
+				color: #9fd8c8;
+				white-space: pre;
+			}
+			#fallback {
+				position: fixed;
+				inset: 0;
+				display: none;
+				align-items: center;
+				justify-content: center;
+				text-align: center;
+				padding: 24px;
+			}
+			a {
+				color: #aee5c7;
+			}
+			@media (max-width: 600px) {
+				#panel {
+					width: calc(100% - 32px);
+					max-height: 45vh;
+				}
+			}
+		</style>
+	</head>
+	<body>
+		<div id="view" aria-label="Plansza prototypu"></div>
+		<section id="panel" aria-label="Sterowanie prototypem">
+			<h1>Renderer WebGL · prototyp</h1>
+			<p>Świetlisty Gąszcz (Lumeria V) w PixiJS. Ta sama symulacja i te same modele co w grze; nowe są oświetlenie, cienie, poświata, woda, pogoda i mgła. Przeciągnij mapę myszą, kółko — przybliżenie.</p>
+			<div class="row" role="group" aria-label="Pora dnia">
+				<button data-time="0">Południe</button>
+				<button data-time="0.25">Zmierzch</button>
+				<button data-time="0.5">Noc</button>
+				<button data-time="auto" aria-pressed="true">Doba (auto)</button>
+			</div>
+			<label>Pora dnia <input id="tod" type="range" min="0" max="1" step="0.005" value="0" aria-label="Pora dnia" /></label>
+			<div class="row"><button id="storm" aria-pressed="false">Tropikalna ulewa</button><button id="pause" aria-pressed="false">Pauza</button></div>
+			<label><input type="checkbox" data-option="lights" checked /> Mapa światła i światła punktowe</label>
+			<label><input type="checkbox" data-option="shadows" checked /> Cienie od słońca</label>
+			<label><input type="checkbox" data-option="bloom" checked /> Poświata (bloom)</label>
+			<label><input type="checkbox" data-option="water" checked /> Animowana woda</label>
+			<label><input type="checkbox" data-option="weather" checked /> Deszcz i błyskawice</label>
+			<label><input type="checkbox" data-option="grading" checked /> Korekcja kolorów</label>
+			<label><input type="checkbox" data-option="fog" /> Mgła wojny</label>
+			<div class="row"><button id="battle">Wyślij armię do ataku</button><button id="center">Centrum mapy</button></div>
+			<div id="stats" role="status"></div>
+			<p><a href="index.html">Gra (renderer Canvas 2D)</a> · <a href="docs/RENDERER_WEBGL.md">Propozycja</a></p>
+		</section>
+		<div id="fallback"><p>Ta przeglądarka nie obsługuje WebGL. Zagraj w <a href="index.html">wersję z rendererem Canvas 2D</a>.</p></div>
+
+		<script src="engine.js"></script>
+		<script src="advanced-rules.js"></script>
+		<script src="army-rules.js"></script>
+		<script src="campaign-act2.js"></script>
+		<script src="scenario-modes.js"></script>
+		<script src="frontier-maps.js"></script>
+		<script src="themed-maps.js"></script>
+		<script src="support-rules.js"></script>
+		<script src="scenario-setup.js"></script>
+		<script src="scenario-challenges.js"></script>
+		<script src="enemy-ai.js"></script>
+		<script src="teams-rules.js"></script>
+		<script src="factions-rules.js"></script>
+		<script src="swarm-rules.js"></script>
+		<script src="campaign-act3.js"></script>
+		<script src="trade-rules.js"></script>
+		<script src="network-rules.js"></script>
+		<script src="scene-fx.js"></script>
+		<script src="art.js"></script>
+		<script src="planet-art.js"></script>
+		<script src="advanced-art.js"></script>
+		<script src="act2-art.js"></script>
+		<script src="support-art.js"></script>
+		<script src="fx-art.js"></script>
+		<script src="faction-art.js"></script>
+		<script src="swarm-art.js"></script>
+		<script src="map-art.js"></script>
+		<script src="themed-art.js"></script>
+		<script src="vendor/pixi.min.js"></script>
+		<script src="webgl/pixi-renderer.js"></script>
+		<script src="webgl/prototype.js"></script>
+	</body>
+</html>

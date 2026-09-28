@@ -1,0 +1,1013 @@
+/* Navigation owns screens; the application retains a single simulation loop. */
+const WINDOW_SCREENS = [
+	"news",
+	"campaign",
+	"settings",
+	"briefing",
+	"slots",
+	"review",
+	"scenarios",
+];
+class CommandMenu {
+	constructor(api) {
+		this.api = api;
+		this.screen = "home";
+		this.origin = "home";
+		this.focusReturn = null;
+		this.selectedMission = "horizon";
+		this.missionOrigin = "single";
+		this.scenario = {
+			name: "Dowódca",
+			color: "#b0efd0",
+			faction: "colonies",
+			difficulty: "normal",
+			players: 2,
+			mode: "conquest",
+			size: "medium",
+			seed: 0,
+			defenseTime: 600,
+			pointsPerRelay: 90,
+			resources: "normal",
+			fauna: "normal",
+			weather: "normal",
+			enemy: "commander",
+			teams: "ffa",
+			enemyFaction: "auto",
+		};
+		this.root = document.createElement("section");
+		this.root.id = "command-menu";
+		this.root.setAttribute("aria-label", "Menu główne");
+		document.body.append(this.root);
+		this.gameElements = [
+			...document.querySelectorAll(
+				"body > header,body > main,body > footer",
+			),
+		];
+		try {
+			this.reduced =
+				JSON.parse(localStorage.getItem("pogranicze-menu-v1"))
+					?.reduced ??
+				matchMedia("(prefers-reduced-motion: reduce)").matches;
+		} catch {
+			this.reduced = true;
+		}
+		this.show("home");
+	}
+	get active() {
+		return !this.root.hidden;
+	}
+	button(id, label, primary = false) {
+		return `<button id="menu-${id}" class="menu-action ${primary ? "prominent" : ""}">${label}<span aria-hidden="true">↗</span></button>`;
+	}
+	show(screen, focusId) {
+		this.galaxy?.destroy();
+		this.galaxy = null;
+		if (this.fitGalaxy) window.removeEventListener("resize", this.fitGalaxy);
+		if (this.introFrame) cancelAnimationFrame(this.introFrame);
+		this.introFrame = null;
+		this.screen = screen;
+		this.root.dataset.screen = screen;
+		this.root.hidden = false;
+		this.api.freeze();
+		this.api.music?.(
+			screen === "intro" || screen === "intro2" ? "intro" : "menu",
+		);
+		this.gameElements.forEach((e) => (e.inert = true));
+		document.body.classList.add("in-menu");
+		const save = this.api.inspectSave();
+		let title = "",
+			body = "";
+		if (screen === "home") {
+			title = "Dowództwo<br>pogranicza.";
+			body = `<p class="menu-lead">Sektor zewnętrzny. Nowy front.<br>Twoje rozkazy wyznaczają granice.</p><nav aria-label="Główna nawigacja">${save.valid ? this.button("continue", "Kontynuuj", true) : ""}${this.button("single", "Gra jednoosobowa", !save.valid)}${this.button("slots", "Wczytaj grę — sloty")}${this.button("knowledge", "Baza wiedzy")}${this.button("settings", "Ustawienia")}</nav><p class="menu-message">${save.error || ""}</p>`;
+		} else if (screen === "single") {
+			title = "Gra jednoosobowa";
+			body = `<p>Wybierz samodzielną bitwę lub kontynuuj historię Wolnych Kolonii.</p>${this.button("training", "Szkolenie: Próba kolonii")}${this.button("scenarios", "Scenariusze")}${this.button("campaign", "Kampania: Odzyskany Świt", true)}${this.button("back", "Wróć")}`;
+		} else if (screen === "intro") {
+			title = "Odzyskany Świt";
+			body =
+				'<div class="campaign-film"><canvas id="campaign-film" width="960" height="400" aria-label="Film wprowadzający do kampanii"></canvas><p id="film-caption" aria-live="polite"></p><progress id="film-progress" max="30" value="0" aria-label="Czas intro"></progress></div>' +
+				this.button("skip-intro", "Pomiń intro") +
+				"<small>Prolog · 30 sekund</small>";
+		} else if (screen === "intro2") {
+			title = "Akt II · Cena świtu";
+			body =
+				'<div class="campaign-film"><canvas id="campaign-film" width="960" height="400" aria-label="Prolog drugiego aktu kampanii"></canvas><p id="film-caption" aria-live="polite"></p><progress id="film-progress" max="20" value="0" aria-label="Czas prologu"></progress></div>' +
+				this.button("skip-intro2", "Pomiń prolog") +
+				"<small>Prolog aktu II · 20 sekund</small>";
+		} else if (screen === "review") {
+			const m = RTS.MISSIONS[this.selectedMission],
+				review = this.api.review?.() || { objectives: [], radio: [] },
+				speakers = RTS.ACT2_SPEAKERS || {};
+			title = m.name;
+			body = `<span class="menu-tag">ODPRAWA · ${m.planet}</span><p>${m.description}</p><h2>Cele</h2><ul class="act2-objectives">${review.objectives.map((o) => `<li class="${o.done ? "done" : o.failed ? "failed" : ""}${o.secondary ? " secondary" : ""}">${o.text}</li>`).join("")}</ul><h2>Dziennik łączności</h2><ol class="act2-radio">${review.radio.map((l) => `<li><b style="color:${speakers[l.who]?.color || "#c5d7d9"}">${speakers[l.who]?.name || l.who}</b> <small>${Math.floor(l.time / 60)}:${String(l.time % 60).padStart(2, "0")}</small><br>${l.text}</li>`).join("") || "<li>Brak wiadomości.</li>"}</ol>${this.button("pause", "Wróć do pauzy", true)}`;
+		} else if (screen === "scenarios") {
+			if (RTS.MISSIONS[this.selectedMission].campaign)
+				this.selectedMission = "horizon";
+			this.missionOrigin = "scenarios";
+			title = "Scenariusze";
+			body =
+				'<h2>Cele operacji</h2><div class="scenario-map"><label>Mapa<select id="scenario-map" aria-label="Mapa">' +
+				Object.entries(RTS.MISSIONS)
+					.filter(([, m]) => !m.campaign)
+					.map(
+						([id, m]) =>
+							'<option value="' +
+							id +
+							'">' +
+							m.name +
+							" / " +
+							m.planet +
+							"</option>",
+					)
+					.join("") +
+				'</select></label><canvas id="map-preview" width="480" height="190" aria-label="Podgląd terenu wybranej mapy"></canvas><p id="map-description"></p><small id="mode-objective">Zniszcz wszystkie wrogie centra dowodzenia.</small></div>' +
+				this.button("launch", "Rozpocznij operację", true) +
+				this.button("campaign-back", "Wróć do wyboru gry");
+		} else if (screen === "campaign") {
+			const isCampaign = screen === "campaign",
+				progress = this.api.campaign?.() || {};
+			title = isCampaign ? "Odzyskany Świt" : "Scenariusze";
+			const details = this.api.campaignDetails?.() || {
+					badges: {},
+					choices: {},
+				},
+				card = ([id, m]) =>
+					`<button class="menu-action mission-card" data-mission="${id}" ${m.requires && !progress[m.requires] ? "disabled" : ""}><span><b>${m.name}${details.badges[id] ? ' <i class="act2-badge" title="Cel dodatkowy wykonany">◆</i>' : ""}</b><small>${m.planet} · ${progress[id] ? "Ukończono" + (details.choices[id] ? (details.choices[id] === "destroy" ? " · kompleks zniszczony" : " · personel ewakuowany") : "") : m.requires && !progress[m.requires] ? "Ukończ: " + RTS.MISSIONS[m.requires].name : "Gotowa do rozpoczęcia"}</small></span><span>↗</span></button>`,
+				missions = Object.entries(RTS.MISSIONS)
+					.filter(([, m]) => !!m.campaign === isCampaign)
+					.sort(([a], [b]) => a.localeCompare(b));
+			body = `<div class="campaign-galaxy"><nav class="mission-list galaxy-list" aria-label="Akty i rozdziały kampanii"><h2 class="act-heading">Akt I · Odzyskany Świt</h2>${missions
+				.filter(([, m]) => !m.act)
+				.map(card)
+				.join(
+					"",
+				)}<h2 class="act-heading">Akt II · Cena świtu</h2>${progress.colony3 ? this.button("intro2", "Prolog aktu II") : ""}${missions
+				.filter(([, m]) => m.act === 2)
+				.map(card)
+				.join(
+					"",
+				)}${missions.some(([, m]) => m.act === 3) ? `<h2 class="act-heading">Akt III · Przebudzenie Roju</h2>${missions
+				.filter(([, m]) => m.act === 3)
+				.map(card)
+				.join("")}` : ""}</nav><div class="galaxy-view"><canvas id="campaign-map" role="img" aria-label="Mapa galaktyki: układy planetarne pogranicza i trasa kampanii"></canvas><p class="galaxy-caption">Akt I: szkolenie i trzy rozdziały. Akt II — Cena świtu i akt III — Przebudzenie Roju: rozdziały z celami dodatkowymi (◆), które dają niewielką premię na start następnego rozdziału. Zwycięstwo odblokowuje kolejny rozdział. Kliknij świat na mapie galaktyki albo rozdział z listy.</p></div><aside id="galaxy-info" class="galaxy-info" aria-live="polite" aria-label="Wybrana planeta"></aside></div>${this.button("campaign-back", "Wróć do wyboru gry")}`;
+		} else if (screen === "slots") {
+			title =
+				this.slotMode === "save" ? "Zapisz w slocie" : "Wczytaj grę";
+			body = `<p>Pięć ręcznych zapisów na tym urządzeniu. Autosave pozostaje niezależny.</p><div class="mission-list">${(this.api.slots?.() || []).map((slot, i) => `<button class="menu-action" data-slot="${i + 1}" ${this.slotMode !== "save" && !slot.valid ? "disabled" : ""}><span><b>Slot ${i + 1} · ${slot.valid ? RTS.MISSIONS[slot.missionId].name : slot.exists ? slot.label || "Uszkodzony zapis" : "Pusty"}</b><small>${slot.valid ? slot.date + " · " + slot.time : ""}</small></span><span>${this.slotMode === "save" ? "Zapisz" : "Wczytaj"}</span></button>`).join("")}</div><p id="menu-feedback" role="status"></p>${this.button("slots-back", "Wróć")}`;
+		} else if (screen === "slot-confirm") {
+			title = "Nadpisać slot " + this.slotNumber + "?";
+			body = `<p>Dotychczasowy ręczny zapis w tym slocie zostanie zastąpiony bieżącą operacją.</p>${this.button("slot-confirm", "Zapisz w tym slocie", true)}${this.button("slot-cancel", "Anuluj")}`;
+		} else if (screen === "briefing") {
+			const m = RTS.MISSIONS[this.selectedMission];
+			title = m.name;
+			body = `<span class="menu-tag">${m.training ? "SZKOLENIE WOLNYCH KOLONII" : m.campaign ? (m.act === 2 ? "KAMPANIA · AKT II · " : "KAMPANIA · ROZDZIAŁ ") + m.name : "OPERACJA NIEZALEŻNA"} / ${m.planet}</span><p>${m.description}</p><h2>Cele operacji</h2><p>${m.campaign ? m.objective : (RTS.describeScenario?.(this.scenario) || RTS.MODES?.[this.scenario.mode])?.objective || "Zniszcz wszystkie wrogie centra dowodzenia."}</p>${m.facts ? `<div class="menu-facts"><span>${m.facts[0]}</span><span>${m.facts[1]}</span></div><p>Nowa umiejętność: ${m.lesson}. Wskazówki i dziennik łączności w panelu celów; odprawę można powtórzyć z menu pauzy.</p>` : `<div class="menu-facts"><span>Metal · gaz · kryształy<br>${m.training || !m.campaign ? "Start: Przyczółek → rozbudowa w BADANIA" : "Start: Kolonia"}</span><span>${m.training ? "1800" : m.campaign ? "650" : "400"} metalu na start<br>${m.training ? "Bez wrogich desantów" : "Pierwszy desant po " + (m.campaign ? "100" : "65") + " s"}</span></div><p>PPM robotem na złożu — wydobycie. Reaktor [C], laboratorium [N]. Home — cała mapa.</p>`}${this.button("launch", "Rozpocznij operację", true)}${this.button("mission-back", "Wróć do wyboru misji")}`;
+		} else if (screen === "replace") {
+			title = "Rozpocząć od nowa?";
+			body = `<p>Rozpoczęcie operacji zastąpi dotychczasowy autosave na tym urządzeniu; ręczne sloty pozostaną zachowane. Powrót do odprawy zachowa postęp.</p>${this.button("confirm", "Rozpocznij i zastąp zapis", true)}${this.button("cancel", "Wróć do odprawy")}`;
+		} else if (screen === "pause") {
+			title = "Pauza operacji";
+			body = `<p>Symulacja zatrzymana. Twoje oddziały czekają na rozkazy.</p>${this.button("resume", "Wznów", true)}${this.api.review?.() ? this.button("review", "Odprawa i dziennik") : ""}${this.button("save", "Zapisz w slocie")}${this.button("slots", "Wczytaj grę — sloty")}${this.button("settings", "Ustawienia")}${this.button("knowledge", "Baza wiedzy")}${this.button("home", "Menu główne")}<p id="menu-feedback" role="status"></p>`;
+		} else if (screen === "save-error") {
+			title = "Nie zapisano postępu";
+			body = `<p>Pamięć lokalna jest niedostępna. Możesz wrócić do gry lub opuścić bitwę bez zapisania ostatnich zmian.</p>${this.button("pause", "Wróć do pauzy", true)}${this.button("leave", "Opuść bez zapisu")}`;
+		} else if (screen === "settings") {
+			title = "Ustawienia";
+			body = `<p>Dźwięk i wygląd pokładu dowodzenia.</p><label class="menu-setting">Głośność efektów <output id="menu-volume-value"></output><input id="menu-volume" aria-label="Głośność efektów" type="range" min="0" max="100"></label><label class="menu-setting">Głośność muzyki <output id="menu-music-value"></output><input id="menu-music-volume" aria-label="Głośność muzyki" type="range" min="0" max="100"></label><label class="menu-setting">Jakość dźwięku <select id="menu-audio-quality" aria-label="Jakość dźwięku"><option value="high">Wysoka (próbki, Tone.js, otoczenie)</option><option value="classic">Klasyczna (synteza)</option></select></label><p id="menu-audio-status" class="menu-audio-status" aria-live="off"></p>${[
+				["combat", "Walka"],
+				["units", "Jednostki i praca"],
+				["ambient", "Otoczenie"],
+				["alerts", "Komunikaty i rozkazy"],
+			]
+				.map(
+					([key, label]) =>
+						`<label class="menu-setting">${label}<output id="mix-${key}-value"></output><input type="range" id="mix-${key}" aria-label="${label}" min="0" max="100"></label>`,
+				)
+				.join(
+					"",
+				)}<label class="menu-setting"><input type="checkbox" id="menu-muted"> Wycisz dźwięk</label><label class="menu-setting"><input type="checkbox" id="menu-reduced" ${this.reduced ? "checked" : ""}> Ogranicz animacje menu</label>${
+				typeof SceneFX !== "undefined"
+					? `<h2>Grafika planszy</h2>${[
+							["terrain", "Detale terenu i roślinność"],
+							["particles", "Cząsteczki pogody"],
+						]
+							.map(
+								([key, label]) =>
+									`<label class="menu-setting">${label}<select id="visual-${key}" aria-label="${label}"><option value="high">Wysokie</option><option value="medium">Średnie</option><option value="low">Niskie</option></select></label>`,
+							)
+							.join(
+								"",
+							)}<label class="menu-setting"><input type="checkbox" id="visual-flashes"> Błyski burzy</label><label class="menu-setting"><input type="checkbox" id="visual-metrics"> Pokaż czas renderowania planszy</label><h2>Renderer</h2><label class="menu-setting">Silnik grafiki<select id="visual-renderer" aria-label="Silnik grafiki"><option value="webgl">WebGL (PixiJS) — oświetlenie i efekty</option><option value="webgpu">WebGPU (PixiJS) — nowszy interfejs grafiki</option><option value="canvas">Canvas 2D — tryb awaryjny</option></select></label><p id="renderer-status" role="status"></p>${[
+								["lights", "Oświetlenie dnia i nocy, światła"],
+								["shadows", "Cienie od słońca"],
+								["bloom", "Poświata"],
+								["water", "Połysk wody"],
+								["volume", "Objętość budynków i jednostek (światło z kierunku słońca)"],
+								["scars", "Ślady zniszczeń i pożarów"],
+								["relief", "Wysokość terenu: rzeźba i cienie gór"],
+								["tilt", "Perspektywa 2,5D (lekko pochylona kamera)"],
+							]
+								.map(([key, label]) => `<label class="menu-setting"><input type="checkbox" id="visual-${key}" class="webgl-effect"> ${label}</label>`)
+								.join("")}`
+					: ""
+			}<p id="menu-preferences" role="status">Ustawienia zapamiętujemy na tym urządzeniu.</p>${this.button("back", "Wróć")}`;
+		} else if (screen === "knowledge") {
+			title = "Baza wiedzy";
+			body = KnowledgeBase.template() + this.button("back", "Wróć");
+		} else {
+			title = "Co nowego";
+			body = `<h2>0.11 / Pogoda i doba</h2><p>Śnieżyce, burze piaskowe i ulewy spowalniają ruch i obniżają celność. Cykl dnia i nocy, badania pogodowe w laboratorium, ptaki i ryby oraz pięć aranżacji muzycznych.</p><h2>0.10 / Budowa przez roboty</h2><p>Robot musi dotrzeć na plac budowy. Osłona piechoty przy skałach i murach, rozkaz utrzymania pozycji, opady osiadające na planszy, pożary uszkodzonych maszyn i proceduralna muzyka.</p><h2>0.9 / Rozległe pogranicze</h2><p>Pięć ręcznych slotów, osobne scenariusze i trzy rozdziały kampanii. Ciężka maszyna [Y], artyleria [O], mur [K] i brama [P]. Mapy 3360 × 2160, cztery przekaźniki, nowe złoża, jeziora i drapieżniki. Pogoda i ślady ruchu. Dolny pasek postępu i lewy panel z zakładkami.</p><h2>0.8 / Nowe światy</h2><p>Reaktory, moc, laboratoria i kryształy. Trzy mapy operacji, kampania Wolnych Kolonii z pierwszą misją, różne biomy i rozbudowana oprawa 2D.</p><h2>0.6 / Gospodarka</h2><p>Magazyny polowe, gaz i ekstraktory, bezczynne roboty oraz badanie większych ładowni. Starsze zapisy otrzymują złoża gazu, a zapas gazu zaczyna od zera.</p><h2>0.5 / Pokład dowodzenia</h2><p>Menu główne, gra jednoosobowa z odprawą, kontynuowanie zapisu, baza wiedzy, ustawienia i menu pauzy.</p><h2>0.4 / Dźwięk</h2><p>Broń, eksplozje, rozkazy, powiadomienia i regulacja głośności.</p><h2>Rozważane kierunki</h2><p>Trzeci poziom centrum (Twierdza) i doktryny frakcji. Nowe cele scenariuszy: ekspedycja po artefakt, ziarno mapy do udostępniania i gotowe zestawy ustawień. Skały blokujące ostrzał, balans frakcji na podstawie rozgrywek, pomiary dużych bitew. Później możliwe bitwy kosmiczne i gra sieciowa. To propozycje bez ustalonego terminu. Przebudowa AI i tryb 3D pozostają odłożone.</p>${this.button("back", "Wróć")}`;
+		}
+		if (screen === "news")
+			body =
+				"<h2>0.10 / Żywa planeta</h2><p>Deszcz tworzy kałuże, śnieg osiada na terenie, a jeziora drobno falują. Uszkodzone obiekty płoną. Roboty fizycznie budują fundamenty; piechota korzysta z osłon, a Shift+S utrzymuje pozycję. Menu i każdy biom mają własną proceduralną muzykę.</p>" +
+				body.replace("Budowa przez roboty, ", "");
+		if (screen === "news")
+			body =
+				"<h2>0.11 / Pogoda i rytm planet</h2><p>Dzień i noc, reflektory, śnieżyce, burze piaskowe i ulewy z piorunami. Pogoda wpływa na ruch i celność. Laboratorium bada monitoring, celowanie adaptacyjne i napędy terenowe. Ptaki, ryby oraz pięć odmiennych aranżacji muzycznych.</p>" +
+				body;
+		if (screen === "news")
+			body =
+				"<h2>0.15 / Armia i baza — etap B</h2><p>Transporter przewozi czterech piechurów: PPM na pojazd, potem Wyładuj. Bateria przeciwlotnicza osłania bazę. Formacje Linia, Kolumna i Rozproszenie zmieniają rozkaz ruchu. Nowe sylwetki i animacje piechoty, detale frakcji, radiowe sygnały rozkazów oraz porównanie parametrów: Oddział / Statystyki.</p>" +
+				"<h2>0.15 / Rozwój kolonii — etap A</h2><p>Drzewo rozwoju F2, panel ekonomii, awans Przyczółek → Kolonia, akumulator i warsztat. Nowe badania: Narzędzia wydobywcze (+25% pobrania), Montaż modułowy (+25% tempa budowy), Szkolenie manewrowe (+10% ruchu piechoty). Gra jednoosobowa → Szkolenie: Próba kolonii uczy tych zasad na bezpiecznym poligonie.</p>" +
+				"<h2>0.14 / Światło i dźwięk</h2><p>Okrągły księżyc, światła nawigacyjne samolotów, pełnoekranowy prolog z sześcioma scenami i osobną muzyką. Bazy w rogach, więcej przekaźników przy złożach oraz dźwięki pracujących robotów.</p>" +
+				"<h2>0.13 / Odzyskany Świt</h2><p>Przywrócone detale budowli, swobodne i okrągłe mury, rozbiórka, łagodniejsza ulewa. Zwarte kafle i konfiguracja scenariusza z podglądem. Osobne mapy kampanii oraz animowany prolog.</p>" +
+				"<h2>0.12 / Frakcje i lotnictwo</h2><p>Dwie frakcje, konfiguracja bitwy dla 2–4 uczestników, myśliwce, bombowce i hangar. Przeciągane mury, bramy i wieże. Bryły budynków, dachy, cienie i nowa fauna. Osobny regulator muzyki.</p>" +
+				body;
+		if (screen === "news")
+			body =
+				"<h2>0.41 / Mapa galaktyki</h2><p>Kampania ma teraz mapę galaktyki: układy z własnymi słońcami, planety o różnych klimatach z pierścieniami, księżycami i pasami asteroid, a także trasę przez wszystkie trzy akty. Kliknij świat, żeby zobaczyć jego rozdziały i scenariusze.</p>" +
+				"<h2>0.40 / Akt III — Przebudzenie Roju</h2><p>Trzy nowe rozdziały kampanii przeciw Rojowi Kryształowemu: wyścig po artefakt na Lumerii V, sojusz z Dominium na Nivalis i szturm na Serce Roju z pomocą stacji orbitalnej. Kampania ma teraz mapę — gwiezdny szlak przez planety wszystkich trzech aktów.</p>" +
+				"<h2>0.39 / Rój Kryształowy</h2><p>Trzecia frakcja: obce, krystaliczne organizmy przebudzone przez artefakty. Tanie i szybkie jednostki, które się regenerują, wybuchające pełzacze, żrące pluwacze, kolosy i monolit spowalniający wrogów. Rój można wybrać dla siebie albo dla przeciwnika.</p>" +
+				"<h2>0.38 / Oblicza frakcji</h2><p>Kolonie dostają grenadierów, łazik serwisowy i placówkę polową, a budują szybciej. Dominium — miotacze ognia, niszczyciel czołgów i stację orbitalną z uderzeniem z orbity, a jego budynki są wytrzymalsze. Obie frakcje wyglądają teraz wyraźnie inaczej.</p>" +
+				"<h2>0.37 / Drużyny 2 na 2</h2><p>Zagraj z sojusznikiem AI przeciwko dwóm przeciwnikom. Sojusznicy widzą to samo, nie strzelają do siebie, wspólnie zdobywają przekaźniki i wygrywają razem.</p>" +
+				"<h2>0.36 / Król wzgórza i Przetrwanie</h2><p>Dwa nowe tryby scenariuszy: walka o centralny Szczyt oraz Przetrwanie — coraz większe fale bez końca, z rekordem na każdej mapie. Nowe ustawienia: długość doby (także wieczny dzień) i start od razu z Kolonią.</p>" +
+				"<h2>0.35 / Efekty i zapowiedź burzy</h2><p>Kopuła osłony rozbłyska przy trafieniu, punkt medyczny pokazuje leczenie, przy rozbiórce wraków i montażu modułów lecą iskry, a wydobycie wzbija pył. Ciężki ostrzał zostawia kratery. Burze nadciągają z konkretnego kierunku: widać je na krawędzi ekranu i na minimapie, a monitoring pogody daje minutę ostrzeżenia.</p>" +
+				"<h2>0.34.2 / Koniec zwalniania</h2><p>Naprawiona właściwa przyczyna zwalniania gry: robot, który miał budować tuż przy skale, bez końca szukał trasy. Teraz dociera na miejsce, a gdy celu naprawdę nie da się osiągnąć, przerywa zadanie z komunikatem.</p>" +
+				"<h2>0.34.1 / Płynność w dłuższej grze</h2><p>Naprawione zwalnianie gry po kilku minutach w trybach WebGL i WebGPU: wydobycie rudy nie tworzy już nowych obrazów złóż, a burza piaskowa rysuje ziarna jako lekkie cząstki.</p>" +
+				"<h2>0.34 / Dowódca AI</h2><p>Przeciwnik w scenariuszach prowadzi własną gospodarkę: roboty wydobywają rudę, baza rośnie i jest odbudowywana, a każda jednostka kosztuje. Broni bazy i robotów, zajmuje przekaźniki i planuje ataki. Trzy poziomy — łatwy, średni i trudny — różnią się tempem rozwoju, doborem jednostek i taktyką. Dawne darmowe desanty można nadal wybrać w ustawieniach.</p>" +
+				"<h2>0.33 / Ekspedycja i ziarno mapy</h2><p>Nowy tryb scenariuszy: Ekspedycja po artefakt — przejmij strzeżone znalezisko obcych i dowieź je do bazy, zanim zrobi to przeciwnik. Ziarno mapy daje nowy, sprawdzony układ złóż, skał i siedlisk, a kod operacji pozwala podzielić się całymi ustawieniami. Gotowe zestawy (Spokojna ekspansja, Niebezpieczna planeta, Wojna o zasoby), wybór czasu obrony, puli punktów, zasobności złóż, liczebności fauny i surowości pogody.</p>" +
+				"<h2>0.32 / Wsparcie i moduły</h2><p>Nowe budynki: punkt medyczny leczy piechotę, generator osłon chroni bazę kopułą, a plac odzysku pozwala robotom zbierać metal z wraków. Nowe jednostki: wóz przeciwlotniczy, dron zwiadowczy i niewidoczni sabotażyści, którzy na chwilę wyłączają wrogie budynki. Koszary, fabryka i wieżyczki mogą dostać jeden z dwóch modułów.</p>" +
+				"<h2>0.31 / Poprawka map kampanii</h2><p>Naprawiona szara plansza na mapach kampanii (np. Szkolenie, Iskra na Eos) w trybach WebGL i WebGPU. Renderer jest też odporniejszy: gdyby któraś jego część zawiodła, dana część rysuje się dalej zwykłą metodą, zamiast zostawiać pustą planszę.</p>" +
+				"<h2>0.30 / Płynniejsze bitwy</h2><p>Równiejsze klatki w dużych bitwach w trybie WebGL, cień latającej wyspy zostaje na ziemi, iskry nad lawą nie przeskakują przy przesuwaniu kamery, a tryb WebGPU nie jest już eksperymentalny. Nowa strona do pomiaru płynności na dowolnym komputerze.</p>" +
+				"<h2>0.29 / Latarki i reflektory</h2><p>W trybie WebGL piechota znowu świeci latarkami, a pojazdy reflektorami — wąskim stożkiem przed sobą, jak w trybie Canvas — i teraz ten stożek naprawdę oświetla teren przed jednostką. Samoloty mają wyraźne światła nawigacyjne na skrzydłach zamiast plamy światła na ziemi.</p>" +
+				"<h2>0.28 / Cała plansza na karcie graficznej</h2><p>W trybie WebGL także interfejs na planszy — znaczniki misji, punkty zbiórki, podgląd budowy, prostokąt zaznaczenia, słońce, księżyc, gwiazdy i pogoda na niebie — jest rysowany bezpośrednio przez kartę graficzną. Plansza nie przesyła już żadnych warstw rysowanych przez Canvas; wygląd bez zmian.</p>" +
+				"<h2>0.27 / Poświata i efekty map na karcie graficznej</h2><p>Świecące zarodniki, blask lawy, iskry, mgła nad przepaściami, wiejący piasek, dym przetwórni i inne efekty map są w trybie WebGL rysowane bezpośrednio przez kartę graficzną — tym samym kodem co wcześniej, odtwarzanym jako obiekty PixiJS. Wygląd bez zmian; przez Canvas rysowany jest już tylko interfejs na planszy.</p>" +
+				"<h2>0.26 / Żywa przyroda na karcie graficznej</h2><p>W trybie WebGL zwierzęta, ptaki, ryby w jeziorach i latające wyspy są rysowane bezpośrednio przez kartę graficzną, tak samo jak grunt i modele. Wygląd bez zmian; na wielu mapach przez Canvas rysowany jest już tylko interfejs na planszy.</p>" +
+				"<h2>0.25 / Szybsze bitwy</h2><p>W trybie WebGL jednostki i budynki są rysowane bezpośrednio przez kartę graficzną: wygląd modelu powstaje raz i odświeża się tylko przy zmianie stanu, a ruch, obrót, cienie, zaznaczenia, paski życia i efekty walki są liczone w każdej klatce. Wygląd bez zmian, a duża bitwa rysuje się prawie dwa razy szybciej.</p>" +
+				"<h2>0.24 / Szybszy grunt</h2><p>W trybie WebGL grunt — złoża, przekaźniki, kałuże, szron, jeziora, ślady i ścieżki jednostek — jest rysowany bezpośrednio przez kartę graficzną zamiast przez Canvas w każdej klatce. Wygląd bez zmian, a plansza rysuje się około dwa razy szybciej.</p>" +
+				"<h2>0.23 / Wysokość terenu i perspektywa</h2><p>Teren ma wysokość: płaskowyże, iglice i wydmy są oświetlone od strony słońca i o świcie oraz zmierzchu kładą długie cienie, a przepaście i jeziora leżą niżej. Nowa opcja Perspektywa 2,5D lekko pochyla kamerę — dalsza część mapy maleje, a klikanie i zaznaczanie działają jak dotąd. Eksperymentalny renderer WebGPU w Ustawieniach. Mniej migotania przy przesuwaniu mapy, miękkie krawędzie mgły wojny i szybsze rysowanie map bez świecących efektów.</p>" +
+				"<h2>0.22 / Światło, pogoda i ślady walki</h2><p>Budynki mają objętość: ich krawędzie i dachy są oświetlone z kierunku słońca, które w ciągu doby wędruje ze wschodu na zachód, a w nocy delikatnie z kierunku księżyca. Uszkodzone budowle pokrywają się sadzą i pęknięciami, a pożary świecą w nocy. Wybuchy zostawiają wypalony grunt. Deszcz i śnieg są rysowane przez kartę graficzną — gęstsze, z rozpryskami kropli — a piorun rozświetla na chwilę całą planszę. Szybsze rysowanie w trybie WebGL.</p>" +
+				"<h2>0.21 / Nowy silnik grafiki</h2><p>Plansza rysowana przez WebGL (PixiJS): prawdziwa noc z mapą świateł, światła budynków, reflektory jednostek, świecące gaje i lawa, cienie od słońca zmieniające się w ciągu doby, poświata, połysk wody i miękka mgła wojny. W Ustawieniach → Renderer można wyłączyć poszczególne efekty lub wrócić do rysowania Canvas 2D; bez WebGL gra przełącza się na nie sama.</p>" +
+				"<h2>0.20 / Wydmy i wrak obcych</h2><p>Klasyczne mapy scenariuszy w nowym klimacie i z nowym terenem: morze wydm Khepri, złoty kanion Helionu, żebrowany wrak obcego statku na Vulkanie i zamarznięta placówka na Nivalis. Kampania aktu I dostała pasujący wygląd bez zmian w układzie. Zapisy scenariuszy na tych mapach sprzed zmiany nie są już wczytywane.</p>" +
+				"<h2>0.19 / Nowe światy pogranicza</h2><p>Cztery mapy scenariuszy: świecąca dżungla Świetlisty Gąszcz, Wiszące Szczyty z przepaściami i latającymi górami, Wydmy Bliźniaczych Słońc z wrakiem krążownika oraz Rzeki Magmy. Rzeki, rozpadliny i lawa z brodami i mostami, nocna bioluminescencja, drugie słońce, woda i lawa na minimapie.</p>" +
+				"<h2>0.18 / Tryby i rozmiary map</h2><p>Scenariusze: tryby Podbój, Utrzymanie przekaźników i Obrona oraz mapy małe, średnie i duże. Duże mapy mają dodatkowe złoża, skały, jeziora, siedliska i więcej przekaźników. Szybsze wyszukiwanie tras.</p>" +
+				"<h2>0.17 / Akt II — Cena świtu</h2><p>Trzy nowe rozdziały kampanii: ratunek badaczy przez obszar jam, konwój przez lodową przełęcz i decyzja o losie kompleksu Hefajstos. Dialogi radiowe, dziennik celów, cele dodatkowe z odznakami i podsumowanie misji.</p>" +
+				"<h2>0.16 / Oprawa reagująca na rozgrywkę — etap D</h2><p>Muzyka reaguje na rozwój i walkę. Osobne suwaki kategorii dźwięków, priorytet komunikatów, detale brzegów, etapy budowy i ustawienia jakości grafiki.</p>" +
+				body;
+		if (
+			screen === "scenarios" ||
+			(screen === "briefing" &&
+				!RTS.MISSIONS[this.selectedMission].campaign)
+		) {
+			body = body.replace(
+				"<h2>Cele operacji</h2>",
+				`<div class="scenario-config"><label class="wide-field">Gotowe ustawienia<select id="scenario-preset" aria-label="Gotowe ustawienia">${Object.entries(RTS.SCENARIO_PRESETS || {})
+					.map(([id, p]) => `<option value="${id}">${p.name}</option>`)
+					.join("")}<option value="custom">Własne</option></select></label><p id="preset-description"></p><label>Nazwa gracza<input id="scenario-name" maxlength="24" aria-label="Nazwa gracza"></label><label>Kolor<select id="scenario-color" aria-label="Kolor gracza">${(RTS.PLAYER_COLORS || []).map((c, i) => `<option value="${c}">${["Miętowy", "Niebieski", "Fioletowy", "Złoty", "Różowy"][i]}</option>`).join("")}</select></label><label>Poziom trudności<select id="scenario-difficulty" aria-label="Poziom trudności"><option value="easy">Łatwy</option><option value="normal">Średni</option><option value="hard">Trudny</option></select></label><label>Liczba graczy<select id="scenario-players" aria-label="Liczba graczy"><option value="2">2 — Ty + 1 AI</option><option value="3">3 — Ty + 2 AI</option><option value="4">4 — Ty + 3 AI</option></select></label><label>Tryb<select id="scenario-mode" aria-label="Tryb scenariusza">${Object.entries(
+					RTS.MODES || {},
+				)
+					.map(
+						([id, m]) => `<option value="${id}">${m.name}</option>`,
+					)
+					.join(
+						"",
+					)}</select></label><label>Rozmiar mapy<select id="scenario-size" aria-label="Rozmiar mapy">${Object.entries(
+					RTS.MAP_SIZES || {},
+				)
+					.map(
+						([id, s]) => `<option value="${id}">${s.name}</option>`,
+					)
+					.join(
+						"",
+					)}</select></label><label>Frakcja<select id="scenario-faction" aria-label="Frakcja"><option value="colonies">Wolne Kolonie</option><option value="dominion">Dominium</option>${RTS.FACTIONS?.swarm ? '<option value="swarm">Rój Kryształowy</option>' : ""}</select></label>${this.settingFields()}<p id="faction-description"></p><p id="mode-description"></p></div><h2>Cele operacji</h2>`,
+			);
+		}
+		this.root.classList.toggle("reduced-motion", this.reduced);
+		this.root.innerHTML = `<div class="menu-stars" aria-hidden="true"></div><div class="menu-orbit" aria-hidden="true"><div class="menu-planet"><div class="planet-surface"></div><div class="planet-clouds"></div><div class="planet-shade"></div></div></div><header class="menu-brand"><span>◈</span> POGRANICZE <small>GALAKTYKI / POKŁAD DOWODZENIA</small></header><div class="menu-layout"><section class="menu-content ${["knowledge", "scenarios", "intro", "campaign"].includes(screen) ? "wide" : ""}"><span class="eyebrow">WOLNE KOLONIE / SEKTOR 07</span><h1 tabindex="-1">${title}</h1>${body}</section>${screen === "home" ? `<aside class="menu-mission"><span class="eyebrow">${save.valid ? "OSTATNIA OPERACJA" : "SYGNAŁ Z POWIERZCHNI"}</span><h2>${save.valid ? RTS.MISSIONS[save.missionId]?.planet || "Khepri IV" : "Khepri IV"}</h2><p>${save.valid ? RTS.MISSIONS[save.missionId]?.name || "Cichy Horyzont" : "Ekspedycja Wolnych Kolonii"}</p><p>${save.valid ? `Czas bitwy: ${save.time}<br>Zapis: ${save.date}` : "Dominium zajęło północny kompleks.<br>Przywróć kontrolę nad sektorem."}</p><span class="menu-tag">${save.valid ? "ZAPIS GOTOWY DO WZNOWIENIA" : "OCZEKIWANIE NA ROZKAZY"}</span></aside>` : ""}</div><footer class="menu-footer"><span>PROTOTYP 0.16 · ZAPIS LOKALNY</span><button id="menu-news">Co nowego i plany</button><button id="menu-sound">Dźwięk</button></footer>`;
+		if (WINDOW_SCREENS.includes(screen)) this.windowed();
+		if (screen === "knowledge") KnowledgeBase.mount(this.root);
+		this.root.querySelector(".menu-footer span").textContent =
+			"PROTOTYP 0.49 · ZAPIS LOKALNY";
+		if (
+			screen === "scenarios" ||
+			(screen === "briefing" &&
+				!RTS.MISSIONS[this.selectedMission].campaign)
+		) {
+			const s = this.scenario,
+				described = () =>
+					RTS.describeScenario?.(s) || RTS.MODES?.[s.mode] || {};
+			const updateFaction = () => {
+				this.root.querySelector("#faction-description").textContent =
+					RTS.FACTIONS?.[s.faction]?.description || "";
+				const size = RTS.MAP_SIZES?.[s.size];
+				this.root.querySelector("#mode-description").textContent =
+					(described().description || "") +
+					(size ? " Mapa: " + size.description + "." : "") +
+					(s.seed
+						? " Ziarno " +
+							s.seed +
+							": przesunięte złoża, nowe skały i siedliska, inny przydział narożników."
+						: "");
+				const goal = this.root.querySelector("#mode-objective");
+				if (goal) goal.textContent = described().objective || "";
+				if (!RTS.SCENARIO_OPTIONS) return;
+				const preset = RTS.presetFor(s);
+				this.root.querySelector("#scenario-preset").value = preset;
+				this.root.querySelector("#preset-description").textContent =
+					RTS.SCENARIO_PRESETS[preset]?.description ||
+					"Własny zestaw ustawień.";
+				this.root.querySelector("#field-defenseTime").hidden =
+					s.mode !== "defense";
+				this.root.querySelector("#field-pointsPerRelay").hidden =
+					s.mode !== "relays";
+				// 2 vs 2 always has four players.
+				const playersField = this.root.querySelector("#scenario-players");
+				if (s.teams === "duo") {
+					s.players = 4;
+					playersField.value = "4";
+				}
+				playersField.disabled = s.teams === "duo";
+				const hillField = this.root.querySelector("#field-hillTime");
+				if (hillField) hillField.hidden = s.mode !== "hill";
+				// Survival: the best time on this map and level.
+				const best = s.mode === "survival" && RTS.survivalBest?.((() => {
+						try {
+							return localStorage;
+						} catch {
+							return null;
+						}
+					})(), this.selectedMission, s.difficulty);
+				if (best)
+					this.root.querySelector("#mode-description").textContent +=
+						` Rekord na tej mapie (${RTS.AI_LEVELS?.[s.difficulty]?.name || s.difficulty}): ${Math.floor(best.time / 60)}:${String(best.time % 60).padStart(2, "0")}, fala ${best.wave}.`;
+				const enemy = this.root.querySelector("#enemy-description");
+				if (enemy)
+					enemy.textContent =
+						s.enemy === "waves"
+							? RTS.ENEMY_MODES.waves.description
+							: RTS.ENEMY_MODES.commander.description +
+								" " +
+								(RTS.AI_LEVELS[s.difficulty]?.name || "") +
+								": " +
+								(RTS.AI_LEVELS[s.difficulty]?.description || "");
+				const code = this.root.querySelector("#scenario-code");
+				if (document.activeElement !== code)
+					code.value = RTS.scenarioCode(this.selectedMission, s);
+			};
+			const refresh = () => {
+				updateFaction();
+				if (screen === "scenarios") this.drawMapPreview();
+			};
+			const fields = [
+				"name",
+				"color",
+				"difficulty",
+				"players",
+				"faction",
+				"mode",
+				"size",
+				...(RTS.SCENARIO_OPTIONS
+					? [
+							"defenseTime",
+							"pointsPerRelay",
+							"resources",
+							"fauna",
+							"weather",
+							"seed",
+							...(RTS.SCENARIO_OPTIONS.dayLength ? ["dayLength", "startLevel", "hillTime"] : []),
+						]
+					: []),
+				...(RTS.ENEMY_MODES ? ["enemy"] : []),
+				...(RTS.TEAM_MODES ? ["teams"] : []),
+				...(RTS.ENEMY_FACTIONS ? ["enemyFaction"] : []),
+			];
+			const numeric = ["players", "defenseTime", "pointsPerRelay", "hillTime"];
+			const fill = () => {
+				for (const field of fields)
+					this.root.querySelector("#scenario-" + field).value =
+						field === "seed" ? s.seed || "" : s[field];
+			};
+			for (const field of fields) {
+				const input = this.root.querySelector("#scenario-" + field);
+				input.oninput = () => {
+					s[field] =
+						field === "seed"
+							? RTS.normalizeScenarioSettings({
+									seed: input.value.replace(/\D/g, ""),
+								}).seed
+							: numeric.includes(field)
+								? Number(input.value)
+								: input.value;
+					refresh();
+				};
+			}
+			if (RTS.SCENARIO_OPTIONS) {
+				// Ready-made settings replace the rule fields; name, colour, faction, map and seed stay.
+				this.root.querySelector("#scenario-preset").oninput = (
+					event,
+				) => {
+					RTS.applyPreset(s, event.target.value);
+					fill();
+					refresh();
+				};
+				this.root.querySelector("#scenario-seed-random").onclick =
+					() => {
+						s.seed = RTS.randomSeed();
+						fill();
+						refresh();
+					};
+				this.root.querySelector("#scenario-code-apply").onclick =
+					() => {
+						const parsed = RTS.parseScenarioCode(
+								this.root.querySelector("#scenario-code").value,
+							),
+							feedback = this.root.querySelector(
+								"#scenario-code-feedback",
+							);
+						if (!parsed) {
+							feedback.textContent =
+								"Nieprawidłowy kod operacji. Wzór: mapa-M2N-C-NNN-ziarno, np. horizon-M2N-X-NNN-4242.";
+							return;
+						}
+						Object.assign(s, parsed.scenario);
+						const otherMap =
+							screen !== "scenarios" &&
+							parsed.missionId !== this.selectedMission;
+						if (screen === "scenarios") {
+							this.selectedMission = parsed.missionId;
+							this.root.querySelector("#scenario-map").value =
+								parsed.missionId;
+						}
+						feedback.textContent =
+							"Wczytano ustawienia operacji: " +
+							RTS.MISSIONS[parsed.missionId].name +
+							(otherMap ? " (mapę wybierz w Scenariuszach)" : "") +
+							".";
+						this.root.querySelector("#scenario-code").blur();
+						fill();
+						refresh();
+					};
+			}
+			fill();
+			updateFaction();
+		}
+		const on = (id, fn) => {
+			const b = this.root.querySelector("#menu-" + id);
+			if (b) b.onclick = fn;
+		};
+		on("single", () => this.show("single"));
+		on("scenarios", () => this.show("scenarios"));
+		on("slots", () => {
+			this.slotOrigin = this.screen;
+			this.slotMode = "load";
+			this.show("slots");
+		});
+		on("slots-back", () => this.show(this.slotOrigin || "home"));
+		on("slot-cancel", () => this.show("slots"));
+		on("slot-confirm", () => this.writeSlot());
+		this.root.querySelectorAll("[data-slot]").forEach(
+			(b) =>
+				(b.onclick = () => {
+					this.slotNumber = Number(b.dataset.slot);
+					if (this.slotMode === "save") {
+						if (this.api.slots()[this.slotNumber - 1].exists)
+							this.show("slot-confirm");
+						else this.writeSlot();
+					} else if (this.api.loadSlot(this.slotNumber))
+						this.show("pause");
+					else {
+						this.show("slots");
+						this.root.querySelector("#menu-feedback").textContent =
+							"Nie udało się wczytać zapisu.";
+					}
+				}),
+		);
+		on("training", () => {
+			this.selectedMission = "training";
+			this.missionOrigin = "campaign";
+			this.show("briefing");
+		});
+		on("campaign", () => this.show("intro"));
+		on("skip-intro", () => this.show("campaign"));
+		on("intro2", () => {
+			this.afterIntro2 = "campaign";
+			this.show("intro2");
+		});
+		on("skip-intro2", () => this.show(this.afterIntro2 || "campaign"));
+		on("review", () => {
+			this.selectedMission = this.api.review().missionId;
+			this.show("review");
+		});
+		if (screen === "intro") this.playIntro();
+		if (screen === "intro2")
+			this.playIntro(Act2Film, this.afterIntro2 || "campaign");
+		if (screen === "scenarios") {
+			this.root.querySelector("h2").remove();
+			const select = this.root.querySelector("#scenario-map");
+			select.value = this.selectedMission;
+			select.onchange = () => {
+				this.selectedMission = select.value;
+				const code = this.root.querySelector("#scenario-code");
+				if (code)
+					code.value = RTS.scenarioCode(
+						this.selectedMission,
+						this.scenario,
+					);
+				this.drawMapPreview();
+			};
+			this.drawMapPreview();
+		}
+		on("campaign-back", () => this.show("single"));
+		if (screen === "campaign") this.mountGalaxy();
+		on("mission-back", () => this.show(this.missionOrigin));
+		this.root.querySelectorAll("[data-mission]").forEach(
+			(b) =>
+				(b.onclick = () => {
+					this.selectedMission = b.dataset.mission;
+					this.missionOrigin = RTS.MISSIONS[this.selectedMission]
+						.campaign
+						? "campaign"
+						: "scenarios";
+					// The act II prologue plays once before its first chapter is completed.
+					if (
+						this.selectedMission === "colony4" &&
+						!(this.api.campaign?.() || {}).colony4 &&
+						!this.act2IntroSeen
+					) {
+						this.act2IntroSeen = true;
+						this.afterIntro2 = "briefing";
+						this.show("intro2");
+					} else this.show("briefing");
+				}),
+		);
+		on("back", () =>
+			this.show(
+				this.screen === "single" ? "home" : this.origin,
+				this.screen === "single" ? "menu-single" : this.focusReturn,
+			),
+		);
+		on("cancel", () =>
+			this.show(
+				RTS.MISSIONS[this.selectedMission].campaign
+					? "briefing"
+					: "scenarios",
+				"menu-launch",
+			),
+		);
+		on("launch", () => {
+			if (save.exists) this.show("replace");
+			else this.launch();
+		});
+		on("confirm", () => this.launch());
+		on("continue", () => {
+			if (this.api.load()) {
+				this.show("pause");
+			} else this.show("home");
+		});
+		on("resume", () => {
+			this.hide();
+			this.api.resume();
+		});
+		on("pause", () => this.show("pause"));
+		on("save", () => {
+			this.slotOrigin = "pause";
+			this.slotMode = "save";
+			this.show("slots");
+		});
+		on("home", () => {
+			if (this.api.save()) {
+				this.api.leave();
+				this.show("home");
+			} else this.show("save-error");
+		});
+		on("leave", () => {
+			this.api.leave();
+			this.show("home");
+		});
+		for (const id of ["settings", "knowledge", "news"])
+			on(id, () => {
+				if (!["settings", "knowledge", "news"].includes(this.screen)) {
+					this.origin = this.screen;
+					this.focusReturn = "menu-" + id;
+				}
+				this.show(id);
+			});
+		on("sound", () => this.api.toggleSound());
+		if (screen === "settings") {
+			if (typeof SceneFX !== "undefined") {
+				for (const key of ["terrain", "particles"]) {
+					const el = this.root.querySelector("#visual-" + key);
+					el.value = SceneFX.options[key];
+					el.onchange = () => SceneFX.set(key, el.value);
+				}
+				for (const key of ["flashes", "metrics", "lights", "shadows", "bloom", "water", "volume", "scars", "relief", "tilt"]) {
+					const el = this.root.querySelector("#visual-" + key);
+					el.checked = SceneFX.options[key];
+					el.onchange = () => SceneFX.set(key, el.checked);
+				}
+				const rendererSelect = this.root.querySelector("#visual-renderer"),
+					status = this.root.querySelector("#renderer-status"),
+					showStatus = () => {
+						const s = this.api.rendererStatus?.() || { mode: "canvas", note: "" };
+						const gpu = SceneFX.options.renderer !== "canvas",
+							name = { webgl: "WebGL", webgpu: "WebGPU" };
+						// The effects stay available when WebGPU fell back to WebGL, not when the board fell back to Canvas 2D.
+						for (const box of this.root.querySelectorAll(".webgl-effect")) box.disabled = !gpu || (s.mode === "canvas" && !!s.note);
+						status.textContent = s.note || (name[s.mode] ? `Aktywny: ${name[s.mode]} (PixiJS).` : gpu ? `${name[SceneFX.options.renderer]} uruchomi się razem z planszą.` : "Aktywny: Canvas 2D.");
+					};
+				rendererSelect.value = SceneFX.options.renderer;
+				rendererSelect.onchange = () => {
+					SceneFX.set("renderer", rendererSelect.value);
+					showStatus();
+					setTimeout(showStatus, 600);
+				};
+				showStatus();
+			}
+			for (const key of ["combat", "units", "ambient", "alerts"])
+				this.root.querySelector("#mix-" + key).oninput = (e) => {
+					this.api
+						.audio()
+						.setChannelVolume(key, Number(e.target.value) / 100);
+					this.syncAudio();
+				};
+			const quality = this.root.querySelector("#menu-audio-quality"),
+				audioStatus = this.root.querySelector("#menu-audio-status");
+			if (quality) {
+				quality.value = this.api.audio().quality || "high";
+				quality.onchange = () => this.api.audio().setQuality?.(quality.value);
+			}
+			// Live diagnostics: context state, what plays and the output level (refreshed while the screen is open).
+			clearInterval(this.audioTimer);
+			const showAudio = () => {
+				if (!audioStatus?.isConnected) return clearInterval(this.audioTimer);
+				const d = this.api.audio().diagnostics?.();
+				if (!d) return;
+				const bars = d.level === undefined ? "—" : "▮".repeat(Math.min(10, Math.round(Math.sqrt(d.level / 0.02) * 10))).padEnd(10, "▯");
+				audioStatus.textContent = `Stan: ${d.state}${d.muted ? " · wyciszony" : ""} · motyw ${d.mode} · próbki ${d.samples}/14 · Tone.js ${d.tone} · wyjście ${bars}${d.invalid ? " · błędny sygnał!" : ""}`;
+			};
+			showAudio();
+			this.audioTimer = setInterval(showAudio, 400);
+			this.root.querySelector("#menu-music-volume").oninput = (e) => {
+				this.api.audio().setMusicVolume(Number(e.target.value) / 100);
+				this.syncAudio();
+			};
+			this.root.querySelector("#menu-volume").oninput = (e) => {
+				this.api.volume(Number(e.target.value) / 100);
+				this.syncAudio();
+			};
+			this.root.querySelector("#menu-muted").onchange = (e) => {
+				this.api.mute(e.target.checked);
+				this.syncAudio();
+			};
+			this.root.querySelector("#menu-reduced").onchange = (e) => {
+				this.reduced = e.target.checked;
+				this.root.classList.toggle("reduced-motion", this.reduced);
+				try {
+					localStorage.setItem(
+						"pogranicze-menu-v1",
+						JSON.stringify({ reduced: this.reduced }),
+					);
+				} catch {
+					this.root.querySelector("#menu-preferences").textContent =
+						"Ustawienie działa teraz, ale nie można go zapamiętać.";
+				}
+			};
+		}
+		this.syncAudio();
+		(
+			this.root.querySelector("#" + focusId) ||
+			this.root.querySelector("h1")
+		).focus();
+	}
+	syncAudio() {
+		if (!this.active) return;
+		const s = this.api.audio();
+		const b = this.root.querySelector("#menu-sound");
+		if (b) {
+			b.textContent = s.muted
+				? "Dźwięk wyłączony [M]"
+				: "Dźwięk włączony [M]";
+			b.disabled = s.failed;
+		}
+		for (const key of ["combat", "units", "ambient", "alerts"]) {
+			const slider = this.root.querySelector("#mix-" + key);
+			if (slider) {
+				slider.value = Math.round((s.channels?.[key] ?? 1) * 100);
+				this.root.querySelector("#mix-" + key + "-value").textContent =
+					slider.value + "%";
+			}
+		}
+		const musicSlider = this.root.querySelector("#menu-music-volume");
+		if (musicSlider) {
+			musicSlider.value = Math.round((s.musicVolume ?? 0.35) * 100);
+			this.root.querySelector("#menu-music-value").textContent =
+				musicSlider.value + "%";
+		}
+		const slider = this.root.querySelector("#menu-volume");
+		if (slider) {
+			slider.value = Math.round(s.volume * 100);
+			slider.disabled = s.failed;
+			this.root.querySelector("#menu-volume-value").textContent =
+				slider.value + "%";
+			this.root.querySelector("#menu-muted").checked = s.muted;
+			this.root.querySelector("#menu-muted").disabled = s.failed;
+		}
+	}
+	writeSlot() {
+		const ok = this.api.saveSlot(this.slotNumber);
+		this.show("slots");
+		this.root.querySelector("#menu-feedback").textContent = ok
+			? "Zapisano slot " + this.slotNumber + "."
+			: "Nie zapisano: pamięć lokalna niedostępna lub pełna.";
+	}
+	launch() {
+		this.hide();
+		this.api.start(
+			this.selectedMission,
+			RTS.MISSIONS[this.selectedMission].campaign ? null : this.scenario,
+		);
+	}
+	// Campaign galaxy: the map on the left, the chapter list on the right, the chosen world below the map.
+	mountGalaxy() {
+		const canvas = this.root.querySelector("#campaign-map");
+		if (!canvas || typeof GalaxyMap === "undefined") return;
+		// Map and list take the room left in the menu window, so the whole galaxy is in view.
+		const grid = this.root.querySelector(".campaign-galaxy"),
+			scroll = this.root.querySelector(".menu-scroll");
+		this.fitGalaxy = () => {
+			if (!grid || !scroll || window.innerWidth <= 1280) return grid && (grid.style.height = "");
+			const top = grid.getBoundingClientRect().top - scroll.getBoundingClientRect().top + scroll.scrollTop;
+			grid.style.height = Math.max(300, Math.min(760, scroll.clientHeight - top - 6)) + "px";
+		};
+		this.fitGalaxy();
+		window.addEventListener("resize", this.fitGalaxy);
+		const progress = this.api.campaign?.() || {},
+			badges = this.api.campaignDetails?.()?.badges || {},
+			planetOf = (id) => RTS.MISSIONS[id].planet.split(" — ")[0],
+			status = (id) => (progress[id] ? "done" : !RTS.MISSIONS[id].requires || progress[RTS.MISSIONS[id].requires] ? "open" : "locked"),
+			order = ["training", "colony1", "colony2", "colony3", "colony4", "colony5", "colony6", "colony7", "colony8", "colony9"].filter((id) => RTS.MISSIONS[id]),
+			chapters = order.map((id) => ({ id, planet: planetOf(id), name: RTS.MISSIONS[id].name, status: status(id), badge: !!badges[id] }));
+		this.galaxy = new GalaxyMap.Map(canvas, {
+			chapters,
+			reduced: this.reduced,
+			onSelect: (name, fromMap) => this.showWorld(name, chapters, fromMap),
+		});
+		// The list and the map point at each other.
+		this.root.querySelectorAll("[data-mission]").forEach((b) => {
+			const planet = planetOf(b.dataset.mission);
+			b.addEventListener("mouseenter", () => this.galaxy?.focus(planet));
+			b.addEventListener("focus", () => this.galaxy?.focus(planet));
+			b.addEventListener("mouseleave", () => this.galaxy?.focus(null));
+		});
+		const next = chapters.find((ch) => ch.status === "open") || chapters.at(-1);
+		this.galaxy.select(next.planet);
+	}
+	showWorld(name, chapters, fromMap) {
+		const info = this.root.querySelector("#galaxy-info"),
+			world = GalaxyMap.WORLDS[name];
+		if (!info || !world) return;
+		const own = chapters.filter((ch) => ch.planet === name),
+			scenarios = Object.entries(RTS.MISSIONS).filter(([, m]) => !m.campaign && m.planet.split(" / ")[0].split(" — ")[0] === name),
+			label = { done: "ukończony", open: "do rozegrania", locked: "zablokowany" };
+		info.innerHTML =
+			`<h3>${name}</h3><small>Klimat: ${GalaxyMap.CLIMATE[world.climate].name}</small><p>${world.text}</p>` +
+			(own.length
+				? own
+						.map(
+							(ch) =>
+								`<div class="world-chapter ${ch.status}"><span><b>${ch.name}${ch.badge ? ' <i class="act2-badge">◆</i>' : ""}</b><small>${label[ch.status]}</small></span>${ch.status === "locked" ? "" : `<button type="button" data-open="${ch.id}">Odprawa ↗</button>`}</div>`,
+						)
+						.join("")
+				: "<p><small>Świat scenariuszy — nie ma tu rozdziałów kampanii.</small></p>") +
+			scenarios.map(([id, m]) => `<div class="world-chapter"><span><b>${m.name}</b><small>scenariusz</small></span><button type="button" data-scenario="${id}">Zagraj ↗</button></div>`).join("");
+		info.querySelectorAll("[data-open]").forEach((b) => (b.onclick = () => this.root.querySelector(`[data-mission="${b.dataset.open}"]`)?.click()));
+		info.querySelectorAll("[data-scenario]").forEach(
+			(b) =>
+				(b.onclick = () => {
+					this.selectedMission = b.dataset.scenario;
+					this.show("scenarios");
+				}),
+		);
+		// Mark the world's chapters in the list; from the map, bring the first into view.
+		let first = null;
+		this.root.querySelectorAll("[data-mission]").forEach((b) => {
+			const on = own.some((ch) => ch.id === b.dataset.mission);
+			b.classList.toggle("on-world", on);
+			if (on && !first) first = b;
+		});
+		const list = this.root.querySelector(".galaxy-list");
+		if (fromMap && first && list && list.scrollHeight > list.clientHeight)
+			list.scrollTo({ top: Math.max(0, list.scrollTop + first.getBoundingClientRect().top - list.getBoundingClientRect().top - 36), behavior: this.reduced || document.hidden ? "auto" : "smooth" });
+	}
+	// Rule settings, map seed and the shareable operation code.
+	settingFields() {
+		const o = RTS.SCENARIO_OPTIONS;
+		if (!o) return "";
+		const options = (table) =>
+			Object.entries(table)
+				.map(([id, v]) => `<option value="${id}">${v.name}</option>`)
+				.join("");
+		return (
+			(RTS.ENEMY_FACTIONS
+				? `<label>Frakcja przeciwnika<select id="scenario-enemyFaction" aria-label="Frakcja przeciwnika">${Object.entries(RTS.ENEMY_FACTIONS)
+						.map(([id, name]) => `<option value="${id}">${name}</option>`)
+						.join("")}</select></label>`
+				: "") +
+			(RTS.TEAM_MODES
+				? `<label>Drużyny<select id="scenario-teams" aria-label="Drużyny">${options(RTS.TEAM_MODES)}</select></label>`
+				: "") +
+			(RTS.ENEMY_MODES
+				? `<label>Przeciwnik<select id="scenario-enemy" aria-label="Rodzaj przeciwnika">${options(RTS.ENEMY_MODES)}</select></label><p id="enemy-description"></p>`
+				: "") +
+			`<label id="field-defenseTime">Czas obrony<select id="scenario-defenseTime" aria-label="Czas obrony">${o.defenseTime.map((t) => `<option value="${t}">${t / 60} min</option>`).join("")}</select></label>` +
+			`<label id="field-pointsPerRelay">Pula punktów<select id="scenario-pointsPerRelay" aria-label="Pula punktów">${o.pointsPerRelay.map((n) => `<option value="${n}">${n} pkt na przekaźnik</option>`).join("")}</select></label>` +
+			`<label>Złoża<select id="scenario-resources" aria-label="Złoża">${options(o.resources)}</select></label>` +
+			`<label>Fauna<select id="scenario-fauna" aria-label="Fauna">${options(o.fauna)}</select></label>` +
+			`<label>Pogoda<select id="scenario-weather" aria-label="Pogoda">${options(o.weather)}</select></label>` +
+			(o.dayLength ? `<label>Długość doby<select id="scenario-dayLength" aria-label="Długość doby">${options(o.dayLength)}</select></label>` : "") +
+			(o.startLevel ? `<label>Poziom startowy<select id="scenario-startLevel" aria-label="Poziom startowy">${options(o.startLevel)}</select></label>` : "") +
+			(o.hillTime ? `<label id="field-hillTime">Czas na Szczycie<select id="scenario-hillTime" aria-label="Czas utrzymania Szczytu">${o.hillTime.map((t) => `<option value="${t}">${t / 60} min</option>`).join("")}</select></label>` : "") +
+			`<label>Ziarno mapy<span class="inline-field"><input id="scenario-seed" inputmode="numeric" maxlength="6" placeholder="układ klasyczny" aria-label="Ziarno mapy"><button type="button" id="scenario-seed-random">Losuj</button></span></label>` +
+			`<label class="wide-field">Kod operacji — do udostępnienia<span class="inline-field"><input id="scenario-code" maxlength="48" spellcheck="false" autocomplete="off" aria-label="Kod operacji"><button type="button" id="scenario-code-apply">Wczytaj kod</button></span></label><p id="scenario-code-feedback" role="status"></p>`
+		);
+	}
+	drawMapPreview() {
+		const canvas = this.root.querySelector("#map-preview"),
+			c = canvas.getContext("2d"),
+			g = new RTS.Game(42, this.selectedMission),
+			m = RTS.MISSIONS[this.selectedMission];
+		g.configureSkirmish(this.scenario);
+		c.fillStyle =
+			m.biome === "ice"
+				? "#b4c5cb"
+				: m.biome === "ash"
+					? "#615962"
+					: "#b9a579";
+		c.fillRect(0, 0, 480, 190);
+		c.save();
+		c.scale(480 / g.W, 190 / g.H);
+		if (typeof BoardArt !== "undefined") BoardArt.terrain(c, g);
+		if (typeof PlanetArt !== "undefined") PlanetArt.terrain(c, g);
+		for (const w of g.waters) {
+			c.fillStyle =
+				(typeof MapArt !== "undefined" && MapArt.color(w.kind)) ||
+				"#467b8e";
+			c.beginPath();
+			if (typeof PlanetArt !== "undefined") PlanetArt.lakePath(c, w);
+			else {
+				for (let i = 0; i <= 80; i++) {
+					const a = (i * Math.PI) / 40,
+						r = RTS.waterRadius(w, a),
+						x = w.x + Math.cos(a) * w.rx * r,
+						y = w.y + Math.sin(a) * w.ry * r;
+					if (!i) c.moveTo(x, y);
+					else c.lineTo(x, y);
+				}
+				c.closePath();
+			}
+			c.fill();
+		}
+		for (const r of g.obstacles) {
+			c.fillStyle =
+				(typeof MapArt !== "undefined" && MapArt.color(r.kind)) ||
+				"#454f4b";
+			c.fillRect(r.x, r.y, r.w, r.h);
+		}
+		for (const o of g.ores) {
+			c.fillStyle = "#82b5be";
+			c.fillRect(o.x - 28, o.y - 28, 56, 56);
+		}
+		for (const n of g.nodes) {
+			c.fillStyle = "#efd17e";
+			c.beginPath();
+			c.arc(n.x, n.y, 36, 0, Math.PI * 2);
+			c.fill();
+		}
+		for (const e of g.entities.filter((e) => e.type === "hq")) {
+			c.fillStyle = g.colorFor(e.team);
+			c.fillRect(e.x - 55, e.y - 55, 110, 110);
+		}
+		const artifact = g.modeState?.artifact;
+		if (artifact) {
+			c.fillStyle = "#f5e27a";
+			c.strokeStyle = "#3a2a08";
+			c.lineWidth = 14;
+			c.beginPath();
+			c.moveTo(artifact.x, artifact.y - 90);
+			c.lineTo(artifact.x + 60, artifact.y);
+			c.lineTo(artifact.x, artifact.y + 90);
+			c.lineTo(artifact.x - 60, artifact.y);
+			c.closePath();
+			c.fill();
+			c.stroke();
+		}
+		c.restore();
+		this.root.querySelector("#map-description").textContent = m.description;
+	}
+	// Long screens get the knowledge-base layout: fixed title and actions, scrolled content between them.
+	windowed() {
+		const content = this.root.querySelector(".menu-content"),
+			scroll = document.createElement("div"),
+			actions = document.createElement("div"),
+			parts = [...content.children].filter(
+				(el) => !el.matches(".eyebrow, h1"),
+			);
+		let split = parts.length;
+		while (
+			split > 0 &&
+			parts[split - 1].matches(".menu-action, [role=status]")
+		)
+			split--;
+		content.classList.add("menu-window");
+		scroll.className = "menu-scroll";
+		scroll.tabIndex = 0;
+		scroll.setAttribute("role", "region");
+		scroll.setAttribute(
+			"aria-label",
+			content.querySelector("h1")?.textContent || "Treść",
+		);
+		actions.className = "menu-window-actions";
+		scroll.append(...parts.slice(0, split));
+		actions.append(...parts.slice(split));
+		content.append(scroll);
+		if (actions.children.length) content.append(actions);
+	}
+	playIntro(film = CampaignFilm, next = "campaign") {
+		const duration = film.duration || 30,
+			screen = this.screen;
+		const canvas = this.root.querySelector("#campaign-film"),
+			caption = this.root.querySelector("#film-caption"),
+			progress = this.root.querySelector("#film-progress"),
+			c = canvas.getContext("2d"),
+			start = performance.now();
+		canvas.width = 1920;
+		canvas.height = 800;
+		c.scale(2, 2);
+		let last = -1;
+		const frame = (now) => {
+			if (this.screen !== screen) return;
+			const t = Math.min(duration, (now - start) / 1000),
+				shot = film.draw(c, t, this.reduced);
+			if (last !== shot.scene) {
+				caption.textContent = shot.caption;
+				last = shot.scene;
+			}
+			progress.value = t;
+			if (t >= duration) {
+				this.show(next);
+				return;
+			}
+			this.introFrame = requestAnimationFrame(frame);
+		};
+		this.introFrame = requestAnimationFrame(frame);
+	}
+
+	hide() {
+		this.galaxy?.destroy();
+		this.galaxy = null;
+		if (this.fitGalaxy) window.removeEventListener("resize", this.fitGalaxy);
+		this.root.hidden = true;
+		document.body.classList.remove("in-menu");
+		this.gameElements.forEach((e) => (e.inert = false));
+		document.getElementById("game").focus();
+	}
+	escape() {
+		if (this.screen === "slots") {
+			this.show(this.slotOrigin || "home");
+		} else if (this.screen === "slot-confirm") {
+			this.show("slots");
+		} else if (this.screen === "scenarios") {
+			this.show("single");
+		} else if (this.screen === "pause") {
+			this.hide();
+			this.api.resume();
+		} else if (this.screen === "single") this.show("home", "menu-single");
+		else if (this.screen === "replace")
+			this.show(
+				RTS.MISSIONS[this.selectedMission].campaign
+					? "briefing"
+					: "scenarios",
+				"menu-launch",
+			);
+		else if (this.screen === "briefing") this.show(this.missionOrigin);
+		else if (this.screen === "intro") this.show("campaign");
+		else if (this.screen === "intro2")
+			this.show(this.afterIntro2 || "campaign");
+		else if (this.screen === "review") this.show("pause");
+		else if (this.screen === "campaign") this.show("single");
+		else if (this.screen === "save-error") this.show("pause");
+		else if (this.screen !== "home")
+			this.show(this.origin, this.focusReturn);
+	}
+}

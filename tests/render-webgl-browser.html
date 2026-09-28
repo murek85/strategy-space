@@ -1,0 +1,594 @@
+<!doctype html>
+<html lang="pl">
+	<head>
+		<meta charset="utf-8" />
+		<title>Test renderera WebGL</title>
+		<style>
+			body {
+				background: #0b141c;
+				color: #d7e4e6;
+				font: 14px "Segoe UI", sans-serif;
+				padding: 16px;
+			}
+			button,
+			select {
+				font: inherit;
+				margin-right: 8px;
+			}
+			.board {
+				position: relative;
+				width: 1130px;
+				height: 522px;
+				margin: 10px 0;
+				border: 1px solid #33505a;
+			}
+			.board canvas#game {
+				position: absolute;
+				inset: 0;
+			}
+			#out p {
+				margin: 2px 0;
+			}
+			code {
+				color: #9fd8c8;
+			}
+		</style>
+	</head>
+	<body>
+		<p>
+			Renderer z <code>webgl/pixi-game-renderer.js</code> (PixiJS) rysuje te same sceny co test renderera Canvas 2D. Sprawdzenia automatyczne: interfejs zgodny z
+			rendererem Canvas, obraz niepusty, noc ciemniejsza od dnia, działające przełączniki efektów i zwalnianie zasobów. Wybrana scena zostaje na planszy do
+			obejrzenia.
+		</p>
+		<button id="run">Sprawdź renderer</button><select id="scene"></select><select id="time">
+			<option value="">pora ze sceny</option>
+			<option value="0">południe</option>
+			<option value="0.45">zmierzch</option>
+			<option value="1">noc</option></select
+		><button id="show">Pokaż</button><button id="perf">Pomiar 120 klatek</button>
+		<div id="out" role="status"></div>
+		<div class="board"><canvas id="game" width="1130" height="522"></canvas></div>
+		<canvas id="minimap" width="220" height="135"></canvas>
+		<script src="../engine.js"></script>
+		<script src="../advanced-rules.js"></script>
+		<script src="../army-rules.js"></script>
+		<script src="../campaign-act2.js"></script>
+		<script src="../scenario-modes.js"></script>
+		<script src="../frontier-maps.js"></script>
+		<script src="../themed-maps.js"></script>
+		<script src="../support-rules.js"></script>
+		<script src="../scenario-setup.js"></script>
+		<script src="../scenario-challenges.js"></script>
+		<script src="../enemy-ai.js"></script>
+		<script src="../teams-rules.js"></script>
+		<script src="../factions-rules.js"></script>
+		<script src="../swarm-rules.js"></script>
+		<script src="../campaign-act3.js"></script>
+		<script src="../scene-fx.js"></script>
+		<script src="../art.js"></script>
+		<script src="../planet-art.js"></script>
+		<script src="../advanced-art.js"></script>
+		<script src="../act2-art.js"></script>
+		<script src="../support-art.js"></script>
+		<script src="../fx-art.js"></script>
+		<script src="../faction-art.js"></script>
+		<script src="../swarm-art.js"></script>
+		<script src="../map-art.js"></script>
+		<script src="../themed-art.js"></script>
+		<script src="../render-canvas.js"></script>
+		<script src="../vendor/pixi.min.js"></script>
+		<script src="../webgl/model-light.js"></script>
+		<script src="../webgl/terrain-height.js"></script>
+		<script src="../webgl/ground-native.js"></script>
+		<script src="../webgl/models-native.js"></script>
+		<script src="../webgl/fauna-native.js"></script>
+		<script src="../webgl/canvas-replay.js"></script>
+		<script src="../webgl/pixi-game-renderer.js"></script>
+		<script src="render-scenes.js"></script>
+		<script>
+			const $ = (id) => document.getElementById(id),
+				canvas = $("game"),
+				mini = $("minimap"),
+				canvasRenderer = createCanvasRenderer(canvas, mini),
+				list = renderScenes(),
+				backend = new URLSearchParams(location.search).get("gpu") === "webgpu" ? "webgpu" : "webgl";
+			let renderer = null;
+			// A big battle for the model checks and the frame-time measurement (only in this test).
+			const battle = (() => {
+				const g = new RTS.Game(7, "magma");
+				g.configureSkirmish({ players: 2 });
+				const cx = g.W / 2,
+					cy = g.H / 2,
+					types = ["trooper", "rocket", "tank", "trooper", "raider"];
+				for (let i = 0; i < 120; i++) g.spawn(types[i % 5], i % 2, cx + (i % 2 ? 200 : -200) + (i % 10) * 18 - 90, cy + Math.floor(i / 20) * 26 - 80);
+				const mine = g.entities.filter((e) => e.team === 0 && e.x > cx - 400 && e.x < cx).map((e) => e.id);
+				g.command(mine, cx + 200, cy);
+				for (let t = 0; t < 3; t += 0.1) g.tick(0.1);
+				g.explored.fill(1);
+				return { name: "Bitwa · 120 jednostek", game: g, camera: { x: cx, y: cy, zoom: 2.2 }, selected: mine.slice(0, 20) };
+			})();
+			$("scene").innerHTML = [...list, battle].map((s, i) => `<option value="${i}">${s.name}</option>`).join("");
+			function view(scene) {
+				const g = scene.game,
+					width = canvas.width,
+					height = canvas.height;
+				return {
+					game: g,
+					width,
+					height,
+					dpr: 1,
+					scale: Math.min(width / g.W, height / g.H) * scene.camera.zoom,
+					camera: scene.camera,
+					selected: new Set(scene.selected || []),
+					colors: [g.colorFor(0), "#f07d78", "#e4b968", "#819dff", "#d2a1ef"],
+					mouse: scene.mouse || { x: 0, y: 0 },
+					drag: scene.drag || null,
+					building: scene.building || false,
+					wallDrag: scene.wallDrag || null,
+				};
+			}
+			// Paints a scene; night overrides the game's own time of day (restored afterwards).
+			function draw(scene, night, target = renderer) {
+				const g = scene.game,
+					own = Object.getOwnPropertyDescriptor(g, "night");
+				if (night !== undefined) Object.defineProperty(g, "night", { value: night, configurable: true });
+				try {
+					target.setGame(g);
+					target.refreshFog(g);
+					target.render(view(scene));
+				} finally {
+					if (night !== undefined) {
+						delete g.night;
+						if (own) Object.defineProperty(g, "night", own);
+					}
+				}
+			}
+			// Average brightness and coverage of the last frame.
+			function measure(shot = renderer.snapshot()) {
+				const data = shot.getContext("2d").getImageData(0, 0, shot.width, shot.height).data;
+				let sum = 0,
+					lit = 0,
+					n = 0;
+				for (let i = 0; i < data.length; i += 4 * 97) {
+					const l = (data[i] + data[i + 1] + data[i + 2]) / 3;
+					sum += l;
+					if (l > 8) lit++;
+					n++;
+				}
+				return { brightness: sum / n, coverage: lit / n };
+			}
+			async function ensure() {
+				// ?gpu=webgpu runs the same checks on the WebGPU backend.
+				if (!renderer) renderer = await createPixiGameRenderer({ gameCanvas: canvas, canvasRenderer, preference: backend });
+				return renderer;
+			}
+			const report = (rows, title) => ($("out").innerHTML = `<p>${rows.every((r) => r.ok) ? "PASS" : "FAIL"} — ${title}</p>` + rows.map((r) => `<p>${r.ok ? "OK" : "FAIL"} ${r.name}${r.note ? " — " + r.note : ""}</p>`).join(""));
+			$("run").onclick = async () => {
+				const rows = [];
+				try {
+					await ensure();
+				} catch (error) {
+					return report([{ name: "Uruchomienie WebGL", ok: false, note: String(error) }], "renderer " + backend);
+				}
+				rows.push({
+					name: "interfejs jak renderer Canvas: kind, fogCanvas, setGame, refreshFog, render, destroy",
+					ok: ["webgl", "webgpu"].includes(renderer.kind) && renderer.fogCanvas === canvasRenderer.fogCanvas && ["setGame", "refreshFog", "render", "destroy"].every((k) => typeof renderer[k] === "function"),
+				});
+				rows.push({ name: "warstwa WebGL nad planszą, bez przechwytywania myszy", ok: renderer.canvas.parentNode === canvas.parentNode && renderer.canvas.style.pointerEvents === "none" });
+				// The same scene from the Canvas renderer tells how much of the board should be covered.
+				for (const scene of list) {
+					draw(scene, 0, canvasRenderer);
+					const reference = measure(canvas);
+					draw(scene, 0);
+					const day = measure();
+					draw(scene, 1);
+					const night = measure();
+					rows.push({
+						name: scene.name,
+						ok: day.coverage > reference.coverage * 0.9 && night.brightness < day.brightness * 0.85 && night.brightness > 4,
+						note: `jasność dzień ${day.brightness.toFixed(0)}, noc ${night.brightness.toFixed(0)}, pokrycie ${(day.coverage * 100).toFixed(0)}% (Canvas ${(reference.coverage * 100).toFixed(0)}%)`,
+					});
+				}
+				const scene = list[1];
+				draw(scene, 1);
+				const lit = measure().brightness;
+				SceneFX.options.lights = false;
+				draw(scene, 1);
+				const plain = measure().brightness;
+				SceneFX.options.lights = true;
+				rows.push({ name: "wyłączenie oświetlenia zmienia obraz nocy", ok: Math.abs(lit - plain) > 1, note: `${lit.toFixed(1)} → ${plain.toFixed(1)}` });
+				draw(list[0], 0);
+				const stats = renderer.stats();
+				rows.push({ name: "cienie jednostek w dzień", ok: stats.shadows > 0, note: JSON.stringify(stats) });
+				draw(list[2], 1);
+				const beams = renderer.stats().beams;
+				draw(list[2], 0);
+				rows.push({ name: "nocą latarki piechoty i reflektory pojazdów świecą stożkami, w dzień nie", ok: beams > 0 && renderer.stats().beams === 0, note: `stożków nocą: ${beams}` });
+				// Etap 4: objętość budynków, ślady zniszczeń, pogoda na GPU, błysk pioruna.
+				const options = SceneFX.options,
+					differs = (a, b) => {
+						const x = a.getContext("2d").getImageData(0, 0, a.width, a.height).data,
+							y = b.getContext("2d").getImageData(0, 0, b.width, b.height).data;
+						let sum = 0;
+						for (let i = 0; i < x.length; i += 4 * 31) sum += Math.abs(x[i] - y[i]) + Math.abs(x[i + 1] - y[i + 1]) + Math.abs(x[i + 2] - y[i + 2]);
+						return sum / (x.length / (4 * 31));
+					},
+					compare = (scene, night, change) => {
+						draw(scene, night);
+						const before = renderer.snapshot();
+						const undo = change();
+						draw(scene, night);
+						const after = renderer.snapshot();
+						undo();
+						return differs(before, after);
+					},
+					base = list[2],
+					hq = base.game.entities.find((e) => e.team === 0 && e.type === "hq"),
+					close = { ...base, camera: { x: hq.x, y: hq.y, zoom: 3 }, selected: [] };
+				let d = compare(close, 0, () => ((options.volume = false), () => (options.volume = true)));
+				rows.push({ name: "objętość budynków w świetle słońca", ok: d > 0.05, note: `różnica ${d.toFixed(2)}` });
+				d = compare(close, 1, () => ((options.volume = false), () => (options.volume = true)));
+				rows.push({ name: "objętość budynków w świetle księżyca", ok: d > 0.02, note: `różnica ${d.toFixed(2)}` });
+				// Units lit too: a group of vehicles and infantry away from any building.
+				const field = new RTS.Game(42, "horizon");
+				field.configureSkirmish({ players: 2 });
+				field.explored.fill(1);
+				const fhq = field.entities.find((e) => e.team === 0 && e.type === "hq"),
+					spot = { x: fhq.x - 520, y: fhq.y + 60 };
+				["tank", "heavy", "trooper", "rocket", "trooper"].forEach((type, i) => field.spawn(type, 0, spot.x + (i % 3) * 60, spot.y + Math.floor(i / 3) * 60));
+				field.tick(0.1);
+				const troops = { game: field, camera: { x: spot.x + 60, y: spot.y + 30, zoom: 5 }, selected: [] };
+				for (let i = 0; i < 4; i++) draw(troops, 0);
+				d = compare(troops, 0, () => ((options.volume = false), () => (options.volume = true)));
+				// Deposits lit like buildings (sun by day), and glowing gas and crystals at night.
+				const fields = new RTS.Game(42, "horizon");
+				fields.configureSkirmish({ players: 2 });
+				fields.explored.fill(1);
+				fields.tick(0.1);
+				const gasField = fields.gasFields[0],
+					deposits = { game: fields, camera: { x: gasField.x, y: gasField.y, zoom: 6 }, selected: [] };
+				for (let i = 0; i < 4; i++) draw(deposits, 0);
+				const litDeposit = compare(deposits, 0, () => ((options.volume = false), () => (options.volume = true)));
+				const nightGlow = compare(deposits, 1, () => {
+					const amount = gasField.amount;
+					gasField.amount = 0;
+					return () => (gasField.amount = amount);
+				});
+				rows.push({ name: "złoża w świetle słońca i nocna poświata gazu", ok: litDeposit > 0.05 && nightGlow > 0.05, note: `światło ${litDeposit.toFixed(2)}, gaz wyczerpany nocą ${nightGlow.toFixed(2)}` });
+				rows.push({ name: "objętość jednostek w świetle słońca (z wyglądu z wieżą i kierunkiem)", ok: d > 0.05 && renderer.stats().looks > 0, note: `różnica ${d.toFixed(2)}, wyglądów z normalnymi ${renderer.stats().looks}` });
+				d = compare(close, 0, () => {
+					hq.hp = hq.maxHp * 0.3;
+					return () => (hq.hp = hq.maxHp);
+				});
+				rows.push({ name: "uszkodzony budynek: sadza, pęknięcia i pożar", ok: d > 0.05, note: `różnica ${d.toFixed(2)}` });
+				const blast = { kind: "explosion", x: hq.x + 150, y: hq.y + 120, size: 60, life: 0.5, maxLife: 0.65 };
+				base.game.effects.push(blast);
+				draw(close, 0);
+				base.game.effects.splice(base.game.effects.indexOf(blast), 1);
+				const scorched = renderer.stats().scorches;
+				rows.push({ name: "wypalony grunt po wybuchu", ok: scorched === 1, note: `śladów ${scorched}` });
+				const particles = (scene) => (draw(scene, 0), renderer.stats().particles);
+				const rain = particles(list[1]),
+					snow = particles(list[3]),
+					dust = particles(list[0]);
+				rows.push({ name: "opady jako cząsteczki GPU: deszcz, śnieg, brak na pustyni", ok: rain > 200 && snow > 200 && dust === 0, note: `deszcz ${rain}, śnieg ${snow}, pustynia ${dust}` });
+				const storm = list[1].game,
+					time = storm.time;
+				// 120 s: middle of the first storm, one second into a lightning cycle (every 17 s).
+				storm.time = 120;
+				const flashOn = (draw(list[1], 1), measure().brightness);
+				options.flashes = false;
+				const flashOff = (draw(list[1], 1), measure().brightness);
+				options.flashes = true;
+				storm.time = time;
+				rows.push({ name: "piorun rozświetla planszę", ok: flashOn > flashOff + 1, note: `${flashOff.toFixed(1)} → ${flashOn.toFixed(1)}` });
+				// Etap 5: wysokość terenu, pochylenie 2,5D, backend.
+				rows.push({ name: `backend: ${renderer.kind}`, ok: renderer.kind === backend, note: backend === "webgpu" && renderer.kind !== "webgpu" ? "WebGPU niedostępny, PixiJS przełączył na WebGL" : "" });
+				const dunes = list[4],
+					mesa = dunes.game.obstacles.find((o) => o.kind === "mesa"),
+					lowland = { x: dunes.game.W / 2, y: dunes.game.H - 60 };
+				draw(dunes, 0);
+				const top = renderer.heightAt(mesa.x + mesa.w / 2, mesa.y + mesa.h / 2),
+					low = renderer.heightAt(lowland.x, lowland.y);
+				rows.push({ name: "wysokość: płaskowyż ponad równiną", ok: top > low + 0.6, note: `${top.toFixed(2)} vs ${low.toFixed(2)}` });
+				const peaks = new RTS.Game(42, "skyfall");
+				peaks.configureSkirmish({ players: 2 });
+				draw({ name: "Wiszące Szczyty", game: peaks, camera: { x: peaks.W / 2, y: peaks.H / 2, zoom: 1 } }, 0);
+				const chasm = peaks.waters.find((w) => w.kind === "chasm"),
+					samples = Array.from({ length: 199 }, (_, i) => renderer.heightAt(((i * 37) % 199) * (peaks.W / 199), ((i * 91) % 199) * (peaks.H / 199))).sort((a, b) => a - b),
+					typical = samples[99];
+				rows.push({ name: "wysokość: przepaść poniżej typowego terenu", ok: renderer.heightAt(chasm.x, chasm.y) < typical - 0.6, note: `${renderer.heightAt(chasm.x, chasm.y).toFixed(2)} vs ${typical.toFixed(2)}` });
+				// Relief light is baked a few rows per frame; let it finish before comparing.
+				for (let i = 0; i < 200 && (renderer.stats().relief.pending || !renderer.stats().relief.baked); i++) {
+					draw(dunes, 0.1);
+					await new Promise((r) => setTimeout(r, 0));
+				}
+				d = compare(dunes, 0.1, () => ((options.relief = false), () => (options.relief = true)));
+				rows.push({ name: "rzeźba terenu i cienie gór", ok: d > 0.3, note: `różnica ${d.toFixed(2)}, ${JSON.stringify(renderer.stats().relief)}` });
+				options.tilt = true;
+				draw(list[2], 0);
+				const w0 = canvas.width,
+					h0 = canvas.height,
+					round = [
+						{ x: 100, y: 80 },
+						{ x: w0 / 2, y: h0 / 2 },
+						{ x: w0 - 40, y: h0 - 30 },
+					].map((p) => {
+						const back = renderer.toFlat(renderer.fromFlat(p));
+						return Math.hypot(back.x - p.x, back.y - p.y);
+					}),
+					farLeft = renderer.toFlat({ x: 0, y: 0 }).x,
+					nearLeft = renderer.toFlat({ x: 0, y: h0 }).x;
+				rows.push({ name: "pochylenie 2,5D: dalszy brzeg pokazuje więcej mapy, mysz wraca na to samo miejsce", ok: Math.max(...round) < 0.01 && farLeft < -100 && Math.abs(nearLeft) < 1, note: `lewy górny róg → ${farLeft.toFixed(0)}, lewy dolny → ${nearLeft.toFixed(1)}` });
+				d = compare(list[2], 0, () => ((options.tilt = false), () => (options.tilt = true)));
+				options.tilt = false;
+				draw(list[2], 0);
+				// Grunt jako natywne obiekty: ten sam obraz co grunt malowany przez Canvas, zmiany stanu odświeżają wygląd.
+				const groundDiff = (scene) => {
+					renderer.setNativeGround(false);
+					draw(scene);
+					const a = renderer.snapshot().getContext("2d").getImageData(0, 0, canvas.width, canvas.height).data;
+					renderer.setNativeGround(true);
+					draw(scene);
+					const b = renderer.snapshot().getContext("2d").getImageData(0, 0, canvas.width, canvas.height).data;
+					let sum = 0,
+						big = 0;
+					for (let k = 0; k < a.length; k += 4) {
+						const dd = Math.abs(a[k] - b[k]) + Math.abs(a[k + 1] - b[k + 1]) + Math.abs(a[k + 2] - b[k + 2]);
+						sum += dd;
+						if (dd > 60) big++;
+					}
+					return { mean: sum / (a.length / 4), big: (100 * big) / (a.length / 4) };
+				};
+				// Models through Canvas in both frames, so only the ground differs (and no relief baking in between).
+				// The deposits' volume light is WebGL-only (like the models'), so it is off for this comparison.
+				renderer.setNativeModels(false);
+				options.relief = false;
+				options.volume = false;
+				const diffs = list.map(groundDiff);
+				renderer.setNativeModels(true);
+				options.relief = true;
+				options.volume = true;
+				rows.push({
+					name: "grunt natywny wygląda jak grunt z Canvas (7 scen)",
+					ok: diffs.every((x) => x.mean < 1 && x.big < 0.2),
+					note: `średnia różnica ≤ ${Math.max(...diffs.map((x) => x.mean)).toFixed(2)}, mocno różnych pikseli ≤ ${Math.max(...diffs.map((x) => x.big)).toFixed(3)}%`,
+				});
+				draw(list[0]);
+				const groundStats = renderer.stats().ground,
+					mines = list[0].game.ores.filter((o) => o.amount > 200),
+					amounts = mines.map((o) => o.amount);
+				// Mining changes the amount label only; the deposit drawing is cached per size step (a new texture
+				// for every unit of ore slowed long games down).
+				for (const o of mines) o.amount = Math.floor(o.amount) - 7;
+				draw(list[0]);
+				const mined = renderer.stats().ground,
+					relabelled = mined.labelUpdates > groundStats.labelUpdates && mined.looks === groundStats.looks;
+				mines.forEach((o, i) => (o.amount = amounts[i]));
+				rows.push({ name: "złoża, przekaźniki i ścieżki jako obiekty; wydobycie zmienia napis złoża bez nowej tekstury", ok: groundStats.deposits > 3 && groundStats.relays > 0 && relabelled, note: JSON.stringify(mined) });
+				draw(list[3]);
+				rows.push({ name: "ślady gąsienic i butów", ok: renderer.stats().ground.tracks > 0, note: `śladów ${renderer.stats().ground.tracks}` });
+				// Modele jako natywne obiekty: ten sam obraz co modele malowane przez Canvas (rzeźba terenu wyłączona,
+				// bo jej światło dopieka się między klatkami), wygląd nieruchomych współdzielony, animowane odświeżane.
+				options.relief = false;
+				const modelDiff = (scene) => {
+					renderer.setNativeModels(false);
+					draw(scene);
+					const a = renderer.snapshot().getContext("2d").getImageData(0, 0, canvas.width, canvas.height).data;
+					renderer.setNativeModels(true);
+					for (let i = 0; i < 4; i++) draw(scene);
+					const b = renderer.snapshot().getContext("2d").getImageData(0, 0, canvas.width, canvas.height).data;
+					let sum = 0,
+						big = 0;
+					for (let k = 0; k < a.length; k += 4) {
+						const dd = Math.abs(a[k] - b[k]) + Math.abs(a[k + 1] - b[k + 1]) + Math.abs(a[k + 2] - b[k + 2]);
+						sum += dd;
+						if (dd > 60) big++;
+					}
+					return { mean: sum / (a.length / 4), big: (100 * big) / (a.length / 4) };
+				};
+				const modelDiffs = [...list, battle].map(modelDiff);
+				options.relief = true;
+				rows.push({
+					name: "modele natywne wyglądają jak modele z Canvas (7 scen i bitwa)",
+					ok: modelDiffs.every((x) => x.mean < 2.5 && x.big < 1.5),
+					note: `średnia różnica ≤ ${Math.max(...modelDiffs.map((x) => x.mean)).toFixed(2)}, mocno różnych pikseli ≤ ${Math.max(...modelDiffs.map((x) => x.big)).toFixed(2)}% (fazy animacji, paski nad modelami)`,
+				});
+				draw(battle);
+				const modelStats = renderer.stats().models;
+				rows.push({
+					name: "modele: nieruchome wyglądy współdzielone, animowane rozpoznane i odświeżane",
+					ok: modelStats.models > 80 && modelStats.shared > 0 && modelStats.animatedKinds > 0 && modelStats.stillKinds > 0 && !renderer.stats().layers.includes("world"),
+					note: JSON.stringify(modelStats) + " · warstwy Canvas: " + renderer.stats().layers.join(", "),
+				});
+				// Zwierzęta, ptaki, ryby i latające wyspy natywnie: z bliska jezioro z rybami i wyspa, obraz jak z Canvas.
+				options.relief = false;
+				const lakeGame = list[3].game,
+					lake = lakeGame.waters.find((w) => !w.kind),
+					sight = Array.from(lakeGame.visible);
+				lakeGame.visible.fill(1);
+				const lakeDiff = modelDiff({ ...list[3], camera: { x: lake.x, y: lake.y, zoom: 5 }, building: false, wallDrag: null }),
+					lakeFauna = renderer.stats().fauna;
+				sight.forEach((value, i) => (lakeGame.visible[i] = value));
+				const isle = MapArt.islands(list[1].game)[0],
+					isleDiff = modelDiff({ ...list[1], camera: { x: isle.x, y: isle.y - 60, zoom: 4.5 } }),
+					isleFauna = renderer.stats().fauna;
+				options.relief = true;
+				rows.push({
+					name: "zwierzęta, ptaki, ryby i latające wyspy natywnie, obraz jak z Canvas",
+					ok: lakeFauna.fish > 0 && lakeFauna.animals > 0 && isleFauna.islands > 0 && lakeDiff.mean < 0.5 && isleDiff.mean < 0.5,
+					note: `jezioro: różnica ${lakeDiff.mean.toFixed(3)}, ${JSON.stringify(lakeFauna)}; wyspa: różnica ${isleDiff.mean.toFixed(3)}`,
+				});
+				// Poświata i efekty map odtworzone natywnie z nagrania rysunku Canvas.
+				options.relief = false;
+				const fxDiffs = [],
+					fxLayers = new Set();
+				for (const scene of list)
+					for (const night of [0, 1]) {
+						renderer.setNativeEffects(false);
+						draw(scene, night);
+						const a = renderer.snapshot().getContext("2d").getImageData(0, 0, canvas.width, canvas.height).data;
+						renderer.setNativeEffects(true);
+						draw(scene, night);
+						draw(scene, night);
+						const b = renderer.snapshot().getContext("2d").getImageData(0, 0, canvas.width, canvas.height).data;
+						renderer.stats().layers.forEach((l) => fxLayers.add(l));
+						let sum = 0;
+						for (let k = 0; k < a.length; k += 4) sum += Math.abs(a[k] - b[k]) + Math.abs(a[k + 1] - b[k + 1]) + Math.abs(a[k + 2] - b[k + 2]);
+						fxDiffs.push(sum / (a.length / 4));
+					}
+				options.relief = true;
+				rows.push({ name: "poświata i efekty map natywnie, obraz jak z Canvas (7 scen, dzień i noc)", ok: Math.max(...fxDiffs) < 0.6, note: `średnia różnica ≤ ${Math.max(...fxDiffs).toFixed(3)}` });
+				rows.push({ name: "na wszystkich mapach testowych żadna warstwa Canvas nie jest przesyłana", ok: fxLayers.size === 0, note: [...fxLayers].join(", ") || "brak warstw" });
+				// A map plugin drawing something the recorder cannot replay: that phase goes back to Canvas.
+				window.replayProbe = true;
+				MapArt.extend({ effects: (c) => window.replayProbe && (void c.isPointInPath, c.fillRect(0, 0, 10, 10)) });
+				draw(list[4]);
+				const fallback = renderer.stats();
+				window.replayProbe = false;
+				draw(list[4]);
+				rows.push({ name: "wtyczka z rysunkiem nie do odtworzenia wraca do warstwy Canvas", ok: fallback.layers.includes("under") && fallback.replay.effects.unsupported === "isPointInPath", note: `warstwy: ${fallback.layers.join(", ")}, powód: ${fallback.replay.effects.unsupported}` });
+				draw(list[4]);
+				rows.push({ name: "mapa bez efektów i wtyczek nieba: bez warstw Canvas", ok: renderer.stats().layers.length === 0, note: renderer.stats().layers.join(", ") || "brak warstw" });
+				// Storm outlook: the marker, clock and label from all eight directions (and while arriving) stay native.
+				const stormLayers = new Set();
+				for (let k = 0; k < 8; k++) {
+					const sg = new RTS.Game(42, "horizon");
+					sg.configureSkirmish({ players: 2 });
+					sg.explored.fill(1);
+					sg.tick(0.1);
+					Object.defineProperty(sg, "stormOutlook", { get: () => ({ kind: ["sand", "snow", "rain"][k % 3], name: "Burza", lead: 20, until: 9, active: k === 7, near: k !== 7, arriving: k === 7, arrived: 0.4, angle: -Math.PI / 2 + (k * Math.PI) / 4, from: "z zachodu" }) });
+					const shq = sg.entities.find((e) => e.team === 0 && e.type === "hq");
+					draw({ game: sg, camera: { x: shq.x, y: shq.y, zoom: 1.4 } });
+					renderer.stats().layers.forEach((l) => stormLayers.add(l));
+				}
+				rows.push({ name: "prognoza burzy natywnie z 8 kierunków", ok: stormLayers.size === 0, note: [...stormLayers].join(", ") || "brak warstw" });
+				// Mapy kampanii: przekaźnik z zanikającym przejęciem (capturing −1) nie może zatrzymać rysowania.
+				const campaign = [];
+				for (const id of ["training", "colony1"]) {
+					const g = new RTS.Game(42, id),
+						hq = g.entities.find((e) => e.team === 0 && e.type === "hq") || { x: g.W / 2, y: g.H / 2 };
+					g.explored.fill(1);
+					let thrown = "";
+					for (let t = 0; t < 60; t += 0.1) {
+						g.tick(0.1);
+						if (Math.round(t * 10) % 30) continue;
+						try {
+							draw({ name: id, game: g, camera: { x: hq.x, y: hq.y, zoom: 1.3 } });
+						} catch (error) {
+							thrown ||= String(error.message || error);
+						}
+					}
+					campaign.push({ id, thrown, failures: renderer.stats().failures.length, bright: measure().brightness });
+				}
+				rows.push({
+					name: "mapy kampanii (Szkolenie, Iskra na Eos): plansza rysowana bez błędów przez minutę gry",
+					ok: campaign.every((c) => !c.thrown && !c.failures && c.bright > 20),
+					note: campaign.map((c) => `${c.id}: jasność ${c.bright.toFixed(0)}${c.thrown ? ", błąd " + c.thrown : ""}${c.failures ? ", awarie " + c.failures : ""}`).join("; "),
+				});
+				// Zabezpieczenie: wyjątek w natywnej części nie daje szarej planszy — ta część wraca do Canvas.
+				const resource = BoardArt.resourceLabel;
+				let thrownOnce = false;
+				// Only the native ground asks BoardArt.resourceLabel (Canvas uses its own copy), and only once it fails.
+				BoardArt.resourceLabel = (...args) => {
+					if (!thrownOnce) {
+						thrownOnce = true;
+						throw Error("test");
+					}
+					return resource(...args);
+				};
+				const fresh = new RTS.Game(9, "horizon");
+				fresh.configureSkirmish({ players: 2 });
+				fresh.explored.fill(1);
+				const probeOre = fresh.ores[0];
+				let broke = "";
+				try {
+					draw({ name: "awaria", game: fresh, camera: { x: probeOre.x, y: probeOre.y, zoom: 1.5 } });
+				} catch (error) {
+					broke = String(error.message || error);
+				}
+				BoardArt.resourceLabel = resource;
+				const afterFailure = renderer.stats();
+				renderer.setNativeGround(true);
+				draw(list[4]);
+				rows.push({
+					name: "wyjątek w natywnym gruncie: grunt wraca do Canvas, plansza rysuje się dalej",
+					ok: !broke && afterFailure.failures.some((f) => f.part === "ground") && afterFailure.layers.includes("world"),
+					note: broke ? "błąd: " + broke : `warstwy: ${afterFailure.layers.join(", ")}`,
+				});
+				// Interfejs na planszy (znaczniki, podgląd budowy, winieta, niebo) natywnie, i jego tryb awaryjny.
+				options.relief = false;
+				const overlayDiffs = [];
+				for (const scene of list)
+					for (const night of [0, 1]) {
+						renderer.setNativeOverlay(false);
+						draw(scene, night);
+						const a = renderer.snapshot().getContext("2d").getImageData(0, 0, canvas.width, canvas.height).data;
+						renderer.setNativeOverlay(true);
+						draw(scene, night);
+						draw(scene, night);
+						const b = renderer.snapshot().getContext("2d").getImageData(0, 0, canvas.width, canvas.height).data;
+						let sum = 0;
+						for (let k = 0; k < a.length; k += 4) sum += Math.abs(a[k] - b[k]) + Math.abs(a[k + 1] - b[k + 1]) + Math.abs(a[k + 2] - b[k + 2]);
+						overlayDiffs.push(sum / (a.length / 4));
+					}
+				options.relief = true;
+				rows.push({ name: "interfejs na planszy natywnie, obraz jak z Canvas (7 scen, dzień i noc)", ok: Math.max(...overlayDiffs) < 1.6, note: `średnia różnica ≤ ${Math.max(...overlayDiffs).toFixed(3)} (winieta: różnice 1/255)` });
+				const atmosphere = PlanetArt.atmosphere;
+				PlanetArt.atmosphere = (c, ...rest) => (void c.isPointInPath, atmosphere(c, ...rest));
+				draw(list[4]);
+				const overlayFallback = renderer.stats();
+				PlanetArt.atmosphere = atmosphere;
+				draw(list[4]);
+				rows.push({ name: "interfejs z rysunkiem nie do odtworzenia wraca do warstwy Canvas", ok: overlayFallback.layers.join() === "overlay" && overlayFallback.replay.overlay.unsupported === "isPointInPath" && renderer.stats().layers.length === 0, note: `warstwy: ${overlayFallback.layers.join(", ")}, powód: ${overlayFallback.replay.overlay.unsupported}` });
+				rows.push({ name: "pochylenie zmienia obraz i się wyłącza", ok: d > 1 && renderer.toFlat({ x: 5, y: 5 }).x === 5, note: `różnica ${d.toFixed(2)}` });
+				canvas.width = 800;
+				canvas.height = 400;
+				draw(list[0], 0);
+				const small = renderer.snapshot();
+				canvas.width = 1130;
+				canvas.height = 522;
+				draw(list[0], 0);
+				rows.push({ name: "zmiana rozmiaru planszy", ok: small.width === 800 && small.height === 400 && measure().coverage > 0.8, note: `${small.width}×${small.height}` });
+				renderer.destroy();
+				rows.push({ name: "destroy usuwa warstwę WebGL", ok: !document.querySelector(".webgl-board") });
+				renderer = null;
+				await ensure();
+				draw(list[0]);
+				report(rows, "renderer PixiJS (" + renderer.kind + ")");
+			};
+			$("show").onclick = async () => {
+				await ensure();
+				const t = $("time").value;
+				draw([...list, battle][+$("scene").value], t === "" ? undefined : +t);
+			};
+			$("perf").onclick = async () => {
+				await ensure();
+				const scene = [...list, battle][+$("scene").value],
+					out = [];
+				for (const [name, r] of [
+					["Canvas 2D", canvasRenderer],
+					[renderer.kind === "webgpu" ? "WebGPU" : "WebGL", renderer],
+				]) {
+					r.setGame(scene.game);
+					// Waiting until the frame is really drawn (both renderers draw on the GPU): read one pixel
+					// back (Canvas 2D, WebGL) or wait for the submitted GPU work (WebGPU).
+					const device = r === renderer ? renderer.pixi.renderer.gpu?.device : null,
+						gl = r === renderer && !device ? renderer.canvas.getContext("webgl2") || renderer.canvas.getContext("webgl") : null,
+						pixel = new Uint8Array(4),
+						finish = () => (device ? device.queue.onSubmittedWorkDone() : gl ? gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel) : canvas.getContext("2d").getImageData(0, 0, 1, 1));
+					const t0 = performance.now();
+					for (let i = 0; i < 120; i++) {
+						scene.game.time += 1 / 60;
+						r.render(view(scene));
+						await finish();
+					}
+					out.push(`${name}: ${((performance.now() - t0) / 120).toFixed(2)} ms/klatkę`);
+				}
+				renderer.setGame(scene.game);
+				renderer.render(view(scene));
+				report([{ name: out.join(" · "), ok: true }], "pomiar " + scene.name);
+			};
+		</script>
+	</body>
+</html>

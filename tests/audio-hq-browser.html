@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="pl">
+	<meta charset="utf-8" /><title>Test dźwięku wysokiej jakości</title>
+	<style>
+		body {
+			background: #17252c;
+			color: #d4eadf;
+			font: 15px system-ui;
+			padding: 24px;
+		}
+		button {
+			padding: 10px 14px;
+			margin: 4px;
+			font: inherit;
+		}
+		pre {
+			white-space: pre-wrap;
+		}
+	</style>
+	<h1>Dźwięk wysokiej jakości (audio-hq.js)</h1>
+	<p>
+		Renderuje dźwięk bez odtwarzania (OfflineAudioContext): wczytanie próbek, muzyka Tone.js w każdym motywie, akcenty, efekty z próbek i tło
+		otoczenia. Głośność porównywana z dotychczasową syntezą (audio.js). Przyciski niżej odtwarzają na żywo.
+	</p>
+	<button id="run">Sprawdź</button>
+	<pre id="out">Gotowe do testu</pre>
+	<div>
+		<button data-mode="menu">Menu</button><button data-mode="game:dust">Pustynia</button><button data-mode="game:ice">Lód</button
+		><button data-mode="game:ash">Wulkan</button><button data-mode="intro">Prolog</button><button id="stop">Stop</button>
+	</div>
+	<div>
+		<button data-sfx="shot" data-faction="colonies">Strzał Kolonii</button><button data-sfx="shot" data-faction="dominion">Strzał Dominium</button
+		><button data-sfx="shot" data-faction="swarm">Strzał Roju</button><button data-sfx="rocket">Rakieta</button><button data-sfx="explosion">Wybuch</button
+		><button data-sfx="robot-mine">Wydobycie</button><button data-sfx="footstep">Kroki</button><button data-sfx="engine">Silnik</button
+		><button data-sfx="thunder">Grzmot</button><button data-sfx="victory">Zwycięstwo</button><button data-sfx="defeat">Porażka</button
+		><button data-sfx="research">Badanie</button>
+	</div>
+	<script src="../audio.js"></script>
+	<script>
+		// Sample paths are relative to the game page; this page lives in tests/.
+		const realFetch = window.fetch.bind(window);
+		window.fetch = (url, ...rest) => realFetch(String(url).startsWith("assets/") ? "../" + url : url, ...rest);
+	</script>
+	<script src="../audio-hq.js"></script>
+	<script>
+		const $ = (id) => document.getElementById(id);
+		const SR = 44100;
+		// A GameAudio on an offline context, with the same buses as unlock() builds.
+		function offline(seconds, hq) {
+			const c = new OfflineAudioContext(2, SR * seconds, SR),
+				a = new GameAudio();
+			a.context = c;
+			a.master = c.createGain();
+			a.master.connect(c.destination);
+			a.effectsGain = c.createGain();
+			a.effectsGain.gain.value = a.volume;
+			a.effectsGain.connect(a.master);
+			a.musicGain = c.createGain();
+			a.musicGain.gain.value = 0.65 * a.musicVolume;
+			a.musicGain.connect(a.master);
+			a.setupMusicSpace();
+			if (hq) a.setupQuality();
+			return { c, a };
+		}
+		const level = (b) => {
+			let peak = 0,
+				sum = 0;
+			for (let ch = 0; ch < b.numberOfChannels; ch++) {
+				const d = b.getChannelData(ch);
+				for (let i = 0; i < d.length; i++) {
+					peak = Math.max(peak, Math.abs(d[i]));
+					sum += d[i] * d[i];
+				}
+			}
+			return { peak, rms: Math.sqrt(sum / (b.length * b.numberOfChannels)) };
+		};
+		const until = async (test, ms = 8000) => {
+			const t0 = performance.now();
+			while (!test() && performance.now() - t0 < ms) await new Promise((r) => setTimeout(r, 50));
+			return test();
+		};
+		async function music(mode, hq) {
+			const { c, a } = offline(10, hq);
+			if (hq) await until(() => a.hq.ready);
+			a.musicMode = mode;
+			let t = 0.1,
+				step = 0;
+			while (t < 9) t += a.musicStep(step++, t);
+			// Give Tone's reverb time to build its impulse before rendering.
+			if (hq) await new Promise((r) => setTimeout(r, 300));
+			return { ...level(await c.startRendering()), tone: !!a.hq?.band };
+		}
+		async function effect(kind, hq, more = {}) {
+			const { c, a } = offline(3, hq);
+			if (hq) await until(() => a.hq.ready);
+			a.voice(kind, 0.7, 0, more);
+			return level(await c.startRendering());
+		}
+		$("run").onclick = async () => {
+			const rows = [],
+				row = (ok, text) => rows.push((ok ? "OK " : "FAIL ") + text);
+			$("out").textContent = "Renderowanie…";
+			try {
+				// Samples.
+				const { a } = offline(1, true);
+				await until(() => a.hq.ready);
+				const groups = [...a.hq.bank.keys()],
+					files = [...a.hq.bank.values()].reduce((n, l) => n + l.length, 0);
+				row(groups.length === 14 && files === 54, `próbki: ${groups.length} grup, ${files} plików`);
+				// Music on Tone.js, loudness close to the synthesized music.
+				for (const mode of ["menu", "intro", "game:dust", "game:ice", "game:ash"]) {
+					const old = await music(mode, false),
+						hq = await music(mode, true),
+						ratio = hq.rms / old.rms;
+					row(hq.tone && hq.rms > 0.002 && hq.peak < 0.99 && ratio > 0.5 && ratio < 2.5, `muzyka ${mode}: Tone.js ${hq.tone ? "tak" : "NIE"}, RMS ${hq.rms.toFixed(4)} (synteza ${old.rms.toFixed(4)}, ×${ratio.toFixed(2)}), szczyt ${hq.peak.toFixed(3)}`);
+				}
+				// Effects from samples, and stingers.
+				for (const [kind, more] of [
+					["shot", { faction: "colonies" }],
+					["shot", { faction: "swarm" }],
+					["rocket", {}],
+					["explosion", {}],
+					["robot-mine", {}],
+					["footstep", { biome: "ice" }],
+					["engine", {}],
+					["thunder", {}],
+					["victory", {}],
+					["research", {}],
+				]) {
+					const old = await effect(kind, false, more),
+						hq = await effect(kind, true, more),
+						ratio = hq.rms / Math.max(1e-6, old.rms);
+					row(hq.rms > Math.max(0.0002, old.rms * 0.3) && hq.peak < 0.99 && ratio > 0.3 && ratio < 4, `${kind}${more.faction ? " " + more.faction : ""}: RMS ${hq.rms.toFixed(4)} (synteza ${old.rms.toFixed(4)}, ×${ratio.toFixed(2)}), szczyt ${hq.peak.toFixed(3)}`);
+				}
+				// A far explosion is quieter than a near one.
+				const { c: c1, a: near } = offline(2, true),
+					{ c: c2, a: far } = offline(2, true);
+				await until(() => near.hq.ready && far.hq.ready);
+				// The same variant and pitch in both, so only the distance differs.
+				const random = Math.random;
+				Math.random = () => 0.5;
+				near.voice("explosion", 0.7, 0, { far: 0 });
+				far.voice("explosion", 0.7, 0, { far: 1 });
+				Math.random = random;
+				const n = level(await c1.startRendering()),
+					f = level(await c2.startRendering());
+				row(f.rms < n.rms * 0.75, `odległość: wybuch z bliska RMS ${n.rms.toFixed(4)}, z daleka ${f.rms.toFixed(4)}`);
+				// Ambience: wind on a desert world, louder before a storm.
+				const amb = async (storm) => {
+					const { c, a } = offline(3, true);
+					a.musicMode = "game:dust";
+					a.updateAmbience({ missionId: "horizon", time: 3, weather: { intensity: 0, kind: "sand" }, stormOutlook: storm ? { near: true, until: 2, lead: 20 } : null }, true);
+					return level(await c.startRendering());
+				};
+				const calm = await amb(false),
+					coming = await amb(true);
+				row(calm.rms > 0.0005 && coming.rms > calm.rms * 1.5, `tło: spokojnie RMS ${calm.rms.toFixed(4)}, przed burzą ${coming.rms.toFixed(4)}`);
+			} catch (error) {
+				row(false, "wyjątek: " + (error.stack || error.message || error));
+			}
+			$("out").textContent = (rows.every((r) => r.startsWith("OK")) ? "PASS" : "FAIL") + "\n" + rows.join("\n");
+		};
+		const live = new GameAudio();
+		document.querySelectorAll("[data-mode]").forEach((b) => (b.onclick = async () => (live.setMuted(false), await live.unlock(), live.setMusicMode(b.dataset.mode))));
+		document.querySelectorAll("[data-sfx]").forEach((b) => (b.onclick = async () => (await live.unlock(), live.play(b.dataset.sfx, { force: true, faction: b.dataset.faction, biome: "dust" }))));
+		$("stop").onclick = () => live.setMuted(true);
+	</script>
+</html>

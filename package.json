@@ -1,0 +1,10 @@
+{
+	"name": "pogranicze-galaktyki",
+	"version": "0.49.0",
+	"private": true,
+	"description": "Samodzielny prototyp kosmicznego RTS",
+	"scripts": {
+		"start": "node server.js",
+		"test": "node --test \"tests/*.test.js\""
+	}
+}

@@ -1,0 +1,354 @@
+.development-dialog {
+	width: min(1160px, 94vw);
+	height: min(820px, 92dvh);
+	max-width: none;
+	max-height: none;
+	box-sizing: border-box;
+	padding: 24px;
+	margin: auto;
+	background: radial-gradient(ellipse at 10% 0, #233e44, #111e2b 65%);
+	border: 1px solid #587672;
+	border-radius: 12px;
+	color: #d6e7e3;
+	box-shadow: 0 25px 90px #0009;
+	font:
+		14px/1.5 "Segoe UI",
+		sans-serif;
+	overflow: hidden;
+}
+.development-dialog[open] {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+.development-dialog::backdrop {
+	background: #030b13bc;
+	backdrop-filter: blur(4px);
+}
+.development-dialog header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 12px;
+	flex-shrink: 0;
+}
+.development-dialog h2 {
+	font-weight: 400;
+	font-size: 28px;
+	margin: 4px 0 0;
+}
+.development-dialog h3 {
+	font-size: 21px;
+	line-height: 1.25;
+	margin: 8px 0;
+}
+.development-dialog button {
+	font: inherit;
+	color: inherit;
+	background: #213640;
+	border: 1px solid #4a666e;
+	border-radius: 5px;
+	padding: 8px 12px;
+	cursor: pointer;
+	text-align: left;
+}
+.development-dialog button:disabled {
+	opacity: 0.45;
+	cursor: default;
+}
+.development-dialog button:focus-visible {
+	outline: 2px solid #efd28e;
+	outline-offset: 3px;
+}
+.development-intro {
+	margin: 0;
+	color: #9fb8bf;
+	font-size: 12px;
+	flex-shrink: 0;
+}
+.development-tabs {
+	display: flex;
+	gap: 8px;
+	flex-shrink: 0;
+}
+.development-tabs button[aria-selected="true"] {
+	background: #2a4a40;
+	border-color: #a9d9b9;
+}
+.development-layout {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 300px;
+	gap: 20px;
+	min-height: 0;
+	flex: 1;
+}
+#development-branches,
+#development-detail {
+	overflow: auto;
+	scrollbar-width: thin;
+	scrollbar-color: #50796f #12232c;
+	padding: 5px;
+	min-height: 0;
+}
+.development-branch {
+	display: grid;
+	grid-template-columns: minmax(140px, 1fr) 20px minmax(180px, 1.6fr);
+	gap: 12px;
+	padding: 14px 0;
+	border-bottom: 1px solid #36515870;
+	align-items: start;
+}
+.development-branch:first-child {
+	padding-top: 0;
+}
+.dev-source {
+	position: sticky;
+	top: 0;
+}
+.dev-arrow {
+	align-self: start;
+	margin-top: 35px;
+	color: #9fbcaf;
+	font-size: 22px;
+}
+.dev-leaves {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 8px;
+	border-left: 1px solid #547669;
+	padding-left: 12px;
+}
+.development-dialog .development-node {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	width: 100%;
+	min-height: 110px;
+	padding: 12px;
+	background: #1a2d39;
+	border-color: #3b535e;
+	overflow-wrap: anywhere;
+}
+.development-node strong {
+	font-size: 13px;
+	line-height: 1.4;
+}
+.development-node small {
+	font-size: 11px;
+	color: #a4b8bf;
+}
+.development-node .dev-kind {
+	font-size: 9px;
+	letter-spacing: 1px;
+	color: #86a3ad;
+	text-transform: uppercase;
+}
+.development-dialog .development-node.ready {
+	border-color: #5f8d73;
+}
+.development-dialog .development-node.done {
+	background: #254137;
+	border-color: #7fa382;
+}
+.development-dialog .development-node.working {
+	border-color: #d6b572;
+}
+.development-dialog .development-node.selected {
+	outline: 2px solid #c5e7ce;
+	outline-offset: 1px;
+	background: #2c4446;
+}
+.dev-leaf-note {
+	color: #859ea8;
+	font-size: 12px;
+	grid-column: 2/-1;
+	margin: 25px 0;
+}
+#development-detail {
+	background: #0b1723b0;
+	border: 1px solid #38535f;
+	border-radius: 8px;
+	padding: 18px;
+}
+#development-detail p {
+	font-size: 13px;
+	color: #afc5ca;
+	margin: 12px 0;
+}
+#development-preview {
+	display: block;
+	width: 100%;
+	height: 120px;
+	object-fit: contain;
+	background: radial-gradient(ellipse, #36564d60, transparent 70%);
+}
+#development-detail dl {
+	margin: 14px 0;
+	display: grid;
+	gap: 9px;
+	font-size: 12px;
+}
+#development-detail dl > div {
+	display: flex;
+	justify-content: space-between;
+	gap: 12px;
+}
+#development-detail dt {
+	color: #839da7;
+}
+#development-detail dd {
+	margin: 0;
+	text-align: right;
+	color: #dbc99d;
+}
+.dev-requires {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+.dev-requires small {
+	color: #8eabae;
+	font-size: 10px;
+	letter-spacing: 1px;
+}
+.dev-requires button {
+	font-size: 12px;
+}
+#development-detail .dev-hint {
+	font-size: 11px;
+	color: #92aab5;
+	line-height: 1.6;
+}
+#development-detail .dev-state {
+	padding: 9px;
+	border-left: 2px solid #c6b184;
+	background: #715f2726;
+	font-size: 12px;
+}
+.dev-state.done,
+.dev-state.ready {
+	color: #bfe9ca !important;
+	border-color: #bfe9ca !important;
+}
+.development-dialog .dev-main-action {
+	width: 100%;
+	margin-top: 10px;
+	background: #294a3e;
+	border-color: #7faa8e;
+	text-align: center;
+	font-size: 12px;
+}
+.development-dialog progress {
+	display: block;
+	width: 100%;
+	height: 7px;
+	accent-color: #b2dfbe;
+}
+.development-dialog footer {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: space-between;
+	gap: 8px;
+	border-top: 1px solid #3f5960;
+	padding-top: 12px;
+	font-size: 12px;
+	flex-shrink: 0;
+}
+#development-message {
+	color: #bfdfc3;
+}
+html.software-cursor-active .development-dialog,
+html.software-cursor-active .development-dialog * {
+	cursor:
+		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='30'%3E%3Cpath d='M2 2L21 20L11 18L5 25Z' fill='%23b0efd0' stroke='%23122631' stroke-width='2'/%3E%3C/svg%3E")
+			2 2,
+		auto !important;
+}
+@media (max-width: 950px) {
+	.dev-leaves {
+		grid-template-columns: 1fr;
+	}
+	.development-layout {
+		grid-template-columns: minmax(0, 1fr) 260px;
+	}
+	.development-dialog {
+		padding: 16px;
+	}
+	.development-branch {
+		grid-template-columns: minmax(110px, 1fr) 16px minmax(125px, 1.2fr);
+		gap: 6px;
+	}
+}
+@media (max-width: 680px) {
+	.development-layout {
+		grid-template-columns: 1fr;
+		grid-template-rows: minmax(180px, 1fr) minmax(180px, 1fr);
+	}
+	.development-dialog {
+		height: 96dvh;
+		padding: 12px;
+		gap: 8px;
+	}
+	.development-dialog h2 {
+		font-size: 22px;
+	}
+	.development-intro {
+		display: none;
+	}
+	.development-tabs button {
+		padding: 7px;
+		font-size: 12px;
+	}
+	.dev-leaves {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+	.development-dialog .development-node {
+		min-height: 90px;
+		padding: 8px;
+	}
+	#development-detail {
+		padding: 12px;
+	}
+	#development-preview {
+		float: right;
+		width: 100px;
+		height: 70px;
+	}
+	.development-dialog footer {
+		font-size: 10px;
+	}
+}
+#development-detail {
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+.dev-detail-body {
+	min-height: 0;
+	flex: 1;
+	overflow: auto;
+	scrollbar-width: thin;
+	scrollbar-color: #50796f #12232c;
+	padding-right: 5px;
+}
+.dev-detail-actions {
+	flex-shrink: 0;
+	border-top: 1px solid #365158;
+	margin-top: 10px;
+	padding-top: 5px;
+}
+#development-detail .dev-detail-actions .dev-hint {
+	margin: 8px 0 0;
+}
+#development-preview {
+	height: 90px;
+}
+@media (max-width: 680px) {
+	.dev-detail-actions .dev-hint {
+		display: none;
+	}
+	.dev-detail-actions {
+		margin-top: 5px;
+		padding-top: 0;
+	}
+}

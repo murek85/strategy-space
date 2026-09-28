@@ -1,0 +1,72 @@
+<!doctype html><meta charset="utf-8" /><title>Przegląd modeli 0.12</title
+><style>
+	body {
+		background: #17242c;
+		color: #def;
+		font: 16px sans-serif;
+	}
+	canvas {
+		width: 1200px;
+		max-width: 100%;
+	}
+</style>
+<h1>Modele obu frakcji · 0.12</h1>
+<canvas id="board" width="1200" height="750"></canvas>
+<p id="result"></p>
+<script src="../engine.js"></script>
+<script src="../advanced-rules.js"></script>
+<script src="../army-rules.js"></script>
+<script src="../support-rules.js"></script>
+<script src="../scenario-setup.js"></script>
+<script src="../scenario-challenges.js"></script>
+<script src="../enemy-ai.js"></script>
+<script src="../teams-rules.js"></script>
+<script src="../factions-rules.js"></script>
+<script src="../swarm-rules.js"></script>
+<script src="../campaign-act3.js"></script>
+<script src="../art.js"></script>
+<script src="../planet-art.js"></script>
+<script src="../advanced-art.js"></script>
+<script>
+	try {
+		const c = document.getElementById("board").getContext("2d");
+		c.fillStyle = "#777553";
+		c.fillRect(0, 0, 1200, 750);
+		for (const [row, faction] of ["colonies", "dominion"].entries()) {
+			const g = new RTS.Game(42, "solar");
+			g.configureSkirmish({ faction });
+			[
+				"hq",
+				"barracks",
+				"factory",
+				"hangar",
+				"lab",
+				"reactor",
+				"turret",
+				"wall",
+				"gate",
+				"interceptor",
+				"bomber",
+				"raider",
+				"sentinel",
+			].forEach((type, i) => {
+				const x = 90 + (i % 7) * 167,
+					y = 130 + Math.floor(i / 7) * 155 + row * 350,
+					e = g.spawn(type, 0, x, y);
+				c.save();
+				c.translate(x, y);
+				if (!AdvancedArt.body(c, e, 6, "dust"))
+					BoardArt.body(c, e, 6, null, true);
+				c.fillStyle = "#fff";
+				c.font = "12px sans-serif";
+				c.textAlign = "center";
+				c.fillText(RTS.TYPES[type].name, 0, 65);
+				c.restore();
+			});
+		}
+		document.getElementById("result").textContent =
+			"PASS — 26 modeli narysowanych";
+	} catch (e) {
+		document.getElementById("result").textContent = "FAIL " + e.stack;
+	}
+</script>

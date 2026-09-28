@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="pl">
+	<meta charset="utf-8" /><title>Przegląd pogranicza 0.9</title
+	><style>
+		body {
+			background: #15212b;
+			color: #cce4dc;
+			font: 16px system-ui;
+			padding: 35px;
+		}
+		button {
+			padding: 16px;
+			margin: 10px;
+			background: #bedbc9;
+			color: #142a2c;
+			border: 0;
+		}
+	</style>
+	<h1>Stan testowy 0.9</h1>
+	<p>
+		Przyciski zastępują autosave na tym adresie. Uruchamiaj na osobnym
+		porcie testowym 4174. Ręczne sloty pozostają zachowane.
+	</p>
+	<button data-mission="solar">Helion · słońce</button
+	><button data-mission="horizon">Khepri · piasek</button
+	><button data-mission="frost">Nivalis · śnieg</button
+	><button data-mission="ember">Vulkan · deszcz</button>
+	<script src="../engine.js"></script>
+	<script src="../advanced-rules.js"></script>
+	<script src="../army-rules.js"></script>
+	<script src="../support-rules.js"></script>
+	<script src="../scenario-setup.js"></script>
+	<script src="../scenario-challenges.js"></script>
+	<script src="../enemy-ai.js"></script>
+	<script src="../teams-rules.js"></script>
+	<script src="../factions-rules.js"></script>
+	<script src="../swarm-rules.js"></script>
+	<script src="../campaign-act3.js"></script>
+	<script>
+		for (const button of document.querySelectorAll("button"))
+			button.onclick = () => {
+				const g = new RTS.Game(42, button.dataset.mission);
+				g.credits = 8000;
+				g.gas = 500;
+				g.crystals = 300;
+				g.nextWave = 999;
+				g.entities = g.entities.filter(
+					(e) => e.team !== 0 || e.type === "hq",
+				);
+				const base = g.hq(0);
+				g.obstacles = g.obstacles.filter(
+					(r) => Math.hypot(r.x - base.x, r.y - base.y) > 500,
+				);
+				g.waters = [
+					{ x: base.x + 300, y: base.y + 150, rx: 90, ry: 65 },
+				];
+				const side = base.x > RTS.W / 2 ? -1 : 1;
+				for (const [type, dx, dy] of [
+					["factory", -100, -120],
+					["lab", 140, -120],
+					["reactor", 0, -210],
+					["heavy", 170, 0],
+					["artillery", 240, 0],
+					["trooper", 150, 60],
+					["worker", 180, 60],
+					["gate", 320, -100],
+					["wall", 250, -100],
+					["wall", 390, -100],
+				])
+					g.spawn(type, 0, base.x + dx * side, base.y + dy);
+				const depot = g.spawn(
+					"depot",
+					0,
+					base.x + 180 * side,
+					base.y + 150,
+				);
+				depot.constructionLeft = 7;
+				const worker = g.units(0).find((e) => e.type === "worker"),
+					heavy = g.units(0).find((e) => e.type === "heavy");
+				g.buildWith([worker.id], depot.id);
+				heavy.hp = heavy.maxHp * 0.24;
+				const beast = g.spawn(
+					"beast",
+					2,
+					base.x + 320 * side,
+					base.y - 210,
+				);
+				beast.home = { x: beast.x, y: beast.y };
+				g.enqueue("heavy");
+				g.startResearch("precision");
+				g.research.left = 18;
+				g.time = 120;
+				g.upgrades.meteorology = true;
+				g.explored.fill(1);
+				g.updateVision();
+				localStorage.setItem(
+					"pogranicze-save-v2",
+					JSON.stringify({
+						state: g.serialize(),
+						camera: {
+							x: base.x + 150 * side,
+							y: base.y - 20,
+							zoom: 4,
+						},
+						savedAt: Date.now(),
+					}),
+				);
+				location.href = "../?qa=frontier";
+			};
+	</script>
+</html>
