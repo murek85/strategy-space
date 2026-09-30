@@ -25,8 +25,10 @@ const FactionArt = (() => {
 		c.fillStyle = fill;
 		c.fillRect(x, y, w, h);
 	};
-	const tintOf = (e) => e.tint || (e.team === (game.viewer ?? 0) ? "#b0efd0" : "#f07d78");
-	const dominion = (e) => e.faction === "dominion" || (!e.faction && e.team !== (game.viewer ?? 0) && e.team !== 2);
+	// The team the screen belongs to (app.js exposes the battle; tests without it see team 0).
+	const viewer = () => (typeof currentGame === "function" ? currentGame()?.viewer : undefined) ?? 0;
+	const tintOf = (e) => e.tint || (e.team === viewer() ? "#b0efd0" : "#f07d78");
+	const dominion = (e) => e.faction === "dominion" || (!e.faction && e.team !== viewer() && e.team !== 2);
 	// Base infantry drawn by the existing art, with a type swap.
 	const asInfantry = (c, e, time, like) => AdvancedArt.body(c, { ...e, type: like }, time);
 

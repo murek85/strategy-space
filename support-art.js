@@ -35,8 +35,10 @@ const SupportArt = (() => {
 		roof.addColorStop(1, dom ? "#8b8589" : "#8b9c85");
 		poly(c, [[x, y - h], [x + w, y - h], [x + w + 12, y - h - 9], [x + 12, y - h - 9]], roof);
 	}
-	const tintOf = (e) => e.tint || (e.team === (g.viewer ?? 0) ? "#b0efd0" : "#f07d78");
-	const dominion = (e) => e.faction === "dominion" || (!e.faction && e.team !== (g.viewer ?? 0) && e.team !== 2);
+	// The team the screen belongs to (app.js exposes the battle; tests without it see team 0).
+	const viewer = () => (typeof currentGame === "function" ? currentGame()?.viewer : undefined) ?? 0;
+	const tintOf = (e) => e.tint || (e.team === viewer() ? "#b0efd0" : "#f07d78");
+	const dominion = (e) => e.faction === "dominion" || (!e.faction && e.team !== viewer() && e.team !== 2);
 
 	function medbay(c, e, time) {
 		const dom = dominion(e),

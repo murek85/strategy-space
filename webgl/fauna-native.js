@@ -138,10 +138,11 @@ function createNativeFauna() {
 			sp.anchor.set(entry.anchor.x, entry.anchor.y);
 			sp.scale.set(entry.scale);
 			islandsLayer.addChild(shadow, sp);
-			return { s, sp, shadow };
+			return { s, sp, shadow, scale: entry.scale };
 		});
 	}
 
+	const upright = new PIXI.Matrix();
 	function update(view) {
 		const { camera, scale, width, height } = view,
 			seen = { x: camera.x, y: camera.y, w: width / scale, h: height / scale },
@@ -188,9 +189,14 @@ function createNativeFauna() {
 		}
 		animals.end();
 		// Floating islands, bobbing (MapArt.sky).
-		for (const { s, sp, shadow } of islands) {
+		for (const { s, sp, shadow, scale } of islands) {
 			sp.visible = shadow.visible = inView(s, 300);
-			if (sp.visible) sp.position.set(s.x, s.y + Math.sin(t * 0.6 + s.seed) * 6);
+			if (!sp.visible) continue;
+			const y = s.y + Math.sin(t * 0.6 + s.seed) * 6,
+				// With the 2.5D tilt they stand upright over the tilted ground (see webgl/models-native.js).
+				L = view.upright?.(s.x, s.y);
+			if (L) sp.setFromMatrix(upright.set(L.a * scale, L.b * scale, L.c * scale, L.d * scale, s.x, y));
+			else sp.setFromMatrix(upright.set(scale, 0, 0, scale, s.x, y));
 		}
 	}
 

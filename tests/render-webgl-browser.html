@@ -320,6 +320,41 @@
 					farLeft = renderer.toFlat({ x: 0, y: 0 }).x,
 					nearLeft = renderer.toFlat({ x: 0, y: h0 }).x;
 				rows.push({ name: "pochylenie 2,5D: dalszy brzeg pokazuje więcej mapy, mysz wraca na to samo miejsce", ok: Math.max(...round) < 0.01 && farLeft < -100 && Math.abs(nearLeft) < 1, note: `lewy górny róg → ${farLeft.toFixed(0)}, lewy dolny → ${nearLeft.toFixed(1)}` });
+				// Stojące obiekty: po przejściu przez siatkę pionowa krawędź zostaje pionowa, a proporcje własne (tylko skala maleje z odległością).
+				const standing = (sx, sy) => {
+						const p = renderer.toFlat({ x: sx, y: sy }),
+							L = renderer.uprightAt(p),
+							at = (dx, dy) => renderer.fromFlat({ x: p.x + L.a * dx + L.c * dy, y: p.y + L.b * dx + L.d * dy }),
+							foot = at(0, 0),
+							top = at(0, -30),
+							side = at(30, 0),
+							up = Math.hypot(top.x - foot.x, top.y - foot.y),
+							across = Math.hypot(side.x - foot.x, side.y - foot.y);
+						return { lean: Math.abs(top.x - foot.x), aspect: up / across, size: across / 30 };
+					},
+					nearCorner = standing(30, h0 - 30),
+					farCorner = standing(30, 30);
+				rows.push({
+					name: "pochylenie 2,5D: modele przy krawędzi stoją prosto i nie są rozciągnięte",
+					ok: nearCorner.lean < 0.5 && farCorner.lean < 0.5 && Math.abs(nearCorner.aspect - 1) < 0.03 && Math.abs(farCorner.aspect - 1) < 0.03 && farCorner.size < nearCorner.size,
+					note: `odchylenie ${nearCorner.lean.toFixed(2)} / ${farCorner.lean.toFixed(2)} px, proporcje ${nearCorner.aspect.toFixed(3)} / ${farCorner.aspect.toFixed(3)}, skala ${nearCorner.size.toFixed(2)} → ${farCorner.size.toFixed(2)}`,
+				});
+				// Teren: w środkowym rzędzie ekranu ma proporcje, pod którymi narysowana jest grafika (1:1).
+				const ground = (sx, sy) => {
+						const p = renderer.toFlat({ x: sx, y: sy }),
+							o = renderer.fromFlat(p),
+							right = renderer.fromFlat({ x: p.x + 1, y: p.y }),
+							down = renderer.fromFlat({ x: p.x, y: p.y + 1 });
+						return (down.y - o.y) / (right.x - o.x);
+					},
+					groundMid = ground(w0 / 2, h0 / 2),
+					groundTop = ground(w0 / 2, 2),
+					groundBottom = ground(w0 / 2, h0 - 2);
+				rows.push({
+					name: "pochylenie 2,5D: teren 1:1 w środku ekranu, łagodnie spłaszczony dalej i wydłużony bliżej",
+					ok: Math.abs(groundMid - 1) < 0.02 && groundTop < 0.95 && groundTop > 0.8 && groundBottom > 1.05 && groundBottom < 1.2,
+					note: `góra ${groundTop.toFixed(3)}, środek ${groundMid.toFixed(3)}, dół ${groundBottom.toFixed(3)}`,
+				});
 				d = compare(list[2], 0, () => ((options.tilt = false), () => (options.tilt = true)));
 				options.tilt = false;
 				draw(list[2], 0);

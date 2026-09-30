@@ -195,7 +195,11 @@ async function createPixiGameRenderer(options) {
 		return n;
 	}
 	flatRoot.addChild(scene, fogWorld, overlayReplay.container, grainLayer, layers.overlay.sprite);
-	app.stage.addChild(flatRoot);
+	// With the 2.5D tilt: the screen-space interface, drawn over the perspective mesh.
+	const screenReplay = createCanvasReplay(),
+		screenRoot = new PIXI.Container();
+	screenRoot.addChild(screenReplay.container);
+	app.stage.addChild(flatRoot, screenRoot);
 	const tiltMesh = new PIXI.PerspectiveMesh({ texture: PIXI.Texture.WHITE, verticesX: 24, verticesY: 24 });
 	let flatTexture = null,
 		projection = { margin: 0, inverse: null, toScreen: null };
@@ -367,7 +371,26 @@ async function createPixiGameRenderer(options) {
 		sp.visible = true;
 		return sp;
 	}
-	function updateWeather(seen, weather, time) {
+	// A particle dx, dy above its ground point x, y, turned and scaled; with the 2.5D tilt (L from
+	// view.upright) it stays upright on the screen, so rain and snow keep falling straight down.
+	const placed = new PIXI.Matrix();
+	function place(sp, L, x, y, dx, dy, rotation, sx, sy) {
+		if (!L) {
+			sp.position.set(x + dx, y + dy);
+			sp.rotation = rotation;
+			sp.skew.set(0, 0);
+			sp.scale.set(sx, sy);
+			return;
+		}
+		const cos = Math.cos(rotation),
+			sin = Math.sin(rotation),
+			a = cos * sx,
+			b = sin * sx,
+			c = -sin * sy,
+			d = cos * sy;
+		sp.setFromMatrix(placed.set(L.a * a + L.c * b, L.b * a + L.d * b, L.a * c + L.c * d, L.b * c + L.d * d, x + L.a * dx + L.c * dy, y + L.b * dx + L.d * dy));
+	}
+	function updateWeather(seen, weather, time, upright) {
 		for (const pool of particlePools.values()) pool.used = 0;
 		const biome = MISSIONS[game.missionId].biome;
 		if (biome === "ash" || biome === "ice") {
@@ -390,16 +413,13 @@ async function createPixiGameRenderer(options) {
 						if (phase < 0.8) {
 							const h = (1 - phase / 0.8) * 120,
 								sp = particle(rainTexture);
-							sp.position.set(x + h * slant, y - h);
-							sp.rotation = tilt;
-							sp.scale.set(0.5, (22 + storm * 20 + (seed % 7)) / 64);
+							place(sp, upright?.(x, y), x, y, h * slant, -h, tilt, 0.5, (22 + storm * 20 + (seed % 7)) / 64);
 							sp.alpha = 0.2 + storm * 0.25;
 						} else {
 							const age = (phase - 0.8) / 0.2,
 								sp = particle(splashTexture);
-							sp.position.set(x, y + 6 + age * 4);
-							sp.rotation = 0;
-							sp.scale.set(0.12 + age * 0.4);
+							// The splash lies on the ground and tilts with it.
+							place(sp, null, x, y, 0, 6 + age * 4, 0, 0.12 + age * 0.4, 0.12 + age * 0.4);
 							sp.alpha = (1 - age) * (0.3 + storm * 0.3);
 						}
 					} else {
@@ -407,9 +427,7 @@ async function createPixiGameRenderer(options) {
 							h = (1 - phase) * 90,
 							sp = particle(flakeTexture),
 							size = 2.4 + (seed % 3) * 1.1 + storm * 1.5;
-						sp.position.set(x + Math.sin(time * (0.9 + storm) + seed) * (12 + storm * 35) + h * storm, y - h);
-						sp.rotation = 0;
-						sp.scale.set(size / 16);
+						place(sp, upright?.(x, y), x, y, Math.sin(time * (0.9 + storm) + seed) * (12 + storm * 35) + h * storm, -h, 0, size / 16, size / 16);
 						sp.alpha = (phase < 0.85 ? 0.9 : ((1 - phase) / 0.15) * 0.9) * (0.55 + (seed % 5) * 0.1);
 					}
 				}
@@ -621,26 +639,26 @@ async function createPixiGameRenderer(options) {
 		terrainSprite.texture = new PIXI.Texture({ source: new PIXI.CanvasSource({ resource: source, autoGenerateMipmaps: true, scaleMode: "linear", mipmapFilter: "linear" }) });
 		if (old !== PIXI.Texture.EMPTY) old.destroy(true);
 	}
-	// width/height: the screen; flat: width of the flat frame (wider than the screen with the tilt).
-	function resize(width, height, dpr, flat) {
-		if (size.width === width && size.height === height && size.dpr === dpr && size.flat === flat) return;
-		size = { width, height, dpr, flat };
+	// width/height: the screen; flat/flatHeight: the flat frame (larger than the screen with the tilt).
+	function resize(width, height, dpr, flat, flatHeight) {
+		if (size.width === width && size.height === height && size.dpr === dpr && size.flat === flat && size.flatHeight === flatHeight) return;
+		size = { width, height, dpr, flat, flatHeight };
 		app.renderer.resize(width, height, dpr);
 		for (const l of Object.values(layers)) {
 			l.canvas.width = Math.max(1, Math.round(flat * dpr * l.resolution));
-			l.canvas.height = Math.max(1, Math.round(height * dpr * l.resolution));
+			l.canvas.height = Math.max(1, Math.round(flatHeight * dpr * l.resolution));
 			l.texture.source.resize(l.canvas.width, l.canvas.height, 1);
 			l.sprite.width = flat;
-			l.sprite.height = height;
+			l.sprite.height = flatHeight;
 		}
 		backdrop.width = flat;
-		backdrop.height = height;
+		backdrop.height = flatHeight;
 		const old = lightTexture;
-		lightTexture = PIXI.RenderTexture.create({ width: flat, height });
+		lightTexture = PIXI.RenderTexture.create({ width: flat, height: flatHeight });
 		lightSprite.texture = lightTexture;
 		old.destroy(true);
 		if (flatTexture) flatTexture.destroy(true);
-		flatTexture = flat !== width ? PIXI.RenderTexture.create({ width: flat, height, resolution: dpr }) : null;
+		flatTexture = flat !== width || flatHeight !== height ? PIXI.RenderTexture.create({ width: flat, height: flatHeight, resolution: dpr }) : null;
 	}
 	// Projective map taking 4 points onto 4 points (3×3 matrix with the last element 1).
 	function homography(src, dst) {
@@ -674,6 +692,46 @@ async function createPixiGameRenderer(options) {
 	};
 	// Share of the screen width added on each side of the flat frame; the top edge of the screen shows all of it.
 	const TILT = 0.14;
+	// The top of the screen shows the whole flat width, the bottom only its middle: the far edge recedes.
+	// The flat frame is also taller than the screen: the art is drawn from a fixed oblique angle, and with
+	// flatHeight = H·(1 + F/W)/2 the ground keeps that angle's proportions (1:1) in the middle row of the
+	// screen, a little flatter above it (×0.88 at the top) and a little steeper below (×1.12 at the bottom).
+	// With the flat frame as tall as the screen the top was 1:1 and the bottom stretched ×1.27.
+	function tiltProjection(W, H, margin) {
+		const F = W + 2 * margin,
+			flatHeight = Math.round((H * (1 + F / W)) / 2),
+			flat = [
+				[0, 0],
+				[F, 0],
+				[F, flatHeight],
+				[0, flatHeight],
+			],
+			corners = [
+				[0, 0],
+				[W, 0],
+				[W + margin, H],
+				[-margin, H],
+			];
+		// top: how far the flat frame reaches above the screen's own frame (the game keeps the screen's middle).
+		return { margin, top: (flatHeight - H) / 2, flatWidth: F, flatHeight, corners, inverse: homography(corners, flat), toScreen: homography(flat, corners) };
+	}
+	const FLAT_PROJECTION = { margin: 0, top: 0, corners: null, inverse: null, toScreen: null };
+	// The mesh bends everything drawn on the flat frame like the ground: things standing on it would be
+	// stretched near the bottom and lean inwards at the sides. For a point of the flat frame this returns
+	// the local transform (k·J⁻¹, J the Jacobian of the projection) that cancels the bend, so after the
+	// mesh a standing thing keeps upright edges and its own proportions and only shrinks with distance.
+	function upright(m, x, y) {
+		const w = m[6] * x + m[7] * y + m[8],
+			u = (m[0] * x + m[1] * y + m[2]) / w,
+			v = (m[3] * x + m[4] * y + m[5]) / w,
+			a = (m[0] - u * m[6]) / w,
+			b = (m[1] - u * m[7]) / w,
+			c = (m[3] - v * m[6]) / w,
+			d = (m[4] - v * m[7]) / w,
+			k = a / (a * d - b * c);
+		// Pixi's Matrix: x' = a·x + c·y, y' = b·x + d·y.
+		return { a: d * k, b: -c * k, c: -b * k, d: a * k };
+	}
 	function terrainLight(q) {
 		const low = Math.abs(q);
 		return { key: "t" + q, x: -q * 0.9, y: -0.5, z: 0.42 + 0.5 * (1 - low), color: [255, Math.round(240 - 45 * low), Math.round(215 - 90 * low)], shade: [8, 14, 26], gain: 1.6 };
@@ -730,23 +788,20 @@ async function createPixiGameRenderer(options) {
 	function render(screenView) {
 		if (lost) return;
 		const opts = SceneFX.options,
-			margin = opts.tilt ? Math.round(screenView.width * TILT) : 0,
-			// The flat frame: with the tilt it is wider, and pointer positions shift with it.
-			v = margin
-				? {
-						...screenView,
-						width: screenView.width + 2 * margin,
-						mouse: { x: screenView.mouse.x + margin, y: screenView.mouse.y },
-						drag: screenView.drag && { ...screenView.drag, x: screenView.drag.x + margin },
-					}
-				: screenView,
+			margin = opts.tilt ? Math.round(screenView.width * TILT) : 0;
+		projection = margin ? tiltProjection(screenView.width, screenView.height, margin) : FLAT_PROJECTION;
+		// The flat frame: with the tilt it is wider and taller, and pointer positions shift with it.
+		const shift = (p) => p && { ...p, x: p.x + projection.margin, y: p.y + projection.top },
+			v = margin ? { ...screenView, width: projection.flatWidth, height: projection.flatHeight, mouse: shift(screenView.mouse), drag: shift(screenView.drag) } : { ...screenView },
 			{ width, height, dpr, scale, camera } = v,
 			night = game.night,
 			day = 1 - night,
 			time = game.time,
 			seen = { x: camera.x, y: camera.y, w: width / scale, h: height / scale },
 			inView = (p, m = 200) => Math.abs(p.x - seen.x) < seen.w / 2 + m && Math.abs(p.y - seen.y) < seen.h / 2 + m;
-		resize(screenView.width, height, dpr, width);
+		resize(screenView.width, screenView.height, dpr, width, height);
+		// Standing things (models, bars, captions, floating islands) are turned back upright on the tilted ground.
+		v.upright = projection.toScreen ? (x, y) => upright(projection.toScreen, (x - camera.x) * scale + width / 2, (y - camera.y) * scale + height / 2) : null;
 		refreshTerrain();
 		for (const c of [back, ground.container, effectsReplay.container, natives.container, fauna.container, glowReplay.container, lightWorld, glow, beamsWorld, weatherWorld, fogWorld]) {
 			c.scale.set(scale);
@@ -770,12 +825,27 @@ async function createPixiGameRenderer(options) {
 			glowNative = hasGlow && nativeEffects && glowReplay.run((c) => MapArt.glow(c, game, mapView)),
 			effectsNative = modelsNative && hasEffects && nativeEffects && effectsReplay.run((c) => MapArt.effects(c, game, mapView));
 		// The interface is recorded in the layer's own pixels (dpr), exactly as the Canvas layer drew it.
-		const overlayNative =
-			nativeOverlay &&
-			overlayReplay.run((c) => canvasRenderer.drawLayer(c, layerView, layers.overlay.phases), { width: Math.max(1, Math.round(width * dpr)), height: Math.max(1, Math.round(height * dpr)) });
+		// With the tilt the screen phase (vignette, selection box, sun, moon, sky weather) is recorded apart and
+		// drawn after the mesh, so it stays flat on the screen; only the markers on the board tilt with it.
+		const tilted = !!projection.toScreen,
+			W = screenView.width,
+			toScreen = (p) => p && { ...p, ...applyH(projection.toScreen, p.x, p.y) },
+			H = screenView.height,
+			screenLayerView = tilted && { ...layerView, width: W, height: H, mouse: toScreen(v.mouse), drag: toScreen(v.drag) },
+			overlayNative =
+				nativeOverlay &&
+				overlayReplay.run((c) => canvasRenderer.drawLayer(c, layerView, tilted ? ["overlay"] : layers.overlay.phases), { width: Math.max(1, Math.round(width * dpr)), height: Math.max(1, Math.round(height * dpr)) }) &&
+				(!tilted || screenReplay.run((c) => canvasRenderer.drawLayer(c, screenLayerView, ["screen"]), { width: Math.max(1, Math.round(W * dpr)), height: Math.max(1, Math.round(H * dpr)) }));
 		overlayReplay.container.scale.set(1 / dpr);
+		screenReplay.container.scale.set(1 / dpr);
 		if (!overlayNative) overlayReplay.container.visible = false;
-		grainCount = drawGrains(game, width, height, overlayNative);
+		if (!overlayNative || !tilted) screenReplay.container.visible = false;
+		// Sandstorm grains belong to the screen too.
+		const grainParent = tilted && overlayNative ? screenRoot : flatRoot;
+		if (grainLayer.parent !== grainParent)
+			if (grainParent === flatRoot) flatRoot.addChildAt(grainLayer, flatRoot.getChildIndex(overlayReplay.container) + 1);
+			else screenRoot.addChild(grainLayer);
+		grainCount = grainParent === screenRoot ? drawGrains(game, W, H, overlayNative) : drawGrains(game, width, height, overlayNative);
 		if (!glowNative) glowReplay.container.visible = false;
 		if (!effectsNative) effectsReplay.container.visible = false;
 		layers.post.active = hasGlow && !glowNative;
@@ -790,7 +860,7 @@ async function createPixiGameRenderer(options) {
 			l.texture.source.update();
 		}
 		updateScorch();
-		updateWeather(seen, weather, time);
+		updateWeather(seen, weather, time, v.upright);
 		updateRelief(sunX, night, weather.intensity);
 		ground.container.visible = nativeGround;
 		// A failure in a native part must not blank the board: that part goes back to Canvas and the frame
@@ -937,30 +1007,14 @@ async function createPixiGameRenderer(options) {
 		// Without the light map the night still has to be visible: fall back to plain darkening.
 		if (!opts.lights) grading.brightness(1 - night * 0.55, true);
 		if (margin && flatTexture) {
-			// The top of the screen shows the whole flat width, the bottom only its middle: the far edge recedes.
-			const W = screenView.width,
-				flat = [
-					[0, 0],
-					[width, 0],
-					[width, height],
-					[0, height],
-				],
-				corners = [
-					[0, 0],
-					[W, 0],
-					[W + margin, height],
-					[-margin, height],
-				];
 			app.renderer.render({ container: flatRoot, target: flatTexture, clear: true, clearColor: "#111e24" });
 			tiltMesh.texture = flatTexture;
-			tiltMesh.setCorners(...corners.flat());
+			tiltMesh.setCorners(...projection.corners.flat());
 			if (flatRoot.parent) app.stage.removeChild(flatRoot);
-			if (!tiltMesh.parent) app.stage.addChild(tiltMesh);
-			projection = { margin, inverse: homography(corners, flat), toScreen: homography(flat, corners) };
+			if (!tiltMesh.parent) app.stage.addChildAt(tiltMesh, 0);
 		} else {
 			if (tiltMesh.parent) app.stage.removeChild(tiltMesh);
-			if (!flatRoot.parent) app.stage.addChild(flatRoot);
-			projection = { margin: 0, inverse: null, toScreen: null };
+			if (!flatRoot.parent) app.stage.addChildAt(flatRoot, 0);
 		}
 		app.renderer.render(app.stage);
 		canvasRenderer.drawMinimap(v);
@@ -1007,11 +1061,16 @@ async function createPixiGameRenderer(options) {
 		toFlat(p) {
 			if (!projection.inverse) return p;
 			const q = applyH(projection.inverse, p.x, p.y);
-			return { x: q.x - projection.margin, y: q.y };
+			return { x: q.x - projection.margin, y: q.y - projection.top };
 		},
 		fromFlat(p) {
 			if (!projection.toScreen) return p;
-			return applyH(projection.toScreen, p.x + projection.margin, p.y);
+			return applyH(projection.toScreen, p.x + projection.margin, p.y + projection.top);
+		},
+		// The upright transform at a point of the flat frame (see upright()); the identity without the tilt.
+		uprightAt(p) {
+			if (!projection.toScreen) return { a: 1, b: 0, c: 0, d: 1 };
+			return upright(projection.toScreen, p.x + projection.margin, p.y + projection.top);
 		},
 		heightAt: (x, y) => terrainHeight.heightAt(x, y),
 		// Comparison and fallback: false paints the whole ground through Canvas again, as in 0.23.

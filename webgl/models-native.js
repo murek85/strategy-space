@@ -69,6 +69,27 @@ function createNativeModels(options) {
 		animatedKinds = new Map(),
 		records = new Map();
 
+	// Upright transform at a map point: with the 2.5D tilt it cancels the bend of the perspective mesh for
+	// things standing on the ground (view.upright from the renderer); without it, the identity.
+	const FLAT = { a: 1, b: 0, c: 0, d: 1 },
+		matrix = new PIXI.Matrix();
+	const uprightAt = (x, y) => view?.upright?.(x, y) || FLAT;
+	// A point dx, dy away from a foot point, in the upright frame of that foot.
+	const lift = (L, x, y, dx, dy) => [x + L.a * dx + L.c * dy, y + L.b * dx + L.d * dy];
+	function stand(obj, L, x, y) {
+		obj.setFromMatrix(matrix.set(L.a, L.b, L.c, L.d, x, y));
+	}
+	// A rectangle given in map coordinates, drawn upright around the foot point fx, fy.
+	function uprightRect(g, L, fx, fy, x, y, w, h) {
+		const p = [
+			[x, y],
+			[x + w, y],
+			[x + w, y + h],
+			[x, y + h],
+		].flatMap(([px, py]) => lift(L, fx, fy, px - fx, py - fy));
+		return g.poly(p);
+	}
+
 	const bucket = (angle, steps) => ((Math.round((angle / TAU) * steps) % steps) + steps) % steps;
 	// Looks are painted at a scale matching the zoom (steps of about 1.25×), so they stay as sharp as the
 	// Canvas board; after a zoom change the new ones arrive within the per-frame budget.
@@ -271,6 +292,8 @@ function createNativeModels(options) {
 			under: new PIXI.Graphics(),
 			shadow: new PIXI.Sprite(ellipseTexture),
 			marks: new PIXI.Graphics(),
+			// What stands above the ground (body, light and scar layers, turret); turned upright with the tilt.
+			stand: new PIXI.Container(),
 			body: new PIXI.Sprite(PIXI.Texture.EMPTY),
 			layers: new PIXI.Container(),
 			top: new PIXI.Sprite(PIXI.Texture.EMPTY),
@@ -282,7 +305,8 @@ function createNativeModels(options) {
 		rec.shadow.anchor.set(0.5);
 		rec.shadow.tint = 0x07111a;
 		rec.shadow.alpha = 0x65 / 255;
-		rec.box.addChild(rec.under, rec.shadow, rec.marks, rec.body, rec.layers, rec.top);
+		rec.stand.addChild(rec.body, rec.layers, rec.top);
+		rec.box.addChild(rec.under, rec.shadow, rec.marks, rec.stand);
 		rec.sun.addChild(rec.sunSprite);
 		entitiesLayer.addChild(rec.box);
 		shadowsLayer.addChild(rec.sun);
@@ -462,7 +486,9 @@ function createNativeModels(options) {
 				habitatSprites.set(e, sp);
 			}
 			shared.get("habitat|" + e.type).get(BAKE).used = frame;
-			sp.position.set(h.x, h.y);
+			// Nests and spires stand on the ground: upright with the tilt, like the models.
+			const L = uprightAt(h.x, h.y);
+			sp.setFromMatrix(matrix.set(L.a / BAKE, L.b / BAKE, L.c / BAKE, L.d / BAKE, h.x, h.y));
 		}
 		for (const [e, sp] of habitatSprites)
 			if (!alive.has(e)) {
@@ -484,15 +510,18 @@ function createNativeModels(options) {
 					dy = (b.y - a.y) / d,
 					nx = -dy * 9,
 					ny = dx * 9,
-					alpha = a.constructionLeft || b.constructionLeft ? 0.35 : 1;
-				walls.poly([a.x + nx, a.y + ny, b.x + nx, b.y + ny, b.x + nx, b.y + ny - 20, a.x + nx, a.y + ny - 20]).fill({ color: 0x526b70, alpha });
-				walls.poly([a.x + nx, a.y + ny - 20, b.x + nx, b.y + ny - 20, b.x - nx, b.y - ny - 20, a.x - nx, a.y - ny - 20]).fill({ color: 0x849a9a, alpha });
+					alpha = a.constructionLeft || b.constructionLeft ? 0.35 : 1,
+					L = uprightAt((a.x + b.x) / 2, (a.y + b.y) / 2),
+					// The wall's top, 20 up from a point of its base.
+					up = (x, y) => lift(L, x, y, 0, -20);
+				walls.poly([a.x + nx, a.y + ny, b.x + nx, b.y + ny, ...up(b.x + nx, b.y + ny), ...up(a.x + nx, a.y + ny)]).fill({ color: 0x526b70, alpha });
+				walls.poly([...up(a.x + nx, a.y + ny), ...up(b.x + nx, b.y + ny), ...up(b.x - nx, b.y - ny), ...up(a.x - nx, a.y - ny)]).fill({ color: 0x849a9a, alpha });
 			}
 	}
 
 	// Construction captions, reused between frames.
 	const captionPool = [];
-	function caption(i, text, x, y) {
+	function caption(i, text, L, fx, fy, dx, dy) {
 		let t = captionPool[i];
 		if (!t) {
 			t = new PIXI.Text({ text, style: { fontFamily: "Segoe UI", fontSize: 11, fill: "#ddc287" }, resolution: 2 });
@@ -501,7 +530,7 @@ function createNativeModels(options) {
 			captionPool.push(t);
 		}
 		if (t.text !== text) t.text = text;
-		t.position.set(x, y);
+		stand(t, L, ...lift(L, fx, fy, dx, dy));
 		t.visible = true;
 	}
 
@@ -564,6 +593,8 @@ function createNativeModels(options) {
 			rec.box.visible = true;
 			rec.box.position.set(e.x, e.y);
 			rec.box.zIndex = (s.flying ? 1e7 : 0) + e.y;
+			const L = uprightAt(e.x, e.y);
+			stand(rec.stand, L, 0, 0);
 			decorate(rec, e, s, sel, color);
 			const drawLook = (c, time) => drawBody(c, state.probe, time, state.aimed, state.working),
 				body = look(rec, "body", "b|" + state.kindKey, "b|" + state.key, state.box, drawLook);
@@ -584,17 +615,18 @@ function createNativeModels(options) {
 			// Bars and flashes, as the Canvas phase draws them after each model.
 			const r = s.radius;
 			if (e.constructionLeft) {
-				bars.rect(e.x - r, e.y - r - 20, r * 2, 6).fill(0x14242a);
-				bars.rect(e.x - r, e.y - r - 20, r * 2 * (1 - e.constructionLeft / s.construction), 6).fill(0xddc287);
-				caption(captions++, `BUDOWA · ${Math.ceil(e.constructionLeft)} s`, e.x, e.y - r - 27);
+				uprightRect(bars, L, e.x, e.y, e.x - r, e.y - r - 20, r * 2, 6).fill(0x14242a);
+				uprightRect(bars, L, e.x, e.y, e.x - r, e.y - r - 20, r * 2 * (1 - e.constructionLeft / s.construction), 6).fill(0xddc287);
+				caption(captions++, `BUDOWA · ${Math.ceil(e.constructionLeft)} s`, L, e.x, e.y, 0, -r - 27);
 			}
 			if (sel || e.hp < e.maxHp || e.type === "hq") {
 				const bw = e.type === "hq" ? 108 : e.type === "tank" ? 46 : 28,
 					y = e.y - (e.type === "hq" ? 82 : r + 16);
-				bars.rect(e.x - bw / 2 - 1, y - 1, bw + 2, 5).fill({ color: 0x0b171b, alpha: 0xdd / 255 });
-				bars.rect(e.x - bw / 2, y, (bw * Math.max(0, e.hp)) / e.maxHp, 3).fill(e.hp / e.maxHp < 0.3 ? 0xe7a075 : color);
+				uprightRect(bars, L, e.x, e.y, e.x - bw / 2 - 1, y - 1, bw + 2, 5).fill({ color: 0x0b171b, alpha: 0xdd / 255 });
+				uprightRect(bars, L, e.x, e.y, e.x - bw / 2, y, (bw * Math.max(0, e.hp)) / e.maxHp, 3).fill(e.hp / e.maxHp < 0.3 ? 0xe7a075 : color);
 			}
-			if (e.hit > 0) bars.circle(e.x, e.y, r).fill({ color: 0xffffff, alpha: Math.min(1, e.hit * 3) });
+			if (e.hit > 0)
+				(L === FLAT ? bars.circle(e.x, e.y, r) : bars.poly(ring(0, 0, r, r, 32).flatMap(([x, y]) => lift(L, e.x, e.y, x, y)))).fill({ color: 0xffffff, alpha: Math.min(1, e.hit * 3) });
 		}
 		for (let i = captions; i < captionPool.length; i++) captionPool[i].visible = false;
 		const existing = new Set(game.entities);

@@ -2042,16 +2042,20 @@
 		mouse = pointer(e);
 		if (!drag.shift) selected.clear();
 		if (dist(drag, mouse) > 5) {
-			const a = world(drag),
-				b = world(mouse);
+			// The box is a rectangle on the screen; with the 2.5D tilt the board is in perspective beneath it.
+			const onScreen = (p) => (renderer.fromFlat ? renderer.fromFlat(p) : p),
+				a = onScreen(drag),
+				b = onScreen(mouse);
 			game.units((game.viewer ?? 0))
-				.filter(
-					(u) =>
-						u.x >= Math.min(a.x, b.x) &&
-						u.x <= Math.max(a.x, b.x) &&
-						u.y >= Math.min(a.y, b.y) &&
-						u.y <= Math.max(a.y, b.y),
-				)
+				.filter((u) => {
+					const q = onScreen(screen(u));
+					return (
+						q.x >= Math.min(a.x, b.x) &&
+						q.x <= Math.max(a.x, b.x) &&
+						q.y >= Math.min(a.y, b.y) &&
+						q.y <= Math.max(a.y, b.y)
+					);
+				})
 				.forEach((u) => selected.add(u.id));
 		} else {
 			const unit = at(world(mouse), 0);
