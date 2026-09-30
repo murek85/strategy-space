@@ -161,7 +161,7 @@ class CommandMenu {
 		} else if (screen === "briefing") {
 			const m = RTS.MISSIONS[this.selectedMission];
 			title = m.name;
-			body = `<span class="menu-tag">${m.training ? "SZKOLENIE WOLNYCH KOLONII" : m.campaign ? (m.act === 2 ? "KAMPANIA · AKT II · " : "KAMPANIA · ROZDZIAŁ ") + m.name : "OPERACJA NIEZALEŻNA"} / ${m.planet}</span><p>${m.description}</p><h2>Cele operacji</h2><p>${m.campaign ? m.objective : (RTS.describeScenario?.(this.scenario) || RTS.MODES?.[this.scenario.mode])?.objective || "Zniszcz wszystkie wrogie centra dowodzenia."}</p>${m.facts ? `<div class="menu-facts"><span>${m.facts[0]}</span><span>${m.facts[1]}</span></div><p>Nowa umiejętność: ${m.lesson}. Wskazówki i dziennik łączności w panelu celów; odprawę można powtórzyć z menu pauzy.</p>` : `<div class="menu-facts"><span>Metal · gaz · kryształy<br>${m.training || !m.campaign ? "Start: Przyczółek → rozbudowa w BADANIA" : "Start: Kolonia"}</span><span>${m.training ? "1800" : m.campaign ? "650" : "400"} metalu na start<br>${m.training ? "Bez wrogich desantów" : "Pierwszy desant po " + (m.campaign ? "100" : "65") + " s"}</span></div><p>PPM robotem na złożu — wydobycie. Reaktor [C], laboratorium [N]. Home — cała mapa.</p>`}${this.button("launch", "Rozpocznij operację", true)}${this.button("mission-back", "Wróć do wyboru misji")}`;
+			body = `<span class="menu-tag">${m.training ? "SZKOLENIE WOLNYCH KOLONII" : m.campaign ? (m.act === 2 ? "KAMPANIA · AKT II · " : "KAMPANIA · ROZDZIAŁ ") + m.name : "OPERACJA NIEZALEŻNA"} / ${m.planet}</span><p>${m.description}</p><h2>Cele operacji</h2><p>${m.campaign ? m.objective : (RTS.describeScenario?.(this.scenario) || RTS.MODES?.[this.scenario.mode])?.objective || "Zniszcz wszystkie wrogie centra dowodzenia."}</p>${this.legacyHtml(m)}${m.facts ? `<div class="menu-facts"><span>${m.facts[0]}</span><span>${m.facts[1]}</span></div><p>Nowa umiejętność: ${m.lesson}. Wskazówki i dziennik łączności w panelu celów; odprawę można powtórzyć z menu pauzy.</p>` : `<div class="menu-facts"><span>Metal · gaz · kryształy<br>${m.training || !m.campaign ? "Start: Przyczółek → rozbudowa w BADANIA" : "Start: Kolonia"}</span><span>${m.training ? "1800" : m.campaign ? "650" : "400"} metalu na start<br>${m.training ? "Bez wrogich desantów" : "Pierwszy desant po " + (m.campaign ? "100" : "65") + " s"}</span></div><p>PPM robotem na złożu — wydobycie. Reaktor [C], laboratorium [N]. Home — cała mapa.</p>`}${this.button("launch", "Rozpocznij operację", true)}${this.button("mission-back", "Wróć do wyboru misji")}`;
 		} else if (screen === "replace") {
 			title = "Rozpocząć od nowa?";
 			body = `<p>Rozpoczęcie operacji zastąpi dotychczasowy autosave na tym urządzeniu; ręczne sloty pozostaną zachowane. Powrót do odprawy zachowa postęp.</p>${this.button("confirm", "Rozpocznij i zastąp zapis", true)}${this.button("cancel", "Wróć do odprawy")}`;
@@ -298,7 +298,7 @@ class CommandMenu {
 		if (WINDOW_SCREENS.includes(screen)) this.windowed();
 		if (screen === "knowledge") KnowledgeBase.mount(this.root);
 		this.root.querySelector(".menu-footer span").textContent =
-			"PROTOTYP 0.49 · ZAPIS LOKALNY";
+			"PROTOTYP 0.51 · ZAPIS LOKALNY";
 		if (
 			screen === "scenarios" ||
 			(screen === "briefing" &&
@@ -360,7 +360,13 @@ class CommandMenu {
 								" " +
 								(RTS.AI_LEVELS[s.difficulty]?.name || "") +
 								": " +
-								(RTS.AI_LEVELS[s.difficulty]?.description || "");
+								(RTS.AI_LEVELS[s.difficulty]?.description || "") +
+								(RTS.AI_STYLES
+									? " Styl frakcji: " +
+										(RTS.AI_STYLES[s.enemyFaction]
+											? RTS.AI_STYLES[s.enemyFaction].name + " — " + RTS.AI_STYLES[s.enemyFaction].description
+											: "Dominium — twierdza, rzadkie i silne ataki; Kolonie — nękanie robotów i przekaźniki; Rój — stała presja.")
+									: "");
 				const code = this.root.querySelector("#scenario-code");
 				if (document.activeElement !== code)
 					code.value = RTS.scenarioCode(this.selectedMission, s);
@@ -916,6 +922,15 @@ class CommandMenu {
 		this.root.querySelector("#map-description").textContent = m.description;
 	}
 	// Long screens get the knowledge-base layout: fixed title and actions, scrolled content between them.
+	// Act III briefing: the consequences of the act II decision about the Hefajstos complex.
+	legacyHtml(m) {
+		if (m.act !== 3 || !RTS.ACT3_LEGACY) return "";
+		const choice = this.api.campaignDetails?.()?.choices?.colony6,
+			legacy = RTS.ACT3_LEGACY[choice];
+		if (!legacy)
+			return `<div class="menu-legacy"><span class="menu-tag">SKUTKI AKTU II</span><p>Brak zapisanej decyzji o losie kompleksu Hefajstos — ukończ rozdział VI, by jego skutki przeszły do aktu III.</p></div>`;
+		return `<div class="menu-legacy ${choice}"><span class="menu-tag">SKUTKI AKTU II · ${choice === "destroy" ? "KOMPLEKS ZNISZCZONY" : "PERSONEL EWAKUOWANY"}</span><h3>${legacy.name}</h3><p>${legacy.summary}</p></div>`;
+	}
 	windowed() {
 		const content = this.root.querySelector(".menu-content"),
 			scroll = document.createElement("div"),

@@ -46,6 +46,25 @@ Aktualizacja: 2026-09-27. Realizuje pomysły [AI-01–AI-05](POMYSLY.md): gospod
 
 Istniejąca różnica wytrzymałości jednostek przeciwnika (×0,85 / ×1 / ×1,15) zostaje. W menu poziom „Normalny” nazywa się teraz „Średni”; pod wyborem przeciwnika jest opis zachowania na wybranym poziomie.
 
+## Styl frakcji (0.51)
+
+Na plan poziomu trudności nakłada się styl frakcji przeciwnika (`RTS.AI_STYLES` w `enemy-ai.js`; `game.aiLevel(drużyna)` zwraca poziom zmieniony przez styl, `game.aiLevel()` bez drużyny — sam poziom).
+
+| | Dominium — „Twierdza” | Kolonie — „Nękanie” | Rój — „Fala” |
+|---|---|---|---|
+| Wieżyczki | 2 dodatkowe (ok. 2. i 6. minuta) | jak poziom | jak poziom |
+| Pierwszy atak | ×1,25 później | ×0,8 wcześniej | jak poziom |
+| Odstęp ataków | ×1,4 | ×0,7 | jak poziom |
+| Wielkość ataku | ×1,35, minimum +2 | ×0,75, minimum −1 | jak poziom |
+| Przekaźniki (udział armii) | ×0,5 | ×2, co najmniej 35% | jak poziom |
+| Nękanie robotów | nigdy | od 3. minuty co 55 s (od średniego) | jak poziom |
+| Wycofanie przegranego ataku | jak poziom | tak (od średniego) | jak poziom |
+| Jednostki | bastiony ×1,8, ciężkie ×1,6 (o 1,5 min wcześniej), niszczyciele ×1,3, mniej piechoty, bez zwiadowców; fabryka o 1 min wcześniej | zwiadowcy ×2,5, grenadierzy ×1,2, mniej ciężkich | jak poziom |
+
+Na łatwym Kolonie nie nękają robotów i nie wycofują ataków (poziom zachowuje łagodny charakter), zmienia się tylko tempo i przekaźniki. W menu opis przeciwnika mówi też o stylu wybranej frakcji (albo wszystkich trzech, gdy frakcja jest losowa). Domyślny przeciwnik scenariuszy to Dominium, więc zwykła potyczka ma teraz rzadsze, ale większe ataki i więcej wieżyczek.
+
+Symulacja 10 min, średni, bierny gracz: Dominium — pierwszy atak w 214. s, 6 wieżyczek, w armii bastiony i niszczyciele; Kolonie — pierwszy atak w 136. s, zwiadowcy nękają roboty, wygrana ok. 200. s; Rój — pierwszy atak w 170. s.
+
 ## Interfejs
 
 - Panel wywiadu: „Planowany atak” z odliczaniem i opis stanu przeciwnika; komunikat przy ataku podaje stronę, numer ataku, liczbę jednostek i cel.
@@ -53,6 +72,7 @@ Istniejąca różnica wytrzymałości jednostek przeciwnika (×0,85 / ×1 / ×1,
 
 ## Weryfikacja
 
+- Styl frakcji (0.51): 2 nowe testy w `tests/enemy-ai.test.js` — parametry stylu dla każdego poziomu (Rój bez zmian, nękanie Kolonii od średniego) oraz rozgrywka: więcej wieżyczek Dominium niż Kolonii po 7 min, dobór jednostek (bastiony i ciężkie maszyny w fabryce Dominium, zwiadowcy w koszarach Kolonii, żadnych zwiadowców Dominium), wysłanie zwiadowców Kolonii na robota przy dalekim złożu i odstęp kolejnego nękania. Test ataków według poziomu używa Roju (plan poziomu bez stylu). `npm test` 256/256.
 - `tests/enemy-ai.test.js` — 16 testów: domyślny dowódca w scenariuszach i brak zmian w kampanii, klasyczne desanty jako opcja, brak darmowych jednostek (bez metalu nic nie powstaje), wydobycie i uzupełnianie robotów, różnice poziomów (roboty, budynki, wielkość armii, limit), odbudowa, obrona i ucieczka robotów, przekaźniki, ataki (czas, minimum, cel dla każdego poziomu), cel i wycofanie na trudnym, dobór jednostek, ulepszenia, sabotaż centrum, osobny dowódca każdej strony, tryby, zapis i odczyt, kod operacji. `npm test`: 194/194.
 - Symulacje 15 minut na Cichym Horyzoncie, 2 graczy, przeciw botowi gracza, który trzyma roboty przy wydobyciu, szkoli piechotę i rakietowców w jednych koszarach, stawia 3 wieżyczki i rusza armią na wrogów przy swoich budynkach (bez fabryki i badań):
 

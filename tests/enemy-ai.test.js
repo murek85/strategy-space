@@ -128,7 +128,8 @@ test("attacks: planned time, minimum size and target by level", () => {
 		["easy", "hq"],
 		["normal", "near"],
 	]) {
-		const g = run(peaceful(skirmish({ difficulty })), 200),
+		// The Swarm keeps the level's plan (the Dominium and the Colonies have their own styles, tested below).
+		const g = run(peaceful(skirmish({ difficulty, enemyFaction: "swarm" })), 200),
 			T = g.enemyAi.teams[1],
 			outpost = g.spawn("depot", 0, g.W / 2, g.H / 2);
 		T.nextAttack = g.time;
@@ -272,4 +273,66 @@ test("operation code carries the classic waves choice", () => {
 	assert.equal(RTS.scenarioCode("horizon", { enemy: "waves" }), "horizon-M2N-C-NNN-0-W");
 	assert.equal(RTS.parseScenarioCode("horizon-M2N-C-NNN-0-W").scenario.enemy, "waves");
 	assert.equal(RTS.parseScenarioCode("horizon-M2N-C-NNN-0").scenario.enemy, "commander");
+});
+
+test("faction styles: the Dominium fortifies and hits rarely but hard, the Colonies harass and take relays", () => {
+	for (const difficulty of ["easy", "normal", "hard"]) {
+		const L = RTS.AI_LEVELS[difficulty],
+			dom = skirmish({ difficulty, enemyFaction: "dominion" }).aiLevel(1),
+			col = skirmish({ difficulty, enemyFaction: "colonies" }).aiLevel(1),
+			swarm = skirmish({ difficulty, enemyFaction: "swarm" }).aiLevel(1);
+		assert.equal(swarm, L, "the Swarm keeps the level");
+		// Dominium: more towers, rarer and bigger attacks, fewer relays, no raids.
+		assert.ok(dom.turrets.length > L.turrets.length, difficulty);
+		assert.ok(dom.interval > L.interval && dom.firstAttack > L.firstAttack);
+		assert.ok(dom.attackSize[2] > L.attackSize[2] && dom.minAttack > L.minAttack);
+		assert.ok(dom.relayShare < L.relayShare && !dom.raids);
+		// Colonies: frequent small attacks, more relays; raids and retreats from the normal level up.
+		assert.ok(col.interval < L.interval && col.firstAttack < L.firstAttack);
+		assert.ok(col.attackSize[2] < L.attackSize[2] && col.minAttack <= L.minAttack);
+		assert.ok(col.relayShare > L.relayShare);
+		assert.equal(col.raids, difficulty !== "easy");
+		assert.equal(col.retreat, difficulty !== "easy");
+		assert.ok(col.units.raider > 1 && dom.units.sentinel > 1);
+	}
+	assert.equal(skirmish({ difficulty: "normal" }).aiLevel(), RTS.AI_LEVELS.normal, "without a team: the plain level");
+});
+
+test("faction styles in play: the Dominium raises more towers, the Colonies send raiders at the workers", () => {
+	const count = (g, type) => own(g, 1, type).length;
+	const dom = run(peaceful(skirmish({ difficulty: "normal", enemyFaction: "dominion" })), 420),
+		col = run(peaceful(skirmish({ difficulty: "normal", enemyFaction: "colonies" })), 420);
+	assert.ok(count(dom, "turret") > count(col, "turret"), `towers: Dominium ${count(dom, "turret")}, Colonies ${count(col, "turret")}`);
+	// The production mix (sampled): the Dominium's factory prefers bastions and heavy machines, the Colonies' barracks
+	// scouts; the Dominium trains no scouts at all.
+	const mix = (g, type) => {
+		const T = g.enemyAi.teams[1],
+			L = g.aiLevel(1),
+			producer = own(g, 1, type)[0],
+			n = {};
+		for (let i = 0; i < 400; i++) {
+			const u = g.aiPickUnit(T, L, producer);
+			n[u] = (n[u] || 0) + 1;
+		}
+		return n;
+	};
+	const domFactory = mix(dom, "factory"),
+		colBarracks = mix(col, "barracks"),
+		domBarracks = mix(dom, "barracks");
+	assert.ok((domFactory.sentinel || 0) + (domFactory.heavy || 0) > 400 * 0.35, JSON.stringify(domFactory));
+	assert.ok((colBarracks.raider || 0) > 400 * 0.3, JSON.stringify(colBarracks));
+	assert.equal(domBarracks.raider || 0, 0);
+	// Raids: the Colonies' fast units go for a worker mining away from the player's base.
+	const g = run(peaceful(skirmish({ difficulty: "normal", enemyFaction: "colonies" })), 240),
+		T = g.enemyAi.teams[1],
+		hq1 = g.hq(1);
+	for (let i = 0; i < 3; i++) g0(g.spawn("raider", 1, hq1.x + 120 + i * 30, hq1.y + 120));
+	const ore = [...g.ores].sort((a, b) => dist(b, g.hq(0)) - dist(a, g.hq(0)))[0],
+		w = g.spawn("worker", 0, ore.x + 30, ore.y);
+	g.gather([w.id], ore.id);
+	T.raidAt = g.time;
+	T.think = 0;
+	g.enemyAiTick(1 / 30);
+	assert.ok(own(g, 1).some((e) => e.aiRole === "raid"), "raiders sent");
+	assert.ok(T.raidAt >= g.time + 50 && T.raidAt <= g.time + 60, "next raid after the style's interval");
 });

@@ -1,7 +1,8 @@
 /* Stage F6: campaign act III "Przebudzenie Roju" — chapters VII–IX against the Crystal Swarm.
    Built on the scenario machinery (commander AI, modes, teams, factions) with the act II interface:
    radio lines, objectives with a secondary badge, the badge bonus from the previous chapter and an epilogue.
-   The terrain is borrowed from scenario maps (layout aliases). Shared by browser and tests. */
+   The terrain is borrowed from scenario maps (layout aliases). Shared by browser and tests.
+   The act II decision about the Hefajstos complex (campaign choice for colony6) changes act III — see LEGACY. */
 (function (root) {
 	function install(RTS) {
 		if (RTS.act3Installed) return;
@@ -64,6 +65,34 @@
 				secondaryTime: 1200,
 			},
 		});
+		// Consequences of the act II decision (the fate of the Hefajstos complex), applied at the start of each chapter.
+		// evacuate: the rescued technicians were Dominium staff — Varn repays the debt with arms and soldiers.
+		// destroy: the Swarm fed on the complex's energy — its nests are weaker, and the ruins gave up metal; Varn,
+		// who lost his power plant, helps only as much as he must.
+		const LEGACY = (RTS.ACT3_LEGACY = {
+			evacuate: {
+				name: "Wdzięczność Dominium",
+				summary: "Uratowani technicy byli ludźmi Dominium. Varn spłaca dług: Twoja fabryka buduje niszczyciele czołgów Dominium, w rozdziale VIII jego baza ma posiłki (2 niszczyciele i bastion), a w IX dołącza do Ciebie eskorta 2 niszczycieli.",
+				units: ["destroyer"],
+				radio: {
+					colony7: ["tessa", "Technicy uratowani z Hefajstosa przekazali nam plany niszczyciela czołgów Dominium. Fabryka może je budować."],
+					colony8: ["varn", "Moi technicy żyją dzięki wam. Garnizon dostał dwa niszczyciele i bastion — nie zawiedziemy was."],
+					colony9: ["varn", "Dług za Hefajstos spłacam osobiście: dwa niszczyciele czołgów dołączają do waszej kolumny."],
+				},
+			},
+			destroy: {
+				name: "Popiół Hefajstosa",
+				summary: "Rój czerpał energię z kompleksu — bez niej gniazda i Serce Roju mają o 25% mniej wytrzymałości, a rdzenie z ruin dają 250 metalu na start każdego rozdziału. Varn stracił elektrownię i nie przyśle posiłków ani planów.",
+				units: [],
+				swarmHp: 0.75,
+				credits: 250,
+				radio: {
+					colony7: ["lira", "Odkąd Hefajstos nie istnieje, Rój stracił źródło energii — jego gniazda są słabsze. Rdzenie z ruin dały nam 250 metalu."],
+					colony8: ["varn", "Zniszczyliście naszą elektrownię. Pomogę, bo muszę — ale posiłków ode mnie nie będzie."],
+					colony9: ["lira", "Serce Roju karmiło się energią Hefajstosa. Bez niej bije słabiej — wykorzystajmy to."],
+				},
+			},
+		});
 		const isAct3 = (id) => Object.hasOwn(CHAPTERS, id);
 		RTS.isAct3 = isAct3;
 
@@ -119,7 +148,7 @@
 		};
 
 		const old = {};
-		for (const k of ["configureMission", "factionFor", "applyDamage", "tick", "campaignReady", "serialize", "act2Objectives", "act2Secondary", "act2Status", "act2Epilogue", "act2Summary", "applyAct2Bonus"]) old[k] = Game.prototype[k];
+		for (const k of ["configureMission", "factionFor", "applyDamage", "tick", "campaignReady", "serialize", "act2Objectives", "act2Secondary", "act2Status", "act2Epilogue", "act2Summary", "applyAct2Bonus", "spawn"]) old[k] = Game.prototype[k];
 		const baseFromSave = Game.fromSave;
 
 		Object.assign(Game.prototype, {
@@ -161,6 +190,57 @@
 				for (const [who, text] of OPENING[this.missionId]) this.say(who, text, false);
 				this.explored.fill(0);
 				this.updateVision();
+			},
+			// The act II decision: choices = the campaign's choices ({ colony6: "evacuate" | "destroy" }). Once per
+			// chapter (kept in the save with the rest of the chapter state).
+			applyCampaignChoices(choices = {}) {
+				if (!this.isAct3() || this.act2.legacy) return null;
+				const key = choices.colony6,
+					legacy = LEGACY[key];
+				if (!legacy) return null;
+				this.act2.legacy = key;
+				const near = (anchor, type, team, angle, distance) => {
+					for (let r = distance; r < distance + 260; r += 26)
+						for (let k = 0; k < 8; k++) {
+							const a = angle + (k * Math.PI) / 4,
+								p = { x: anchor.x + Math.cos(a) * r, y: anchor.y + Math.sin(a) * r },
+								rad = TYPES[type].radius;
+							if (p.x > 40 && p.y > 40 && p.x < this.W - 40 && p.y < this.H - 40 && !this.blocked(p.x, p.y, rad + 6) && this.entities.every((e) => e.hp <= 0 || dist(e, p) > TYPES[e.type].radius + rad + 10))
+								return this.spawn(type, team, p.x, p.y);
+						}
+					return null;
+				};
+				if (key === "evacuate") {
+					const ally = this.hq(3),
+						hq = this.hq(0);
+					if (this.missionId === "colony8" && ally)
+						for (const [type, a] of [["destroyer", 0], ["destroyer", 2.1], ["sentinel", 4.2]]) near(ally, type, 3, a, 150);
+					if (this.missionId === "colony9" && hq) {
+						const toward = Math.atan2(this.H / 2 - hq.y, this.W / 2 - hq.x);
+						for (const a of [-0.35, 0.35]) near(hq, "destroyer", 0, toward + a, 170);
+					}
+				} else {
+					this.credits += legacy.credits;
+					// The Swarm's bases (enemy command centres of the Swarm faction) lose a quarter of their durability.
+					for (const e of this.entities)
+						if (e.type === "hq" && e.hp > 0 && e.team !== 0 && !this.allied(0, e.team) && this.factionFor(e.team)?.key === "swarm") {
+							e.maxHp *= legacy.swarmHp;
+							e.hp = Math.min(e.hp, e.maxHp);
+						}
+				}
+				const [who, text] = legacy.radio[this.missionId];
+				this.say(who, text, false);
+				return key;
+			},
+			// A unit of another faction the player may build (the Dominium's tank destroyer after the evacuation).
+			loanedUnit(type) {
+				return this.me === 0 && this.isAct3() && !!LEGACY[this.act2.legacy]?.units.includes(type);
+			},
+			spawn(type, team, x, y) {
+				const e = old.spawn.call(this, type, team, x, y);
+				// Lent units keep the Dominium's look (and its bonuses per unit, none so far), in the player's colour.
+				if (team === 0 && this.act2?.legacy && this.loanedUnit(type)) e.faction = TYPES[type].faction;
+				return e;
 			},
 			// Chapter VIII: the ally is the Dominium.
 			factionFor(team) {
@@ -234,7 +314,15 @@
 					return (this.hq(3)
 						? "Varn ściska dłoń Liry nad dymiącymi ruinami gniazda. Wrogowie sprzed miesiąca patrzą teraz w tę samą stronę. "
 						: "Baza Varna nie przetrwała, ale jego ludzie ewakuowali się pod osłoną Szczytu. ") + "Zagłuszony rezonans pokazał, skąd Rój czerpie siłę: z Serca pod magmą Pyrrhosa.";
-				return "Serce Roju gaśnie, a wraz z nim milkną artefakty w całym pograniczu. Kolonie i Dominium po raz pierwszy od lat nie liczą strat, lecz ocalałych. Na horyzoncie wstaje świt — tym razem wspólny.";
+				return (
+					"Serce Roju gaśnie, a wraz z nim milkną artefakty w całym pograniczu. " +
+					(this.act2.legacy === "evacuate"
+						? "Technicy z Hefajstosa i żołnierze Varna świętują razem z Kolonistami — dług został spłacony z nawiązką. "
+						: this.act2.legacy === "destroy"
+							? "Popiół Hefajstosa osłabił Rój, ale Varn długo nie zapomni utraconej elektrowni. "
+							: "") +
+					"Kolonie i Dominium po raz pierwszy od lat nie liczą strat, lecz ocalałych. Na horyzoncie wstaje świt — tym razem wspólny."
+				);
 			},
 			act2Summary() {
 				const r = old.act2Summary.call(this);
@@ -263,6 +351,7 @@
 					throw Error("Uszkodzony zapis aktu III");
 				g.act2 = JSON.parse(JSON.stringify(s));
 				g.act2.heard ||= {};
+				if (g.act2.legacy && !LEGACY[g.act2.legacy]) delete g.act2.legacy;
 				g.act3Ally = state.act3Ally || null;
 			}
 			return g;

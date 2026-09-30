@@ -966,7 +966,8 @@
 			enqueue(type, preferredId = null) {
 				if (
 					TYPES[type]?.faction &&
-					TYPES[type].faction !== this.factionFor(this.me)?.key
+					TYPES[type].faction !== this.factionFor(this.me)?.key &&
+					!this.loanedUnit?.(type)
 				)
 					return false;
 				const cost = this.cost(type),

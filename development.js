@@ -129,6 +129,8 @@
 						...(faction === "dominion" ? ["sentinel", "destroyer"] : []),
 						...(faction === "colonies" ? ["serviceRover"] : []),
 						...(faction === "swarm" ? ["colossus"] : []),
+						// Act III: the Dominium's destroyer lent after the evacuation of Hefajstos.
+						...(faction !== "dominion" && game.loanedUnit?.("destroyer") ? ["destroyer"] : []),
 					].map(u),
 					r("weapons"),
 					r("armor"),
@@ -190,7 +192,7 @@
 						0,
 					);
 			data.queued = game.queue.filter((q) => q.type === id).length;
-			if (s.faction && s.faction !== game.factionFor((game.viewer ?? 0))?.key)
+			if (s.faction && s.faction !== game.factionFor((game.viewer ?? 0))?.key && !game.loanedUnit?.(id))
 				data.reason =
 					"Jednostka frakcji: " + RTS.FACTIONS[s.faction].name;
 			else if (!game.ready(game.productionType(id)))

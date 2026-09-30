@@ -66,7 +66,7 @@
 			},
 			developmentRequirement(type) {
 				const f = TYPES[type]?.faction;
-				if (f && this.scenario && f !== this.factionFor(this.me)?.key) return "Jednostka innej frakcji";
+				if (f && this.scenario && f !== this.factionFor(this.me)?.key && !this.loanedUnit?.(type)) return "Jednostka innej frakcji";
 				if (type === "uplink" && this.centerLevel() < 2) return "Wymaga centrum II — Kolonia (BADANIA lub ROZWÓJ / F2)";
 				return old.developmentRequirement.call(this, type);
 			},

@@ -1328,4 +1328,24 @@ body.in-menu > .command-bar {
 	padding: 6px 8px;
 	font: inherit;
 }
+/* Act III briefing: consequences of the act II decision. */
+.menu-legacy {
+	margin: 16px 0 6px;
+	padding: 12px 16px;
+	border-left: 2px solid #98c6b4;
+	background: #0c1922c4;
+}
+.menu-legacy.destroy {
+	border-left-color: #e0a36e;
+}
+.menu-legacy h3 {
+	margin: 6px 0 4px;
+	font-size: 17px;
+	font-weight: 500;
+}
+.menu-legacy p {
+	margin: 0;
+	font-size: 13px;
+	line-height: 1.5;
+}
 

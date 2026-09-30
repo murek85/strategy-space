@@ -1101,6 +1101,8 @@
 		game = prepared || new Game(42, missionId);
 		if (scenario && !prepared) game.configureSkirmish(scenario);
 		game.applyAct2Bonus?.(campaign.badges);
+		// Act III: the consequences of the act II decision (Hefajstos).
+		game.applyCampaignChoices?.(campaign.choices);
 		choiceOpen = false;
 		act2Signature = "";
 		for (let t = 0; t < colors.length; t++) colors[t] = game.colorFor(t);
@@ -1547,6 +1549,9 @@
 			groups.build.push(...kit.build);
 			groups.army.push(...kit.army);
 		}
+		// Act III after the evacuation of Hefajstos: the Dominium's tank destroyer, lent by Varn.
+		if (game.loanedUnit?.("destroyer") && !groups.army.some(([type]) => type === "destroyer"))
+			groups.army.push(["destroyer", "Niszczyciel czołgów", "Wsparcie Dominium (akt II) · fabryka", "➹", ""]);
 		groups.army.push(
 			["skyguard", "Wóz przeciwlotniczy", "Mobilna OPL · fabryka", "✺", ""],
 			["drone", "Dron zwiadowczy", "Zwiad z powietrza · koszary", "✢", ""],

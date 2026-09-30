@@ -1,7 +1,9 @@
 /* Enemy commander AI for scenarios. Each enemy side runs its own economy (workers mining ore, passive and relay income),
    builds and rebuilds its base, pays for every unit, defends its base and workers, takes relays and plans attacks.
    Three levels (easy, normal, hard) differ in income, reaction time, build order, army composition and tactics.
-   Campaign missions keep their scripted waves; a scenario can still choose the classic free waves. All values are tunable below. */
+   Campaign missions keep their scripted waves; a scenario can still choose the classic free waves. All values are tunable below.
+   On top of the level, each faction has its own style (AI_STYLES): the Dominium builds towers and attacks rarely but hard,
+   the Colonies harass workers and take relays; the Swarm keeps the level's plan. */
 (function (root) {
 	function install(RTS) {
 		if (RTS.enemyAiInstalled) return;
@@ -112,6 +114,42 @@
 				artilleryAt: 480,
 			},
 		});
+		// Faction styles, applied to a level (see aiLevel): multipliers (×), additions (+) and unit weight biases.
+		const STYLES = (RTS.AI_STYLES = {
+			dominion: {
+				name: "Twierdza",
+				description: "Dominium buduje więcej wieżyczek, rzadko zajmuje przekaźniki, atakuje wolno, ale dużymi grupami ciężkich maszyn i bastionów.",
+				extraTurrets: [110, 360],
+				interval: 1.4,
+				firstAttack: 1.25,
+				attackSize: 1.35,
+				minAttack: 2,
+				relayShare: 0.5,
+				heavyEarlier: 90,
+				factoryEarlier: 60,
+				raids: false,
+				units: { sentinel: 1.8, heavy: 1.6, destroyer: 1.3, trooper: 0.5, rocket: 0.8, raider: 0 },
+			},
+			colonies: {
+				name: "Nękanie",
+				description: "Kolonie atakują często małymi grupami, szybkimi zwiadowcami nękają Twoje roboty przy złożach i zajmują przekaźniki; przegrany atak wycofują.",
+				interval: 0.7,
+				firstAttack: 0.8,
+				attackSize: 0.75,
+				minAttack: -1,
+				relayShare: 2,
+				relayMin: 0.35,
+				raids: true,
+				retreat: true,
+				raidFrom: 180,
+				raidEvery: 55,
+				units: { raider: 2.5, grenadier: 1.2, heavy: 0.6 },
+			},
+			swarm: {
+				name: "Fala",
+				description: "Rój trzyma się planu poziomu trudności: tanie jednostki, stała presja.",
+			},
+		});
 		const ENEMY = (RTS.ENEMY_MODES = {
 			commander: { name: "Dowódca AI", code: "A", description: "Przeciwnik zbiera surowce, buduje i płaci za każdą jednostkę." },
 			waves: { name: "Klasyczne desanty", code: "W", description: "Dawny przeciwnik: darmowe desanty co 35–65 s, bez gospodarki." },
@@ -156,8 +194,30 @@
 			aiActive() {
 				return !!this.enemyAi && !!this.scenario && this.scenario.enemy !== "waves" && (!MISSIONS[this.missionId]?.campaign || MISSIONS[this.missionId].act === 3);
 			},
-			aiLevel() {
-				return LEVELS[this.scenario?.difficulty] || LEVELS.normal;
+			// The level, shaped by the faction's style when a team is given.
+			aiLevel(team = null) {
+				const L = LEVELS[this.scenario?.difficulty] || LEVELS.normal,
+					S = team == null ? null : STYLES[this.factionFor(team)?.key];
+				if (!S || S.interval == null) return L;
+				const scale = (n, k) => (n == null ? n : Math.round(n * k));
+				return {
+					...L,
+					style: S,
+					turrets: S.extraTurrets ? [...L.turrets, ...S.extraTurrets].sort((a, b) => a - b) : L.turrets,
+					interval: L.interval * S.interval,
+					firstAttack: L.firstAttack * S.firstAttack,
+					attackSize: [Math.max(3, scale(L.attackSize[0], S.attackSize)), L.attackSize[1] * S.attackSize, Math.max(4, scale(L.attackSize[2], S.attackSize))],
+					minAttack: Math.max(3, L.minAttack + S.minAttack),
+					relayShare: Math.min(0.6, Math.max(S.relayMin || 0, L.relayShare * S.relayShare)),
+					heavyAt: L.heavyAt != null && S.heavyEarlier ? Math.max(120, L.heavyAt - S.heavyEarlier) : L.heavyAt,
+					factoryAt: L.factoryAt != null && S.factoryEarlier ? Math.max(60, L.factoryAt - S.factoryEarlier) : L.factoryAt,
+					// Raids and retreats of a style only from the normal level up (easy keeps its gentle plan).
+					raids: S.raids === false ? false : S.raids && L.counter > 0 ? true : L.raids,
+					retreat: L.retreat || (!!S.retreat && L.counter > 0),
+					raidFrom: S.raidFrom ?? AI.raidFrom,
+					raidEvery: S.raidEvery ?? AI.raidEvery,
+					units: S.units || null,
+				};
 			},
 			aiCost(type, team) {
 				return Math.round((TYPES[type].cost || 0) * (this.factionFor(team)?.cost || 1));
@@ -171,8 +231,7 @@
 				return result;
 			},
 			setupEnemyAi() {
-				const L = this.aiLevel(),
-					pace = this.modeState?.mode === "defense" ? 0.85 : 1;
+				const pace = this.modeState?.mode === "defense" ? 0.85 : 1;
 				this.enemyAi = { teams: {} };
 				// Every computer side, including a player's ally in 2 vs 2.
 				for (const hq of this.entities.filter((e) => e.type === "hq" && e.hp > 0 && !this.isHuman(e.team) && e.team !== 2)) {
@@ -195,6 +254,7 @@
 								rally = p;
 						}
 					rally ||= this.pathTo(hq, { x: hq.x + (toward.x / len) * 210, y: hq.y + (toward.y / len) * 210 }).at(-1) || { x: hq.x, y: hq.y + 120 };
+					const L = this.aiLevel(team);
 					this.enemyAi.teams[team] = {
 						team,
 						metal: AI.startMetal,
@@ -205,7 +265,7 @@
 						rally: { x: Math.round(rally.x), y: Math.round(rally.y) },
 						upgrades: {},
 						lastThreat: -99,
-						raidAt: AI.raidFrom,
+						raidAt: L.raidFrom ?? AI.raidFrom,
 						mined: 0,
 						spent: 0,
 					};
@@ -259,11 +319,11 @@
 				return n;
 			},
 			enemyAiTick(dt) {
-				const L = this.aiLevel(),
-					bonus = this.modeState?.mode === "defense" ? AI.defenseBonus : 1;
+				const bonus = this.modeState?.mode === "defense" ? AI.defenseBonus : 1;
 				for (const T of Object.values(this.enemyAi.teams)) {
 					const hq = this.hq(T.team);
 					if (!hq) continue;
+					const L = this.aiLevel(T.team);
 					const relays = this.nodes.filter((n) => n.owner === this.sideLeader(T.team)).length;
 					T.metal += dt * (L.passive + relays * L.relayIncome) * bonus;
 					this.aiWorkers(T, dt, L);
@@ -549,6 +609,8 @@
 						interceptor: 2 + 6 * c * air,
 						bomber: 1.5,
 					};
+				// The faction's style prefers some units.
+				if (L.units) for (const [type, k] of Object.entries(L.units)) if (type in weights) weights[type] *= k;
 				const options = PRODUCERS[producer.type].filter((type) => TYPES[type] && weights[type] > 0),
 					sum = options.reduce((n, type) => n + weights[type], 0);
 				let roll = this.rand() * sum;
@@ -715,7 +777,7 @@
 				}
 				// Hard: fast raiders harass workers at the player's outer deposits.
 				if (L.raids && this.time >= T.raidAt) {
-					T.raidAt = this.time + AI.raidEvery;
+					T.raidAt = this.time + (L.raidEvery ?? AI.raidEvery);
 					const foes = this.aiFoes(T.team),
 						miners = this.entities.filter((e) => foes.includes(e.team) && e.type === "worker" && e.hp > 0 && (e.order?.kind === "gather" || e.aiTask?.kind === "mine"));
 					const home = this.aiFoeHq(T.team, hq);

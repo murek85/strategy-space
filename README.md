@@ -1,4 +1,8 @@
-# Pogranicze Galaktyki — prototyp RTS 0.49
+# Pogranicze Galaktyki — prototyp RTS 0.51
+
+**Wersja 0.51 — styl gry AI zależny od frakcji.** Dowódca AI gra inaczej każdą frakcją. Dominium („Twierdza”) stawia więcej wieżyczek, wcześniej fabrykę i atakuje rzadko, ale dużymi grupami bastionów, niszczycieli i ciężkich maszyn. Kolonie („Nękanie”) atakują często małymi grupami, szybkimi zwiadowcami nękają roboty przy złożach, mocno walczą o przekaźniki i wycofują przegrane ataki. Rój gra planem poziomu trudności. [Opis](docs/AI_PRZECIWNIKA.md#styl-frakcji-051).
+
+**Wersja 0.50 — wybory z konsekwencjami.** Decyzja z aktu II o losie kompleksu Hefajstos zmienia akt III. Ewakuacja personelu („Wdzięczność Dominium”): fabryka buduje niszczyciele czołgów Dominium, baza Varna w rozdziale VIII ma posiłki, a w IX dołącza eskorta. Zniszczenie kompleksu („Popiół Hefajstosa”): gniazda i Serce Roju słabsze o 25%, +250 metalu na start rozdziału, ale bez pomocy Varna. Skutki widać na odprawie, w łączności i w epilogu. [Opis](docs/ETAP_F.md#wybory-z-konsekwencjami-akt-ii--akt-iii-050).
 
 **Wersja 0.49 — handel zasobami.** Nowa zakładka **Logistyka → Handel**: wymiana metalu, gazu i kryształów po niekorzystnym kursie (tracisz 40% wartości; 1 gaz = 3 metalu, 1 kryształ = 2 metalu — np. 100 kryształów → 120 metalu albo 40 gazu). Wymaga ukończonego magazynu polowego lub laboratorium; porcje po 50, 100 lub 250. Działa też w grze wieloosobowej. Reguły: `trade-rules.js`.
 

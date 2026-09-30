@@ -188,3 +188,22 @@ Pas z odliczaniem (F1) zastąpił wariant B wybrany z arkusza koncepcyjnego, z j
 - Przeglądarka: wszystkie 8 kierunków w Canvas na widoku 1280 × 720 z zaznaczonymi obszarami minimapy, przycisków, nagłówka i legendy — bez nachodzenia.
 - `tests/render-webgl-browser.html` — nowe sprawdzenie „prognoza burzy natywnie z 8 kierunków” (także w czasie nadciągania); PASS. `tests/render-browser.html` PASS; `npm test` 237/237.
 
+
+## Wybory z konsekwencjami: akt II → akt III (0.50)
+
+Decyzja z rozdziału VI (los kompleksu Hefajstos, zapisana w postępie kampanii jako `choices.colony6`) zmienia teraz akt III. Skutki opisuje `RTS.ACT3_LEGACY` w `campaign-act3.js`; `game.applyCampaignChoices(choices)` stosuje je raz na start każdego rozdziału VII–IX (aplikacja wywołuje ją razem z premią za odznakę), a wybór zapisuje się w stanie rozdziału (`act2.legacy`), więc wczytanie gry nie stosuje go drugi raz.
+
+| Decyzja w akcie II | Skutek w akcie III |
+|---|---|
+| **Odłącz i ewakuuj personel** → „Wdzięczność Dominium” | Uratowani technicy byli ludźmi Dominium. **Jednostki:** fabryka Kolonii buduje **niszczyciel czołgów** Dominium (wygląd Dominium, kolor gracza; także w drzewie rozwoju). **Sojusznicy:** w VIII baza Varna dostaje 2 niszczyciele i bastion; w IX do gracza dołącza eskorta 2 niszczycieli. |
+| **Zniszcz instalację** → „Popiół Hefajstosa” | Rój czerpał energię z kompleksu: **gniazda i Serce Roju** mają o **25% mniej wytrzymałości**; rdzenie z ruin dają **+250 metalu** na start każdego rozdziału. Varn stracił elektrownię — bez posiłków i planów. |
+
+- Na start rozdziału wybrana ścieżka ma własną linię łączności (Tessa, Varn lub Lira), a epilog aktu III (rozdział IX) — własne zdanie.
+- **Odprawa** rozdziałów VII–IX pokazuje ramkę „Skutki aktu II” z nazwą i opisem skutku (albo informację, że decyzji brak).
+- Bez zapisanej decyzji (np. postęp sprzed wersji 0.40) akt III działa jak dotąd.
+- Mechanizm „użyczonej jednostki”: `game.loanedUnit(typ)` — sprawdzany przy produkcji (`enqueue`), w wymaganiach rozwoju i w kartach produkcji.
+
+### Weryfikacja
+
+- `tests/act3-legacy.test.js` — 4 testy: brak decyzji (nic się nie zmienia), ewakuacja (produkcja niszczyciela z wyglądem Dominium, posiłki Varna w VIII, eskorta w IX, epilog), zniszczenie (−25% gniazd i Serca we wszystkich rozdziałach, +250 metalu, bez posiłków), zapis i wczytanie (skutek nie działa drugi raz, uszkodzona wartość jest odrzucana). `npm test` 254/254.
+- Przeglądarka: postęp kampanii z ewakuacją — odprawa rozdziału VII z ramką skutków, w bitwie linia łączności Tessy i karta niszczyciela czołgów w produkcji; `tests/development-browser.html` 68/68, `tests/menu-browser.html` 37/37. Przywrócony zapis w przeglądarce testowej.
