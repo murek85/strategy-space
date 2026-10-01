@@ -1,4 +1,8 @@
-# Pogranicze Galaktyki — prototyp RTS 0.51
+# Pogranicze Galaktyki — prototyp RTS 0.53
+
+**Wersja 0.53 — woda, noc i pogoda w 3D.** Na planszy 3D jeziora odbijają słońce zmarszczkami, świecące rozlewiska Lumerii jaśnieją nocą, a lawa płynie żarzącymi się pęknięciami; brzegi są miękkie. Nocą budynki rzucają na ziemię ciepłe światło, a pojazdy i piechota świecą reflektorami. Deszcz z błyskawicami, śnieżyce i burze piaskowe z mgiełką zasłaniającą dal. Uszkodzone budynki i pojazdy dymią i płoną, wybuchy rozrzucają iskry i dym. Łagodna krawędź mgły wojny, teren za krawędzią mapy zamiast pustki, a minimapa pokazuje obszar, który faktycznie widać. [Opis](docs/RENDERER_3D.md#woda-noc-pogoda-dym-wersja-053-2026-10-01).
+
+**Wersja 0.52 — plansza 3D (eksperymentalnie).** Ustawienia → Renderer → „3D (Three.js)”: teren z wysokością, modele 3D budowane w kodzie dla wszystkich 49 typów (Kolonie, Dominium, Rój i fauna), prawdziwe cienie od słońca i księżyca, mgła wojny i kamera 3D sterowana jak dotąd (przesuwanie, przybliżenie, Home). Zaznaczanie, ramka, rozkazy i podgląd budowy działają bez zmian; części modeli są rysowane zbiorczo (instancing), więc liczba wywołań nie rośnie z liczbą jednostek. Wymaga uruchomienia gry przez serwer (`npm start`); z pliku lub bez WebGL gra wraca do WebGL (PixiJS). Samodzielny prototyp z galerią modeli: `prototyp-3d.html`. Biblioteka Three.js 0.170 (MIT) w `vendor/`. [Opis](docs/RENDERER_3D.md).
 
 **Wersja 0.51 — styl gry AI zależny od frakcji.** Dowódca AI gra inaczej każdą frakcją. Dominium („Twierdza”) stawia więcej wieżyczek, wcześniej fabrykę i atakuje rzadko, ale dużymi grupami bastionów, niszczycieli i ciężkich maszyn. Kolonie („Nękanie”) atakują często małymi grupami, szybkimi zwiadowcami nękają roboty przy złożach, mocno walczą o przekaźniki i wycofują przegrane ataki. Rój gra planem poziomu trudności. [Opis](docs/AI_PRZECIWNIKA.md#styl-frakcji-051).
 

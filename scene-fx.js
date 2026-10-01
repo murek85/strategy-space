@@ -15,7 +15,7 @@
 			relief: true,
 			tilt: false,
 		},
-		RENDERERS = ["webgpu", "webgl", "canvas"],
+		RENDERERS = ["three", "webgpu", "webgl", "canvas"],
 		options = { ...defaults };
 	try {
 		const saved = JSON.parse(

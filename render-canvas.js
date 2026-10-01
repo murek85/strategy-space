@@ -24,6 +24,7 @@ function createCanvasRenderer(canvas, mini) {
 		wallDrag = null,
 		shadeBody = null,
 		underUnits = null,
+		viewOutline = null,
 		nativeGrains = false,
 		terrain = null;
 	function world(p) {
@@ -34,6 +35,8 @@ function createCanvasRenderer(canvas, mini) {
 	}
 	function useView(view) {
 		({ game, width, height, dpr, scale, camera, selected, colors, mouse, drag, building, wallDrag, shadeBody, underUnits } = view);
+		// A renderer with a perspective camera outlines on the minimap the ground it shows (map points).
+		viewOutline = view.viewOutline || null;
 		nativeGrains = !!view.nativeGrains;
 	}
 	const fog = document.createElement("canvas");
@@ -1145,12 +1148,18 @@ function createCanvasRenderer(canvas, mini) {
 		}
 		mc.strokeStyle = "#b9d7d477";
 		mc.lineWidth = 10;
-		mc.strokeRect(
-			camera.x - width / scale / 2,
-			camera.y - height / scale / 2,
-			width / scale,
-			height / scale,
-		);
+		if (viewOutline) {
+			mc.beginPath();
+			viewOutline.forEach((p, i) => (i ? mc.lineTo(p.x, p.y) : mc.moveTo(p.x, p.y)));
+			mc.closePath();
+			mc.stroke();
+		} else
+			mc.strokeRect(
+				camera.x - width / scale / 2,
+				camera.y - height / scale / 2,
+				width / scale,
+				height / scale,
+			);
 		mc.restore();
 	}
 	return {

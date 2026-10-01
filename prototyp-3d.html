@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="pl">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Prototyp 3D · Pogranicze Galaktyki</title>
+		<style>
+			html,
+			body {
+				margin: 0;
+				height: 100%;
+				background: #0b141c;
+				color: #d7e4e6;
+				font: 14px "Segoe UI", sans-serif;
+				overflow: hidden;
+			}
+			#view {
+				position: fixed;
+				inset: 0;
+			}
+			#view canvas {
+				display: block;
+			}
+			#box {
+				position: fixed;
+				border: 1px solid #8dffc8;
+				background: #8dffc81a;
+				pointer-events: none;
+				display: none;
+			}
+			#panel {
+				position: fixed;
+				left: 16px;
+				top: 16px;
+				width: 300px;
+				max-height: calc(100vh - 32px);
+				overflow: auto;
+				background: #0a1524e6;
+				border: 1px solid #3b535d;
+				border-radius: 8px;
+				padding: 14px 16px;
+				box-sizing: border-box;
+			}
+			#panel h1 {
+				font-size: 18px;
+				font-weight: 500;
+				margin: 0 0 4px;
+			}
+			#panel p {
+				margin: 6px 0 10px;
+				line-height: 1.4;
+				color: #a9bec3;
+			}
+			.row {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 6px;
+				margin: 8px 0;
+			}
+			button {
+				background: #16303a;
+				color: #d7e4e6;
+				border: 1px solid #3b535d;
+				border-radius: 5px;
+				padding: 5px 9px;
+				font: inherit;
+				cursor: pointer;
+			}
+			button[aria-pressed="true"] {
+				background: #2a5a4c;
+				border-color: #8dffc8;
+			}
+			label {
+				display: block;
+				margin: 8px 0;
+			}
+			input[type="range"] {
+				width: 100%;
+			}
+			#stats {
+				white-space: pre;
+				font: 12px Consolas, monospace;
+				color: #8fb3b8;
+				margin-top: 10px;
+			}
+			kbd {
+				background: #16303a;
+				border: 1px solid #3b535d;
+				border-radius: 3px;
+				padding: 0 4px;
+				font-size: 12px;
+			}
+			.tag {
+				position: fixed;
+				left: 0;
+				top: 0;
+				font-size: 11px;
+				white-space: nowrap;
+				color: #d7e4e6;
+				background: #0a1524b3;
+				padding: 1px 5px;
+				border-radius: 3px;
+				pointer-events: none;
+			}
+			#fallback {
+				display: none;
+				position: fixed;
+				inset: 0;
+				align-items: center;
+				justify-content: center;
+			}
+			a {
+				color: #8dffc8;
+			}
+		</style>
+		<script type="importmap">
+			{ "imports": { "three": "./vendor/three.module.js" } }
+		</script>
+	</head>
+	<body>
+		<div id="view" aria-label="Plansza 3D"></div>
+		<div id="box"></div>
+		<section id="panel" aria-label="Sterowanie prototypem">
+			<h1>Renderer 3D · prototyp</h1>
+			<p>Świetlisty Gąszcz w Three.js (inna mapa: <code>?map=frost</code>, <code>magma</code>, <code>horizon</code>…). Ta sama symulacja i ten sam wygląd modeli co w grze; nowe są teren 3D, modele low-poly budowane w kodzie dla wszystkich typów, prawdziwe cienie, woda, noc, pogoda, dym i ogień, mgła wojny i kamera.</p>
+			<p>
+				<kbd>LPM</kbd> zaznacz / ramka · <kbd>PPM</kbd> rozkaz · <kbd>ŚPM</kbd> lub <kbd>WASD</kbd> przesuwanie · kółko przybliżenie · <kbd>Q</kbd>/<kbd>E</kbd> obrót ·
+				<kbd>R</kbd>/<kbd>F</kbd> pochylenie
+			</p>
+			<div class="row" role="group" aria-label="Pora dnia">
+				<button data-time="0.06">Świt</button>
+				<button data-time="0.25">Południe</button>
+				<button data-time="0.46">Zmierzch</button>
+				<button data-time="0.75">Noc</button>
+				<button data-time="auto" aria-pressed="true">Doba (auto)</button>
+			</div>
+			<label>Pora dnia <input id="tod" type="range" min="0" max="1" step="0.005" value="0.1" aria-label="Pora dnia" /></label>
+			<label><input type="checkbox" data-option="models" checked /> Modele 3D (bez — namalowane tektury)</label>
+			<label><input type="checkbox" data-option="fog" checked /> Mgła wojny</label>
+			<div class="row">
+				<button id="pause" aria-pressed="false">Pauza</button><button id="battle">Wyślij armię do ataku</button><button id="home">Baza</button><button id="center">Środek mapy</button><button id="gallery">Galeria modeli</button>
+			</div>
+			<div id="stats" role="status"></div>
+			<p><a href="index.html">Gra</a> · <a href="prototyp-webgl.html">Prototyp WebGL</a></p>
+		</section>
+		<div id="fallback"><p>Nie udało się uruchomić WebGL. Zagraj w <a href="index.html">wersję 2D</a>.</p></div>
+		<script src="engine.js"></script>
+		<script src="advanced-rules.js"></script>
+		<script src="army-rules.js"></script>
+		<script src="campaign-act2.js"></script>
+		<script src="scenario-modes.js"></script>
+		<script src="frontier-maps.js"></script>
+		<script src="themed-maps.js"></script>
+		<script src="support-rules.js"></script>
+		<script src="scenario-setup.js"></script>
+		<script src="scenario-challenges.js"></script>
+		<script src="enemy-ai.js"></script>
+		<script src="teams-rules.js"></script>
+		<script src="factions-rules.js"></script>
+		<script src="swarm-rules.js"></script>
+		<script src="campaign-act3.js"></script>
+		<script src="trade-rules.js"></script>
+		<script src="network-rules.js"></script>
+		<script src="scene-fx.js"></script>
+		<script src="art.js"></script>
+		<script src="planet-art.js"></script>
+		<script src="advanced-art.js"></script>
+		<script src="act2-art.js"></script>
+		<script src="support-art.js"></script>
+		<script src="fx-art.js"></script>
+		<script src="faction-art.js"></script>
+		<script src="swarm-art.js"></script>
+		<script src="map-art.js"></script>
+		<script src="themed-art.js"></script>
+		<script src="render-canvas.js"></script>
+		<script src="webgl/model-light.js"></script>
+		<script src="webgl/terrain-height.js"></script>
+		<script type="module" src="webgl3d/prototype-3d.js"></script>
+	</body>
+</html>

@@ -197,7 +197,7 @@ class CommandMenu {
 							)
 							.join(
 								"",
-							)}<label class="menu-setting"><input type="checkbox" id="visual-flashes"> Błyski burzy</label><label class="menu-setting"><input type="checkbox" id="visual-metrics"> Pokaż czas renderowania planszy</label><h2>Renderer</h2><label class="menu-setting">Silnik grafiki<select id="visual-renderer" aria-label="Silnik grafiki"><option value="webgl">WebGL (PixiJS) — oświetlenie i efekty</option><option value="webgpu">WebGPU (PixiJS) — nowszy interfejs grafiki</option><option value="canvas">Canvas 2D — tryb awaryjny</option></select></label><p id="renderer-status" role="status"></p>${[
+							)}<label class="menu-setting"><input type="checkbox" id="visual-flashes"> Błyski burzy</label><label class="menu-setting"><input type="checkbox" id="visual-metrics"> Pokaż czas renderowania planszy</label><h2>Renderer</h2><label class="menu-setting">Silnik grafiki<select id="visual-renderer" aria-label="Silnik grafiki"><option value="three">3D (Three.js) — teren, modele i kamera 3D</option><option value="webgl">WebGL (PixiJS) — oświetlenie i efekty</option><option value="webgpu">WebGPU (PixiJS) — nowszy interfejs grafiki</option><option value="canvas">Canvas 2D — tryb awaryjny</option></select></label><p id="renderer-status" role="status"></p>${[
 								["lights", "Oświetlenie dnia i nocy, światła"],
 								["shadows", "Cienie od słońca"],
 								["bloom", "Poświata"],
@@ -298,7 +298,7 @@ class CommandMenu {
 		if (WINDOW_SCREENS.includes(screen)) this.windowed();
 		if (screen === "knowledge") KnowledgeBase.mount(this.root);
 		this.root.querySelector(".menu-footer span").textContent =
-			"PROTOTYP 0.51 · ZAPIS LOKALNY";
+			"PROTOTYP 0.53 · ZAPIS LOKALNY";
 		if (
 			screen === "scenarios" ||
 			(screen === "briefing" &&
@@ -627,10 +627,11 @@ class CommandMenu {
 					showStatus = () => {
 						const s = this.api.rendererStatus?.() || { mode: "canvas", note: "" };
 						const gpu = SceneFX.options.renderer !== "canvas",
-							name = { webgl: "WebGL", webgpu: "WebGPU" };
+							name = { webgl: "WebGL (PixiJS)", webgpu: "WebGPU (PixiJS)", three: "3D (Three.js)" };
 						// The effects stay available when WebGPU fell back to WebGL, not when the board fell back to Canvas 2D.
-						for (const box of this.root.querySelectorAll(".webgl-effect")) box.disabled = !gpu || (s.mode === "canvas" && !!s.note);
-						status.textContent = s.note || (name[s.mode] ? `Aktywny: ${name[s.mode]} (PixiJS).` : gpu ? `${name[SceneFX.options.renderer]} uruchomi się razem z planszą.` : "Aktywny: Canvas 2D.");
+						// They belong to the PixiJS renderer; the 3D board has its own light and shadows.
+						for (const box of this.root.querySelectorAll(".webgl-effect")) box.disabled = !gpu || s.mode === "three" || (s.mode === "canvas" && !!s.note);
+						status.textContent = s.note || (name[s.mode] ? `Aktywny: ${name[s.mode]}.` : gpu ? `${name[SceneFX.options.renderer]} uruchomi się razem z planszą.` : "Aktywny: Canvas 2D.");
 					};
 				rendererSelect.value = SceneFX.options.renderer;
 				rendererSelect.onchange = () => {

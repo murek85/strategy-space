@@ -145,7 +145,7 @@
 		rendererMode = "canvas",
 		rendererRequested = null,
 		rendererNote = "";
-	// WebGL when chosen and available; Canvas 2D stays the fallback at every step.
+	// 3D or WebGL when chosen and available; 3D falls back to WebGL, and Canvas 2D stays the fallback at every step.
 	async function applyRenderer() {
 		const wanted = SceneFX.options.renderer;
 		if (wanted === rendererRequested) return;
@@ -154,28 +154,47 @@
 			useCanvasRenderer("");
 			return;
 		}
+		const lost = () => useCanvasRenderer("Utracono kontekst grafiki — gra przełączyła się na renderer Canvas 2D.");
+		let board = null,
+			note = "";
+		if (wanted === "three") {
+			// An ES module loaded on demand (webgl3d/): it needs WebGL and a page served over http.
+			try {
+				const { createThreeGameRenderer } = await import("./webgl3d/three-game-renderer.js");
+				board = createThreeGameRenderer({ gameCanvas: canvas, canvasRenderer, onContextLost: lost });
+			} catch (error) {
+				console.warn(error);
+				note =
+					location.protocol === "file:"
+						? "Tryb 3D wymaga uruchomienia gry przez serwer (npm start) — działa WebGL (PixiJS)."
+						: "Tryb 3D nie uruchomił się w tej przeglądarce — działa WebGL (PixiJS).";
+			}
+		}
 		try {
-			if (typeof createPixiGameRenderer !== "function" || typeof PIXI === "undefined")
-				throw Error("Brak biblioteki PixiJS");
-			const pixi = await createPixiGameRenderer({
-				gameCanvas: canvas,
-				canvasRenderer,
-				preference: wanted,
-				onContextLost: () =>
-					useCanvasRenderer("Utracono kontekst grafiki — gra przełączyła się na renderer Canvas 2D."),
-			});
+			if (!board) {
+				if (typeof createPixiGameRenderer !== "function" || typeof PIXI === "undefined")
+					throw Error("Brak biblioteki PixiJS");
+				board = await createPixiGameRenderer({
+					gameCanvas: canvas,
+					canvasRenderer,
+					preference: wanted === "webgpu" ? "webgpu" : "webgl",
+					onContextLost: lost,
+				});
+			}
 			if (SceneFX.options.renderer !== wanted) {
-				pixi.destroy();
+				board.destroy();
 				return;
 			}
-			pixi.setGame(game);
+			board.setGame(game);
 			const old = renderer;
-			renderer = pixi;
+			renderer = board;
 			if (old !== canvasRenderer) old.destroy?.();
-			rendererMode = pixi.kind;
-			rendererNote = wanted === "webgpu" && pixi.kind !== "webgpu" ? "WebGPU jest niedostępny w tej przeglądarce — działa WebGL (PixiJS) z tymi samymi efektami." : "";
+			rendererMode = board.kind;
+			rendererNote = note || (wanted === "webgpu" && board.kind !== "webgpu" ? "WebGPU jest niedostępny w tej przeglądarce — działa WebGL (PixiJS) z tymi samymi efektami." : "");
+			if (note) toast(note);
 		} catch (error) {
 			console.warn(error);
+			board?.destroy?.();
 			useCanvasRenderer("WebGL jest niedostępny w tej przeglądarce — gra używa renderera Canvas 2D.");
 		}
 	}
