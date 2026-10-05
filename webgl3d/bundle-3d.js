@@ -59917,7 +59917,15 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 					} else headlamp(e, { len: 90, reach: r * 0.5, height: 14, angle: 0.26, color: "#eef4ff", power: night * 420, range: 144, haze: night * (0.04 + weather * 0.22) });
 				}
 			}
-		lights.end(focus, span, night > 0.05);
+		// Explosions light the ground and the models around them for a moment, by day too.
+		for (const ef of game.effects) {
+			if (ef.kind !== "explosion" || hidden({ x: ef.x, y: ef.y, team: -1 })) continue;
+			const k = 1 - ef.life / ef.maxLife,
+				f = Math.max(0, 1 - k / 0.55),
+				size = ef.size || 40;
+			if (f > 0) lights.point(ef.x, ef.y, heightAt(ef.x, ef.y) + (ef.air ? 90 : size * 0.4), { color: "#ffb35c", power: f * f * size * (25 + night * 15), range: size * 5 + 80 });
+		}
+		lights.end(focus, span, true);
 		pools.visible = pools.count > 0;
 		pools.instanceMatrix.needsUpdate = true;
 		pools.instanceColor.needsUpdate = true;
@@ -59985,6 +59993,13 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 						list.pop();
 						continue;
 					}
+					// A delayed particle (negative life) waits unseen; drag slows it down.
+					if (p.life < 0) continue;
+					if (p.drag) {
+						const k = Math.max(0, 1 - p.drag * dt);
+						p.vx *= k;
+						p.vz *= k;
+					}
 					p.vy += (p.lift ?? 0) * dt;
 					p.x += p.vx * dt;
 					p.y += p.vy * dt;
@@ -60045,14 +60060,39 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 			seenExplosions.add(ef);
 			if (hidden({ x: ef.x, y: ef.y, team: -1 })) continue;
 			const size = ef.size || 40,
-				ground = heightAt(ef.x, ef.y);
-			for (let i = 0; i < Math.ceil(16 * density); i++) {
+				scale = size / 50,
+				ground = heightAt(ef.x, ef.y),
+				y = ground + (ef.air ? 90 : 8),
+				n = (count) => Math.ceil(count * density * Math.min(1.6, 0.6 + scale * 0.5));
+			// Sparks: fast, white-yellow, falling.
+			for (let i = 0; i < n(26); i++) {
 				const a = rand(0, TAU),
-					sp = rand(40, 140) * (size / 50);
-				fire.spawn({ x: ef.x, y: ground + 8, z: ef.y, vx: Math.cos(a) * sp, vy: rand(40, 160), vz: Math.sin(a) * sp, lift: -260, life: 0, max: rand(0.35, 0.8), s0: rand(4, 9), s1: 1, r: 1, g: rand(0.55, 0.85), b: 0.3, a: 1 });
+					sp = rand(60, 200) * scale;
+				fire.spawn({ x: ef.x, y, z: ef.y, vx: Math.cos(a) * sp, vy: rand(ef.air ? -60 : 50, 200), vz: Math.sin(a) * sp, lift: -320, life: 0, max: rand(0.3, 0.75), s0: rand(3, 7), s1: 0.8, r: 1, g: rand(0.75, 0.95), b: rand(0.4, 0.6), a: 1 });
 			}
-			for (let i = 0; i < Math.ceil(7 * density); i++)
-				smoke.spawn({ x: ef.x + rand(-size, size) * 0.25, y: ground + rand(4, 16), z: ef.y + rand(-size, size) * 0.25, vx: rand(-10, 10), vy: rand(10, 26), vz: rand(-10, 10), life: 0, max: rand(1.6, 3), s0: size * 0.5, s1: size * 1.5, r: 0.38, g: 0.35, b: 0.32, a: 0.55 });
+			// Embers: slow, orange, drifting down for a while.
+			for (let i = 0; i < n(10); i++) {
+				const a = rand(0, TAU),
+					sp = rand(15, 60) * scale;
+				fire.spawn({ x: ef.x, y: y + rand(0, 10), z: ef.y, vx: Math.cos(a) * sp, vy: rand(30, 90), vz: Math.sin(a) * sp, lift: -70, drag: 1.2, life: rand(-0.1, 0), max: rand(1.2, 2.2), s0: rand(2, 3.5), s1: 1, r: 1, g: rand(0.4, 0.6), b: 0.12, a: 0.95 });
+			}
+			// Debris: dark chunks thrown up and falling.
+			for (let i = 0; i < n(12); i++) {
+				const a = rand(0, TAU),
+					sp = rand(50, 150) * scale,
+					c = rand(0.08, 0.16);
+				smoke.spawn({ x: ef.x, y, z: ef.y, vx: Math.cos(a) * sp, vy: rand(ef.air ? -20 : 90, 220), vz: Math.sin(a) * sp, lift: -420, life: 0, max: rand(0.8, 1.4), s0: rand(2, 4) * Math.max(1, scale), s1: rand(1.5, 3), r: c, g: c * 0.95, b: c * 0.9, a: 1 });
+			}
+			// The smoke column: dark puffs welling up one after another, growing.
+			for (let i = 0; i < n(12); i++)
+				smoke.spawn({ x: ef.x + rand(-size, size) * 0.2, y: y + rand(0, size * 0.4), z: ef.y + rand(-size, size) * 0.2, vx: rand(-8, 8), vy: rand(18, 45), vz: rand(-8, 8), drag: 0.6, life: -rand(0.05, 0.7), max: rand(2.4, 4.4), s0: size * 0.45, s1: size * rand(1.6, 2.3), r: 0.2, g: 0.19, b: 0.18, a: 0.62 });
+			// Dust thrown out along the ground (not in the air).
+			if (!ef.air)
+				for (let i = 0; i < n(12); i++) {
+					const a = (i / n(12)) * TAU + rand(-0.2, 0.2),
+						sp = rand(70, 130) * scale;
+					smoke.spawn({ x: ef.x + Math.cos(a) * size * 0.2, y: ground + 4, z: ef.y + Math.sin(a) * size * 0.2, vx: Math.cos(a) * sp, vy: rand(3, 10), vz: Math.sin(a) * sp, drag: 2.2, life: 0, max: rand(1.1, 1.8), s0: size * 0.25, s1: size * 0.9, r: 0.56, g: 0.49, b: 0.4, a: 0.42 });
+				}
 		}
 	}
 
@@ -62128,8 +62168,80 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		tracers.setMatrixAt(i, beam.m.compose(beam.from.lerp(beam.to, 0.5), beam.q, beam.s.set(Math.max(1, len), width, width)));
 		tracers.setColorAt(i, c);
 	}
-	const fireballGeometry = new THREE.IcosahedronGeometry(1, 2),
-		shockGeometry = new THREE.RingGeometry(0.82, 1, 40).rotateX(-Math.PI / 2);
+	// Explosions: a fireball of churning noise (white-hot core → yellow → orange → dark red → smoke,
+	// breaking up into wisps as it cools), a soft shock ring running over the ground and a short glare.
+	const fireballGeometry = new THREE.IcosahedronGeometry(1, 4),
+		shockGeometry = new THREE.PlaneGeometry(2, 2).rotateX(-Math.PI / 2),
+		NOISE3 = `
+			float bHash(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+			float bNoise(vec3 p) {
+				vec3 i = floor(p), f = fract(p);
+				f = f * f * (3.0 - 2.0 * f);
+				return mix(mix(mix(bHash(i), bHash(i + vec3(1, 0, 0)), f.x), mix(bHash(i + vec3(0, 1, 0)), bHash(i + vec3(1, 1, 0)), f.x), f.y),
+					mix(mix(bHash(i + vec3(0, 0, 1)), bHash(i + vec3(1, 0, 1)), f.x), mix(bHash(i + vec3(0, 1, 1)), bHash(i + vec3(1, 1, 1)), f.x), f.y), f.z);
+			}
+			float bFbm(vec3 p) { return bNoise(p) * 0.55 + bNoise(p * 2.1 + 3.1) * 0.3 + bNoise(p * 4.3 - 1.7) * 0.15; }`,
+		fireballMaterial = () =>
+			new THREE.ShaderMaterial({
+				uniforms: { uK: { value: 0 }, uSeed: { value: 0 } },
+				vertexShader: `uniform float uK; uniform float uSeed; varying float vNoise; varying vec3 vN; varying vec3 vView;
+					${NOISE3}
+					void main() {
+						vec3 p = position;
+						// Billows: big lumps and smaller ones on them, churning upwards.
+						float n = bFbm(p * 2.3 + vec3(uSeed, uSeed * 0.7 - uK * 3.0, uSeed * 1.3));
+						float lumps = abs(bNoise(p * 4.5 + uSeed - uK * 2.0) - 0.5) * 2.0;
+						vNoise = n;
+						vec4 mv = modelViewMatrix * vec4(p * (0.55 + n * 0.75 + lumps * 0.18), 1.0);
+						vN = normalize(normalMatrix * normal);
+						vView = normalize(-mv.xyz);
+						gl_Position = projectionMatrix * mv;
+					}`,
+				fragmentShader: `uniform float uK; varying float vNoise; varying vec3 vN; varying vec3 vView;
+					void main() {
+						float facing = clamp(dot(normalize(vN), normalize(vView)), 0.0, 1.0);
+						float heat = clamp(1.05 - uK * 1.75 + (vNoise - 0.5) * 1.2 + facing * 0.45 - 0.3, 0.0, 1.0);
+						vec3 col = heat > 0.66 ? mix(vec3(1.0, 0.62, 0.18), vec3(1.0, 0.96, 0.82), (heat - 0.66) / 0.34)
+							: heat > 0.3 ? mix(vec3(0.72, 0.16, 0.03), vec3(1.0, 0.62, 0.18), (heat - 0.3) / 0.36)
+							: mix(vec3(0.16, 0.14, 0.13), vec3(0.72, 0.16, 0.03), smoothstep(0.0, 0.3, heat));
+						float glow = 0.5 + 1.0 * smoothstep(0.35, 0.85, heat);
+						// Breaking up: the cooler, thinner parts go first.
+						// Soft at the silhouette (a volume, not a shell), thinner as it cools.
+						float alpha = smoothstep(uK - 0.12, uK + 0.12, vNoise * 0.9 + facing * 0.35) * (1.0 - smoothstep(0.75, 1.0, uK)) * smoothstep(0.0, 0.45, facing) * (1.0 - uK * 0.45);
+						gl_FragColor = vec4(col * glow, alpha);
+						#include <colorspace_fragment>
+					}`,
+				transparent: true,
+				depthWrite: false,
+			}),
+		shockMaterial = () =>
+			new THREE.ShaderMaterial({
+				uniforms: { uK: { value: 0 } },
+				vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+				fragmentShader: `uniform float uK; varying vec2 vUv;
+					void main() {
+						float r = length(vUv - 0.5) * 2.0;
+						float edge = smoothstep(0.8, 0.95, r) * (1.0 - smoothstep(0.95, 1.0, r));
+						float a = edge * (1.0 - uK) * (1.0 - uK) * 0.7;
+						gl_FragColor = vec4(vec3(1.0, 0.82, 0.6) * a, 1.0);
+						#include <colorspace_fragment>
+					}`,
+				transparent: true,
+				depthWrite: false,
+				blending: THREE.AdditiveBlending,
+			}),
+		glareTexture = (() => {
+			const c = document.createElement("canvas");
+			c.width = c.height = 64;
+			const x = c.getContext("2d"),
+				g = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+			g.addColorStop(0, "#ffffffff");
+			g.addColorStop(0.25, "#fff2c8aa");
+			g.addColorStop(1, "#ff904000");
+			x.fillStyle = g;
+			x.fillRect(0, 0, 64, 64);
+			return new THREE.CanvasTexture(c);
+		})();
 	const flashes = [],
 		shotsSeen = new WeakSet(),
 		impactsSeen = new WeakSet();
@@ -62253,26 +62365,41 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 					fx.shot("impact", ef.tx, toY, ef.ty, ef.rocket || bomb);
 				}
 			} else if (ef.kind === "explosion") {
-				// A fireball swelling and cooling from white-yellow to dark red, and a shock ring running
-				// over the ground (sparks and smoke come from scene-fx-3d.js).
+				// A churning fireball swelling fast, rising and cooling into smoke; a shock ring running over
+				// the ground; a glare at the start (sparks, debris, dust and smoke come from scene-fx-3d.js,
+				// the light it throws around from its night lights). Aircraft blow up at their height.
 				const blast = pooled(flashes, fi++, () => {
 						const root = new THREE.Group(),
-							ball = new THREE.Mesh(fireballGeometry, new THREE.MeshBasicMaterial({ transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })),
-							ring = new THREE.Mesh(shockGeometry, new THREE.MeshBasicMaterial({ color: "#ffd9a8", transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
-						root.add(ball, ring);
-						return { root, ball, ring };
+							ball = new THREE.Mesh(fireballGeometry, fireballMaterial()),
+							ring = new THREE.Mesh(shockGeometry, shockMaterial()),
+							glare = new THREE.Sprite(new THREE.SpriteMaterial({ map: glareTexture, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
+						ball.renderOrder = 7;
+						ring.renderOrder = 3;
+						glare.renderOrder = 8;
+						root.add(ball, ring, glare);
+						return { root, ball, ring, glare };
 					}),
 					size = ef.size || 40,
 					k = 1 - alpha,
-					ground = heightAt(ef.x, ef.y);
+					ground = heightAt(ef.x, ef.y),
+					base = ground + (ef.air ? 90 : 0),
+					grow = 1 - Math.pow(1 - Math.min(1, k * 1.6), 3);
+				if (!blast.seeds) blast.seeds = new WeakMap();
+				if (!blast.seeds.has(ef)) blast.seeds.set(ef, Math.random() * 50);
 				blast.root.visible = true;
-				blast.ball.position.set(ef.x, ground + size * (0.25 + k * 0.35), ef.y);
-				blast.ball.scale.setScalar(size * (0.35 + k * 0.55));
-				blast.ball.material.color.setRGB(1, 0.85 - k * 0.5, 0.55 - k * 0.5);
-				blast.ball.material.opacity = alpha * alpha;
+				blast.ball.position.set(ef.x, base + size * (ef.air ? 0 : 0.22 + k * 0.45), ef.y);
+				blast.ball.scale.set(size * (0.25 + grow * 0.55), size * (0.25 + grow * 0.55) * (0.85 + k * 0.45), size * (0.25 + grow * 0.55));
+				blast.ball.material.uniforms.uK.value = k;
+				blast.ball.material.uniforms.uSeed.value = blast.seeds.get(ef);
+				blast.ring.visible = !ef.air;
 				blast.ring.position.set(ef.x, ground + 2, ef.y);
-				blast.ring.scale.setScalar(size * (0.4 + k * 1.2));
-				blast.ring.material.opacity = alpha * 0.55;
+				blast.ring.scale.setScalar(size * (0.3 + k * 1.6));
+				blast.ring.material.uniforms.uK.value = k;
+				const g = Math.max(0, 1 - k / 0.22);
+				blast.glare.visible = g > 0;
+				blast.glare.position.set(ef.x, base + size * 0.3, ef.y);
+				blast.glare.scale.setScalar(size * (1.6 + (1 - g) * 1.2));
+				blast.glare.material.opacity = g * g * 0.7;
 			}
 		}
 		tracers.count = si;

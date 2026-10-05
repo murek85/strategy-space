@@ -335,6 +335,14 @@ Akt I (Szkolenie, I · Iskra na Eos, II · Archiwum pod lodem, III · Świt nad 
 - **Silnik** (`engine.js`): strzał niesie `air` (strzelec lata), `airTarget` (cel lata) i `bomb` (bombowiec); renderery 2D ich nie używają.
 - **Plansza 3D** (`three-renderer.js`): strzał z samolotu startuje z wysokości lotu, myśliwca — z nosa (16 przed środkiem), dwiema cieńszymi, krótszymi smugami po bokach, po prostej (bez łuku); bombowiec zrzuca bombę spadającą z przyspieszeniem (wysokość ∝ k²), z dymem, bez błysku wylotu, z wybuchem jak rakieta; strzał w samolot kończy się na jego wysokości (iskry w powietrzu).
 
+## Wybuchy (wersja 0.81, 2026-10-05)
+
+- **Kula ognia** (`three-renderer.js`): dwudziestościan (podział 4) z shaderem — powierzchnia przesunięta szumem (duże kłęby i mniejsze na nich, kłębiące się w górę), kolor z „temperatury” (szum, zwrot ku kamerze, czas: biało-gorący środek → żółty → pomarańczowy → ciemnoczerwony → dym), miękkie brzegi (objętość, nie skorupa), rozpad od chłodniejszych części; rośnie szybko (krzywa sześcienna), wznosi się i wydłuża ku górze. Każdy wybuch ma własny zarodek szumu.
+- **Fala uderzeniowa**: cienki, miękki pierścień na ziemi (shader na kwadracie), **rozbłysk**: duszek z gradientem przez pierwsze ~0,15 s.
+- **Cząstki** (`scene-fx-3d.js`): iskry (szybkie, opadające), żar (wolny, z oporem, 1,2–2,2 s), odłamki (ciemne, rzucone w górę, spadające), słup dymu (kłęby z opóźnieniem do 0,7 s, ciemne, rosnące), fala pyłu przy ziemi (w kolorze ziemi, rozchodzi się i zwalnia). Cząstki dostały opóźnienie (ujemny wiek — czeka niewidoczna) i opór (`drag`); liczba rośnie z wielkością wybuchu.
+- **Światło**: przez pierwsze ~0,35 s wybuch jest światłem punktowym na liście świateł nocy (`night-lights-3d.js`), także w dzień — oświetla teren i modele wokół.
+- **W powietrzu**: silnik zaznacza wybuch zniszczonego samolotu (`air`); kula, rozbłysk i cząstki są na wysokości lotu (bez pierścienia i pyłu), odłamki spadają.
+
 ## W grze
 
 - **Kamera**: kamera gry (`camera.x`, `camera.y`, `zoom` → `scale`) steruje kamerą 3D. Patrzy na środek widoku z pochylenia ok. 54°, z odległości, przy której środek ekranu ma tyle pikseli na jednostkę mapy co widok 2D. Przesuwanie, przybliżenie, Home i minimapa działają jak dotąd; obrotu i pochylenia w grze nie ma.

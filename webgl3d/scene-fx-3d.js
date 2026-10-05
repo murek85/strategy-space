@@ -434,7 +434,15 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 					} else headlamp(e, { len: 90, reach: r * 0.5, height: 14, angle: 0.26, color: "#eef4ff", power: night * 420, range: 144, haze: night * (0.04 + weather * 0.22) });
 				}
 			}
-		lights.end(focus, span, night > 0.05);
+		// Explosions light the ground and the models around them for a moment, by day too.
+		for (const ef of game.effects) {
+			if (ef.kind !== "explosion" || hidden({ x: ef.x, y: ef.y, team: -1 })) continue;
+			const k = 1 - ef.life / ef.maxLife,
+				f = Math.max(0, 1 - k / 0.55),
+				size = ef.size || 40;
+			if (f > 0) lights.point(ef.x, ef.y, heightAt(ef.x, ef.y) + (ef.air ? 90 : size * 0.4), { color: "#ffb35c", power: f * f * size * (25 + night * 15), range: size * 5 + 80 });
+		}
+		lights.end(focus, span, true);
 		pools.visible = pools.count > 0;
 		pools.instanceMatrix.needsUpdate = true;
 		pools.instanceColor.needsUpdate = true;
@@ -502,6 +510,13 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 						list.pop();
 						continue;
 					}
+					// A delayed particle (negative life) waits unseen; drag slows it down.
+					if (p.life < 0) continue;
+					if (p.drag) {
+						const k = Math.max(0, 1 - p.drag * dt);
+						p.vx *= k;
+						p.vz *= k;
+					}
 					p.vy += (p.lift ?? 0) * dt;
 					p.x += p.vx * dt;
 					p.y += p.vy * dt;
@@ -562,14 +577,39 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 			seenExplosions.add(ef);
 			if (hidden({ x: ef.x, y: ef.y, team: -1 })) continue;
 			const size = ef.size || 40,
-				ground = heightAt(ef.x, ef.y);
-			for (let i = 0; i < Math.ceil(16 * density); i++) {
+				scale = size / 50,
+				ground = heightAt(ef.x, ef.y),
+				y = ground + (ef.air ? 90 : 8),
+				n = (count) => Math.ceil(count * density * Math.min(1.6, 0.6 + scale * 0.5));
+			// Sparks: fast, white-yellow, falling.
+			for (let i = 0; i < n(26); i++) {
 				const a = rand(0, TAU),
-					sp = rand(40, 140) * (size / 50);
-				fire.spawn({ x: ef.x, y: ground + 8, z: ef.y, vx: Math.cos(a) * sp, vy: rand(40, 160), vz: Math.sin(a) * sp, lift: -260, life: 0, max: rand(0.35, 0.8), s0: rand(4, 9), s1: 1, r: 1, g: rand(0.55, 0.85), b: 0.3, a: 1 });
+					sp = rand(60, 200) * scale;
+				fire.spawn({ x: ef.x, y, z: ef.y, vx: Math.cos(a) * sp, vy: rand(ef.air ? -60 : 50, 200), vz: Math.sin(a) * sp, lift: -320, life: 0, max: rand(0.3, 0.75), s0: rand(3, 7), s1: 0.8, r: 1, g: rand(0.75, 0.95), b: rand(0.4, 0.6), a: 1 });
 			}
-			for (let i = 0; i < Math.ceil(7 * density); i++)
-				smoke.spawn({ x: ef.x + rand(-size, size) * 0.25, y: ground + rand(4, 16), z: ef.y + rand(-size, size) * 0.25, vx: rand(-10, 10), vy: rand(10, 26), vz: rand(-10, 10), life: 0, max: rand(1.6, 3), s0: size * 0.5, s1: size * 1.5, r: 0.38, g: 0.35, b: 0.32, a: 0.55 });
+			// Embers: slow, orange, drifting down for a while.
+			for (let i = 0; i < n(10); i++) {
+				const a = rand(0, TAU),
+					sp = rand(15, 60) * scale;
+				fire.spawn({ x: ef.x, y: y + rand(0, 10), z: ef.y, vx: Math.cos(a) * sp, vy: rand(30, 90), vz: Math.sin(a) * sp, lift: -70, drag: 1.2, life: rand(-0.1, 0), max: rand(1.2, 2.2), s0: rand(2, 3.5), s1: 1, r: 1, g: rand(0.4, 0.6), b: 0.12, a: 0.95 });
+			}
+			// Debris: dark chunks thrown up and falling.
+			for (let i = 0; i < n(12); i++) {
+				const a = rand(0, TAU),
+					sp = rand(50, 150) * scale,
+					c = rand(0.08, 0.16);
+				smoke.spawn({ x: ef.x, y, z: ef.y, vx: Math.cos(a) * sp, vy: rand(ef.air ? -20 : 90, 220), vz: Math.sin(a) * sp, lift: -420, life: 0, max: rand(0.8, 1.4), s0: rand(2, 4) * Math.max(1, scale), s1: rand(1.5, 3), r: c, g: c * 0.95, b: c * 0.9, a: 1 });
+			}
+			// The smoke column: dark puffs welling up one after another, growing.
+			for (let i = 0; i < n(12); i++)
+				smoke.spawn({ x: ef.x + rand(-size, size) * 0.2, y: y + rand(0, size * 0.4), z: ef.y + rand(-size, size) * 0.2, vx: rand(-8, 8), vy: rand(18, 45), vz: rand(-8, 8), drag: 0.6, life: -rand(0.05, 0.7), max: rand(2.4, 4.4), s0: size * 0.45, s1: size * rand(1.6, 2.3), r: 0.2, g: 0.19, b: 0.18, a: 0.62 });
+			// Dust thrown out along the ground (not in the air).
+			if (!ef.air)
+				for (let i = 0; i < n(12); i++) {
+					const a = (i / n(12)) * TAU + rand(-0.2, 0.2),
+						sp = rand(70, 130) * scale;
+					smoke.spawn({ x: ef.x + Math.cos(a) * size * 0.2, y: ground + 4, z: ef.y + Math.sin(a) * size * 0.2, vx: Math.cos(a) * sp, vy: rand(3, 10), vz: Math.sin(a) * sp, drag: 2.2, life: 0, max: rand(1.1, 1.8), s0: size * 0.25, s1: size * 0.9, r: 0.56, g: 0.49, b: 0.4, a: 0.42 });
+				}
 		}
 	}
 

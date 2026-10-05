@@ -1,4 +1,6 @@
-# Pogranicze Galaktyki — prototyp RTS 0.80.1
+# Pogranicze Galaktyki — prototyp RTS 0.81
+
+**Wersja 0.81 — wybuchy.** Wybuch na planszy 3D to teraz skłębiona kula ognia (biało-gorący środek, żółć, pomarańcz, ciemna czerwień, w końcu dym), która rośnie, wznosi się i rozpada na strzępy; krótki rozbłysk, a światło wybuchu przez chwilę oświetla teren i modele dookoła (w dzień i w nocy); cienki pierścień fali uderzeniowej po ziemi; fala pyłu rozchodząca się przy ziemi; odłamki rzucone w górę i spadające; iskry i opadający powoli żar; słup ciemnego dymu wzbierający kłąb po kłębie. Samolot zestrzelony w powietrzu wybucha na wysokości lotu. [Opis](docs/RENDERER_3D.md#wybuchy-wersja-081-2026-10-05).
 
 **Wersja 0.80.1 — strzały samolotów w powietrzu.** Na planszy 3D strzały samolotów wychodziły z ziemi pod nimi, jakby strzelały pojazdy, a strzały w samoloty trafiały w ziemię. Teraz myśliwiec strzela z wysokości lotu dwiema smugami z działek przy nosie, prosto do celu; bombowiec zrzuca bomby, które spadają coraz szybciej, z dymem, i wybuchają mocniej; strzały z ziemi do samolotów (np. przeciwlotnicze) lecą w górę, do samolotu. [Opis](docs/RENDERER_3D.md#strzały-samolotów-wersja-0801-2026-10-05).
 

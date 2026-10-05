@@ -2542,6 +2542,8 @@
 				x: target.x,
 				y: target.y,
 				size: TYPES[target.type].radius * 2 + 15,
+				// For the 3D board: an aircraft blows up at its flight height.
+				air: !!TYPES[target.type].flying,
 				life: 0.65,
 				maxLife: 0.65,
 			});

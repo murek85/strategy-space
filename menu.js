@@ -236,6 +236,7 @@ class CommandMenu {
 				body;
 		if (screen === "news")
 			body =
+				"<h2>0.81 / Wybuchy</h2><p>Skłębiona kula ognia przechodząca w dym, rozbłysk i światło wybuchu na otoczeniu, fala uderzeniowa i pył, odłamki, iskry, żar i słup dymu; samoloty wybuchają w powietrzu.</p>" +
 				"<h2>0.80.1 / Strzały samolotów w powietrzu</h2><p>Myśliwce strzelają z powietrza dwiema smugami z nosa, bombowce zrzucają bomby, a ogień z ziemi do samolotów leci w górę.</p>" +
 				"<h2>0.80 / Wszystkie światła nocy naraz</h2><p>Reflektory pojazdów i budynków, latarki i reflektory samolotów świecą wszystkie jednocześnie i oświetlają teren oraz modele — światła nie przeskakują już przy ruchu kamery.</p>" +
 				"<h2>0.79.1 / Bez ostrych snopów światła</h2><p>Dalsze budynki rzucają miękką plamę zamiast ostrego klina, wachlarze świateł pojazdów mają miękkie brzegi; księżyc świeci z wyższego kąta.</p>" +
@@ -346,7 +347,7 @@ class CommandMenu {
 		if (WINDOW_SCREENS.includes(screen)) this.windowed();
 		if (screen === "knowledge") KnowledgeBase.mount(this.root);
 		this.root.querySelector(".menu-footer span").textContent =
-			"PROTOTYP 0.80.1 · ZAPIS LOKALNY";
+			"PROTOTYP 0.81 · ZAPIS LOKALNY";
 		if (
 			screen === "scenarios" ||
 			(screen === "briefing" &&
