@@ -7,6 +7,14 @@
    the Swarm matte obsidian monoliths, sentries and walkers with the team stripe as the only colour
    (as swarm-art.js). Wildlife and monsters use natural materials. Types without a model stay as painted
    decals (three-renderer.js). */
+import { createDetail3D, createBaker, windowCurve } from "./models-detail-3d.js";
+import { createNature3D } from "./nature-detail-3d.js";
+import { createProps3D } from "./props-detail-3d.js";
+import { createSwarm3D } from "./swarm-detail-3d.js";
+import { createAct3 } from "./act3-detail-3d.js";
+import { createAct2 } from "./act2-detail-3d.js";
+import { createAct1 } from "./act1-detail-3d.js";
+
 export function createModels3D(THREE) {
 	const geo = {
 		box: new THREE.BoxGeometry(1, 1, 1),
@@ -27,6 +35,10 @@ export function createModels3D(THREE) {
 		prism: new THREE.CylinderGeometry(0.62, 1, 1, 4, 1).rotateY(Math.PI / 4),
 		pyramid: new THREE.ConeGeometry(1, 1, 4).rotateY(Math.PI / 4),
 		octa: new THREE.OctahedronGeometry(1),
+		// A boulder, a tapering rock spike, a half ring (ribs of wrecks).
+		ico: new THREE.IcosahedronGeometry(1, 0),
+		spike: new THREE.CylinderGeometry(0.22, 1, 1, 7),
+		arc: new THREE.TorusGeometry(1, 0.07, 6, 18, Math.PI),
 		halfCyl: new THREE.CylinderGeometry(1, 1, 1, 14, 1, false, 0, Math.PI),
 		torus: new THREE.TorusGeometry(1, 0.22, 8, 24).rotateX(Math.PI / 2),
 		// A cooling tower: narrow waist, wider top and base.
@@ -46,9 +58,10 @@ export function createModels3D(THREE) {
 					swarm,
 					team: std(color, { roughness: 0.5 }),
 					glow: std(color, { roughness: 0.5 }),
-					metal: std("#3a434e", { roughness: 0.85, metalness: 0.1 }),
-					plate: std("#1b2027", { roughness: 0.8, metalness: 0.15 }),
-					dark: std("#0e1216", { roughness: 0.9, metalness: 0.1 }),
+					metal: std("#55606e", { roughness: 0.5, metalness: 0.1 }),
+					// Sheen on the obsidian, so the light shows the cut faces of the stones.
+					plate: std("#3e4856", { roughness: 0.3, metalness: 0.1 }),
+					dark: std("#1c232b", { roughness: 0.7, metalness: 0.2 }),
 					black: std("#06090c", { roughness: 0.9 }),
 					glass: std("#6a7581", { roughness: 0.4, metalness: 0.5 }),
 					warn: std("#303336", { roughness: 0.9 }),
@@ -68,6 +81,24 @@ export function createModels3D(THREE) {
 		k.red = std("#d8453c", { emissive: "#d8453c", emissiveIntensity: 0.5 });
 		k.fire = std("#ff9a3c", { emissive: "#ff7a1c", emissiveIntensity: 1.4 });
 		k.energy = std("#9ff7ff", { emissive: "#6fe8ff", emissiveIntensity: 1.3 });
+		// Detailed models: lamps (glow at night), tyres and tracks, polished hubs, dark steel fittings.
+		k.lamp = std("#fff3d6", { emissive: "#ffe6b0", emissiveIntensity: 0.35, roughness: 0.3 });
+		k.rubber = std("#1a1e20", { roughness: 0.95, metalness: 0.05 });
+		k.hub = std(swarm ? "#4a525c" : "#c9d2c8", { roughness: 0.35, metalness: 0.8 });
+		k.steel = std("#2c3437", { roughness: 0.5, metalness: 0.75 });
+		// Windows of buildings: dark reflecting glass by day, lit from inside at night (nightOnly: see
+		// setNight), warm rooms, cool screens, and dark ones.
+		const pane = dominion ? "#2a2830" : "#22323b";
+		k.window = std(pane, { emissive: dominion ? "#ffa860" : "#ffc878", emissiveIntensity: 1.5, roughness: 0.12, metalness: 0.65 });
+		k.windowCool = std(pane, { emissive: "#bfe6ff", emissiveIntensity: 1.1, roughness: 0.12, metalness: 0.65 });
+		k.windowOff = std("#1b252b", { roughness: 0.12, metalness: 0.75 });
+		k.window.userData.nightOnly = k.windowCool.userData.nightOnly = true;
+		// Cockpit glass of aircraft: dark tinted, glossy, a faint glow of the instruments.
+		k.canopy = std(dominion ? "#3a2b27" : "#1f3d47", { roughness: 0.1, metalness: 0.45, emissive: dominion ? "#ff9a50" : "#5fd8e0", emissiveIntensity: 0.05 });
+		// Navigation lights of aircraft: red (left), green (right), a white strobe.
+		k.navRed = std("#ff3b30", { emissive: "#ff2a1a", emissiveIntensity: 1.6 });
+		k.navGreen = std("#3bff6a", { emissive: "#22e04a", emissiveIntensity: 1.6 });
+		k.strobe = std("#ffffff", { emissive: "#ffffff", emissiveIntensity: 2 });
 		for (const m of Object.values(k)) if (m.isMaterial && m.emissiveIntensity && m.emissive.getHex()) glowing.push([m, m.emissiveIntensity]);
 		kits.set(key, k);
 		return k;
@@ -78,7 +109,12 @@ export function createModels3D(THREE) {
 	function setNight(n) {
 		if (Math.abs(n - nightLevel) < 0.01) return;
 		nightLevel = n;
-		for (const [m, base] of glowing) m.emissiveIntensity = base * (0.6 + 1.6 * n);
+		for (const [m, base] of glowing) {
+			m.userData.baseGlow = base; // merged models bake the base glow (models-detail-3d.js)
+			m.emissiveIntensity = base * (m.userData.nightOnly ? windowCurve(n) : 0.6 + 1.6 * n);
+		}
+		bake.setNight(n);
+		act2.setNight(n);
 	}
 	// Wildlife and monsters: natural materials, no team colour.
 	const nature = {
@@ -112,800 +148,26 @@ export function createModels3D(THREE) {
 		return g;
 	};
 
-	// ---- Units ----
-	// Infantry; weapon: rifle, rocket, flamer, grenade, none (civilians), carbine (saboteurs).
-	// coat: torso material (scientists white, technicians hazard yellow, saboteurs black).
-	function infantry(k, weapon, coat = k.plate) {
-		const root = new THREE.Group(),
-			body = group(root),
-			legs = [-1, 1].map((side) => {
-				const pivot = group(body, [0, 9, side * 2.6]);
-				part(pivot, "box", k.dark, [3, 9, 2.6], [0, -4.5, 0]);
-				return pivot;
-			});
-		part(body, "box", coat, [5, 8, 7.5], [0, 13, 0]); // torso
-		part(body, "box", k.team, [5.2, 2, 7.8], [0, 15.5, 0]); // shoulder stripe
-		part(body, "box", weapon === "none" ? k.team : k.metal, [3, 5, 5], [-3.8, 13, 0]); // pack
-		if (weapon === "none" && coat === k.white) part(body, "box", k.glass, [2, 3, 2], [3, 12, -2.5]); // sample case
-		k.dominion ? part(body, "box", k.metal, [4.6, 4, 4.6], [0.3, 19.2, 0]) : part(body, "sphere", k.metal, [2.6, 2.6, 2.6], [0.3, 19.3, 0]);
-		part(body, "box", k.glass, [0.8, 1.2, 3.2], [2.6, 19.4, 0]); // visor
-		const gun = group(body, [2.5, 13, 3]);
-		if (weapon === "rocket") {
-			part(gun, "cyl", k.dark, [2.2, 15, 2.2], [1, 5, -3], [0, 0, Math.PI / 2]);
-			part(gun, "cyl", k.team, [2.4, 2, 2.4], [7.5, 5, -3], [0, 0, Math.PI / 2]);
-		} else if (weapon === "flamer") {
-			part(gun, "box", k.black, [11, 2, 2], [4, 0, 0]);
-			part(body, "cyl", k.warn, [2, 7, 2], [-4.5, 13, -1.8]);
-			part(body, "cyl", k.warn, [2, 7, 2], [-4.5, 13, 1.8]);
-		} else if (weapon === "grenade") {
-			part(gun, "cyl", k.black, [2.4, 9, 2.4], [3, 0, 0], [0, 0, Math.PI / 2]);
-			for (const z of [-2.5, 0, 2.5]) part(body, "sphere", k.warn, [1.2, 1.2, 1.2], [2.8, 10.5, z]);
-		} else if (weapon === "carbine") part(gun, "box", k.black, [8, 1.4, 1.4], [3, 0, 0]);
-		else if (weapon === "tool") part(gun, "box", k.warn, [6, 2, 2], [2, -1, 0]);
-		else if (weapon !== "none") part(gun, "box", k.black, [12, 1.6, 1.6], [4, 0, 0]);
-		return {
-			root,
-			update(e, i) {
-				const swing = i.moving ? Math.sin(i.time * 11 + e.id) * 0.6 : 0;
-				legs[0].rotation.z = swing;
-				legs[1].rotation.z = -swing;
-				body.position.y = i.moving ? Math.abs(Math.cos(i.time * 11 + e.id)) * 1.2 : 0;
-				gun.position.x = 2.5 - i.recoil * 3;
-			},
-		};
-	}
+	// ---- Units and buildings of the Colonies and the Dominium: webgl3d/models-detail-3d.js ----
+	const detail = createDetail3D(THREE, { group });
+	detail.setEmber(nature.ember);
 
-	function tank(k) {
-		const root = new THREE.Group();
-		for (const side of [-1, 1]) {
-			part(root, "box", k.black, [42, 9, 8], [0, 5, side * 12]); // track
-			for (let w = -15; w <= 15; w += 10) part(root, "cyl", k.dark, [3.6, 9, 3.6], [w, 4.5, side * 12], [Math.PI / 2, 0, 0]);
-		}
-		part(root, k.dominion ? "wedge" : "box", k.plate, [40, 9, 18], [0, 12, 0]); // hull
-		part(root, "box", k.team, [8, 1, 19], [-12, 16.6, 0]);
-		part(root, "box", k.metal, [8, 3, 12], [-15, 17, 0]); // engine deck
-		const turret = group(root, [2, 17, 0]),
-			barrel = group(turret, [0, 4, 0]);
-		k.dominion ? part(turret, "cyl6", k.metal, [11, 8, 11], [0, 4, 0]) : part(turret, "dome", k.metal, [11, 9, 11], [0, 0, 0]);
-		part(turret, "box", k.glass, [2, 1.5, 4], [6, 6.5, -4]);
-		part(barrel, "cyl", k.dark, [2.2, 26, 2.2], [17, 0, 0], [0, 0, Math.PI / 2]);
-		part(barrel, "cyl", k.black, [3, 4, 3], [29, 0, 0], [0, 0, Math.PI / 2]);
-		return {
-			root,
-			update(e, i) {
-				turret.rotation.y = -i.aim;
-				barrel.position.x = -i.recoil * 7;
-				root.position.y = i.moving ? Math.sin(i.time * 30 + e.id) * 0.3 : 0;
-			},
-		};
-	}
+	// ---- Wildlife and monsters: webgl3d/nature-detail-3d.js (natureKit, made with the scenery materials) ----
 
-	function worker(k) {
-		const root = new THREE.Group();
-		for (const x of [-7, 7]) for (const z of [-7, 7]) part(root, "cyl", k.black, [3.5, 3, 3.5], [x, 3.5, z], [Math.PI / 2, 0, 0]);
-		part(root, "box", k.plate, [20, 7, 13], [0, 8, 0]);
-		part(root, "box", k.team, [4, 7.2, 13.4], [4, 8, 0]);
-		part(root, "box", k.metal, [6, 6, 8], [6, 14, 0]); // cab
-		part(root, "box", k.glass, [1, 2.5, 6], [9.2, 15, 0]);
-		const cargo = part(root, "box", k.warn, [8, 5, 10], [-5, 14, 0]);
-		const arm = group(root, [10, 10, 4]);
-		part(arm, "box", k.dark, [10, 2, 2], [5, 0, 0]);
-		part(arm, "box", k.metal, [2.5, 4, 5], [10, -1, 0]);
-		return {
-			root,
-			update(e, i) {
-				cargo.visible = (e.cargo || 0) > 0;
-				arm.rotation.z = e.order?.kind === "gather" && !i.moving ? Math.sin(i.time * 8 + e.id) * 0.5 - 0.3 : 0.2;
-			},
-		};
-	}
-
-	// ---- Buildings (footprint from the 2D radius, so bases keep their proportions) ----
-	function hq(k, r) {
-		const root = new THREE.Group(),
-			w = r * 1.5;
-		part(root, "box", k.dark, [w * 1.1, 6, w * 1.1], [0, 3, 0]); // pad
-		part(root, "box", k.plate, [w * 0.8, 30, w * 0.75], [0, 21, 0]);
-		part(root, "box", k.team, [w * 0.82, 3, w * 0.77], [0, 30, 0]);
-		k.dominion ? part(root, "box", k.metal, [w * 0.5, 22, w * 0.45], [-6, 47, 0]) : part(root, "dome", k.metal, [w * 0.3, w * 0.22, w * 0.3], [-6, 36, 0]);
-		for (let i = 0; i < 4; i++) part(root, "box", k.glass, [1, 3, 8], [w * 0.4 + 0.2, 20, -24 + i * 16]);
-		const mast = group(root, [w * 0.25, 36, -w * 0.25]);
-		part(mast, "cyl", k.metal, [1.5, 34, 1.5], [0, 17, 0]);
-		const dish = group(mast, [0, 34, 0]);
-		part(dish, "cone", k.metal, [8, 4, 8], [0, 0, 0], [Math.PI, 0, 0]);
-		part(dish, "sphere", k.glow, [1.6, 1.6, 1.6], [0, 1, 0]);
-		part(root, "box", k.warn, [w * 1.1, 1, 3], [0, 6.3, w * 0.52]);
-		return { root, update: (e, i) => (dish.rotation.y = i.time * 0.8) };
-	}
-	function barracks(k, r) {
-		const root = new THREE.Group(),
-			w = r * 1.6;
-		part(root, "box", k.dark, [w, 4, w * 0.8], [0, 2, 0]);
-		for (const z of [-w * 0.2, w * 0.2]) {
-			k.dominion
-				? part(root, "box", k.plate, [w * 0.85, 18, w * 0.3], [0, 13, z])
-				: part(root, "cyl", k.plate, [w * 0.17, w * 0.8, w * 0.17], [0, 10, z], [0, 0, Math.PI / 2]);
-			part(root, "box", k.team, [w * 0.87, 2.2, 2], [0, k.dominion ? 20 : 17, z]);
-		}
-		part(root, "box", k.metal, [10, 14, 16], [w * 0.45, 9, 0]); // gate
-		part(root, "box", k.glass, [1, 8, 10], [w * 0.45 + 5.2, 8, 0]);
-		return { root, update() {} };
-	}
-	function factory(k, r) {
-		const root = new THREE.Group(),
-			w = r * 1.6;
-		part(root, "box", k.dark, [w, 4, w * 0.9], [0, 2, 0]);
-		part(root, k.dominion ? "box" : "wedge", k.plate, [w * 0.9, 34, w * 0.62], [-4, 21, 0]);
-		part(root, "box", k.team, [w * 0.92, 3, w * 0.64], [-4, 30, 0]);
-		part(root, "box", k.black, [2, 22, w * 0.36], [w * 0.41, 15, 0]); // bay door
-		part(root, "box", k.warn, [2.2, 2, w * 0.38], [w * 0.41, 27, 0]);
-		const fans = [];
-		for (const z of [-w * 0.2, w * 0.2]) {
-			part(root, "cyl", k.metal, [6, 14, 6], [-w * 0.3, 44, z]); // stack
-			const fan = group(root, [-w * 0.05, 38.5, z]);
-			part(fan, "cyl", k.dark, [8, 1, 8], [0, 0, 0]);
-			part(fan, "box", k.metal, [15, 1.2, 2], [0, 0.6, 0]);
-			fans.push(fan);
-		}
-		return { root, update: (e, i) => fans.forEach((f, n) => (f.rotation.y = i.time * (4 + n))) };
-	}
-	function depot(k, r) {
-		const root = new THREE.Group(),
-			w = r * 1.6;
-		part(root, "box", k.dark, [w, 3, w], [0, 1.5, 0]);
-		const colors = [k.plate, k.team, k.metal, k.plate];
-		[[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([x, z], n) => part(root, "box", colors[n], [w * 0.4, 12, w * 0.38], [x * w * 0.23, 9 + (n === 1 ? 12 : 0), z * w * 0.23]));
-		part(root, "box", k.warn, [w * 0.4, 1, 3], [w * 0.23, 3.3, 0]);
-		return { root, update() {} };
-	}
-	function turret(k, r) {
-		const root = new THREE.Group();
-		part(root, "cyl6", k.dark, [r * 0.9, 10, r * 0.9], [0, 5, 0]);
-		part(root, "cyl", k.team, [r * 0.7, 2, r * 0.7], [0, 11, 0]);
-		const head = group(root, [0, 12, 0]),
-			guns = group(head, [0, 7, 0]);
-		part(head, k.dominion ? "cyl6" : "dome", k.metal, [r * 0.55, 10, r * 0.55], [0, k.dominion ? 5 : 0, 0]);
-		for (const z of [-3.5, 3.5]) part(guns, "cyl", k.black, [2, 26, 2], [16, 0, z], [0, 0, Math.PI / 2]);
-		part(head, "box", k.glass, [1.5, 2, 5], [r * 0.5, 7, 0]);
-		return {
-			root,
-			update(e, i) {
-				head.rotation.y = -i.aim;
-				guns.position.x = -i.recoil * 6;
-			},
-		};
-	}
-
-	// ---- Vehicle parts ----
-	function trackPair(root, k, len, gap, h = 9) {
-		for (const side of [-1, 1]) {
-			part(root, "box", k.black, [len, h, 8], [0, h / 2 + 0.5, side * gap]);
-			for (let w = -len / 2 + 5; w <= len / 2 - 5; w += 10) part(root, "cyl", k.dark, [h * 0.4, 9, h * 0.4], [w, h / 2, side * gap], [Math.PI / 2, 0, 0]);
-		}
-	}
-	// Wheels spin with speed; returns the wheel meshes.
-	function wheelSet(root, k, xs, gap, rad) {
-		const list = [];
-		for (const x of xs) for (const side of [-1, 1]) list.push(part(root, "cyl", k.black, [rad, 5, rad], [x, rad, side * gap], [Math.PI / 2, 0, 0]));
-		return list;
-	}
-	const spin = (wheels, i, rad) => {
-		if (i.moving) for (const w of wheels) w.rotation.y = -(i.time * 90) / rad;
-	};
-	// A turret group at (x, y) turning with the aim; its barrel group recoils along -X.
-	function turretMount(root, [x, y]) {
-		const turret = group(root, [x, y, 0]),
-			barrel = group(turret, [0, 0, 0]);
-		return { turret, barrel, aim: (i, kick = 6) => ((turret.rotation.y = -i.aim), (barrel.position.x = -i.recoil * kick)) };
-	}
-	const barrelPart = (parent, k, len, r, [x, y, z] = [0, 0, 0], elevation = 0) => {
-		const g = group(parent, [x, y, z]);
-		g.rotation.z = elevation;
-		part(g, "cyl", k.dark, [r, len, r], [len / 2, 0, 0], [0, 0, Math.PI / 2]);
-		part(g, "cyl", k.black, [r * 1.35, 3, r * 1.35], [len, 0, 0], [0, 0, Math.PI / 2]);
-		return g;
-	};
-
-	function heavy(k) {
-		const root = new THREE.Group();
-		trackPair(root, k, 54, 16, 11);
-		part(root, k.dominion ? "wedge" : "box", k.plate, [52, 11, 24], [0, 15, 0]);
-		part(root, "box", k.team, [10, 1, 25], [-16, 20.8, 0]);
-		for (const side of [-1, 1]) part(root, "box", k.metal, [46, 6, 3], [0, 13, side * 13.5]); // side skirts
-		const m = turretMount(root, [2, 21]);
-		part(m.turret, k.dominion ? "cyl6" : "box", k.metal, k.dominion ? [14, 10, 14] : [24, 10, 20], [0, 5, 0]);
-		part(m.turret, "box", k.glass, [2, 2, 5], [10, 8, -6]);
-		for (const z of [-4, 4]) barrelPart(m.barrel, k, 30, 2.3, [8, 5, z]);
-		return { root, update: (e, i) => m.aim(i, 8) };
-	}
-	function artillery(k) {
-		const root = new THREE.Group();
-		trackPair(root, k, 42, 12);
-		part(root, "box", k.plate, [40, 9, 18], [0, 12, 0]);
-		part(root, "box", k.team, [6, 1, 19], [-14, 16.6, 0]);
-		for (const side of [-1, 1]) part(root, "box", k.dark, [4, 3, 3], [-20, 6, side * 9]); // spades
-		const m = turretMount(root, [-2, 17]);
-		part(m.turret, "box", k.metal, [18, 7, 16], [0, 3.5, 0]);
-		part(m.turret, "box", k.warn, [18.2, 1.2, 16.2], [0, 6.5, 0]);
-		barrelPart(m.barrel, k, 44, 2.6, [4, 6, 0], 0.42);
-		return { root, update: (e, i) => m.aim(i, 10) };
-	}
-	function destroyer(k) {
-		const root = new THREE.Group();
-		trackPair(root, k, 44, 13);
-		part(root, "wedge", k.plate, [44, 12, 22], [0, 13, 0]); // low casemate, no turret
-		part(root, "box", k.team, [8, 1, 23], [-14, 19.6, 0]);
-		const gun = group(root, [10, 15, 0]);
-		barrelPart(gun, k, 36, 2.6, [0, 0, 0]);
-		part(root, "box", k.glass, [2, 2, 8], [-2, 19.5, -6]);
-		return {
-			root,
-			update(e, i) {
-				// The casemate gun traverses only a little; the hull does the rest.
-				gun.rotation.y = -Math.max(-0.35, Math.min(0.35, Math.atan2(Math.sin(i.aim), Math.cos(i.aim))));
-				gun.position.x = 10 - i.recoil * 7;
-			},
-		};
-	}
-	function skyguard(k) {
-		const root = new THREE.Group(),
-			wheels = wheelSet(root, k, [-12, 0, 12], 11, 5);
-		part(root, "box", k.plate, [38, 9, 18], [0, 12, 0]);
-		part(root, "box", k.team, [6, 1, 19], [-13, 16.6, 0]);
-		const m = turretMount(root, [2, 17]);
-		part(m.turret, "cyl6", k.metal, [9, 6, 9], [0, 3, 0]);
-		for (const z of [-4.5, 4.5]) barrelPart(m.barrel, k, 20, 1.6, [2, 5, z], 0.75);
-		const radar = group(root, [-12, 17, 0]);
-		part(radar, "cyl", k.metal, [1, 8, 1], [0, 4, 0]);
-		part(radar, "box", k.glass, [2, 5, 12], [0, 9, 0]);
-		return {
-			root,
-			update(e, i) {
-				m.aim(i, 4);
-				radar.rotation.y = i.time * 2.5;
-				spin(wheels, i, 5);
-			},
-		};
-	}
-	function raider(k) {
-		const root = new THREE.Group(),
-			wheels = wheelSet(root, k, [-9, 9], 10, 5.5);
-		part(root, "box", k.dark, [26, 4, 12], [0, 7, 0]); // chassis
-		part(root, "wedge", k.plate, [16, 5, 12], [3, 11, 0]);
-		part(root, "box", k.team, [6, 5.2, 12.4], [-6, 11, 0]);
-		for (const z of [-5, 5]) part(root, "box", k.black, [1, 8, 1], [-2, 15, z]); // roll cage
-		part(root, "box", k.black, [12, 1, 11], [-2, 19, 0]);
-		const m = turretMount(root, [-3, 20]);
-		barrelPart(m.barrel, k, 12, 1.2, [0, 1, 0]);
-		return {
-			root,
-			update(e, i) {
-				m.aim(i, 3);
-				spin(wheels, i, 5.5);
-				root.rotation.x = i.moving ? Math.sin(i.time * 17 + e.id) * 0.04 : 0;
-			},
-		};
-	}
-	function transport(k) {
-		const root = new THREE.Group(),
-			wheels = wheelSet(root, k, [-13, 0, 13], 12, 5.5);
-		part(root, k.dominion ? "wedge" : "box", k.plate, [44, 14, 22], [0, 16, 0]);
-		part(root, "box", k.team, [44.4, 2, 22.4], [0, 19, 0]);
-		part(root, "box", k.dark, [4, 10, 14], [-22, 15, 0]); // rear ramp
-		part(root, "box", k.glass, [1, 3, 14], [k.dominion ? 4 : 22.2, 19, 0]);
-		const m = turretMount(root, [-4, 23]);
-		part(m.turret, "cyl", k.metal, [4, 3, 4], [0, 1.5, 0]);
-		barrelPart(m.barrel, k, 12, 1.1, [2, 2.5, 0]);
-		return {
-			root,
-			update(e, i) {
-				m.aim(i, 3);
-				spin(wheels, i, 5.5);
-			},
-		};
-	}
-	function hauler(k) {
-		const root = new THREE.Group(),
-			wheels = wheelSet(root, k, [-14, -4, 13], 11, 5);
-		part(root, "box", k.dark, [44, 4, 18], [0, 8, 0]);
-		part(root, "box", k.plate, [11, 12, 17], [14, 16, 0]); // cab
-		part(root, "box", k.glass, [1, 4, 14], [19.7, 19, 0]);
-		part(root, "box", k.team, [11.2, 2, 17.2], [14, 22, 0]);
-		for (const x of [-16, 0]) part(root, "box", k.metal, [2, 12, 18], [x, 16, 0]); // cradle
-		const core = part(root, "cyl", k.energy, [6, 14, 6], [-8, 17, 0], [0, 0, Math.PI / 2]);
-		return {
-			root,
-			update(e, i) {
-				spin(wheels, i, 5);
-				core.rotation.x = i.time * 1.5;
-			},
-		};
-	}
-	function serviceRover(k) {
-		const root = new THREE.Group(),
-			wheels = wheelSet(root, k, [-9, 9], 10, 5);
-		part(root, "box", k.plate, [28, 9, 16], [0, 11, 0]);
-		part(root, "box", k.team, [6, 9.2, 16.2], [-9, 11, 0]);
-		part(root, "box", k.glass, [1, 3, 10], [14.2, 13, 0]);
-		const arm = group(root, [2, 16, 0]);
-		part(arm, "cyl", k.warn, [2, 18, 2], [0, 9, 0]);
-		const boom = group(arm, [0, 17, 0]);
-		part(boom, "box", k.warn, [16, 2, 2], [8, 0, 0]);
-		part(boom, "box", k.black, [3, 5, 3], [16, -2.5, 0]);
-		return {
-			root,
-			update(e, i) {
-				spin(wheels, i, 5);
-				const working = e.order?.kind === "repair" && !i.moving;
-				arm.rotation.y = working ? Math.sin(i.time * 1.5) * 0.8 : 0;
-				boom.rotation.z = working ? -0.3 + Math.sin(i.time * 3) * 0.15 : 0.35;
-			},
-		};
-	}
-	// Dominium bastion: a two-legged walker with shoulder cannons.
-	function sentinel(k) {
-		const root = new THREE.Group(),
-			hips = group(root, [0, 18, 0]),
-			legs = [-1, 1].map((side) => {
-				const leg = group(hips, [0, 0, side * 8]);
-				part(leg, "box", k.dark, [5, 10, 4], [1, -5, 0]);
-				part(leg, "box", k.metal, [4, 9, 4], [-1, -13, 0]);
-				part(leg, "box", k.black, [9, 2, 6], [0, -17, 0]); // foot
-				return leg;
-			}),
-			torso = group(hips, [0, 3, 0]);
-		part(torso, "wedge", k.plate, [20, 12, 18], [0, 5, 0]);
-		part(torso, "box", k.team, [20.2, 2, 18.2], [0, 9, 0]);
-		part(torso, "box", k.glass, [1, 2, 8], [6, 7, 0]);
-		const guns = [-1, 1].map((side) => barrelPart(torso, k, 20, 2.2, [2, 10, side * 11]));
-		return {
-			root,
-			update(e, i) {
-				const s = i.moving ? Math.sin(i.time * 6 + e.id) * 0.45 : 0;
-				legs[0].rotation.z = s;
-				legs[1].rotation.z = -s;
-				hips.position.y = 18 + (i.moving ? Math.abs(Math.sin(i.time * 6 + e.id)) * 1.5 : 0);
-				torso.rotation.y = -i.aim;
-				for (const g of guns) g.position.x = 2 - i.recoil * 5;
-			},
-		};
-	}
-	// ---- Aircraft (the renderer lifts them; here only the airframe, bank and rotors) ----
-	function interceptor(k) {
-		const root = new THREE.Group(),
-			frame = group(root);
-		part(frame, "box", k.plate, [30, 5, 6], [0, 0, 0]);
-		part(frame, "cone", k.metal, [3, 10, 3], [19, 0, 0], [0, 0, -Math.PI / 2]);
-		part(frame, "wedge", k.plate, [18, 1.5, 36], [-4, 0, 0]); // delta wing
-		part(frame, "box", k.team, [4, 1.7, 36.4], [-8, 0, 0]);
-		for (const z of [-4, 4]) part(frame, "box", k.dark, [7, 8, 1], [-12, 4, z], [0.3 * Math.sign(z), 0, 0]);
-		part(frame, "box", k.glass, [7, 2.5, 3], [8, 3, 0]);
-		part(frame, "cyl", k.fire, [2.2, 2, 2.2], [-16, 0, 0], [0, 0, Math.PI / 2]);
-		return { root, update: (e, i) => (frame.rotation.x = Math.sin(i.time * 1.3 + e.id) * 0.25) };
-	}
-	function bomber(k) {
-		const root = new THREE.Group(),
-			frame = group(root);
-		part(frame, "box", k.plate, [36, 8, 10], [0, 0, 0]);
-		part(frame, "cone", k.metal, [5, 8, 5], [22, 0, 0], [0, 0, -Math.PI / 2]);
-		part(frame, "box", k.plate, [14, 2, 60], [0, 0, 0]);
-		part(frame, "box", k.team, [4, 2.2, 60.4], [-4, 0, 0]);
-		for (const z of [-15, 15]) {
-			part(frame, "cyl", k.dark, [3.5, 14, 3.5], [2, -3, z], [0, 0, Math.PI / 2]);
-			part(frame, "cyl", k.fire, [2.6, 1, 2.6], [-5.5, -3, z], [0, 0, Math.PI / 2]);
-		}
-		part(frame, "box", k.dark, [8, 10, 1.5], [-15, 5, 0]);
-		part(frame, "box", k.glass, [5, 3, 6], [14, 4, 0]);
-		return { root, update: (e, i) => (frame.rotation.x = Math.sin(i.time * 0.9 + e.id) * 0.12) };
-	}
-	function drone(k) {
-		const root = new THREE.Group(),
-			rotors = [];
-		part(root, "sphere", k.plate, [5, 3, 5], [0, 0, 0]);
-		part(root, "box", k.glass, [2, 1.5, 2], [4.5, 0, 0]);
-		for (const [x, z] of [[7, 7], [7, -7], [-7, 7], [-7, -7]]) {
-			part(root, "box", k.dark, [Math.hypot(x, z), 1, 1.2], [x / 2, 0, z / 2], [0, -Math.atan2(z, x), 0]);
-			const rotor = group(root, [x, 1.2, z]);
-			part(rotor, "box", k.team, [9, 0.4, 1.2], [0, 0, 0]);
-			rotors.push(rotor);
-		}
-		return { root, update: (e, i) => rotors.forEach((r, n) => (r.rotation.y = i.time * 40 * (n % 2 ? 1 : -1))) };
-	}
-
-	// ---- More buildings ----
-	const pad = (root, k, w, d = w, h = 4) => part(root, "box", k.dark, [w, h, d], [0, h / 2, 0]);
-	function wall(k, r) {
-		const root = new THREE.Group(),
-			w = r * 1.75;
-		part(root, "box", k.plate, [w, 24, w], [0, 12, 0]);
-		part(root, "box", k.team, [w + 0.4, 2, w + 0.4], [0, 20, 0]);
-		for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) part(root, "box", k.metal, [w * 0.3, 5, w * 0.3], [x * w * 0.33, 26.5, z * w * 0.33]);
-		return { root, update() {} };
-	}
-	function gate(k, r) {
-		const root = new THREE.Group(),
-			w = r * 1.5;
-		for (const z of [-w / 2, w / 2]) {
-			part(root, "box", k.plate, [16, 32, 12], [0, 16, z]);
-			part(root, "box", k.team, [16.4, 2, 12.4], [0, 28, z]);
-		}
-		part(root, "box", k.metal, [16, 5, w + 12], [0, 34, 0]); // lintel
-		const door = part(root, "box", k.dark, [5, 26, w - 12], [0, 13, 0]);
-		return {
-			root,
-			update(e, i) {
-				const target = e.open ? -24 : 13;
-				door.position.y += (target - door.position.y) * 0.15; // sinks into the ground when open
-			},
-		};
-	}
-	function extractor(k, r) {
-		const root = new THREE.Group(),
-			w = r * 1.6;
-		pad(root, k, w);
-		for (const z of [-w * 0.28, w * 0.28]) part(root, "cyl", k.plate, [7, 18, 7], [-w * 0.25, 13, z]); // tanks
-		part(root, "box", k.team, [4, 2, w * 0.8], [-w * 0.25, 18, 0]);
-		for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) part(root, "box", k.metal, [2, 36, 2], [w * 0.15 + x * 6, 21, z * 6], [z * 0.1, 0, -x * 0.1]); // derrick
-		part(root, "box", k.metal, [10, 2, 10], [w * 0.15, 39, 0]);
-		const piston = part(root, "cyl", k.warn, [2.5, 20, 2.5], [w * 0.15, 18, 0]);
-		const vent = part(root, "sphere", k.energy, [3, 3, 3], [w * 0.15, 6, 0]);
-		return {
-			root,
-			update(e, i) {
-				const work = i.working && i.built >= 1;
-				piston.position.y = 18 + (work ? Math.sin(i.time * 9) * 5 : 0);
-				vent.visible = work;
-			},
-		};
-	}
-	function reactor(k, r) {
-		const root = new THREE.Group(),
-			w = r * 1.6;
-		pad(root, k, w);
-		part(root, "tower", k.metal, [r * 0.55, 40, r * 0.55], [-w * 0.12, 24, 0]);
-		part(root, "torus", k.team, [r * 0.5, 4, r * 0.5], [-w * 0.12, 42, 0]);
-		const core = part(root, "cyl", k.energy, [5, 14, 5], [w * 0.28, 11, w * 0.2]);
-		part(root, "box", k.plate, [12, 10, 12], [w * 0.28, 5, -w * 0.2]);
-		part(root, "cyl", k.dark, [1.5, w * 0.4, 1.5], [w * 0.1, 8, w * 0.2], [0, 0, Math.PI / 2]);
-		return { root, update: (e, i) => core.scale.set(5 + Math.sin(i.time * 3) * 0.6, 14, 5 + Math.sin(i.time * 3) * 0.6) };
-	}
-	function lab(k, r) {
-		const root = new THREE.Group(),
-			w = r * 1.6;
-		pad(root, k, w);
-		part(root, "box", k.plate, [w * 0.8, 12, w * 0.7], [0, 10, 0]);
-		part(root, "box", k.team, [w * 0.82, 2, w * 0.72], [0, 15, 0]);
-		part(root, "dome", k.dominion ? k.metal : k.glass, [r * 0.5, r * 0.45, r * 0.5], [0, 16, 0]);
-		const ring = group(root, [0, 26, 0]);
-		part(ring, "torus", k.metal, [r * 0.62, 3, r * 0.62], [0, 0, 0]);
-		part(ring, "sphere", k.energy, [2, 2, 2], [r * 0.62, 0, 0]);
-		return { root, update: (e, i) => ((ring.rotation.y = i.time * 0.9), (ring.rotation.x = Math.sin(i.time * 0.7) * 0.25)) };
-	}
-	function battery(k, r) {
-		const root = new THREE.Group(),
-			w = r * 1.6,
-			caps = [];
-		pad(root, k, w);
-		for (let x = -1; x <= 1; x++)
-			for (const z of [-1, 1]) {
-				part(root, "cyl", k.plate, [5.5, 20, 5.5], [x * w * 0.28, 14, z * w * 0.2]);
-				caps.push(part(root, "cyl", k.energy, [4, 3, 4], [x * w * 0.28, 25, z * w * 0.2]));
-			}
-		part(root, "box", k.team, [w * 0.9, 2, 3], [0, 8, 0]);
-		return { root, update: (e, i) => caps.forEach((c, n) => (c.visible = i.built >= 1 && Math.sin(i.time * 2 - n) > -0.6)) };
-	}
-	function workshop(k, r) {
-		const root = new THREE.Group(),
-			w = r * 1.6;
-		pad(root, k, w, w * 0.85);
-		for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) part(root, "box", k.metal, [3, 26, 3], [x * w * 0.42, 15, z * w * 0.36]);
-		part(root, "box", k.plate, [w * 0.9, 3, w * 0.78], [0, 29, 0]);
-		part(root, "box", k.team, [w * 0.92, 1.5, 4], [0, 31, w * 0.3]);
-		const crane = group(root, [0, 26, 0]);
-		part(crane, "box", k.warn, [3, 2, w * 0.74], [0, 0, 0]);
-		part(crane, "box", k.black, [4, 7, 4], [0, -4.5, 0]);
-		part(root, "box", k.dark, [w * 0.4, 7, w * 0.26], [0, 7.5, 0]); // hull on the jig
-		return { root, update: (e, i) => (crane.position.x = Math.sin(i.time * 0.8) * w * 0.3) };
-	}
-	function hangar(k, r) {
-		const root = new THREE.Group(),
-			w = r * 1.6;
-		pad(root, k, w, w * 0.9);
-		part(root, "halfCyl", k.plate, [w * 0.3, w * 0.62, w * 0.3], [-w * 0.12, 4, 0], [0, 0, Math.PI / 2]); // arched roof along X
-		part(root, "box", k.team, [2, w * 0.3, w * 0.62], [w * 0.19, 4 + w * 0.15, 0]);
-		part(root, "box", k.black, [1.5, w * 0.2, w * 0.4], [w * 0.2, 4 + w * 0.1, 0]);
-		part(root, "cyl", k.warn, [w * 0.14, 1, w * 0.14], [w * 0.35, 4.4, w * 0.25]); // landing pad
-		return { root, update() {} };
-	}
-	function flak(k, r) {
-		const root = new THREE.Group();
-		part(root, "cyl6", k.dark, [r * 0.8, 10, r * 0.8], [0, 5, 0]);
-		part(root, "cyl", k.team, [r * 0.62, 2, r * 0.62], [0, 11, 0]);
-		const m = turretMount(root, [0, 12]);
-		part(m.turret, "box", k.metal, [14, 9, 16], [0, 4.5, 0]);
-		for (const z of [-5.5, -2, 2, 5.5]) barrelPart(m.barrel, k, 22, 1.3, [4, 7, z], 0.8);
-		part(m.turret, "box", k.glass, [1.5, 2, 5], [7.2, 6, 0]);
-		return { root, update: (e, i) => m.aim(i, 4) };
-	}
-	function forge(k, r) {
-		const root = new THREE.Group(),
-			w = r * 1.5;
-		pad(root, k, w * 1.1, w * 1.1, 5);
-		part(root, "cyl6", k.dark, [w * 0.45, 16, w * 0.45], [0, 13, 0]);
-		part(root, "cyl6", k.plate, [w * 0.33, 14, w * 0.33], [0, 28, 0]);
-		const heart = part(root, "sphere", nature.ember, [9, 9, 9], [0, 38, 0]);
-		for (let n = 0; n < 3; n++) {
-			const a = (n / 3) * Math.PI * 2;
-			part(root, "cyl", k.metal, [4, 46, 4], [Math.cos(a) * w * 0.38, 28, Math.sin(a) * w * 0.38]);
-			part(root, "cyl", k.fire, [3, 2, 3], [Math.cos(a) * w * 0.38, 52, Math.sin(a) * w * 0.38]);
-		}
-		part(root, "torus", k.team, [w * 0.46, 5, w * 0.46], [0, 21, 0]);
-		return { root, update: (e, i) => heart.scale.setScalar(9 + Math.sin(i.time * 2.4) * 1.2) };
-	}
-	function medbay(k, r) {
-		const root = new THREE.Group(),
-			w = r * 1.6;
-		pad(root, k, w);
-		part(root, "box", k.white, [w * 0.62, 14, w * 0.62], [-w * 0.1, 11, 0]);
-		part(root, "box", k.team, [w * 0.64, 2, w * 0.64], [-w * 0.1, 16, 0]);
-		part(root, "box", k.red, [w * 0.42, 1.5, 8], [-w * 0.1, 18.8, 0]);
-		part(root, "box", k.red, [8, 1.5, w * 0.42], [-w * 0.1, 18.8, 0]);
-		part(root, "cyl", k.warn, [w * 0.13, 1, w * 0.13], [w * 0.33, 4.5, 0]);
-		return { root, update() {} };
-	}
-	function shieldgen(k, r) {
-		const root = new THREE.Group(),
-			w = r * 1.5;
-		pad(root, k, w);
-		part(root, "cyl6", k.plate, [r * 0.45, 12, r * 0.45], [0, 10, 0]);
-		part(root, "cyl", k.metal, [3, 30, 3], [0, 31, 0]);
-		const ring = group(root, [0, 36, 0]);
-		part(ring, "torus", k.team, [r * 0.42, 4, r * 0.42], [0, 0, 0]);
-		const emitter = part(root, "sphere", k.energy, [5, 5, 5], [0, 47, 0]);
-		return {
-			root,
-			update(e, i) {
-				ring.rotation.y = i.time * 1.4;
-				ring.position.y = 36 + Math.sin(i.time * 2) * 3;
-				emitter.visible = i.built >= 1;
-			},
-		};
-	}
-	function salvageYard(k, r) {
-		const root = new THREE.Group(),
-			w = r * 1.6;
-		pad(root, k, w, w, 3);
-		for (let n = 0; n < 10; n++) {
-			const a = (n / 10) * Math.PI * 2;
-			part(root, "box", k.metal, [1.5, 10, 1.5], [Math.cos(a) * w * 0.47, 8, Math.sin(a) * w * 0.47]); // fence posts
-		}
-		const scrap = [[-0.2, -0.2, 0.5], [-0.25, 0.2, 1.3], [0.1, 0.25, 2.2]];
-		for (const [x, z, a] of scrap) part(root, "box", k.dark, [12, 7, 9], [x * w, 6, z * w], [0.2, a, 0.15]);
-		part(root, "cyl", k.warn, [2.5, 34, 2.5], [w * 0.25, 20, -w * 0.2]);
-		const boom = group(root, [w * 0.25, 36, -w * 0.2]);
-		part(boom, "box", k.warn, [34, 2.5, 2.5], [-12, 0, 0]);
-		part(boom, "box", k.black, [5, 4, 5], [-26, -6, 0]);
-		part(root, "box", k.team, [8, 2, 8], [w * 0.25, 4, -w * 0.2]);
-		return { root, update: (e, i) => (boom.rotation.y = Math.sin(i.time * 0.5) * 1.2) };
-	}
-	function outpost(k, r) {
-		const root = new THREE.Group();
-		part(root, "torus", k.warn, [r * 0.8, 10, r * 0.8], [0, 2, 0]); // sandbag ring
-		part(root, "dome", k.plate, [r * 0.55, r * 0.5, r * 0.55], [0, 0, 0]);
-		part(root, "torus", k.team, [r * 0.55, 3, r * 0.55], [0, 3, 0]);
-		part(root, "cyl", k.metal, [1, 28, 1], [r * 0.2, 26, 0]);
-		const light = part(root, "sphere", k.glow, [2, 2, 2], [r * 0.2, 41, 0]);
-		return { root, update: (e, i) => (light.visible = Math.sin(i.time * 4) > 0) };
-	}
-	function uplink(k, r) {
-		const root = new THREE.Group(),
-			w = r * 1.6;
-		pad(root, k, w);
-		part(root, "box", k.plate, [w * 0.55, 16, w * 0.55], [0, 12, 0]);
-		part(root, "box", k.team, [w * 0.57, 2, w * 0.57], [0, 17, 0]);
-		const dish = group(root, [0, 26, 0]);
-		part(dish, "cyl", k.metal, [3, 10, 3], [0, -3, 0]);
-		const bowl = group(dish, [0, 6, 0]);
-		bowl.rotation.z = 0.5;
-		part(bowl, "cone", k.metal, [r * 0.6, 10, r * 0.6], [0, 0, 0], [Math.PI, 0, 0]);
-		part(bowl, "cyl", k.dark, [1, 14, 1], [0, 7, 0]);
-		part(bowl, "sphere", k.glass, [2.2, 2.2, 2.2], [0, 14, 0]);
-		return { root, update: (e, i) => (dish.rotation.y = i.time * 0.3) };
-	}
-
-	// ---- Wildlife and monsters ----
-	function quadruped(scale, mat, extra) {
-		const root = new THREE.Group(),
-			body = group(root, [0, 10 * scale, 0]),
-			legs = [];
-		part(body, "sphere", mat, [12 * scale, 6.5 * scale, 6.5 * scale], [0, 0, 0]);
-		part(body, "sphere", nature.belly, [9 * scale, 4 * scale, 5.5 * scale], [0, -2.5 * scale, 0]);
-		const head = group(body, [11 * scale, 3 * scale, 0]);
-		part(head, "sphere", mat, [5.5 * scale, 4.5 * scale, 4.5 * scale], [0, 0, 0]);
-		for (const z of [-1.8, 1.8]) part(head, "sphere", nature.eye, [0.9 * scale, 0.9 * scale, 0.9 * scale], [4 * scale, 1.5 * scale, z * scale]);
-		part(body, "cone", mat, [2 * scale, 9 * scale, 2 * scale], [-13 * scale, 1.5 * scale, 0], [0, 0, Math.PI / 2 + 0.4]); // tail
-		for (const x of [-6, 6])
-			for (const z of [-3.5, 3.5]) {
-				const leg = group(body, [x * scale, -3 * scale, z * scale]);
-				part(leg, "box", mat, [2.5 * scale, 8 * scale, 2.5 * scale], [0, -4 * scale, 0]);
-				legs.push(leg);
-			}
-		extra?.(head, body, scale);
-		return {
-			root,
-			update(e, i) {
-				const s = i.moving ? Math.sin(i.time * 13 + e.id) * 0.55 : 0;
-				legs.forEach((l, n) => (l.rotation.z = n === 0 || n === 3 ? s : -s));
-				body.position.y = 10 * scale + (i.moving ? Math.abs(Math.sin(i.time * 13 + e.id)) * scale : 0);
-				head.rotation.y = -Math.max(-0.6, Math.min(0.6, i.aim)) ;
-				head.rotation.z = i.recoil * 0.4; // snap
-			},
-		};
-	}
-	const beast = (k, r) => quadruped(r / 9, nature.hide, (head, body, s) => part(head, "cone", nature.bone, [1.2 * s, 4 * s, 1.2 * s], [1 * s, 4 * s, 0])); // crest horn
-	const frostTusk = (k, r) =>
-		quadruped(r / 11, nature.fur, (head, body, s) => {
-			for (const z of [-2.5, 2.5]) part(head, "cone", nature.bone, [1.1 * s, 9 * s, 1.1 * s], [5 * s, -2 * s, z * s], [0, 0, -Math.PI / 2 - 0.5]);
-			part(body, "box", nature.fur, [10 * s, 4 * s, 5 * s], [0, 5 * s, 0]); // shaggy hump
-		});
-	function ashCrawler(k, r) {
-		const root = new THREE.Group(),
-			s = r / 19,
-			body = group(root, [0, 12 * s, 0]),
-			legs = [];
-		part(body, "sphere", nature.basalt, [9 * s, 6 * s, 8 * s], [2 * s, 0, 0]);
-		part(body, "sphere", nature.basalt, [11 * s, 8 * s, 10 * s], [-12 * s, 2 * s, 0]);
-		part(body, "box", nature.ember, [14 * s, 1 * s, 1.5 * s], [-12 * s, 9.8 * s, 0]); // glowing seam
-		for (const z of [-2.5, 2.5]) part(body, "sphere", nature.ember, [1.2 * s, 1.2 * s, 1.2 * s], [10 * s, 2 * s, z * s]);
-		for (let n = 0; n < 4; n++)
-			for (const side of [-1, 1]) {
-				const leg = group(body, [(4 - n * 4) * s, 0, side * 6 * s]);
-				leg.rotation.y = side * (0.4 - n * 0.3);
-				part(leg, "box", nature.basalt, [2 * s, 2 * s, 14 * s], [0, 3 * s, side * 7 * s], [side * -0.5, 0, 0]);
-				part(leg, "box", nature.basalt, [1.6 * s, 14 * s, 1.6 * s], [0, -4 * s, side * 13 * s]);
-				legs.push(leg);
-			}
-		return {
-			root,
-			update(e, i) {
-				legs.forEach((l, n) => (l.rotation.z = i.moving ? Math.sin(i.time * 16 + n * 1.3 + e.id) * 0.3 : 0));
-			},
-		};
-	}
-	// Dune maw: a sand crater with a ring of teeth; the throat rises when it strikes.
-	function duneMaw(k, r) {
-		const root = new THREE.Group();
-		part(root, "torus", nature.sand, [r * 0.9, 14, r * 0.9], [0, 1, 0]);
-		part(root, "cyl", nature.maw, [r * 0.7, 1, r * 0.7], [0, 0.5, 0]);
-		const throat = group(root, [0, -20, 0]);
-		for (let n = 0; n < 3; n++) part(throat, "cyl", n % 2 ? nature.sand : nature.hide, [r * (0.5 - n * 0.08), 12, r * (0.5 - n * 0.08)], [0, n * 11, 0]);
-		for (let n = 0; n < 12; n++) {
-			const a = (n / 12) * Math.PI * 2;
-			part(throat, "cone", nature.bone, [2.5, 12, 2.5], [Math.cos(a) * r * 0.36, 36, Math.sin(a) * r * 0.36], [Math.sin(a) * -0.5, 0, Math.cos(a) * 0.5]);
-		}
-		return {
-			root,
-			update(e, i) {
-				const up = e.target != null || i.recoil > 0 ? 1 : 0;
-				throat.position.y += ((up ? 0 : -34) - throat.position.y) * 0.1;
-			},
-		};
-	}
-
-	// ---- Swarm: obsidian guardians ----
-	const hash = (s) => [...s].reduce((h, c) => (Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0), 2166136261);
-	function monolith(parent, k, h, w, [x, z], stripe) {
-		const m = group(parent, [x, 0, z]);
-		part(m, "prism", k.plate, [w, h, w], [0, h / 2 + 3, 0]);
-		part(m, "pyramid", k.metal, [w * 0.62, w * 1.4, w * 0.62], [0, h + 3 + w * 0.7, 0]);
-		part(m, "box", k.black, [w * 0.12, h * 0.8, w * 1.3], [0, h * 0.45 + 3, 0]); // seam
-		if (stripe) part(m, "box", k.team, [w * 1.05, 3, w * 1.05], [0, h * 0.3, 0]);
-		return m;
-	}
-	function swarmBuilding(k, r, type) {
-		const root = new THREE.Group(),
-			seed = hash(type),
-			n = type === "hq" ? 5 : 3 + (seed % 3),
-			tall = type === "hq" ? 3 : type === "monolith" ? 3.4 : 1.4 + ((seed >> 4) % 10) / 10;
-		part(root, "box", k.warn, [r * 1.7, 3, r * 1.7], [0, 1.5, 0]); // plinth
-		monolith(root, k, r * tall, r * 0.42, [0, 0], true);
-		for (let m = 0; m < n; m++) {
-			const a = (m / n) * Math.PI * 2 + (seed % 7);
-			monolith(root, k, r * tall * (0.45 + ((seed >> (m + 2)) % 5) * 0.08), r * 0.26, [Math.cos(a) * r * 0.55, Math.sin(a) * r * 0.55], false);
-		}
-		// Defences turn a crown of prongs towards the target.
-		let head = null;
-		if (type === "turret" || type === "flak") {
-			head = group(root, [0, r * tall + r * 0.2, 0]);
-			for (const z of [-3, 3]) part(head, "prism", k.metal, [2.5, 22, 2.5], [10, 0, z], [0, 0, -Math.PI / 2]);
-		}
-		return { root, update: (e, i) => head && (head.rotation.y = -i.aim) };
-	}
-	// Small units: a wedge of stone on four thin legs, a lens at the front.
-	function swarmSentry(k, size, o = {}) {
-		const root = new THREE.Group(),
-			s = size / 10,
-			body = group(root, [0, 9 * s, 0]),
-			legs = [];
-		part(body, "wedge", k.plate, [18 * s, 7 * s, 11 * s], [0, 0, 0]);
-		part(body, "pyramid", k.metal, [6 * s, 5 * s, 6 * s], [-2 * s, 5.5 * s, 0]);
-		part(body, "box", k.glass, [1 * s, 1.6 * s, 3 * s], [8 * s, 0, 0]);
-		part(body, "box", k.team, [3 * s, 7.4 * s, 11.4 * s], [-6 * s, 0, 0]);
-		if (o.prongs) for (const z of [-3, 3]) part(body, "prism", k.metal, [1.6 * s, 13 * s, 1.6 * s], [12 * s, 0, z * s], [0, 0, -Math.PI / 2]);
-		if (o.spine) for (let n = 0; n < 3; n++) part(body, "pyramid", k.metal, [2 * s, 5 * s, 2 * s], [(-6 + n * 4) * s, 5 * s, 0]);
-		for (const x of [-5, 5])
-			for (const z of [-4, 4]) {
-				const leg = group(body, [x * s, -2 * s, z * s]);
-				part(leg, "box", k.dark, [1.6 * s, 9 * s, 1.6 * s], [0, -3.5 * s, z * 0.2 * s], [z * 0.05, 0, 0]);
-				legs.push(leg);
-			}
-		return {
-			root,
-			update(e, i) {
-				legs.forEach((l, n) => (l.rotation.z = i.moving ? Math.sin(i.time * 13 + e.id + (n % 2) * Math.PI) * 0.5 : 0));
-				body.rotation.y = -Math.max(-0.5, Math.min(0.5, i.aim)) * 0.5;
-			},
-		};
-	}
-	function crawler(k, r) {
-		const root = new THREE.Group(),
-			s = r / 9,
-			legs = [];
-		part(root, "wedge", k.plate, [18 * s, 4 * s, 10 * s], [0, 5 * s, 0]);
-		part(root, "box", k.team, [3 * s, 4.2 * s, 10.2 * s], [-6 * s, 5 * s, 0]);
-		for (let n = 0; n < 3; n++)
-			for (const side of [-1, 1]) {
-				const leg = group(root, [(-5 + n * 5) * s, 5 * s, side * 5 * s]);
-				part(leg, "box", k.dark, [1.4 * s, 1.4 * s, 8 * s], [0, -1.5 * s, side * 4 * s], [side * 0.5, 0, 0]);
-				legs.push(leg);
-			}
-		return { root, update: (e, i) => legs.forEach((l, n) => (l.rotation.y = i.moving ? Math.sin(i.time * 22 + n * 2 + e.id) * 0.4 : 0)) };
-	}
-	// Vehicles: a long tapering stone body on 2–4 legs, weapon prongs turning to the target.
-	function swarmWalker(k, r, o = {}) {
-		const root = new THREE.Group(),
-			s = r / 20,
-			n = o.legs ?? 4,
-			body = group(root, [0, 20 * s, 0]),
-			legs = [];
-		part(body, "prism", k.plate, [9 * s, (o.long ? 44 : 34) * s, 13 * s], [0, 0, 0], [0, 0, -Math.PI / 2]);
-		part(body, "pyramid", k.metal, [6 * s, 10 * s, 8 * s], [(o.long ? 25 : 20) * s, 0, 0], [0, 0, -Math.PI / 2]);
-		part(body, "box", k.team, [4 * s, 10 * s, 14 * s], [-9 * s, 0, 0]);
-		part(body, "box", k.black, [30 * s, 1 * s, 2 * s], [0, 6 * s, 0]); // groove
-		if (o.plates) for (const z of [-1, 1]) part(body, "box", k.metal, [22 * s, 9 * s, 1.5 * s], [0, 0, z * 8 * s]);
-		if (o.hump) part(body, "prism", k.metal, [10 * s, 14 * s, 10 * s], [-4 * s, 10 * s, 0]);
-		if (o.sensors) for (const z of [-4, 4]) part(body, "prism", k.glass, [1.2 * s, 14 * s, 1.2 * s], [-2 * s, 11 * s, z * s]);
-		const xs = n === 2 ? [0] : n === 3 ? [9, -9] : [9, -9];
-		const places = n === 3 ? [[9, -1], [9, 1], [-11, 0]] : xs.flatMap((x) => [[x, -1], [x, 1]]);
-		for (const [x, side] of places) {
-			const leg = group(body, [x * s, -3 * s, side * (side ? 7 : 0) * s]);
-			part(leg, "box", k.dark, [2.6 * s, 3 * s, 12 * s], [0, 2 * s, side * 6 * s]);
-			part(leg, "prism", k.dark, [2.2 * s, 22 * s, 2.2 * s], [0, -8 * s, side * 12 * s], [Math.PI, 0, 0]);
-			legs.push(leg);
-		}
-		const mount = group(body, [6 * s, 7 * s, 0]),
-			weapon = group(mount);
-		if (o.spike) part(weapon, "prism", k.metal, [2.5 * s, 34 * s, 2.5 * s], [10 * s, 8 * s, 0], [0, 0, -Math.PI / 2 + 0.5]);
-		else for (const z of o.twin ? [-3.5, 3.5] : o.prong ? [0] : []) part(weapon, "prism", k.metal, [2.2 * s, 20 * s, 2.2 * s], [10 * s, 0, z * s], [0, 0, -Math.PI / 2]);
-		return {
-			root,
-			update(e, i) {
-				legs.forEach((l, m) => (l.rotation.z = i.moving ? Math.sin(i.time * 8 + m * 1.7 + e.id) * 0.35 : 0));
-				body.position.y = 20 * s + (i.moving ? Math.sin(i.time * 16 + e.id) * 0.6 * s : 0);
-				mount.rotation.y = -i.aim;
-				weapon.position.x = -i.recoil * 5 * s;
-			},
-		};
-	}
-	function swarmFlyer(k, r) {
-		const root = new THREE.Group(),
-			frame = group(root),
-			s = r / 17;
-		part(frame, "octa", k.plate, [14 * s, 4 * s, 7 * s], [0, 0, 0]);
-		for (const z of [-1, 1]) part(frame, "prism", k.metal, [2 * s, 22 * s, 5 * s], [-3 * s, 0, z * 12 * s], [Math.PI / 2, 0, 0]);
-		part(frame, "box", k.team, [3 * s, 4.2 * s, 5 * s], [-5 * s, 0, 0]);
-		return { root, update: (e, i) => (frame.rotation.x = Math.sin(i.time * 1.4 + e.id) * 0.3) };
-	}
+	// ---- Swarm: obsidian guardians, webgl3d/swarm-detail-3d.js ----
+	const swarmKit = createSwarm3D(THREE, { tools: detail.tools, group }),
+		swarmBuilding = (k, r, type) => swarmKit.building(k, r, type),
+		swarmSentry = (k, size, o) => swarmKit.sentry(k, size, o),
+		crawler = (k, r) => swarmKit.crawler(k, r),
+		swarmWalker = (k, r, o) => swarmKit.walker(k, r, o),
+		swarmFlyer = (k, r) => swarmKit.flyer(k, r);
+	// ---- Special buildings of act III and the orbital station: webgl3d/act3-detail-3d.js ----
+	const act3 = createAct3(THREE, { tools: detail.tools, swarm: swarmKit, group, std });
+	// ---- Objective sites of act II: webgl3d/act2-detail-3d.js ----
+	const act2 = createAct2(THREE, { tools: detail.tools, group, std });
+	// The mission on the board (setMission): chapter VIII's Swarm gates are nests, chapter IX's the Heart.
+	let mission = null;
+	const swarmGate = (e) => (e.type === "hq" && e.faction === "swarm" ? { colony8: "nest", colony9: "heart" }[mission] || null : null);
 	const SWARM_UNITS = {
 		worker: (k) => swarmSentry(k, 11, { prongs: true }),
 		trooper: (k) => swarmSentry(k, 10),
@@ -923,51 +185,12 @@ export function createModels3D(THREE) {
 	};
 
 	const BUILDERS = {
-		trooper: (k) => infantry(k, "rifle"),
-		rocket: (k) => infantry(k, "rocket"),
-		flamer: (k) => infantry(k, "flamer"),
-		grenadier: (k) => infantry(k, "grenade"),
-		scientist: (k) => infantry(k, "none", k.white),
-		technician: (k) => infantry(k, "tool", k.warn),
-		saboteur: (k) => infantry(k, "carbine", k.black),
-		tank,
-		heavy,
-		artillery,
-		destroyer,
-		skyguard,
-		raider,
-		transport,
-		hauler,
-		serviceRover,
-		sentinel,
-		worker,
-		interceptor,
-		bomber,
-		drone,
-		hq,
-		barracks,
-		factory,
-		depot,
-		turret,
-		wall,
-		gate,
-		extractor,
-		reactor,
-		lab,
-		battery,
-		workshop,
-		hangar,
-		flak,
-		forge,
-		medbay,
-		shieldgen,
-		salvageYard,
-		outpost,
-		uplink,
-		beast,
-		frostTusk,
-		ashCrawler,
-		duneMaw,
+		...detail.builders,
+		uplink: (k, r) => act3.orbital(k, r),
+		beast: (k, r) => natureKit.beast(k, r),
+		frostTusk: (k, r) => natureKit.frostTusk(k, r),
+		ashCrawler: (k, r) => natureKit.ashCrawler(k, r),
+		duneMaw: (k, r) => natureKit.duneMaw(k, r),
 		// Swarm-only types outside the Swarm dispatch (e.g. a crawler without a faction tag).
 		crawler: (k, r) => crawler(kit(2, "swarm", "#8a94a3", []), r),
 		spitter: (k) => swarmSentry(kit(2, "swarm", "#8a94a3", []), 12, { spine: true }),
@@ -975,17 +198,342 @@ export function createModels3D(THREE) {
 		monolith: (k, r) => swarmBuilding(kit(2, "swarm", "#8a94a3", []), r, "monolith"),
 	};
 
+	// ---- Scenery: wildlife (game.wildlife(), not entities), birds, fish, floating islands, wrecks ----
+	const scenery = {
+		deer: std("#8a6a48", { roughness: 0.95, metalness: 0 }),
+		hare: std("#b5a587", { roughness: 0.95, metalness: 0 }),
+		fox: std("#c4672a", { roughness: 0.95, metalness: 0 }),
+		snowfox: std("#e6e1d6", { roughness: 0.95, metalness: 0 }),
+		lizard: std("#6f7d4a", { roughness: 0.8, metalness: 0 }),
+		bird: std("#3b3631", { roughness: 0.9, metalness: 0 }),
+		fish: std("#d0a24a", { roughness: 0.5, metalness: 0.2 }),
+		rock: std("#7d6a57", { roughness: 1, metalness: 0 }),
+		rockDark: std("#56493e", { roughness: 1, metalness: 0 }),
+		moss: std("#2f6b5a", { roughness: 1, metalness: 0 }),
+		grass: std("#7c8a63", { roughness: 1, metalness: 0 }),
+		shroom: std("#58cdbd", { emissive: "#1f8f84", emissiveIntensity: 0.45, roughness: 0.6 }),
+		gills: std("#2c4f4a", { roughness: 0.9, metalness: 0 }),
+		violet: std("#ad7ee6", { emissive: "#6a3aa8", emissiveIntensity: 0.45, roughness: 0.6 }),
+		scrap: std("#2b2725", { roughness: 0.85, metalness: 0.5 }),
+		ember: std("#ff7a2e", { emissive: "#ff5a12", emissiveIntensity: 1.2 }),
+	};
+	for (const m of [scenery.shroom, scenery.violet, scenery.ember]) glowing.push([m, m.emissiveIntensity]);
+	scenery.bone = nature.bone;
+	const natureKit = createNature3D(THREE, { tools: detail.tools, group, materials: { nature, scenery, std } });
+	// ---- Act I: the relay station and the landmarks of the act's story: webgl3d/act1-detail-3d.js ----
+	const act1 = createAct1(THREE, { tools: detail.tools, nature: natureKit, group, std });
+	// A stone of the shared irregular shapes (nature-detail-3d.js) in place of a plain icosahedron.
+	function rockPart(parent, m, [sx, sy, sz], [x, y, z], i) {
+		const o = new THREE.Mesh(natureKit.rockGeo(i % natureKit.ROCKS), m);
+		o.scale.set(sx, sy, sz);
+		o.position.set(x, y, z);
+		o.rotation.set((((i * 1.3) % 0.6) - 0.3) * 0.8, i * 2.3, (((i * 0.7) % 0.4) - 0.2) * 0.8);
+		o.castShadow = o.receiveShadow = true;
+		parent.add(o);
+		return o;
+	}
+	// Obstacles of the map (game.obstacles: a w × h rectangle of impassable ground, already raised by the
+	// height map): props standing on it, kept inside an ellipse of the rectangle so nothing hangs over
+	// passable ground. Rock tints follow the biome.
+	const ROCK = { dust: std("#8a7356", { roughness: 1, metalness: 0 }), ice: std("#9aa9b2", { roughness: 0.9, metalness: 0 }), ash: std("#4c4442", { roughness: 1, metalness: 0 }) },
+		ROCK_DARK = { dust: std("#6c5a44", { roughness: 1, metalness: 0 }), ice: std("#76868f", { roughness: 0.9, metalness: 0 }), ash: std("#3a3433", { roughness: 1, metalness: 0 }) },
+		prop = {
+			metal: std("#6d6f72", { roughness: 0.7, metalness: 0.5 }),
+			rust: std("#7a4e32", { roughness: 0.9, metalness: 0.3 }),
+			alien: std("#3c4642", { roughness: 0.6, metalness: 0.4 }),
+			stone: std("#8e9aa0", { roughness: 1, metalness: 0 }),
+			resin: std("#b07a34", { roughness: 0.25, metalness: 0.1, transparent: true, opacity: 0.85 }),
+			egg: std("#d9d2b8", { roughness: 0.5, metalness: 0, emissive: "#6f8f4a", emissiveIntensity: 0.15 }),
+			stem: std("#cfc6b0", { roughness: 0.8, metalness: 0 }),
+		};
+	glowing.push([prop.egg, prop.egg.emissiveIntensity]);
+	// Detailed props: the crashed ship, debris, carcass, ruins, resin, eggs, plant, islands, unit wrecks.
+	const props = createProps3D(THREE, { tools: detail.tools, nature: natureKit, group, materials: { prop, scenery, std } });
+	function obstacle(kind, w, h, biome, seed) {
+		const root = new THREE.Group(),
+			rnd = (n) => ((Math.sin(seed * 12.9898 + n * 78.233) * 43758.5453) % 1 + 1) % 1,
+			rx = w / 2,
+			rz = h / 2,
+			small = Math.min(w, h),
+			rock = ROCK[biome] || ROCK.dust,
+			// A point inside the rectangle's ellipse (scale 0…1 of it).
+			spot = (n, reach = 0.6) => {
+				const a = rnd(n) * Math.PI * 2,
+					d = Math.sqrt(rnd(n + 50)) * reach;
+				return [Math.cos(a) * rx * d, Math.sin(a) * rz * d];
+			};
+		// A rock spire of one of the shared ringed shapes.
+		const spire = (parent, m, scale, pos, rot, v) => {
+			const o = new THREE.Mesh(natureKit.spireGeo(v % 3), m);
+			o.scale.set(...scale);
+			o.position.set(...pos);
+			o.rotation.set(...rot);
+			o.castShadow = o.receiveShadow = true;
+			parent.add(o);
+		};
+		if (kind === "spire") {
+			const H = 130 + rnd(1) * 90;
+			spire(root, rock, [small * 0.34, H, small * 0.34], [0, H / 2 - 25, 0], [0, rnd(2) * 3, 0.06], seed);
+			for (let n = 0; n < 3; n++) {
+				const [x, z] = spot(n + 3, 0.7),
+					h2 = H * (0.3 + rnd(n + 9) * 0.3);
+				spire(root, rock, [small * 0.16, h2, small * 0.16], [x, h2 / 2 - 15, z], [rnd(n) * 0.3 - 0.15, rnd(n + 1) * 3, rnd(n + 2) * 0.3 - 0.15], seed + n + 1);
+			}
+		} else if (kind === "grove") {
+			// Giant glowing mushrooms (Lumeria).
+			for (let n = 0; n < 4; n++) {
+				const [x, z] = n ? spot(n, 0.55) : [0, 0],
+					H = (n ? 35 : 60) + rnd(n + 20) * 30,
+					cap = (n ? 16 : 30) + rnd(n + 30) * 12;
+				const glow = n % 3 === 2 ? scenery.violet : scenery.shroom;
+				natureKit.mushroom(root, { stem: prop.stem, cap: glow, gills: scenery.gills, spot: glow === scenery.violet ? scenery.shroom : scenery.violet }, [x, z], H - 12, cap, seed + n);
+			}
+		} else if (kind === "wreck") props.wreck(root, w, h, rnd, rock);
+		else if (kind === "debris") props.debris(root, w, h, rnd);
+		else if (kind === "derelict") props.derelict(root, w, h, rnd);
+		else if (kind === "ruin") props.ruin(root, w, h, rnd);
+		else if (kind === "resin") props.resin(root, w, h, rnd);
+		else if (kind === "eggs") props.eggs(root, w, h, rnd, biome === "ice");
+		else if (kind === "processor") props.processor(root, w, h, rnd);
+		else {
+			// Mesa: a few boulders on the plateau. Rock and outcrop: a tight pile of big boulders over most of
+			// the raised ground, the biggest in the middle, so the rock reads as rock, not as a smooth mound.
+			if (kind === "mesa")
+				for (let n = 0; n < 5; n++) {
+					const [x, z] = spot(n, 0.75),
+						s = small * (0.08 + rnd(n + 9) * 0.06);
+					rockPart(root, rock, [s * (1 + rnd(n + 3) * 0.4), s * (0.7 + rnd(n + 4) * 0.5), s], [x, s * 0.3, z], n + seed);
+				}
+			else {
+				// More boulders on long rock walls: about five per square of the short side.
+				const count = Math.max(7, Math.min(30, Math.round(((w * h) / (small * small)) * 5 + rnd(1) * 3)));
+				// Long walls: boulders spread evenly along the long axis; round rocks: around the middle.
+				const long = Math.max(w, h) / small > 1.6,
+					along = (n) => {
+						const t = ((n + rnd(n + 70) * 0.6) / count) * 1.6 - 0.8,
+							side = (rnd(n + 80) - 0.5) * 0.5;
+						return w > h ? [t * rx, side * rz] : [side * rx, t * rz];
+					};
+				for (let n = 0; n < count; n++) {
+					const [x, z] = long ? along(n) : n ? spot(n, 0.62) : [0, 0],
+						edge = Math.hypot(x / rx, z / rz),
+						s = small * (n ? 0.2 + rnd(n + 9) * 0.14 : 0.34) * (1 - edge * 0.35);
+					rockPart(root, n % 3 ? rock : ROCK_DARK[biome] || ROCK_DARK.dust, [s * (1.1 + rnd(n + 3) * 0.5), s * (0.75 + rnd(n + 4) * 0.45), s], [x, s * 0.2 - edge * 6, z], n + seed);
+				}
+			}
+		}
+		return { root, update() {} };
+	}
+	// ---- Deposits and relays (the 2D board's art.js layouts, stage by stage) ----
+	// Stage n: 0 = exhausted … 6 = full (BoardArt.resourceLook / crystalLook). Map y is the model's +Z.
+	const DEP = {
+		ore: std("#6f7a7c", { roughness: 0.9, metalness: 0.05 }),
+		oreDark: std("#4c5658", { roughness: 1, metalness: 0 }),
+		vein: std("#b8ecf6", { roughness: 0.2, metalness: 0.85, emissive: "#4f95a3", emissiveIntensity: 0.45 }),
+		gasRock: std("#4f4655", { roughness: 0.95, metalness: 0 }),
+		crater: std("#2a2230", { roughness: 1, metalness: 0 }),
+		throat: std("#0f0b12", { roughness: 1, metalness: 0 }),
+		groove: std("#19131e", { roughness: 1, metalness: 0 }),
+		crystal: std("#f4d989", { roughness: 0.15, metalness: 0.1, emissive: "#c9962a", emissiveIntensity: 0.35, transparent: true, opacity: 0.88 }),
+		stump: std("#a08a55", { roughness: 0.6, metalness: 0 }),
+		mound: std("#3d4442", { roughness: 1, metalness: 0 }),
+		oreMound: std("#454d4b", { roughness: 1, metalness: 0 }),
+		gasMound: std("#3d3644", { roughness: 1, metalness: 0 }),
+		pit: std("#191e20", { roughness: 1, metalness: 0 }),
+	};
+	// Gas fissures glow less as the field empties: one material per stage.
+	const FISSURE = Array.from({ length: 7 }, (_, n) => std("#d08cf0", { emissive: "#b060e0", emissiveIntensity: 0.25 + (n / 6) * 1.1, roughness: 0.6 }));
+	for (const m of [DEP.vein, DEP.crystal, ...FISSURE]) glowing.push([m, m.emissiveIntensity]);
+	const ORE_ROCKS = [[0, -4, 16], [-18, 2, 13], [17, 3, 13], [-4, 12, 12], [-30, 10, 9], [28, 12, 9], [10, -14, 10], [-14, -12, 9], [-20, 18, 7], [22, -6, 8]],
+		ORE_COUNT = [0, 2, 3, 5, 6, 8, 10],
+		FISSURES = [
+			[[-10, 3], [-22, 6], [-30, 2], [-38, 7]],
+			[[9, 4], [20, 1], [28, 6], [37, 3]],
+			[[-4, 8], [-9, 15], [-16, 19]],
+			[[5, 8], [11, 15], [9, 21]],
+			[[-2, -4], [-6, -11], [-1, -16]],
+		],
+		PRISMS = [[0, 2, 34, 7, 1], [-15, 5, 26, 6, -3], [14, 6, 24, 6, 3], [-6, 12, 18, 5, -1], [8, 13, 16, 5, 2], [-24, 12, 13, 4, -3], [23, 13, 12, 4, 3]],
+		PRISM_COUNT = [0, 2, 3, 4, 5, 6, 7];
+	// A rough rock: a squashed icosahedron, turned by its index so no two look alike.
+	const boulder = (root, m, [x, z, s], i) => rockPart(root, m, [s, s * 0.75, s * 0.9], [x, s * 0.35, z], i);
+	// Surface of the deposit mound (an ellipsoid 42 × 24 around (0, 3), its top 1 unit above the ground).
+	const moundTop = (x, z) => Math.max(0, -2.5 + 3.5 * Math.sqrt(Math.max(0, 1 - (x / 42) ** 2 - ((z - 3) / 24) ** 2)));
+	// A crack along a 2D polyline: flat thin boxes from point to point, lying on the mound.
+	function groove(root, m, pts, width) {
+		for (let i = 1; i < pts.length; i++) {
+			const [x0, z0] = pts[i - 1],
+				[x1, z1] = pts[i],
+				len = Math.hypot(x1 - x0, z1 - z0),
+				x = (x0 + x1) / 2,
+				z = (z0 + z1) / 2;
+			part(root, "box", m, [len + width * 0.5, 0.5, width], [x, moundTop(x, z) + 0.15, z], [0, -Math.atan2(z1 - z0, x1 - x0), 0]);
+		}
+	}
+	function deposit(kind, n) {
+		const root = new THREE.Group();
+		// A little above the ground point: the terrain triangles can rise over its bilinear height.
+		root.position.y = 1.5;
+		// The low mound under every deposit, in the rock's own tint; its top is 1 unit above the ground.
+		part(root, "sphere", kind === "gas" ? DEP.gasMound : kind === "ore" ? DEP.oreMound : DEP.mound, [42, 3.5, 24], [0, -2.5, 3]);
+		if (kind === "ore") {
+			if (!n) {
+				part(root, "cyl", DEP.pit, [22, 1.5, 13], [-2, 0.8, 6]);
+				[[-26, 10, 4], [22, 12, 5], [8, 20, 3], [-12, -8, 3]].forEach((r, i) => boulder(root, DEP.oreDark, r, i));
+			} else {
+				// Pits where rock has already been dug out.
+				for (let i = 0; i < Math.min(3, 6 - n); i++) part(root, "cyl", DEP.pit, [9 - i, 1.4, 6 - i * 0.6], [[26, -26, 4][i], 0.8, [6, 14, 22][i]]);
+				const k = 0.72 + (n / 6) * 0.28;
+				ORE_ROCKS.slice(0, ORE_COUNT[n]).forEach(([x, z, s], i) => {
+					boulder(root, i % 3 ? DEP.ore : DEP.oreDark, [x, z, s * k], i);
+					// Metal: shiny nuggets breaking out of the top of every bigger rock.
+					if (s >= 9)
+						for (let j = 0; j < (s >= 13 ? 3 : 2); j++)
+							part(root, "octa", DEP.vein, [s * k * 0.22, s * k * 0.3, s * k * 0.18], [x + (j - 1) * s * k * 0.35, s * k * 0.95, z + ((i + j) % 2 ? 1 : -1) * s * k * 0.2], [j, i + j, 0.4]);
+				});
+			}
+		} else if (kind === "gas") {
+			const live = n / 6;
+			FISSURES.forEach((pts, i) => groove(root, i < n ? FISSURE[n] : DEP.groove, pts, i < n ? 1.5 : 2));
+			[[-22, -6, 8], [20, -7, 7], [-28, 14, 6], [26, 14, 6]].forEach(([x, z, s], i) => boulder(root, DEP.gasRock, [x, z, s * (0.8 + live * 0.2)], i + 3));
+			part(root, "torus", DEP.crater, [17, 9, 9.5], [0, 2.4, 3]); // rim
+			part(root, "cyl", DEP.throat, [12, 1, 6.5], [0, 1.6, 4]);
+			if (n) part(root, "sphere", FISSURE[n], [7 * (0.5 + live * 0.5), 2.5, 4 * (0.5 + live * 0.5)], [0, 2, 4]);
+		} else {
+			// Crystals: translucent golden prisms leaning out, shorter as the field empties; stumps at the end.
+			if (!n)
+				[[-6, 4, 5], [6, 8, 4], [-2, 12, 3]].forEach(([x, z, h], i) => part(root, "cyl6", DEP.stump, [3, h, 3], [x, h / 2, z], [0, i, 0.2 * (i - 1)]));
+			else {
+				const k = 0.62 + (n / 6) * 0.38;
+				// Clusters of six-sided crystals with pointed tips, smaller ones at their foot.
+				PRISMS.slice(0, PRISM_COUNT[n]).forEach(([x, z, h, w, lean], i) => {
+					const g = natureKit.crystals(root, DEP.crystal, [x, z], h * k + w * 1.2, w * 1.15, lean, i + 1);
+					g.rotation.x = (z - 6) * 0.012;
+				});
+			}
+		}
+		return { root, update() {} };
+	}
+	// Relay: a hexagonal plinth, a tripod mast with a dish, a light in the owner's colour and a capture
+	// ring that fills with the capturing side's colour.
+	const ringColors = new Map(),
+		ringOf = (color) => {
+			if (!ringColors.has(color)) ringColors.set(color, std(color, { emissive: color, emissiveIntensity: 0.6 }));
+			return ringColors.get(color);
+		};
+	function relay(color, hill = false, name = null) {
+		const root = new THREE.Group(),
+			light = ringOf(color),
+			SEGMENTS = 24,
+			ring = [],
+			ground = [];
+		// The station: base, cabinets, lattice mast, the owner's beacon, a turning dish (act1-detail-3d.js).
+		const dish = act1.relayStation(root, light);
+		// The capture zone (radius 95): a dashed circle in the owner's colour, flat on the ground.
+		for (let i = 0; i < 36; i++) {
+			const a = (i / 36) * Math.PI * 2;
+			ground.push(part(root, "box", light, [8, 0.6, 1.4], [Math.cos(a) * 95, 0.5, Math.sin(a) * 95], [0, -a + Math.PI / 2, 0]));
+		}
+		for (let i = 0; i < SEGMENTS; i++) {
+			const a = (i / SEGMENTS) * Math.PI * 2 - Math.PI / 2,
+				seg = part(root, "box", light, [10, 1.5, 4], [Math.cos(a) * 40, 1.2, Math.sin(a) * 40], [0, -a + Math.PI / 2, 0]);
+			seg.visible = false;
+			ring.push(seg);
+			ground.push(seg);
+		}
+		// The ground parts are laid on the terrain one by one (scene-life-3d.js): never merged.
+		for (const g of ground) g.userData.keep = true;
+		// The Peak (king of the hill): the resonance jammer tower over the relay.
+		const jammer = hill ? act3.peak(root, color) : null,
+			// The Hefajstos complex (act II, chapter VI): a machine on each control node, by its name.
+			machine = name ? act2.machine(root, name) : null;
+		return {
+			root,
+			// Parts lying on the ground: the renderer sets their height to the terrain under them.
+			ground,
+			update(node, i) {
+				dish.rotation.y = i.time * 0.6;
+				if (jammer) jammer.rotation.y = i.time * 0.7;
+				machine?.(node, i);
+				const shown = Math.round((node.progress || 0) * SEGMENTS),
+					m = node.capturing >= 0 && i.colors ? ringOf(i.colors[node.capturing] || color) : light;
+				ring.forEach((s, k) => {
+					s.visible = k < shown;
+					if (s.material !== m) {
+						s.material = m;
+						s.userData.batch = undefined; // the renderer batches parts by geometry and material
+					}
+				});
+			},
+		};
+	}
+	// Construction scaffold around a building site: poles at the corners and along the sides, rails at
+	// three levels, a warning light blinking on top (shown while the building rises, see three-renderer).
+	const SCAFFOLD = { pole: std("#9a8a5a", { roughness: 0.8, metalness: 0.3 }), rail: std("#c9a640", { roughness: 0.6, metalness: 0.3 }), lamp: std("#ffb13a", { emissive: "#ff9a1a", emissiveIntensity: 1.4 }) };
+	glowing.push([SCAFFOLD.lamp, SCAFFOLD.lamp.emissiveIntensity]);
+	function scaffold(radius) {
+		const root = new THREE.Group(),
+			w = radius * 1.7,
+			H = Math.max(36, Math.min(80, radius * 1.2));
+		for (const x of [-1, 0, 1])
+			for (const z of [-1, 0, 1]) if (x || z) part(root, "box", SCAFFOLD.pole, [1.8, H, 1.8], [(x * w) / 2, H / 2, (z * w) / 2]);
+		for (const y of [H * 0.3, H * 0.65, H])
+			for (const side of [-1, 1]) {
+				part(root, "box", SCAFFOLD.rail, [w, 1.4, 1.4], [0, y, (side * w) / 2]);
+				part(root, "box", SCAFFOLD.rail, [1.4, 1.4, w], [(side * w) / 2, y, 0]);
+			}
+		const lamp = part(root, "box", SCAFFOLD.lamp, [3.5, 3.5, 3.5], [w / 2, H + 2.5, w / 2]);
+		return { root, update: (e, i) => (lamp.visible = Math.sin(i.time * 5 + (e.id || 0)) > 0) };
+	}
+	// Scenery baked like the entities (static parts merged, see models-detail-3d.js): animals, birds and
+	// fish share one look per kind; deposits one per kind and stage; the tall obstacles (spires, giant
+	// mushrooms), drawn one by one so they can fade, get their own merged geometry. Relays are left as
+	// they are (the renderer lays their ground ring on the terrain part by part).
+	const baked = (key, model) => bake(model, "scenery|" + key, { id: 1 });
+	const SCENERY = {
+		animal: (kind, biome) => baked("animal|" + kind + "|" + (kind === "fox" && biome === "ice" ? "ice" : ""), natureKit.animal(kind, biome)),
+		bird: () => baked("bird", natureKit.bird()),
+		fish: () => baked("fish", natureKit.fish()),
+		// Islands are drawn one by one (they fade): merged per island.
+		island: (theme, size, seed) => baked(["island", theme, size, seed].join("|"), props.island(theme, size, seed)),
+		wreck: (size, seed) => props.unitWreck(size, seed),
+		// Plain rocks share the stone shapes in the instanced batches; every other obstacle is a few of a
+		// kind on a map, merged per obstacle.
+		obstacle: (kind, w, h, biome, seed) => {
+			const model = obstacle(kind, w, h, biome, seed);
+			return ["rock", "outcrop", "mesa"].includes(kind) ? model : baked(["obstacle", kind, w, h, biome, seed].join("|"), model);
+		},
+		deposit: (kind, n) => baked("deposit|" + kind + "|" + n, deposit(kind, n)),
+		relay: (color, hill, name) => baked(["relay", color, !!hill, name || ""].join("|"), relay(color, hill, name)),
+		scaffold,
+		// Act I landmarks on the rock outcrops of its maps (webgl3d/scene-life-3d.js picks the outcrop).
+		landmark: (piece, w, h) => baked(["landmark", piece, w, h].join("|"), act1.landmark(piece, w, h)),
+		// Act II objective sites (webgl3d/scene-life-3d.js places them from game.act2).
+		pad: () => baked("a2pad", act2.pad()),
+		camp: () => baked("a2camp", act2.camp()),
+		archive: () => baked("a2archive", act2.archive()),
+		coreSite: () => baked("a2core", act2.coreSite()),
+		stop: () => baked("a2stop", act2.stop()),
+		lighthouse: () => baked("a2lighthouse", act2.lighthouse()),
+		conduit: (points) => baked("a2conduit|" + points.map((p) => p.map(Math.round).join(",")).join(";"), act2.conduit(points)),
+	};
+
 	// Which builder draws an entity: Swarm faction first (its own look for every shared type), then the type.
 	function builderOf(e) {
 		const s = RTS.TYPES[e.type];
 		if (!s) return null;
 		if (e.faction === "swarm" && !s.threat && e.type !== "wall" && e.type !== "gate") {
+			const gate = swarmGate(e);
+			if (gate === "heart") return (k, r) => act3.heart(k, r, "#" + k.team.color.getHexString());
+			if (gate === "nest") return (k, r) => act3.nest(k, r);
 			if (!s.speed) return (k, r) => swarmBuilding(k, r, e.type);
 			if (s.flying) return swarmFlyer;
 			return SWARM_UNITS[e.type] || (s.radius < 14 ? (k) => swarmSentry(k, s.radius) : (k, r) => swarmWalker(k, r, { prong: true }));
 		}
 		return BUILDERS[e.type] || null;
 	}
+
+	const bake = createBaker(THREE);
 
 	return {
 		has: (e) => !!builderOf(e),
@@ -994,9 +542,17 @@ export function createModels3D(THREE) {
 			const s = RTS.TYPES[e.type],
 				model = builderOf(e)(kit(e.team, e.faction, e.tint, teamColors), s.radius);
 			model.key = [e.type, e.team, e.faction || "", e.tint || ""].join("|");
-			return model;
+			// Static parts merged per group and material (models-detail-3d.js), shared by every entity of the look.
+			return bake(model, model.key + "|" + (swarmGate(e) || ""), e);
 		},
 		types: () => Object.keys(BUILDERS),
+		// The mission on the board (act III's special Swarm gates); the renderer sets it with the game.
+		setMission: (id) => (mission = id),
+		// Weather on the models: snow cover and wetness, 0…1 (the renderer, from weather-3d.js).
+		setWeather: (snow, wet) => bake.setWeather(snow, wet),
 		setNight,
+		// Scenery models: scenery("animal", kind, biome), ("bird"), ("fish"), ("island", theme, size, seed),
+		// ("wreck", size, seed); same { root, update(e, info) } shape as the entity models.
+		scenery: (what, ...args) => SCENERY[what](...args),
 	};
 }

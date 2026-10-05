@@ -77,7 +77,8 @@ const MapArt = (() => {
 			}
 			c.strokeStyle = "#3f8a5a88";
 			c.lineWidth = 2;
-			for (let i = 0; i < 900 * area; i++) {
+			// Grass blades: 2D only (the 3D board grows real grass: RTS.bareGround).
+			for (let i = 0; i < (RTS.bareGround ? 0 : 900 * area); i++) {
 				const x = rand() * g.W,
 					y = rand() * g.H;
 				if (g.blocked(x, y, 6)) continue;
@@ -106,7 +107,7 @@ const MapArt = (() => {
 			}
 			c.strokeStyle = "#8fb07a99";
 			c.lineWidth = 1.8;
-			for (let i = 0; i < 1300 * area; i++) {
+			for (let i = 0; i < (RTS.bareGround ? 0 : 1300 * area); i++) {
 				const x = rand() * g.W,
 					y = rand() * g.H;
 				if (g.blocked(x, y, 6)) continue;
@@ -140,7 +141,8 @@ const MapArt = (() => {
 				c.quadraticCurveTo(x, y - 10 - rand() * 8, x + w, y + 3);
 				c.stroke();
 			}
-			for (let i = 0; i < 260 * area; i++) {
+			// Pebbles: 2D only (RTS.bareGround: the 3D board scatters real ones).
+			for (let i = 0; i < (RTS.bareGround ? 0 : 260 * area); i++) {
 				const x = rand() * g.W,
 					y = rand() * g.H;
 				if (g.blocked(x, y, 6)) continue;
@@ -176,7 +178,8 @@ const MapArt = (() => {
 				}
 				c.stroke();
 			}
-			for (let i = 0; i < 500 * area; i++) {
+			// Rock chips: 2D only (RTS.bareGround).
+			for (let i = 0; i < (RTS.bareGround ? 0 : 500 * area); i++) {
 				const x = rand() * g.W,
 					y = rand() * g.H;
 				if (g.blocked(x, y, 6)) continue;
@@ -697,7 +700,8 @@ const MapArt = (() => {
 			return;
 		if (t) ground(c, g, seeded(4242), t);
 		waters(c, g);
-		obstacles(c, g, t);
+		// The 3D board builds obstacles in 3D (RTS.bareGround).
+		if (!RTS.bareGround) obstacles(c, g, t);
 	}
 	// Animated, unlit effects under units: drifting mist over chasms.
 	function effects(c, g, view) {

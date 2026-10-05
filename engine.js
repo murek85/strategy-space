@@ -2604,7 +2604,8 @@
 			const trackFrame = this.trackClock >= 0.25;
 			if (trackFrame) this.trackClock = 0;
 			for (const e of this.entities) {
-				if (trackFrame && TYPES[e.type].speed && e.hp > 0) {
+				// Tread marks and footprints: only units on the ground (aircraft leave none).
+				if (trackFrame && TYPES[e.type].speed && !TYPES[e.type].flying && e.hp > 0) {
 					if (e.lastTrack && dist(e, e.lastTrack) > 8) {
 						this.tracks.push({
 							x: e.x,
@@ -2890,6 +2891,11 @@
 							team: e.team,
 							rocket:
 								e.type === "rocket" || e.type === "artillery",
+							// For the 3D board: shots from and at aircraft fly at their height; the
+							// bomber drops bombs.
+							air: !!s.flying,
+							airTarget: !!TYPES[target.type].flying,
+							bomb: e.type === "bomber",
 							life: 0.2,
 							maxLife: 0.2,
 						});

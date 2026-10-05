@@ -1,4 +1,4 @@
-# Renderer 3D (wersje 0.52–0.53, eksperymentalnie)
+# Renderer 3D (wersje 0.52–0.62, eksperymentalnie)
 
 Data: 2026-09-30. Status: w grze jako Ustawienia → Renderer → „3D (Three.js)”, obok samodzielnego prototypu `prototyp-3d.html`. Tylko grafika — symulacja, zasady, zapisy i gra sieciowa bez zmian.
 
@@ -6,7 +6,7 @@ Data: 2026-09-30. Status: w grze jako Ustawienia → Renderer → „3D (Three.j
 
 - Symulacja zostaje 2D (`x, y`). Renderer umieszcza ją w 3D: X = x, Z = y, Y = wysokość terenu z `webgl/terrain-height.js`.
 - W grze ten sam interfejs co renderery Canvas i PixiJS: `setGame`, `refreshFog`, `render(view)`, `toFlat`, `fromFlat`, `destroy`. `app.js` zachowuje kamerę, sterowanie i HUD.
-- Biblioteka: Three.js 0.170.0 w `vendor/three.module.js` (moduł ES). Gra wczytuje renderer 3D przez `import()` dopiero po wybraniu go w Ustawieniach; moduły ES nie działają ze strony otwartej z dysku (`file://`), więc tryb 3D wymaga serwera (`npm start`). Bez serwera lub bez WebGL gra przełącza się na WebGL (PixiJS) z komunikatem, a dalej — jak dotąd — na Canvas 2D.
+- Biblioteka: Three.js 0.170.0 w `vendor/three.module.js` (moduł ES). Gra wczytuje renderer 3D dopiero po wybraniu go w Ustawieniach: przez serwer (`npm start`) jako moduły ES z `webgl3d/`, a ze strony otwartej z dysku (`file://`, gdzie moduły się nie wczytują) jako jeden zwykły skrypt `webgl3d/bundle-3d.js` (od 0.55). Bez WebGL gra przełącza się na WebGL (PixiJS) z komunikatem, a dalej — jak dotąd — na Canvas 2D.
 
 ## Pliki
 
@@ -15,7 +15,14 @@ Data: 2026-09-30. Status: w grze jako Ustawienia → Renderer → „3D (Three.j
 | `webgl3d/three-game-renderer.js` | adapter do gry: kamera gry → kamera 3D, `toFlat`/`fromFlat`, nakładka interfejsu, warstwa ekranu, minimapa, słońce z gry |
 | `webgl3d/three-renderer.js` | teren, modele (instancing), tektury, światło, cienie, mgła, znaczniki, efekty |
 | `webgl3d/models-3d.js` | modele low-poly budowane w kodzie |
-| `webgl3d/scene-fx-3d.js` | woda, światła nocne, pogoda, dym i ogień (0.53) |
+| `webgl3d/scene-fx-3d.js` | woda, światła nocne, pogoda, dym i ogień (0.53), efekty map i strzałów (0.54) |
+| `webgl3d/scene-life-3d.js` | zwierzyna, ptaki, ryby, latające wyspy, wraki (0.54), przeszkody (0.56), złoża i przekaźniki (0.58) |
+| `webgl3d/weather-3d.js` | pogoda na karcie graficznej: deszcz z rozpryskami, śnieg, burza piaskowa, pioruny; mokry i zaśnieżony grunt (0.62) |
+| `webgl3d/objectives-3d.js` | kopuły osłon, uderzenia orbitalne, artefakt, Szczyt, znaczniki misji (0.60) |
+| `webgl3d/scatter-3d.js` | drobne obiekty na gruncie: kamienie, kępy trawy, zaspy, odłamki lodu, grzybki (0.58) |
+| `webgl3d/bundle-3d.js` | WYGENEROWANY: Three.js i moduły `webgl3d/` jako jeden zwykły skrypt, dla gry otwartej z dysku (`npm run build:3d`, `tools/build-3d.js`) |
+| `tests/render-3d-browser.html` | test w przeglądarce (0.57): sceny testów renderera, noc, kursor przy obrocie, instancing, tekstury, zwalnianie |
+| `tests/bundle-3d.test.js` | paczka zgodna ze źródłami; każdy typ ma model w każdej odmianie i animuje się; modele przyrody |
 | `prototyp-3d.html`, `webgl3d/prototype-3d.js` | samodzielny prototyp: kamera z obrotem i pochyleniem, galeria modeli, pora dnia |
 
 ## Co jest zrobione
@@ -44,6 +51,290 @@ Data: 2026-09-30. Status: w grze jako Ustawienia → Renderer → „3D (Three.j
 - **Nakładka interfejsu** jest przesyłana do karty graficznej tylko wtedy, gdy coś na niej narysowano (kontekst płótna zgłasza każde malowanie).
 - Prototyp: `prototyp-3d.html?map=frost` (lub `magma`, `horizon`, `lumen`…) — inna mapa.
 
+## Przyroda, efekty map, pociski (wersja 0.54, 2026-10-01)
+
+- **Zwierzyna** (`game.wildlife()`): jelenie z porożem, zające, lisy (na lodzie białe), jaszczurki — modele budowane w kodzie, idą w kierunku, w którym dryfują. **Ptaki**: 18 nad mapą (ten sam wzór co w 2D), machają skrzydłami wysoko nad ziemią. **Ryby**: po siedem w zwykłych jeziorach, krążą pod powierzchnią.
+- **Latające wyspy** (`MapArt.islands`): skalny stożek ostrzem w dół, wierzch z mchu i świecących grzybów (Lumeria) lub trawy i głazów (Aerion), kołysanie jak w 2D, prawdziwy cień na ziemi.
+- **Wraki** (`game.debris`): zwęglone płyty i belki z żarzącym się kawałkiem; przez ostatnie sekundy zapadają się w ziemię.
+- Wszystkie te modele idą przez ten sam instancing co jednostki; we mgle wojny są ukryte (wyspy zostają — są częścią krajobrazu, jak w 2D).
+- **Efekty map** wokół kamery: świecące zarodniki nad Lumerią (jaśniejsze nocą), iskry z lawy Pyrrhosu, mgła wypełzająca z przepaści Aerionu.
+- **Pociski**: smuga leci od lufy do celu przez czas życia strzału (rakiety wolniej, łukiem, z dymem), błysk u wylotu, iskry w miejscu trafienia.
+- Prototyp: zakres map przez `?map=` (np. `skyfall`).
+
+## Tabliczki, smugi, gra z dysku, testy (wersja 0.55, 2026-10-01)
+
+- **Tabliczki**: nazwy i zasoby złóż („RUDA · 3937”, „KRYSZTAŁY · 900”) oraz nazwy i stan przekaźników („GREK / PRZEJMIJ”) stoją nad nimi jako napisy zawsze zwrócone do kamery, z cieniem dla czytelności; odświeżane tylko przy zmianie tekstu. Grunt w 3D jest malowany bez nich (`view.groundLabels = false` w `render-canvas.js`; tekst przekaźnika z `nodeLabel()`, złóż z `BoardArt.resourceLabel` / `crystalLabel`). Kafel gruntu odświeża się teraz tylko przy zmianie etapu złoża (`resourceLook` / `crystalLook`), a nie co 250 jednostek.
+- **Smugi pocisków**: świecące belki (rozciągnięte prostopadłościany, jedno rysowanie instancjonowane) zamiast linii o grubości piksela; rakiety grubsze.
+- **Gra z dysku**: `tools/build-3d.js` (bez zależności) skleja Three.js (jedna lista `export { … }` na końcu zamieniana na obiekt) i moduły `webgl3d/` (usunięte linie `import`, `export function` → `function`) w jedną funkcję; `app.js` przy `file://` lub nieudanym `import()` dołącza `webgl3d/bundle-3d.js` i używa `window.Board3D`. Sprawdzone: renderer z paczki rysuje grę na stronie, przeliczanie kursora wraca w to samo miejsce, Three.js nie trafia do `window`. Strony otwartej z dysku nie dało się sprawdzić w podglądzie (otwiera pliki jako statyczną kopię).
+- **Testy** (`tests/bundle-3d.test.js`, w `npm test`): paczka zgodna ze źródłami (po zmianie `webgl3d/*.js` trzeba uruchomić `npm run build:3d`), każdy z 49 typów ma model w odmianie Kolonii, Dominium, Roju i dzikiej, który się buduje i animuje z poprawnymi przekształceniami; modele przyrody, wysp i wraków.
+
+## Przeszkody, motywy, pomiar (wersja 0.56, 2026-10-01)
+
+- **Przegląd map**: wszystkie 18 misji (scenariusze, kampania, akt II) uruchamiają się w 3D bez błędów i bez tektur — każdy obiekt ma model.
+- **Przeszkody** (`game.obstacles`, prostokąty nieprzejezdnego terenu podniesione mapą wysokości) dostały bryły (`scenery("obstacle")` w `models-3d.js`, stawiane przez `scene-life-3d.js`, zawsze widoczne jak krajobraz): iglice skalne z mniejszymi kolcami (Aerion, Pyrrhos), olbrzymie świecące grzyby z blaszkami (gaje Lumerii), rozbity kadłub statku z żebrami i statecznikiem oraz rozrzucone płyty (wraki i szczątki Kessaru), żebra obcego truchła (derelict), ruiny filarów i murów, bryły żywicy, gniazda jaj, przetwórnia, głazy na skałach, występach i płaskowyżach w kolorze biomu. Wszystko mieści się w elipsie prostokąta przeszkody — nic nie wisi nad przejezdnym terenem.
+- **Efekty motywów** (`themed-art.js`): piasek niesiony nisko nad wydmami (dunesea, goldsand), drobiny unoszące się nad polami wraków (derelict) i zamarzniętym rojem (frozenhive).
+- **Pomiar**: `tests/benchmark-browser.html` ma wiersz „3D” (strona musi być podana przez serwer). Przy okazji: bufory cząsteczek, deszczu i śniegu wypełniane bez tworzenia tablic w każdej klatce, a do karty graficznej idzie tylko używana część buforów i macierzy instancji.
+
+| 2026-10-01, 1920×1080, noc, ulewa, ~66 jednostek | kl./s | 95% klatek do | rysowanie CPU (śr. / 95%) |
+|---|---|---|---|
+| Canvas 2D | 82 | 17,7 ms | 4,3 / 5,7 ms |
+| WebGL (PixiJS) | 130–152 | 11,8–17,6 ms | 5,3–6,6 / 10,6–13,5 ms |
+| 3D przed poprawkami | 99 | 17,7 ms | 8,5 / 14,0 ms |
+| 3D po poprawkach | 135 | 11,8 ms | 6,2 / 7,9 ms |
+
+## Prześwitywanie, obrót kamery, test w przeglądarce (wersja 0.57, 2026-10-01)
+
+- **Prześwitywanie**: latające wyspy, iglice i gaje wielkich grzybów są rysowane osobno (każdy z własnymi materiałami, poza instancingiem) i płynnie przygasają do ok. 25%, gdy na ekranie zasłaniają własną jednostkę, coś zaznaczonego albo punkt pod kursorem i stoją przed nim (`covers()` w `three-renderer.js`, `fadeTall()` w `scene-life-3d.js`). Cień na ziemi zostaje.
+- **Obrót kamery w grze**: `,` i `.` (przytrzymane) obracają kamerę wokół środka widoku, `/` przywraca widok od południa (tylko w trybie 3D; `camera.yaw` w `app.js`, `rig.yaw` w adapterze). Strzałki przesuwają wtedy widok względem ekranu, nie osi mapy. Zaznaczanie, ramka, rozkazy i budowa działają bez zmian, bo płaska klatka logiki gry zostaje nieobrócona, a ekran przelicza się przez teren. Minimapa pokazuje obrócony obrys widoku. Skrót opisany w panelu rozkazów i w Bazie wiedzy.
+- Sprawdzone w grze: po obrocie o ok. 1 rad ramka zaznacza oddział, rozkaz ruchu ustawia linię dokładnie wokół klikniętego punktu, strzałka w górę przesuwa widok w głąb ekranu.
+- **Test w przeglądarce** `tests/render-3d-browser.html` (przez serwer): wszystkie sceny testów renderera (Morze Wydm, Lumeria nocą w ulewie, Rzeki Magmy z budową, Ostatni konwój ze znacznikami i murem, duża mapa z mgłą, 4 graczy, kampania, baza Roju) i bitwa 200 jednostek rysują się bez błędów i niepusto, każdy obiekt ma model 3D; noc ciemniejsza od dnia; kursor → plansza → kursor z błędem 0,002 px (prosto) i 0,028 px (obrót 1,2 rad); bitwa 206 modeli w 184 rysowaniach (42 paczki instancji); 5 przebiegów zmian map bez przyrostu tekstur; `destroy()` usuwa planszę. Wynik 2026-10-01: 30/30 PASS.
+
+## Złoża, przekaźniki i teren 3D (wersja 0.58, 2026-10-01)
+
+- **Złoża jako modele** (`scenery("deposit")` w `models-3d.js`), etap po etapie jak w `art.js` (0 = wyczerpane … 6 = pełne; ten sam układ skał i graniastosłupów): ruda — skały z błyszczącymi grudkami metalu, mniej i mniejsze z każdym etapem, wykopy po wydobytym; gaz — krater z obrzeżem i świecącą gardzielą, pęknięcia na kopcu świecące słabiej, gdy pole się wyczerpuje, i fioletowa para (gęsta nad pompującym ekstraktorem, `gasFlowing` z renderera Canvas); kryształy — przejrzyste złote graniastosłupy ze szpicami, na końcu ułamane kikuty. Model wymieniany przy zmianie etapu.
+- **Przekaźniki**: sześciokątny cokół, trójnożny maszt z obracającą się anteną i światłem w kolorze właściciela, przerywany krąg strefy przejmowania (promień 95) i pierścień zapełniający się kolorem przejmującego; oba kręgi idą po zboczach. Właściciel widoczny tylko w zasięgu wzroku lub dla własnych (jak w 2D).
+- Grunt w 3D jest malowany bez złóż i przekaźników (`view.groundDeposits = false` w `render-canvas.js`), a kafle gruntu nie odświeżają się już przy wydobyciu ani odkrywaniu mapy (tylko przy wrakach i kraterach).
+- **Rzeźba terenu**: do mapy wysokości dochodzą łagodne pagórki i drobne nierówności z szumu zależnego od mapy (3 oktawy, kilka jednostek wysokości, tylko wygląd — ruch i widoczność bez zmian; jednostki, budynki i woda stoją na tej samej wysokości). Normalne i cieniowanie liczone z całej mapy (bez szwów między kaflami): strome stoki i zagłębienia ciemniejsze, grzbiety jaśniejsze (kolor wierzchołków).
+- **Faktura biomu**: powtarzalna mapa normalnych (co ok. 110 jednostek) — zmarszczki wiatru w piasku, ziarno popiołu, gładki lód z rysami; łapie niskie słońce o świcie i zmierzchu.
+- **Drobne obiekty** (`scatter-3d.js`): 3–4,4 tys. na mapę, z ziarna mapy (tak samo u każdego gracza), w kępach, z dala od wody, przeszkód, złóż, przekaźników i krawędzi; jedno rysowanie instancjonowane na rodzaj. Piasek: kamienie i suche kępy; lód: zaspy, kamienie, odłamki lodu; popiół: ciemne kamienie, kępy, odłamki; Lumeria: kępy, świecące grzybki. Chowane pod budynkami (także postawionymi w trakcie gry). Mgła wojny przyciemnia je jak grunt (shader mgły działa teraz też dla obiektów instancjonowanych).
+- Wydajność (benchmark, noc, ulewa, 1920×1080): 3D 118 kl./s, 95% klatek do 11,8 ms, rysowanie CPU 7,6 / 8,7 ms (WebGL w tym przebiegu: 163 kl./s). Przyczyny i poprawki w trakcie: kursor przy prześwitywaniu wyznaczany był promieniem przez cały teren w każdej klatce (0,9 ms) — teraz liczy się tylko na ekranie; drobne kamienie nie rzucają cieni (tysiące obiektów w mapie cieni kosztowały kartę graficzną więcej, niż było widać).
+
+## Goły grunt, ustawienia jakości, kamera (wersja 0.59, 2026-10-01)
+
+- **Goły grunt**: w 3D grunt jest malowany bez dekoracji, które są już bryłami 3D — bez ok. 1700 namalowanych kamyków z cieniami (`BoardArt.terrain`), ok. 1650 kępek roślin (`PlanetArt.terrain`), namalowanych skał, występów, gniazd, żywicy, ruin, przetwórni i wraku z ich cieniami 2D (`render-canvas.js`, `AdvancedArt`, `SceneFX`, `MapArt`, `ThemedArt`) i bez nazwy planety. Zostają kolor podłoża, plamy, koryta i brzegi wód, drogi, oznaczenia bazy; pod przeszkodą miękka plama w kolorze skały biomu. Przełącznik `canvasRenderer.setBareGround()` (włącza renderer 3D, wyłącza przy zamknięciu, więc WebGL i Canvas dostają pełny malunek); malarze czytają `RTS.bareGround` tylko w trakcie malowania terenu.
+- **Skały**: zwykłe skały i występy to zwarte stosy dużych głazów w kolorze biomu (ciemniejsze i jaśniejsze), na długich wałach rozłożone równo wzdłuż osi (7–30 głazów zależnie od wydłużenia), tak że wzniesienie czyta się jako skała, a nie gładki wał.
+- **Ustawienia jakości 3D** (Ustawienia → Grafika planszy, istniejące pola): „Detale terenu i roślinność” — gęstość drobnych obiektów (100 / 55 / 25%), mapa cieni (4096 / 2048 / 1024), rozdzielczość renderowania (do 2 / 1,5 / 1 piksela na punkt); „Cząsteczki pogody” — deszcz, śnieg, pył, dym, iskry, para i efekty map (100 / 50 / 25%); przełączniki: cienie od słońca, oświetlenie nocne (plamy i reflektory), woda (powierzchnie), ślady zniszczeń (dym i ogień), wysokość terenu (rzeźba z szumu i faktura), błyski burzy. W trybie 3D wyszarzone zostają tylko poświata, objętość i pochylenie 2,5D. Zmiana rzeźby lub gęstości przebudowuje mapę; reszta działa od razu. Pomiar (1920×1080, noc, ulewa): pełna klatka z oczekiwaniem na kartę ok. 9,5 ms na każdym poziomie — na tym komputerze wąskim gardłem jest stały koszt sceny, ustawienia pomogą słabszym kartom (wypełnianie pikseli, mapa cieni).
+- **Kamera**: obrót także myszą — Alt + przeciąganie środkowym przyciskiem; przesuwanie środkowym przyciskiem trzyma chwycony punkt terenu pod kursorem (korekta raz na klatkę, na świeżo narysowanym widoku, więc szybka mysz nie przestrzeliwuje — pierwsza wersja liczyła korektę przy każdym zdarzeniu i wyrzucała kamerę na skraj mapy); kąt obrotu zapisuje się w zapisie gry i wczytuje; pochylenie zależy od przybliżenia: z daleka ok. 60° (przegląd), z bliska ok. 40°. Sprawdzone w grze: magazyn przeciągnięty środkowym przyciskiem ląduje dokładnie pod kursorem, Alt + środkowy obraca widok, zapis przywraca kąt.
+
+## Cele i moce, budowa, zniszczenie (wersja 0.60, 2026-10-01)
+
+- **Cele i moce jako obiekty 3D** (`objectives-3d.js`, nad nakładką 2D, która zostawia pierścienie, postęp i napisy; te same reguły widoczności): kopuła nad działającym generatorem osłon (krawędź świeci z ładunkiem i rozbłyskuje przy trafieniu, czerwona przy przeciążeniu); kolumna światła uderzenia orbitalnego, zwężająca się i jaśniejąca do chwili trafienia; złoty kryształ artefaktu unoszący się i obracający nad miejscem lub nad niosącym, z promieniem, gdy leży; słup światła Szczytu w kolorze posiadacza z obracającym się pierścieniem; słupy światła nad znacznikami misji aktu II. Promienie mają miękkie boki (jasny rdzeń, gasnące krawędzie).
+- Znaczniki aktu II: `Act2Art` zgłasza każde wywołanie `beacon()` przez `Act2Art.onBeacon` — adapter zbiera je podczas rysowania nakładki i przekazuje rendererowi (`setBeacons`), bez powielania logiki misji. Płaski romb artefaktu nie jest rysowany w 3D (`view.objects3D`).
+- **Budowa**: wokół wznoszącego się budynku rusztowanie (słupy, rygle na trzech poziomach, migające światło ostrzegawcze), znika po ukończeniu.
+- **Zniszczenie**: gdy w miejscu znikającego modelu gra zgłasza wybuch, model zapada się przez 1,2 s — budynek osiada i przechyla się, pojazd i kroczący przewracają się na bok i grzęzną; potem zostaje wrak. Jednostki znikające bez wybuchu (np. wsiadające do transportera) znikają jak dotąd.
+
+## Czytelność drużyn i trafienia (wersja 0.61, 2026-10-01)
+
+- **Kręgi drużyn**: pod każdą jednostką naziemną (bez fauny) krąg w kolorze jej strony (`game.colorFor`), jedno rysowanie instancjonowane; pomijany we mgle wojny. Kolor drużyny na samych modelach to wąskie pasy — z daleka trudno było odróżnić swoich od przeciwnika.
+- **Rozbłysk trafienia**: paczki instancji mają kolor na instancję (mnoży materiał); trafiony model rozjaśnia się na czas `e.hit` (0,15 s od każdego trafienia). Zapadające się modele zniszczonych ciemnieją (zwęglenie).
+- Koszt: jeden dodatkowy bufor koloru na paczkę, przesyłany tylko w używanej części; bitwa 206 modeli — 211 rysowań (+1 za kręgi).
+- **Rój z bliska**: obsydian monolitów ma lekki połysk (światło wydobywa ściany głazów, które wcześniej zlewały się w czarne sylwetki), a pod szpicem każdego monolitu jasna obwódka; nadal ciemny, zgodnie ze stylem Roju z 2D.
+
+## Pogoda 3D (wersja 0.62, 2026-10-01)
+
+- **Bez pogody 2D**: warstwa ekranu w 3D rysuje już tylko słońce, księżyc i gwiazdy (`PlanetArt.atmosphere(…, withWeather = false)`, `view.weather3D`); wcześniej na planszę 3D nakładały się płaskie płatki, smugi deszczu, piorun i ziarna piasku z 2D.
+- **Animacja na karcie graficznej** (`weather-3d.js`): każda kropla, płatek i ziarno ma ziarno losowe, a pozycję liczy shader z czasu (zero pracy procesora na cząsteczkę); wysokość gruntu z tekstury mapy wysokości, więc deszcz kończy się na terenie. Cząsteczki krążą w pudełku wokół kamery i gasną przy jego brzegach oraz tuż przy obiektywie.
+- **Deszcz**: do 9000 ukośnych smug z wiatrem, rozpryski-pierścienie na ziemi; grunt w ulewie ciemnieje i lśni w słońcu (szorstkość spada), potem schnie (ok. 45 s).
+- **Śnieg**: do 7000 kołyszących się płatków; śnieg osiada na zwróconych ku górze powierzchniach terenu i drobnych obiektów, narasta w śnieżycy i topnieje po niej (ok. 90 s).
+- **Burza piaskowa**: ziarna pędzące nisko z wiatrem i szerokie zasłony pyłu; mgiełka ogranicza dal, ale nie zasłania jednostek w kadrze.
+- **Pioruny**: w rytmie nieba 2D (co 17 s w silnej ulewie) rozgałęziony piorun 3D uderza w teren w pobliżu widoku, a światło punktowe rozświetla okolicę.
+- Ustawienia: „Cząsteczki pogody” zmieniają liczbę cząsteczek, „Błyski burzy” wyłączają pioruny.
+- Pomiar (benchmark, noc, ulewa, 1920×1080): 3D 103 kl./s, CPU 8,3 / 11,2 ms (wcześniejsze przebiegi 102–135 kl./s).
+
+## Bez 2D: mury, ślady, wraki, siedliska, poświata, światła, wybuchy, podgląd budowy (wersja 0.63, 2026-10-01)
+
+Ostatnie elementy malowane na gruncie 2D przeszły do 3D. Grunt planszy 3D maluje się raz (`view.ground3D`: bez `PlanetArt.ground`, `MapArt.effects`, kraterów, odłamków, wraków, siedlisk i murów 2D), więc wszystko, co się zmienia, musi być obiektem 3D.
+
+- **Mury** (`marks-3d.js`): odcinek muru między sąsiednimi murami, bramami i wieżyczkami jednej strony (30–70 jednostek, nie przez otwartą bramę), z koroną; o połowę niższy, gdy któryś koniec jest w budowie. Wcześniej był namalowany na gruncie i nie zmieniał się po zniszczeniu.
+- **Ślady i kratery** (`marks-3d.js`): naklejki dopasowane do nachylenia stoku, jedno wywołanie rysowania dla wszystkich: gąsienice, odciski stóp (gasnące z życiem śladu), kratery z ciemnym lejem, jaśniejszym wałem i osmaleniem (gasnące przez `CRATER_LIFE`). Na lodzie ślady są niebieskawe.
+- **Siedliska stworzeń**: przerywany krąg i rozrzucone kości 3D wokół legowiska widocznego zagrożenia.
+- **Wraki do odzysku**: model wraku (`scene-life-3d.js`) i napis „WRAK · wartość” jak nad złożami; znikają po odzysku.
+- **Poświata mapy** (`scene-fx-3d.js`): gaje (turkus), świecące jeziora i lawa (pomarańcz, słabo także w dzień) rzucają kolorowe światło na grunt, najmocniej w nocy.
+- **Światła nocne**: oprócz plam światła pod wszystkimi budynkami sześć świateł punktowych przy oświetlonych budynkach najbliżej środka widoku oświetla modele obok (stała liczba świateł, więc shadery się nie przebudowują).
+- **Wybuchy**: kula ognia rosnąca i stygnąca od białożółtej do ciemnoczerwonej oraz fala uderzeniowa biegnąca po gruncie, zamiast płaskiego rozbłysku. Iskry i dym jak dotąd z `scene-fx-3d.js`.
+- **Podgląd budowy**: pod kursorem półprzezroczysty model budowanego obiektu, zielony albo czerwony, gdy budowa jest niemożliwa (`setPlacements`, te same reguły co nakładka: ekstraktor przyciąga się do złoża gazu, zastępowanie budynku, przeciągany mur).
+- Sprawdzone w przeglądarce: test renderera 3D (wszystkie scenariusze), noc na Świetlistym Gąszczu i Rzekach Magmy, wybuchy, mur z bramą i wieżyczką, krater, ślady gąsienic, napis wraku, podgląd koszar w grze.
+
+## Szczegółowe modele z kodu (wersja 0.64, 2026-10-02)
+
+Jednostki i budynki Kolonii i Dominium są zbudowane od nowa w `webgl3d/models-detail-3d.js` (Rój, przyroda, złoża i sceneria zostają w `models-3d.js`). Dalej bez plików z modelami: kształty powstają w kodzie, więc gra otwarta z dysku działa jak dotąd.
+
+- **Zestaw kształtów**: fazowane bryły, profile boczne wyciągane na szerokość (kadłuby z pochyłym pancerzem), bryły przez pierścienie punktów (wieże, kadłuby samolotów), bryły obrotowe ze ścianką (kominy, chłodnie, talerze anten), gąsienice jako pierścień z kołami jezdnymi, napędowym i napinającym w środku, lufy z przeciwodrzutem i hamulcem wylotowym, reflektory, anteny, włazy, rury.
+- **Jednostki**: piechota z nogami (udo, goleń, nakolannik, but), pancerzem, ładownicami, hełmem (okrągły w Koloniach, kanciasty z grzebieniem w Dominium) i bronią każdego typu. Czołgi, ciężka maszyna, artyleria i niszczyciel na gąsienicach, wozy kołowe z błotnikami, łazik z dźwigiem, zbieracz z zasobnikiem i wiertłem, krocząca maszyna z kolanami i tłokami, samoloty z kadłubem, kabiną, statecznikami i dyszami.
+- **Budynki**: fundament z pasem ostrzegawczym i słupkami, okna (świecą nocą), kominy, wentylatory, rury, lampy, maszty. Kolonie mają łukowe hale i kopuły, Dominium kanciaste bloki z blankami.
+- **Ruch**: koła i gąsienice toczą się z przejechaną drogą, anteny kołyszą się w jeździe, zbieracz wierci, flaga powiewa, dźwigi jeżdżą. Renderer przechyla pojazdy i kroczące maszyny zgodnie ze stokiem pod nimi (piechota stoi prosto).
+- **Scalanie części** (`createBaker`): przy tworzeniu modelu wszystkie nieruchome części jednej ruchomej grupy (kadłub, wieża, lufa, koło…) łączą się w jedną bryłę z jednym wspólnym materiałem „lakieru”. Kolor, chropowatość, metaliczność i świecenie (okna, lampy, rdzenie energii) każdej części są zapisane w wierzchołkach, a świecenie rośnie nocą jak w pozostałych materiałach. To, które części się ruszają, ustala próbna animacja świeżego modelu (jazda, celowanie, strzał, budowa, praca, ładunek, otwarta brama). Takie same zestawy części (np. wszystkie koła jezdne) mają jedną wspólną bryłę, więc całe wojsko dalej rysuje się w kilkudziesięciu partiach instancingu.
+- **Wystawa**: `prototyp-modele.html` pokazuje wszystkie modele jednej frakcji obok siebie. Ruch i ogień, noc, kliknięcie przybliża model.
+- Pomiary: czołg 3,8 tys. trójkątów i 19 brył po scaleniu (14 to koła). Armia 10 typów: 45 partii. Test bitwy 206 modeli: 238 rysowań (limit 250), 87 partii. W grze (Cichy Horyzont, początek): 169 kl./s, 74 rysowania.
+
+## Reflektory 3D (wersja 0.65, 2026-10-04)
+
+Wcześniej światła jednostek były płaskimi teksturami 2D: rozjaśniony prostokąt z namalowanym wachlarzem, płaski na wysokości środka plamy, który nie oświetlał modeli.
+
+- **Prawdziwe reflektory** (`scene-fx-3d.js`, `nightLights`): stała pula 8 świateł typu spot dla pojazdów naziemnych (promień 12 i więcej) najbliżej środka widoku. Światło świeci z przodu kadłuba wzdłuż kierunku jazdy, w dół, na teren przed pojazdem, i oświetla teren oraz wszystkie modele w snopie (bez cieni). Liczba świateł się nie zmienia, więc shadery nie są przebudowywane.
+- **Latarki piechoty**: druga stała pula 6 świateł typu spot dla żołnierzy najbliżej środka widoku: wąski (0,26 rad), krótki (90) i chłodno biały snop z wysokości piersi, z własnym, cieńszym stożkiem w powietrzu. Pozostali żołnierze mają wąski wachlarz na terenie.
+- **Snop w powietrzu**: przed każdym takim reflektorem otwarty stożek, addytywny, gasnący z długością i ku krawędzi. Nocą ledwie widoczny, w ulewie, śnieżycy i burzy piaskowej wyraźny (siła rośnie z natężeniem pogody).
+- **Światło na terenie**: pozostałe pojazdy (wachlarz), latarki piechoty (węższy i krótszy wachlarz), plamy pod budynkami i poświata map są siatkami 12 × 12, które shader wierzchołków układa na terenie (dwuliniowo z tekstury mapy wysokości, tej samej co pogoda: `weather3d.ground`).
+- Przełącznik „Oświetlenie dnia i nocy, światła” w ustawieniach grafiki wyłącza też reflektory. Pomiar: Cichy Horyzont nocą w burzy piaskowej, 8 reflektorów: 168 kl./s, 107 rysowań; z 6 latarkami piechoty: 168 kl./s, 88 rysowań (inna liczba jednostek w kadrze).
+
+## Teren 3D: trawa i kamienie (wersja 0.66, 2026-10-05)
+
+Grunt planszy 3D to wciąż jedna malowana tekstura (barwy, plamy, zmarszczki wydm, pęknięcia lawy, żyły) pod rzeźbą terenu, ale bez rzeczy, które powinny mieć bryłę.
+
+- **Bez obiektów 2D na gruncie** (`RTS.bareGround` podczas malowania gruntu 3D): źdźbła trawy (Lumeria, Aerion), kamyki i kości (wydmy, złote piaski, bliźniacze słońca), okruchy skał (Pyrrhos), trawa i kamyki przy brzegach jezior (`scene-fx.js`), żarzące się okruchy popiołu, rysy lodu i linie szronu (zamarznięty rój), rysy na skalnym gruncie przeszkód, linie grzbietów wydm, przerywane ślady dróg, plac z płytami i obrysami pod HQ, drobinki szumu.
+- **Rozrzut 3D** (`webgl3d/scatter-3d.js`, napisany od nowa): kępy trawy (9 zakrzywionych źdźbeł), wysoka trawa, trzcina z kolbami, paprocie, krzaki (gałązki i liście), kamienie okrągłe i kanciaste (bryły z losowo przesuniętymi wierzchołkami), płyty skalne, żwir, zaspy, odłamki lodu, świecące grzyby, kości, złom, żarzące się okruchy. Zestaw i kolory zależą od biomu i motywu mapy.
+- **Rozmieszczenie**: pole łąk z ziarna mapy — trawa rośnie tam, gdzie pole jest wysokie, żwir i kamienie na gołym gruncie między łąkami, wszystko w skupiskach. Brzegi jezior: trzcina i kamyki w pasie wzdłuż wody (na lodzie same kamyki). Na grzbietach wydm też (blokują ruch, ale to piasek). Każdy obiekt ma własny odcień (kolor instancji).
+- **Wiatr**: trawa, trzcina, paprocie i krzaki kołyszą się w shaderze wierzchołków (`tick()` co klatkę); w burzy piaskowej i ulewie mocniej, w śnieżycy trochę mocniej.
+- Gęstość: ok. 17–23 tys. obiektów na mapę 3360 × 2160 (wcześniej 4–9 tys.), ustawienie „Detale terenu i roślinność” dalej ją zmniejsza. Cienie rzucają tylko większe rzeczy. Pomiar: 160–164 kl./s na mapach Cichy Horyzont, Świetlisty Gąszcz, Wiszące Szczyty i Biały Przesmyk (ok. 0,85–0,97 mln trójkątów), test bitwy 206 modeli: 241 rysowań (limit 250).
+
+## Dokładniejsza przyroda (wersja 0.67, 2026-10-05)
+
+- **Moduł `webgl3d/nature-detail-3d.js`** (z zestawem kształtów z `models-detail-3d.js`): zwierzęta, ptaki, ryby, bestie oraz kształty skał, iglic, kryształów i grzybów dla przeszkód i złóż (`models-3d.js`).
+- **Zwierzęta**: tułów jako bryła przez pierścienie, brzuch, szyja, głowa z pyskiem, nosem, oczami i uszami (szpiczaste, długie, okrągłe), nogi z udem, kolanem, goleniem i kopytem lub łapą (chód), ogon (merda); jeleń z rozgałęzionym porożem, lis z puszystą kitą z białą końcówką (polarny biały), zając z długimi uszami, jaszczurka z grzebieniem na grzbiecie, palcami i wygiętym ogonem. Ptak: tułów, głowa, dziób, skrzydła z dwóch części (zewnętrzna macha mocniej), ogon wachlarzem. Ryba: tułów, oczy, płetwa grzbietowa, płetwa ogonowa.
+- **Bestie**: drapieżnik (kolce na grzbiecie, róg, szczęka z kłami, świecące oczy), mamut (garb, kudły, trąba, zakrzywione ciosy), bazaltowy pająk (tułów i odwłok, żarzące się szwy, żuwaczki, osiem nóg z dwóch części), wydmowa paszcza (krater z bryłek piasku, żebrowana gardziel, zakrzywione zęby).
+- **Skały**: sześć wspólnych kształtów nieregularnych kamieni (wierzchołki dwudziestościanu wypchnięte i wciśnięte, kilka dużych wypukłości, spłaszczony spód) dla głazów przeszkód i złóż rudy i gazu; iglice jako skręcone, nierówne graniastosłupy. Kryształy: sześcioboczne z ostrym grotem, w skupiskach z mniejszymi u podstawy. Olbrzymie grzyby: wygięty trzon z rozszerzoną stopą, kapelusz z rantem, blaszki pod spodem, jasne kropki.
+- **Drzewa** (rozrzut, `scatter-3d.js`): pień i korona jako osobne rysowania instancji; liściaste i świerki (Aerion), ośnieżone świerki (lód), akacje i suche drzewa (piasek), zwęglone kikuty (popiół, Pyrrhos), świecące drzewa grzybowe (Lumeria). Korony kołyszą się z wiatrem. Z dala od baz (HQ 320, inne budynki 140) i przekaźników (160), żeby było gdzie budować.
+- **Scalanie**: zwierzęta, ptaki i ryby (jeden kształt na gatunek), złoża (jeden na rodzaj i etap) i wysokie przeszkody (iglice, gaje — rysowane pojedynczo, żeby mogły prześwitywać) są scalane jak jednostki; kopie materiałów prześwitujących przeszkód zachowują wykończenie i świecenie lakieru.
+- **Wystawa** `prototyp-modele.html`: zakładka „Przyroda” (zwierzęta, bestie, złoża w etapach 6/3/1/0, przeszkody).
+- Pomiar: Wiszące Szczyty, 1280 × 720, pełna klatka z kartą graficzną 7,9 ms (mediana), ok. 1,07 mln trójkątów; test bitwy 206 modeli: 237 rysowań (wcześniej 241).
+
+## Wraki, ruiny i wyspy (wersja 0.68, 2026-10-05)
+
+- **Moduł `webgl3d/props-detail-3d.js`** (zestaw kształtów z `models-detail-3d.js`, kamienie i kończyny z `nature-detail-3d.js`): przeszkody inne niż skała, latające wyspy i wraki zniszczonych jednostek. Rozmiary z podniesionego gruntu przeszkody (w × h), więc nic nie wisi nad terenem, po którym da się chodzić.
+- **Rozbity statek**: kadłub przez pierścienie (spłaszczony spód, zwężenie ku dziobowi), szwy paneli, pas, szklana kabina; wyrwana rufa z żebrami, stępką i oderwanymi płytami; urwany statecznik; silnik leżący obok z dyszą i obręczami; piasek i kamienie przy kadłubie, szczątki dookoła. **Pole szczątków**: wygięte płyty z żebrowaniem, poskręcane belki, rury z kołnierzem, obudowy maszyn.
+- **Truchło obcego**: kręgosłup z kręgów zwężający się w ogon, łukowate żebra zawinięte do środka (największe pośrodku), czaszka z oczodołami, szczęką i zakrzywionymi rogami.
+- **Ruiny**: dwa mury z warstw kamieni (przesunięte co drugą warstwę, górne wykruszone), cztery kolumny z bazą (wysokie z kapitelem, niskie złamane, bęben leżący obok), łuk, gruz. **Żywica**: bursztynowe bryły z zatopionymi drobinami i zaciekami. **Jaja**: obręcz gniazda, żyły, jaja jako bryły obrotowe, pęknięte otwarte ze światłem w środku. **Przetwórnia**: hala z dachem i oświetlonymi oknami, dwa zbiorniki z obręczami i drabinami, rury, kominy, pomost do zasobnika, lampy.
+- **Latające wyspy**: trzy nieregularne skały wiszące ostrzem w dół (płaska strona do góry), pokrywa mchu lub trawy z miękkim brzegiem, korzenie zwisające za krawędź; na wierzchu grzyby (Lumeria) albo sosenki i głazy (Aerion).
+- **Wraki jednostek**: przewrócony, osmalony kadłub z wieżą i lufą, porozrzucane płyty, koło, żarzący się węgielek — z jednostkowych kształtów skalowanych, więc każdy wrak w bitwie dzieli te same bryły (instancing).
+- **Scalanie**: każda przeszkoda poza skałami (skała, wychodnia, płaskowyż dzielą kształty kamieni) i każda wyspa jest scalana w kilka brył. Test bitwy 206 modeli: 239 rysowań (limit 250); Wydmy Bliźniaczych Słońc: 164 kl./s.
+- **Wystawa** `prototyp-modele.html` → Przyroda: nowe przeszkody, obie wyspy, wraki trzech rozmiarów.
+
+## Światło budynków (wersja 0.69, 2026-10-05)
+
+Wcześniej każdy budynek nocą dostawał jedną okrągłą plamę z tekstury (gradient od środka, którego nie widać, bo tam stoi budynek), w jednym kolorze dla wszystkich.
+
+- **Poświata okien** (`scene-fx-3d.js`, tekstura `spill` liczona w kodzie): kwadratowy obrys budynku (podstawa modelu ok. 1,6 × promień), najjaśniej przy ścianach (trochę mocniej pośrodku ścian, gdzie są okna), gasnąca na zewnątrz z zaokrąglonymi narożnikami; ułożona na terenie jak pozostałe światła.
+- **Wejście i lampy**: jaśniejsza, ciepła plama przed frontem budynku (+X, tam są drzwi, bramy i wrota modeli), a budynki o promieniu 40 i więcej mają słabsze plamy przy tylnych narożnikach.
+- **Kolor według budynku**: ciepły (baza), chłodny biały (laboratorium, stacja łączności), turkus energii (reaktor, akumulator, generator osłon), ogień (kuźnia), biel (punkt medyczny).
+- **Prawdziwe lampy**: 8 zamiast 6, nad wejściem i trochę przed ścianą, w kolorze budynku; oświetlają front i jednostki przed nim.
+- Test renderera 3D: noc ciemniejsza od dnia (11 wobec 53), bitwa 239 rysowań. Cichy Horyzont nocą z bazą: 158 kl./s.
+
+## Okna budynków (wersja 0.70, 2026-10-05)
+
+Wcześniej okna były płytkami turkusowego, świecącego szkła (tego samego co celowniki pojazdów), świecącymi jednakowo w dzień i w nocy.
+
+- **Budowa okna** (`windows()` w `models-detail-3d.js`): ciemna rama, szyba, parapet; okna od 3 jednostek wysokości albo 3,5 szerokości mają szprosy (pion i poziom).
+- **Materiały okien** (zestaw strony w `models-3d.js`): `window` (ciepłe wnętrze; w Dominium pomarańczowe), `windowCool` (chłodne ekrany), `windowOff` (ciemne). Szyba za dnia to ciemne szkło o niskiej chropowatości i wysokiej metaliczności (odbija niebo i słońce). Które okna są ciemne (ok. 20%) i chłodne (ok. 12%), wynika z położenia okna, więc wzór jest stały dla budynku.
+- **Świecenie tylko nocą**: materiały okien mają znacznik `nightOnly`; ich świecenie idzie krzywą `windowCurve(night)` (zero w dzień, od zmierzchu rośnie do pełnego w nocy), a nie wspólnym czynnikiem świateł (0,6 + 1,6 × noc), który zostaje dla lamp, rdzeni energii i celowników. W scalonym lakierze znacznik jest trzecią składową atrybutu `finish`, a shader wybiera między `glowScale` i `windowScale`.
+- Okna w ten sam sposób: świetliki warsztatu i hali fabryki (z ramą i szprosami), sterówka wieży hangaru (ze słupkami w narożnikach), okienka bramy koszar, kabina dźwigu placu odzysku. Kopuły (HQ, laboratorium) i celowniki pojazdów zostają szklane.
+- Test renderera 3D przechodzi (noc 11 wobec dnia 53, bitwa 239 rysowań).
+
+## Rój w 3D (wersja 0.71, 2026-10-05)
+
+- **Moduł `webgl3d/swarm-detail-3d.js`** (zestaw kształtów z `models-detail-3d.js`) zastępuje proste bryły Roju w `models-3d.js` (te same funkcje: budynki, strażnicy, pełzacz, kroczące, latacze; te same odmiany jednostek w `SWARM_UNITS`).
+- **Odłamki**: wspólne kształty pięciościennych, zwężających się kamieni o nierównych ścianach z ukośnie wyszczerbionym szczytem i ostrzem (trzy całe, dwa odłamane nisko).
+- **Budynki**: schodkowy sześciokątny cokół (dwa poziomy), centralny monolit z pięcioma rowkami, pasem drużyny i jasną wargą pod koroną; pierścień mniejszych monolitów odchylonych na zewnątrz (część odłamanych) z opaskami drużyny; odłamki leżące u podstawy. Rdzeń (HQ): sześć monolitów i przypory do środka. Monolit: pięć odłamków krążących powoli wokół pasa i falujących w górę i w dół. Wieżyczka i obrona przeciwlotnicza: korona ostrzy na podstawie, obracana do celu.
+- **Jednostki**: tułów jako kanciasta bryła (sześcioboczne pierścienie), płyty barkowe, pas drużyny, soczewka w ciemnej oprawie, garb; nogi z udem, kolanem i goleniem zakończonym ostrzem; kolce (rakietowiec, robot), grzbiet z ostrzy (pluwacz). Pełzacz: trzy segmenty pancerza, żuwaczki, sześć nóg. Kroczące maszyny: długi tułów z rowkiem i grzebieniem, płyty boczne, garb (kolos), czujniki; nogi z kolanami i stopą z odłamka; broń: kolec, podwójne ostrza, szpikulec. Latacze: tułów, dwie pary skrzydeł jak ostrza, kolec ogonowy.
+- **Obsydian**: jaśniejszy i gładki (szorstkość 0,3), prawie niemetaliczny — przy metaliczności bez mapy otoczenia ściany wychodziły czarne i nie było widać faset. Bez poświaty; kolor drużyny jest jedynym kolorem.
+- Test renderera 3D: baza Roju rysuje się (jasność 85), bitwa 239 rysowań.
+
+## Budynki specjalne aktu III (wersja 0.72, 2026-10-05)
+
+Akt III nie ma własnych typów budynków: Serce Roju to brama Roju w rozdziale IX, gniazda — bramy Roju w rozdziale VIII, stacja orbitalna — budynek Dominium (`uplink`), Szczyt — przekaźnik trybu król wzgórza. W 3D dostały własne modele (`webgl3d/act3-detail-3d.js`, z odłamkami i kończynami `swarm-detail-3d.js`).
+
+- **Misja na planszy**: `models3d.setMission(game.missionId)` (renderer przy `setGame`); brama Roju w `colony9` buduje się jako Serce, w `colony8` jako gniazdo. Scalanie ma osobny klucz dla wariantu.
+- **Serce Roju**: dwupoziomowy siedmiokątny cokół ze świecącymi szczelinami, osiem wielkich odłamków odchylonych do środka (klatka), z opaskami drużyny; rdzeń — kryształ z przesuniętymi wierzchołkami świecący kolorem drużyny w osłonie z obsydianowych płyt — bije podwójnym uderzeniem i się obraca; sześć żył z rdzenia do ziemi ze świecącą nicią; sześć odłamków krąży wokół klatki.
+- **Gniazdo Roju**: kopiec pięciu obsydianowych brył, cztery otwory z obrzeżem, pierścień drużyny u podstawy, wieniec dwunastu kolców, strąki, anteny z odłamków (kołyszą się).
+- **Stacja orbitalna** (każda, nie tylko w akcie III): ośmiokątna stopniowana platforma z pasem ostrzegawczym, sterownia z oknami, cztery baterie kondensatorów, kratownicowy maszt z dwoma pierścieniami celowniczymi i emiterem, antena talerzowa na obrotowej podstawie. Naładowanie (`info.charge` 0…1 z `e.strikeReady` i czasu odnowienia uderzenia) zapala kolejne kondensatory, przyspiesza pierścienie w trakcie ładowania, a gotowe uderzenie zapala emiter.
+- **Szczyt**: na przekaźniku trybu król wzgórza wieża zagłuszacza — sześciokątny cokół, sześć zbieżnych słupów, cztery świecące talerze, kryształ rezonatora obracający się na szczycie.
+- Wystawa `prototyp-modele.html` → Przyroda: rząd „akt III”. Nowy test (`tests/bundle-3d.test.js`): Serce i gniazdo różnią się od zwykłej bramy, stacja animuje się przy każdym naładowaniu, Szczyt ma wieżę. Test bitwy: 239 rysowań.
+
+## Obiekty aktu II (wersja 0.73, 2026-10-05)
+
+Cele aktu II (`game.act2`) były na planszy 3D tylko słupami światła z napisami (Act2Art beacons). Teraz mają modele (`webgl3d/act2-detail-3d.js`), stawiane przez `scene-life-3d.js` po odkryciu miejsca; słupy, pierścienie i napisy zostają.
+
+- **Lądowisko ewakuacyjne** (IV, VI): betonowa płyta, pas ostrzegawczy, okrąg i litera H, dwanaście świateł biegnących w kółko, budka kontrolna z oknem i pasem, latarnia, rękaw wiatrowy kołyszący się na wietrze.
+- **Obóz badaczy** (IV): trzy namioty z drążkami, skrzynie, generator z kominem, maszt z anteną (obraca się) i migającym światłem, lampy, stół z ekranami.
+- **Archiwum sondy** (IV): na wpół zakopana obca sonda (kadłub przez pierścienie, stateczniki, świecąca kopułka i szwy), wydmy piasku; trzy pierścienie danych pojawiają się przy 0, 1/3 i 2/3 odczytu i kręcą się szybciej wraz z postępem.
+- **Rdzeń danych** (IV): wrak z płyt i rury, świecący rdzeń z obręczami unoszący się i obracający; widoczny, gdy rdzeń leży na miejscu albo we wraku transportera.
+- **Postoje konwoju** (V): betonowy plac, szlabany biało-czerwone, dwa maszty z reflektorami, tablica. **Latarnia Kestrel**: wieża w czerwone pasy, dom latarnika, galeria z balustradą, laterna, obracająca się lampa z dwoma snopami światła (słabymi w dzień, wyraźnymi nocą).
+- **Kompleks Hefajstos** (VI): na węzłach sterujących maszyny według nazwy — ZAWÓR (gruba rura z kołnierzami, korpus, koło zaworu obracające się z przejmowaniem), TURBINA (obudowa z obręczami, wirnik szybki, gdy węzeł należy do Dominium), ŁĄCZNIK (trzy słupy, kule i wyładowania między nimi); rurociągi od Serca popiołu do każdego z tych węzłów, na podporach, po terenie.
+- Wystawa `prototyp-modele.html` → Przyroda: rząd „akt II”. Nowy test (`tests/bundle-3d.test.js`) buduje i animuje wszystkie obiekty, rurociąg i maszyny węzłów. Test bitwy: 239 rysowań.
+
+## Akt I (wersja 0.74, 2026-10-05)
+
+Akt I (Szkolenie, I · Iskra na Eos, II · Archiwum pod lodem, III · Świt nad Nadir) toczy się zwykłymi jednostkami i budynkami; jego cele to przekaźniki. Fabuła (Stacja Ciszy, Latarnia Eos, archiwum w lodzie, Cytadela Węzła) nie miała na planszy obiektów. `webgl3d/act1-detail-3d.js`:
+
+- **Przekaźnik** (wszystkie mapy): dwupoziomowy sześciokątny cokół, trzy szafki aparatury ze światłami w kolorze właściciela i kablami do masztu, kratownicowy maszt trójnożny ze stężeniami na czterech poziomach, latarnia właściciela na szczycie, anteny prętowe, obrotowa antena talerzowa (czasza, zastrzały, odbiornik, przeciwwaga). Strefa przejmowania i pierścień postępu zostały; przekaźnik jest teraz scalany, a części na ziemi (renderer kładzie je na terenie po jednej) mają znacznik `keep` i nie są scalane (nowa reguła w `createBaker`).
+- **Punkty orientacyjne** na skałach map aktu I (`scene-life-3d.js` wybiera raz na grę skałę najbliżej środka mapy; w rozdziale I także skałę najbliżej centrum gracza), zamiast stosu głazów, z mniejszymi kamieniami na obrzeżu:
+  - Szkolenie: **poligon Liry** — cztery tarcze strzeleckie, beczki, worki z piaskiem, drewniana wieża obserwacyjna, pachołki.
+  - I: **Latarnia Eos** — kratownicowa wieża 150 jednostek z galerią i obracającą się laterną, panele słoneczne; ciemna (z rzadkim mignięciem), zapala się, gdy cele misji są spełnione (`game.campaignReady()`). **Stacja Ciszy** — kopuła zawalona w jednej trzeciej, odpadłe panele, na wpół zasypane moduły, skrzynie, zgięty maszt, wydmy.
+  - II: **wrota archiwum** — półksiężyc lodowych bloków, stalowa rama ze świecącymi znakami, wrota z żebrami i znakiem, schody; wrota unoszą się po spełnieniu celów.
+  - III: **Cytadela Węzła** — schodkowa ośmiokątna platforma, czterościenny obelisk ze świecącymi szwami, kable; trzy pierścienie energii pojawiają się przy każdej trzeciej części przejętych węzłów, korona zapala się przy wszystkich.
+- Wystawa `prototyp-modele.html` → Przyroda: rząd „akt I”. Nowy test: przekaźnik zachowuje 60 części na ziemi i pokazuje postęp przejmowania, punkty orientacyjne budują się i reagują na stan. Test bitwy: 237 rysowań (przekaźniki scalone).
+
+## Woda, mgła i pogoda (wersja 0.75, 2026-10-05)
+
+- **Woda** (`scene-fx-3d.js`, `waterLook` na shaderze mgły wojny; jeziora, szczeliny lodu, świecące rozlewiska — nie lawa): fale w shaderze wierzchołków (tylko z dala od brzegu), druga warstwa zmarszczek z mapy normalnych w innej skali i kierunku (mniej powtarzalnego wzoru), odbicie nieba pod kątem (fresnel, kolor tła sceny), jaśniejsze płycizny (przezroczystość brzegu służy za głębokość), piana na linii brzegu z dwóch warstw szumu, kręgi od kropel w deszczu (trzy warstwy komórek, każda kropla w swoim miejscu i chwili).
+- **Kałuże** (tylko teren, `TERRAIN` w `fogged()`): w ulewie na płaskim gruncie, gdzie szum ziarna mapy przekracza próg obniżany przez wilgotność — ciemne, prawie lustrzane (szorstkość 0,04), odbijające kolor nieba, z kręgami od kropel, gdy pada; wysychają razem z gruntem. Mokry grunt poza kałużami błyszczy umiarkowanie.
+- **Śnieg na terenie i rozrzucie**: osiada najpierw płatami (szum), przy większej pokrywie wszędzie; iskierki połyskują i zmieniają się co chwilę. **Na modelach** (lakier `models-detail-3d.js`): ściany zwrócone do góry bieleją ze śniegiem (dachy, kadłuby, wieże; nie okna), w deszczu modele są ciemniejsze i błyszczące (`models3d.setWeather`).
+- **Mgiełka** (`weather-3d.js`): 160 szerokich, miękkich płatów sunących nisko nad terenem z wiatrem, w kolorze nieba; w deszczu, śnieżycy i (słabiej) nocą, znika tuż przy kamerze.
+- **Deszcz**: krople cieńsze, dłuższe w ulewie; zasłony deszczu — wysokie pasma smug w oddali (250 płatów obracanych do kamery, smugi spływające w dół); pierścienie rozbryzgów słabsze.
+- **Pioruny**: rdzeń i niebieska poświata (druga warstwa, czterokrotnie szersza), pięć szybkich rozbłysków w jednym uderzeniu zamiast jednego, błysk z góry (światło kierunkowe bez cieni) oprócz światła punktowego, iskry i dym w miejscu uderzenia.
+- Test renderera 3D przechodzi (noc z ulewą, bitwa 237 rysowań). Pomiar: Popielny Szlak w ulewie, 1280 × 720: 167–169 kl./s.
+
+## Znaczniki rozkazów (wersja 0.75.1, 2026-10-05)
+
+- **Błąd**: od 0.63 grunt planszy 3D maluje się raz (`ground3D`, podpis gruntu pusty), a przerywane trasy zaznaczonych jednostek z kółkiem celu były malowane w fazie `ground` (`render-canvas.js`), więc przestały się pojawiać. Pierścień kliknięcia rozkazu (efekt `command`) był rysowany w fazie `units`, której plansza 3D nie używa.
+- **Poprawka**: `drawPaths()` (trasy i kółko celu) oraz `drawOrderMarks()` (trasy i pierścienie rozkazów ruchu i ataku) rysuje faza `overlay`, gdy widok ma `objects3D` (nakładka planszy 3D, odświeżana co klatkę i kładziona na terenie) — grubszymi, jaśniejszymi liniami, bo nakładka ma niższą rozdzielczość. Plansza 2D i WebGL rysują trasy jak dotąd w fazie `ground`.
+- Sprawdzone w grze (Świetlisty Gąszcz, oddział sześciu jednostek, rozkaz ruchu).
+
+## Samoloty (wersja 0.75.2, 2026-10-05)
+
+- **Ślady**: silnik (`engine.js`) nie zapisuje śladów gąsienic i stóp dla jednostek latających (`flying`) — dotyczy wszystkich renderów.
+- **Reflektory w powietrzu** (`scene-fx-3d.js`): cztery reflektory (`AIR_SPOTS`) przy samolotach najbliższych środka widoku, ustawione przez `aim()` na wysokości lotu (88 nad terenem): smuga światła (stożek mgiełki) biegnie w powietrzu od nosa w dół i do przodu, na ziemi leży plama światła. Siła rośnie z nocą, smuga gęstnieje w deszczu i śniegu.
+- **Światła pozycyjne** (`models-detail-3d.js`, `navLights`): czerwone na końcu lewego skrzydła, zielone na prawym, biały stroboskop na ogonie migający krótko co ok. sekundę (przesunięty o identyfikator jednostki) — myśliwiec, bombowiec, dron.
+- **Smugi silników**: krótki żar z dyszy (nie dron) i jasna para rozpływająca się za lecącym samolotem (`airTrails`, tylko jednostki w ruchu blisko widoku).
+
+## Samoloty: modele (wersja 0.76, 2026-10-05)
+
+- **Narzędzia** (`models-detail-3d.js`): `fuselage()` — kadłub przez pierścienie z przesunięciem w pionie (12 boków u Kolonii, 6 u Dominium); `wingGeo()` — skrzydło lub usterzenie przez przekroje profilu lotniczego (krawędź natarcia, grubszy wierzch, cienka krawędź spływu) z cięciwą, grubością, rozpiętością i wzniosem na każdym przekroju; `jet()` — silnik w gondoli (pierścień wlotu, ciemny wentylator, kołpak, dysza, żar); `missile()` — rakieta na pylonie; `canopy()` — przyciemniana kabina (`k.canopy`, słaba poświata przyrządów) z ramą.
+- **Myśliwiec**: przycięta delta (Dominium: ostra delta z przednim usterzeniem), usterzenie poziome, dwa stateczniki pionowe pochylone na zewnątrz z pasem barwy drużyny, boczne wloty, owiewka radaru z rurką Pitota, cztery rakiety, dysza z dopalaczem.
+- **Bombowiec**: skrzydła z wzniosem i załamaniem, cztery silniki na pylonach, usterzenie T (Dominium nisko), klapy, drzwi komory bombowej, wieżyczka grzbietowa obracana do celu (`aim`), tylny strzelec, przeszklenie bombardiera.
+- **Dron**: korpus z pasem drużyny, okno kamery, głowica kamery rozglądająca się, cztery wirniki w osłonach z krzyżakiem i silnikiem, łopaty po trzy, płozy; w locie pochyla się do przodu.
+- Części nieruchome są scalane jak dotąd — bitwa w teście nadal 237 rysowań.
+
+## Pojazdy naziemne (wersja 0.77, 2026-10-05)
+
+- **Nowe części** (`models-detail-3d.js`): `smokeLaunchers()`, `stowage()` (skrzynia z pasami), `jerry()` (kanister), `towHooks()`, `driverHatch()` (właz z trzema peryskopami na pochyłej płycie), `grille()`, `mirror()`, `bullbar()`, `windscreen()` (przyciemniana szyba `k.canopy` w ramie, słupek, dwie wycieraczki, pochylenie), `arch()` (łukowe nadkole). Kładą części prosto w rodzicu, bez własnych grup, bo scalanie łączy części nieruchome w obrębie rodzica — nowe grupy dodawałyby paczki rysowania.
+- **Gąsienice**: ogniwa także na dolnym odcinku, dwie rolki podtrzymujące pod górnym, grzebień prowadzący. **Koła**: 12 klocków bieżnika na oponie (obracają się z kołem, w jego scalonej części — za darmo), nadkola łukowe zamiast płaskich błotników.
+- **Gąsienicowe**: czołg — osłony boczne z płyt, skrzynie i kanistry, właz kierowcy, zapasowe ogniwa, haki, wyrzutnie dymne, kosz z relingami i zwiniętą plandeką na tyle wieży, karabin dowódcy, karabin sprzężony; czołg ciężki — skrzynie, właz, haki, wyrzutnie, kanistry na tyle wieży; artyleria — właz, skrzynie, hak, pociski na pokładzie, wyrzutnie i skrzynka kierowania ogniem z okienkiem; niszczyciel — wyrzutnie, skrzynie, kanistry, haki, zapasowe ogniwa.
+- **Kołowe**: szyby `windscreen()` zamiast świecących `k.glass` (ciężarówka, transporter, łazik, zbieracz, przeciwlotniczy, zwiadowca), boczne okna przyciemniane; atrapy chłodnic, lusterka, zderzak i stopnie ciężarówki, zbiorniki paliwa, lampy na belce dachowej; transporter — płyty pancerza na burtach, relingi i bagaż na dachu, kanistry i klamki na rampie, wyrzutnie; zwiadowca — belka lamp na klatce, wydechy, kanistry, felga koła zapasowego.
+- Bitwa w teście: nadal 237 rysowań.
+
+## Słońce, księżyc i noc (wersja 0.78, 2026-10-05)
+
+- **Niebo** (`webgl3d/sky-3d.js`): kopuła wokół kamery (shader, bez mgły), rysowana po nieprzezroczystych obiektach z testem głębokości, więc liczona tylko tam, gdzie niebo widać (+1 rysowanie). Gradient horyzont → zenit z palety zależnej od wysokości słońca (noc, niebieska godzina, zachód, złota godzina, dzień); tarcza słońca, korona i szeroka poświata, mocniejsza wzdłuż horyzontu o zachodzie; nocą gwiazdy (siatka komórek na sferze, migotanie), pas galaktyki i księżyc — tarcza oświetlona z boku (faza przed pełnią), ciemniejsze morza, halo; chmury w perspektywie, oświetlone słońcem albo światłem księżyca, gęstsze w złą pogodę. Mgła pogody i błysk pioruna barwią też kopułę; w zamieci i ulewie gwiazdy, księżyc i słońce znikają.
+- **Światło** (`three-renderer.js`, `light()`): jedno światło z cieniem jest słońcem albo księżycem. Słońce: kolor z palety (białe → złote → pomarańczowe → czerwone), siła maleje od wysokości 0,3 do −0,12; księżyc: chłodny, z własnego kierunku nisko nad horyzontem (ok. 17°, długie cienie), od −0,05 do −0,3; zmiana w niebieskiej godzinie, gdy oba są słabe. Światło otoczenia: niebieskie nocą, błękitne w dzień, ocieplone kolorem horyzontu o zmierzchu; odbicie od ziemi ciemnieje nocą. Mgiełka w oddali i tło mają kolor horyzontu; woda odbija tę barwę.
+- **Cienie chmur**: `cloudShade()` wstawia do shaderów (teren, rozrzut, woda — przez `fogged()`; modele — w lakierze `models-detail-3d.js`) przyciemnienie światła kierunkowego według tego samego szumu co chmury na niebie, w punkcie świata (z macierzy widoku); płyną z wiatrem, słabsze przy zachmurzeniu (`options.cloudShadows: false` wyłącza).
+- Test renderera 3D przechodzi (bitwa 238 rysowań).
+
+## Reflektory budynków (wersja 0.79, 2026-10-05)
+
+- **Reflektory** (`scene-fx-3d.js`, `FLOODS` = 10): po dwa na przednich narożnikach najbliższych oświetlonych budynków (na wysokości ok. 0,55 promienia), skierowane o ±0,6 rad od frontu i w dół, szerokie (kąt 0,62, miękka krawędź 0,8), w kolorze budynku (`BUILDING_LIGHT`); widoczna smuga jak przy pojazdach (`beamAt()` — wspólne ustawianie światła i smugi, `aim()` z niego korzysta). Budynki bez prawdziwych reflektorów rzucają na ziemię te same wachlarze jako naklejki.
+- **Światło fasady** (`LAMPS` = 5, było 8): punktowe przed frontem, blisko ściany (1,25 promienia + 8), z mocą w jednostkach fizycznych jak reflektory (480 zamiast 1,8 — dawne światło przy drzwiach było praktycznie niewidoczne) — oświetla ściany budynku i jednostki przed nim.
+- **Na ziemi**: kwadratowa poświata wokół podstawy (naklejka `spill`) i plama przed drzwiami zastąpione miękką, okrągłą poświatą okien.
+- Liczba świateł w scenie: 15 zamiast 8 dla budynków (cieniowanie bez zmian w liczbie rysowań; bitwa w teście 238).
+
+## Bez ostrych snopów światła (wersja 0.79.1, 2026-10-05)
+
+- **Błąd**: reflektory dostaje tylko 10 najbliższych narożników budynków; pozostałe dostawały naklejkę-wachlarz (tekstura `cone`: trójkąt z twardymi krawędziami, jaśniejsza od prawdziwego światła). Przy ruchu kamery budynek przechodził między reflektorem a naklejką i przez chwilę świecił „zwykłym snopem”.
+- **Poprawka**: budynek bez prawdziwego reflektora rzuca miękką, owalną plamę (`pools`) tam, gdzie reflektor oświetla ziemię, słabiej (0,12 × noc). Tekstura `cone` (dalsze pojazdy, latarki) liczona piksel po pikselu: miękkie brzegi w poprzek wachlarza, początek nieco przed lampą, zanik z odległością.
+- Światło księżyca pada z wysokości ok. 40° w stronę tarczy (tarcza na niebie dalej nisko, ok. 17°): przy niskim świetle wzgórza rzucały cienie przez pół mapy.
+
+## Wszystkie światła nocy naraz (wersja 0.80, 2026-10-05)
+
+- **Błąd**: światła nocy były stałą pulą świateł Three.js (8 reflektorów pojazdów, 6 latarek, 4 reflektory samolotów, 10 reflektorów i 5 świateł fasad budynków) dawaną obiektom najbliższym środka kamery; reszta miała naklejki na ziemi. Przy ruchu kamery światła przeskakiwały z obiektu na obiekt — teren i modele nagle jaśniały lub ciemniały.
+- **Teraz** (`webgl3d/night-lights-3d.js`): każde światło klatki to wiersz w teksturze (pozycja i zasięg, kierunek i stożek, kolor × moc; do 128 najbliższych środka widoku, wygaszane ku brzegowi siatki). Siatka 48 × 48 komórek wokół środka widoku (rozmiar komórki rośnie z oddaleniem) wymienia światła sięgające komórki — do 24, przy nadmiarze odpadają najsłabsze w tej komórce. `nightLightShade()` dodaje w shaderach terenu, rozrzutu, wody (`fogged()`) i modeli (lakier) światło rozproszone tych świateł: zanik jak w Three.js (moc / odległość^1,3, łagodne odcięcie przy zasięgu), miękkie stożki, te same moce co dawne światła. Smugi w powietrzu — jedno rysowanie instancjonowane dla wszystkich reflektorów.
+- `scene-fx-3d.js` tylko zbiera światła klatki (`lights.spot()`, `lights.point()`): budynki — dwa reflektory na przednich narożnikach i światło fasady, pojazdy — reflektor, piechota — latarka, samoloty — reflektor z nosa. Na ziemi zostały tylko miękka poświata okien i blask mapy (gaje, świecące stawy, lawa); usunięte naklejki wachlarzy i kwadratowej poświaty.
+- W scenie nie ma już świateł punktowych i reflektorów Three.js poza słońcem/księżycem i błyskiem pioruna. Test: bitwa 238 rysowań; prototyp ok. 170 kl./s.
+
+## Strzały samolotów (wersja 0.80.1, 2026-10-05)
+
+- **Błąd**: efekt strzału (`game.effects`, `kind: "shot"`) ma tylko punkt strzelca i celu, więc plansza 3D rysowała każdy strzał od 14 nad ziemią do 10 nad ziemią — samoloty (lecące 90 nad ziemią) strzelały spod siebie, a strzały w samoloty trafiały w ziemię.
+- **Silnik** (`engine.js`): strzał niesie `air` (strzelec lata), `airTarget` (cel lata) i `bomb` (bombowiec); renderery 2D ich nie używają.
+- **Plansza 3D** (`three-renderer.js`): strzał z samolotu startuje z wysokości lotu, myśliwca — z nosa (16 przed środkiem), dwiema cieńszymi, krótszymi smugami po bokach, po prostej (bez łuku); bombowiec zrzuca bombę spadającą z przyspieszeniem (wysokość ∝ k²), z dymem, bez błysku wylotu, z wybuchem jak rakieta; strzał w samolot kończy się na jego wysokości (iskry w powietrzu).
+
 ## W grze
 
 - **Kamera**: kamera gry (`camera.x`, `camera.y`, `zoom` → `scale`) steruje kamerą 3D. Patrzy na środek widoku z pochylenia ok. 54°, z odległości, przy której środek ekranu ma tyle pikseli na jednostkę mapy co widok 2D. Przesuwanie, przybliżenie, Home i minimapa działają jak dotąd; obrotu i pochylenia w grze nie ma.
@@ -58,12 +349,11 @@ Data: 2026-09-30. Status: w grze jako Ustawienia → Renderer → „3D (Three.j
 - 415 modeli (galeria + 300 jednostek): 107 wywołań, 230 tys. trójkątów, 8,5 ms na klatkę (5,4 ms procesora).
 - W grze (Cichy Horyzont, początek bitwy): ok. 169 kl./s (mediana klatki 5,9 ms) razem z nakładką interfejsu.
 - 0.53, w grze (Rzeki Magmy, noc i burza wulkaniczna, płonące koszary): mediana klatki 5,9 ms, 95% klatek do 11,7 ms.
+- 0.54, w grze (Wiszące Szczyty, początek bitwy, przyroda i wyspy): mediana klatki 5,9 ms, 95% klatek do 6,0 ms.
 - Sprawdzone w grze: zaznaczanie ramką, rozkaz ruchu trafia w kliknięte miejsce, podgląd budowy pod kursorem, przełączanie 3D ↔ WebGL w trakcie gry. Powrót do WebGL przy stronie otwartej z dysku nie był sprawdzany w przeglądarce.
 
 ## Dalej
 
-1. Napisy złóż i przekaźników jako sprite'y zwrócone do kamery (dziś są namalowane na gruncie).
-2. Zwierzyna, ptaki i latające wyspy (`webgl/fauna-native.js` w PixiJS) — w 3D jeszcze ich nie ma; efekty map (zarodniki, iskry lawy, mgła nad przepaściami) też nie.
-3. Ślady efektów walki: lecące pociski zamiast linii, błysk wystrzału, wraki.
-4. Pomiar w `tests/benchmark-browser.html` i testy renderera 3D w `tests/render-webgl-browser.html`.
-5. Tryb 3D z dysku: Three.js jako zwykły skrypt (zbudowany plik UMD) albo wbudowanie w jeden plik.
+1. Domyślny renderer 3D (po ocenie gracza), WebGL (PixiJS) jako zapasowy.
+2. Kampania: znaczniki misji i obiekty specjalne aktu II/III w 3D zamiast nakładki na terenie; animowane sceny kampanii.
+3. Szlif modeli z bliska (Rój, akt III, budowle specjalne).

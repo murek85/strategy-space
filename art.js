@@ -821,7 +821,8 @@ const BoardArt = (() => {
 						: "#bc9a5c12",
 			);
 		}
-		if (biome === "ice")
+		// Ice cracks: 2D only (RTS.bareGround).
+		if (biome === "ice" && !RTS.bareGround)
 			for (let i = 0; i < 65 * area; i++) {
 				const x = rand() * game.W,
 					y = rand() * game.H;
@@ -837,13 +838,15 @@ const BoardArt = (() => {
 					1,
 				);
 			}
-		if (biome === "ash")
+		// Cinders (the 3D board scatters real ones: RTS.bareGround).
+		if (biome === "ash" && !RTS.bareGround)
 			for (let i = 0; i < 80 * area; i++) {
 				const x = rand() * game.W,
 					y = rand() * game.H;
 				ellipse(c, x, y, 7, 3, "#b1794233");
 			}
-		for (let i = 0; i < 1700 * area; i++) {
+		// Pebbles (the 3D board scatters real stones instead: RTS.bareGround).
+		for (let i = 0; i < (RTS.bareGround ? 0 : 1700 * area); i++) {
 			const x = rand() * game.W,
 				y = rand() * game.H,
 				r = 1 + rand() * 4;
@@ -860,7 +863,8 @@ const BoardArt = (() => {
 				null,
 			);
 		}
-		for (const o of game.obstacles.filter((o) => !o.kind)) {
+		// Cracks over rock ground (the 3D board builds the rocks: RTS.bareGround).
+		for (const o of game.obstacles.filter((o) => !o.kind && !RTS.bareGround)) {
 			c.save();
 			c.beginPath();
 			c.rect(o.x, o.y, o.w, o.h);
@@ -891,7 +895,8 @@ const BoardArt = (() => {
 			}
 			c.restore();
 		}
-		for (const b of game.entities.filter((e) => e.type === "hq")) {
+		// Base pad tiles around the HQ (the 3D HQ stands on its own foundation).
+		for (const b of game.entities.filter((e) => e.type === "hq" && !RTS.bareGround)) {
 			for (let x = -110; x < 130; x += 40)
 				for (let y = -95; y < 120; y += 40) {
 					rect(c, b.x + x, b.y + y, 37, 37, "#82938b0b");

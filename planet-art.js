@@ -53,6 +53,7 @@ const PlanetArt = (() => {
 			gradient.addColorStop(1, "#07111600");
 			c.fillStyle = gradient;
 			c.fillRect(x - r, y - r, 2 * r, 2 * r);
+			if (RTS.bareGround) continue; // the painted ridge line: 2D only (the 3D ground has relief)
 			c.strokeStyle = biome === "ice" ? "#c9e2e21c" : "#ac9c6520";
 			c.lineWidth = 2;
 			c.beginPath();
@@ -85,7 +86,7 @@ const PlanetArt = (() => {
 		for (
 			let i = 0;
 			i <
-			((RTS.MISSIONS[g.missionId].barren ? 0 : 1650) * (g.W * g.H)) /
+			((RTS.MISSIONS[g.missionId].barren || RTS.bareGround ? 0 : 1650) * (g.W * g.H)) /
 				(3360 * 2160);
 			i += typeof SceneFX !== "undefined" ? SceneFX.stride("terrain") : 1
 		) {
@@ -887,7 +888,9 @@ const PlanetArt = (() => {
 		c.restore();
 	}
 	// grains = false: the storm grains are drawn by the WebGL renderer as native particles.
-	function atmosphere(c, g, width, height, grains = true) {
+	// withWeather = false: only the sky ornaments (sun, moon, stars); a renderer with 3D weather (the 3D board)
+	// draws rain, snow, sand and lightning itself.
+	function atmosphere(c, g, width, height, grains = true, withWeather = true) {
 		const t = g.time,
 			night = g.night,
 			weather = g.weather,
@@ -942,6 +945,7 @@ const PlanetArt = (() => {
 			);
 		}
 		c.restore();
+		if (!withWeather) return;
 		if (weather.kind === "sand") {
 			sandstorm(c, g, width, height, grains);
 			return;

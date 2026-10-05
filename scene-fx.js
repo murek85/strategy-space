@@ -72,7 +72,8 @@
 			const biome = RTS.MISSIONS[g.missionId].biome,
 				step = this.stride("terrain");
 			c.save();
-			for (const w of g.waters.filter((w) => !w.kind)) {
+			// Shore pebbles and grass (the 3D board scatters real reeds and pebbles: RTS.bareGround).
+			for (const w of g.waters.filter((w) => !w.kind && !RTS.bareGround)) {
 				// A bounded shoreline pass, baked into the existing terrain canvas.
 				for (let i = 0; i < 90; i += step) {
 					const a = (i * Math.PI * 2) / 90,
@@ -114,7 +115,7 @@
 					}
 				}
 			}
-			for (const o of g.obstacles.filter((o) => !o.kind)) {
+			for (const o of g.obstacles.filter((o) => !o.kind && !RTS.bareGround)) {
 				c.strokeStyle = biome === "ice" ? "#d2e1dc55" : "#b7ad8c44";
 				c.lineWidth = 2;
 				c.beginPath();

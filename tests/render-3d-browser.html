@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="pl">
+	<head>
+		<meta charset="utf-8" />
+		<title>Test renderera 3D</title>
+		<style>
+			body {
+				background: #0b141c;
+				color: #d7e4e6;
+				font: 14px "Segoe UI", sans-serif;
+				padding: 16px;
+			}
+			button,
+			select {
+				font: inherit;
+				margin-right: 8px;
+			}
+			.board {
+				position: relative;
+				width: 1130px;
+				height: 522px;
+				margin: 10px 0;
+				border: 1px solid #33505a;
+			}
+			.board canvas#game {
+				position: absolute;
+				inset: 0;
+			}
+			#out p {
+				margin: 2px 0;
+			}
+			code {
+				color: #9fd8c8;
+			}
+		</style>
+	</head>
+	<body>
+		<p>
+			Renderer 3D z <code>webgl3d/three-game-renderer.js</code> (Three.js) rysuje te same sceny co testy rendererów Canvas 2D i WebGL. Sprawdzenia automatyczne: każda scena
+			rysuje się bez błędu i niepusto, noc ciemniejsza od dnia, kursor → plansza → kursor w to samo miejsce (także z obróconą kamerą), każdy obiekt ma model 3D, duża
+			bitwa w małej liczbie rysowań (instancing), brak przyrostu tekstur przy zmianie map, zwalnianie zasobów. Strona musi być podana przez serwer (<code>npm start</code>).
+		</p>
+		<button id="run">Sprawdź renderer</button><select id="scene"></select><button id="show">Pokaż</button>
+		<div id="out" role="status"></div>
+		<div class="board"><canvas id="game" width="1130" height="522"></canvas></div>
+		<canvas id="minimap" width="220" height="135"></canvas>
+		<script src="../engine.js"></script>
+		<script src="../advanced-rules.js"></script>
+		<script src="../army-rules.js"></script>
+		<script src="../campaign-act2.js"></script>
+		<script src="../scenario-modes.js"></script>
+		<script src="../frontier-maps.js"></script>
+		<script src="../themed-maps.js"></script>
+		<script src="../support-rules.js"></script>
+		<script src="../scenario-setup.js"></script>
+		<script src="../scenario-challenges.js"></script>
+		<script src="../enemy-ai.js"></script>
+		<script src="../teams-rules.js"></script>
+		<script src="../factions-rules.js"></script>
+		<script src="../swarm-rules.js"></script>
+		<script src="../campaign-act3.js"></script>
+		<script src="../scene-fx.js"></script>
+		<script src="../art.js"></script>
+		<script src="../planet-art.js"></script>
+		<script src="../advanced-art.js"></script>
+		<script src="../act2-art.js"></script>
+		<script src="../support-art.js"></script>
+		<script src="../fx-art.js"></script>
+		<script src="../faction-art.js"></script>
+		<script src="../swarm-art.js"></script>
+		<script src="../map-art.js"></script>
+		<script src="../themed-art.js"></script>
+		<script src="../render-canvas.js"></script>
+		<script src="../webgl/model-light.js"></script>
+		<script src="../webgl/terrain-height.js"></script>
+		<script src="render-scenes.js"></script>
+		<script type="module">
+			import { createThreeGameRenderer } from "../webgl3d/three-game-renderer.js";
+			const $ = (id) => document.getElementById(id),
+				canvas = $("game"),
+				mini = $("minimap"),
+				canvasRenderer = createCanvasRenderer(canvas, mini),
+				list = renderScenes();
+			// A big battle for the model and instancing checks.
+			const battle = (() => {
+				const g = new RTS.Game(7, "magma");
+				g.configureSkirmish({ players: 2 });
+				const cx = g.W / 2,
+					cy = g.H / 2,
+					types = ["trooper", "rocket", "tank", "trooper", "raider", "heavy", "artillery", "skyguard"];
+				for (let i = 0; i < 200; i++) g.spawn(types[i % types.length], i % 2, cx + (i % 2 ? 220 : -220) + (i % 10) * 18 - 90, cy + Math.floor(i / 20) * 26 - 120);
+				for (let t = 0; t < 2; t += 0.1) g.tick(0.1);
+				g.explored.fill(1);
+				return { name: "Bitwa · 200 jednostek", game: g, camera: { x: cx, y: cy, zoom: 2.2 }, selected: [] };
+			})();
+			const scenes = [...list, battle];
+			$("scene").innerHTML = scenes.map((s, i) => `<option value="${i}">${s.name}</option>`).join("");
+			function view(scene, extra = {}) {
+				const g = scene.game,
+					width = canvas.width,
+					height = canvas.height;
+				return {
+					game: g,
+					width,
+					height,
+					dpr: 1,
+					scale: Math.min(width / g.W, height / g.H) * scene.camera.zoom,
+					camera: { ...scene.camera, ...extra },
+					selected: new Set(scene.selected || []),
+					colors: [g.colorFor(0), "#f07d78", "#e4b968", "#819dff", "#d2a1ef"],
+					mouse: scene.mouse || { x: 0, y: 0 },
+					drag: scene.drag || null,
+					building: scene.building || false,
+					wallDrag: scene.wallDrag || null,
+				};
+			}
+			// Mean brightness of the frame just drawn (read before the browser presents it).
+			function brightness(board) {
+				const gl = board.canvas.getContext("webgl2"),
+					w = gl.drawingBufferWidth,
+					h = gl.drawingBufferHeight,
+					px = new Uint8Array(w * h * 4);
+				gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
+				let sum = 0,
+					n = 0;
+				for (let i = 0; i < px.length; i += 4 * 97) {
+					sum += px[i] * 0.3 + px[i + 1] * 0.55 + px[i + 2] * 0.15;
+					n++;
+				}
+				return sum / n;
+			}
+			function draw(board, scene, { night, yaw } = {}) {
+				const g = scene.game,
+					own = Object.getOwnPropertyDescriptor(g, "night");
+				if (night !== undefined) Object.defineProperty(g, "night", { value: night, configurable: true });
+				try {
+					board.setGame(g);
+					board.refreshFog(g);
+					for (let i = 0; i < 3; i++) board.render(view(scene, yaw === undefined ? {} : { yaw }));
+				} finally {
+					if (night !== undefined) {
+						if (own) Object.defineProperty(g, "night", own);
+						else delete g.night;
+					}
+				}
+			}
+			async function run() {
+				const out = [],
+					check = (ok, text) => out.push(`<p>${ok ? "✅ PASS" : "❌ FAIL"} — ${text}</p>`) && ok;
+				$("out").innerHTML = "<p>Sprawdzanie…</p>";
+				const board = createThreeGameRenderer({ gameCanvas: canvas, canvasRenderer });
+				try {
+					for (const k of ["setGame", "refreshFog", "render", "toFlat", "fromFlat", "destroy"]) check(typeof board[k] === "function", `interfejs: ${k}()`);
+					// Every scene draws, not empty; every entity has a model.
+					for (const scene of scenes) {
+						let error = null;
+						try {
+							draw(board, scene, { night: 0 });
+						} catch (e) {
+							error = e;
+						}
+						const b = brightness(board),
+							s = board.stats();
+						check(!error && b > 8, `${scene.name}: rysuje się (jasność ${b.toFixed(0)})${error ? " — " + error : ""}`);
+						check(s.looks === 0, `${scene.name}: każdy obiekt ma model 3D (tektur: ${s.looks})`);
+					}
+					// Night darker than day.
+					draw(board, scenes[0], { night: 0 });
+					const day = brightness(board);
+					draw(board, scenes[0], { night: 1 });
+					const night = brightness(board);
+					check(night < day * 0.8, `noc ciemniejsza od dnia (${night.toFixed(0)} wobec ${day.toFixed(0)})`);
+					// Pointer → flat frame → screen, straight and turned camera.
+					for (const yaw of [0, 1.2]) {
+						draw(board, battle, { yaw });
+						let worst = 0;
+						for (const x of [150, 565, 980])
+							for (const y of [130, 260, 400]) {
+								const back = board.fromFlat(board.toFlat({ x, y }));
+								worst = Math.max(worst, Math.hypot(back.x - x, back.y - y));
+							}
+						check(worst < 0.5, `kursor → plansza → kursor przy obrocie ${yaw}: błąd ${worst.toFixed(3)} px`);
+					}
+					// Instancing: a big battle in few draws.
+					draw(board, battle);
+					const s = board.stats();
+					check(s.calls < 250, `bitwa ${s.models} modeli: ${s.calls} rysowań (instancing, ${s.batches} paczek)`);
+					// Changing maps does not leak textures.
+					for (let i = 0; i < 2; i++) for (const scene of scenes) draw(board, scene);
+					const before = board.stats().textures;
+					for (let i = 0; i < 3; i++) for (const scene of scenes) draw(board, scene);
+					const after = board.stats().textures;
+					check(after <= before + 4, `zmiana map bez przyrostu tekstur (${before} → ${after})`);
+				} finally {
+					board.destroy();
+				}
+				check(!document.querySelector(".three-board"), "destroy() usuwa planszę 3D");
+				$("out").innerHTML = out.join("");
+				return { pass: !out.some((l) => l.includes("FAIL")), lines: out.map((l) => l.replace(/<[^>]+>/g, "")) };
+			}
+			let shown = null;
+			$("run").onclick = run;
+			$("show").onclick = () => {
+				shown?.destroy();
+				shown = createThreeGameRenderer({ gameCanvas: canvas, canvasRenderer });
+				draw(shown, scenes[+$("scene").value]);
+			};
+			window.run3D = run;
+		</script>
+	</body>
+</html>

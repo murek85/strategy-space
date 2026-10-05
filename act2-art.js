@@ -218,6 +218,8 @@ const Act2Art = (() => {
 		}
 	}
 	function beacon(c, p, time, color, radius, text, sub, progress = null) {
+		// A renderer with its own 3D markers (webgl3d/objectives-3d.js) listens here for where they stand.
+		if (typeof Act2Art !== "undefined") Act2Art.onBeacon?.(p, color, radius, progress);
 		c.save();
 		c.strokeStyle = color;
 		c.globalAlpha = 0.8;

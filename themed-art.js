@@ -100,7 +100,8 @@
 					c.strokeStyle = light + "40";
 					c.stroke();
 				}
-			for (let i = 0; i < 220 * n; i++) {
+			// Pebbles and bone chips: 2D only (RTS.bareGround: the 3D board scatters real ones).
+			for (let i = 0; i < (RTS.bareGround ? 0 : 220 * n); i++) {
 				const x = rand() * g.W,
 					y = rand() * g.H;
 				if (g.blocked(x, y, 6)) continue;
@@ -163,7 +164,8 @@
 				c.fillStyle = gr;
 				c.fillRect(x - r, y - r, 2 * r, 2 * r);
 			}
-			for (let i = 0; i < 240 * n; i++) {
+			// Frost lines: 2D only (the 3D board has drifts and shards: RTS.bareGround).
+			for (let i = 0; i < (RTS.bareGround ? 0 : 240 * n); i++) {
 				let x = rand() * g.W,
 					y = rand() * g.H;
 				c.strokeStyle = i % 6 ? "#dcebf055" : "#3b3050aa";
@@ -550,6 +552,8 @@
 		if (OURS.includes(t)) ground(c, g, t, rand);
 		waters(c, g);
 		const icy = t === "frozenhive";
+		// The 3D board builds the wreck and the obstacles in 3D (RTS.bareGround).
+		if (RTS.bareGround) return;
 		derelictShip(c, g, rand);
 		for (const o of g.obstacles) {
 			if (!o.kind && OURS.includes(t)) dressRock(c, o, t, rand);

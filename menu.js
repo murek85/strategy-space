@@ -236,6 +236,54 @@ class CommandMenu {
 				body;
 		if (screen === "news")
 			body =
+				"<h2>0.80.1 / Strzały samolotów w powietrzu</h2><p>Myśliwce strzelają z powietrza dwiema smugami z nosa, bombowce zrzucają bomby, a ogień z ziemi do samolotów leci w górę.</p>" +
+				"<h2>0.80 / Wszystkie światła nocy naraz</h2><p>Reflektory pojazdów i budynków, latarki i reflektory samolotów świecą wszystkie jednocześnie i oświetlają teren oraz modele — światła nie przeskakują już przy ruchu kamery.</p>" +
+				"<h2>0.79.1 / Bez ostrych snopów światła</h2><p>Dalsze budynki rzucają miękką plamę zamiast ostrego klina, wachlarze świateł pojazdów mają miękkie brzegi; księżyc świeci z wyższego kąta.</p>" +
+				"<h2>0.79 / Reflektory budynków</h2><p>Budynki świecą nocą jak pojazdy: reflektory na narożnikach rzucają plamy światła na teren, światło przed fasadą oświetla ściany i jednostki; zamiast kwadratowej poświaty — miękka poświata okien.</p>" +
+				"<h2>0.78 / Słońce, księżyc i noc</h2><p>Niebo w barwach pory dnia ze słońcem, księżycem, gwiazdami i chmurami; płynne przejście przez złotą godzinę, zachód i niebieską godzinę do chłodnego światła księżyca; cienie chmur płynące po planszy.</p>" +
+				"<h2>0.77 / Dokładniejsze pojazdy naziemne</h2><p>Gąsienice z ogniwami dookoła i rolkami, osłony boczne, skrzynie, kanistry, włazy z peryskopami, wyrzutnie dymne; opony z bieżnikiem, nadkola, przyciemniane szyby z wycieraczkami, atrapy chłodnic, lusterka i zderzaki.</p>" +
+				"<h2>0.76 / Nowe modele samolotów</h2><p>Myśliwiec, bombowiec i dron od nowa: profilowane skrzydła, kabiny, wloty i dysze, rakiety, silniki w gondolach, wieżyczka bombowca, dron z osłoniętymi wirnikami i kamerą. Samoloty Dominium są kanciaste.</p>" +
+				"<h2>0.75.2 / Samoloty: reflektory i smugi</h2><p>Samoloty nie zostawiają śladów na ziemi. Nocą ich reflektory dają smugę światła w powietrzu i plamę na ziemi; mają światła pozycyjne, migający stroboskop oraz żar i smugę pary za silnikami.</p>" +
+				"<h2>0.75.1 / Znaczniki rozkazów w 3D</h2><p>Na planszy 3D wróciły przerywane trasy zaznaczonych jednostek z kółkiem celu i pierścień w miejscu wydanego rozkazu.</p>" +
+				"<h2>0.75 / Woda, mgła i pogoda</h2><p>Falująca woda z pianą przy brzegu i kręgami od kropel, kałuże zbierające się w ulewie, śnieg osiadający płatami i na dachach, mgiełka przy ziemi, zasłony deszczu i pioruny z wieloma rozbłyskami, poświatą i iskrami w miejscu uderzenia.</p>" +
+				"<h2>0.74 / Akt I w 3D</h2><p>Nowe przekaźniki z masztem kratownicowym i anteną talerzową. Na mapach aktu I: poligon Liry, Latarnia Eos zapalająca się po wykonaniu celów, ruiny Stacji Ciszy, wrota archiwum w lodzie i obelisk Cytadeli Węzła budzący się z każdym przejętym węzłem.</p>" +
+				"<h2>0.73 / Obiekty aktu II</h2><p>Lądowisko ewakuacyjne, obóz badaczy, archiwum sondy z pierścieniami danych, rdzeń we wraku, postoje konwoju, latarnia Kestrel z obracającym się snopem oraz maszyny i rurociągi kompleksu Hefajstos — w 3D.</p>" +
+				"<h2>0.72 / Budynki specjalne aktu III</h2><p>Bijące Serce Roju w klatce obsydianowych odłamków, kopce gniazd Roju, stacja orbitalna z ładującymi się kondensatorami i pierścieniami celowniczymi oraz wieża zagłuszacza na Szczycie.</p>" +
+				"<h2>0.71 / Rój w 3D</h2><p>Nowe modele Obsydianowych Strażników: ciosane monolity z rowkami i odłamkami, przypory rdzenia, krążące odłamki monolitu, korony ostrzy wieżyczek, jednostki z płytami, soczewkami i nogami z kolanami.</p>" +
+				"<h2>0.70 / Okna budynków</h2><p>Okna mają ramy, parapety i szprosy. W dzień to ciemne szkło, a od zmierzchu zapalają się ciepłym światłem wnętrza; część świeci chłodno jak ekrany, część zostaje ciemna.</p>" +
+				"<h2>0.69 / Światło budynków</h2><p>Nocą światło okien otacza ściany budynków, przed wejściem świeci lampa, a kolor światła zależy od budynku: ciepły w bazie, chłodny w laboratorium, turkusowy przy reaktorze, pomarańczowy przy kuźni.</p>" +
+				"<h2>0.68 / Wraki, ruiny i wyspy 3D</h2><p>Rozbity statek z wyrwaną rufą i silnikiem obok, pola szczątków, truchło obcego z czaszką i żebrami, ruiny z murami, kolumnami i łukiem, bursztynowa żywica, gniazda jaj, przetwórnia, latające wyspy na skałach z korzeniami i dokładniejsze wraki zniszczonych jednostek.</p>" +
+				"<h2>0.67 / Przyroda 3D</h2><p>Dokładniejsze zwierzęta, ptaki i ryby, nowe bestie: drapieżnik, mamut, bazaltowy pająk i wydmowa paszcza. Nieregularne głazy i iglice, skupiska kryształów, olbrzymie grzyby z blaszkami. Na mapach rosną drzewa zależne od planety.</p>" +
+				"<h2>0.66 / Trawa i kamienie 3D</h2><p>Na planszy 3D trawa rośnie łąkami i kołysze się na wietrze, a na gruncie leżą kamienie, płyty skalne, żwir, krzaki i kości. Przy jeziorach jest trzcina. Zniknęły namalowane źdźbła, kamyki i rysy.</p>" +
+				"<h2>0.65 / Reflektory i latarki 3D</h2><p>Nocą pojazdy w pobliżu kamery świecą prawdziwymi reflektorami, a żołnierze latarkami, które oświetlają teren, budynki i inne jednostki, a w deszczu, śniegu i burzy piaskowej widać snop światła w powietrzu. Światła pozostałych jednostek i budynków układają się na zboczach.</p>" +
+				"<h2>0.64 / Szczegółowe modele 3D</h2><p>Jednostki i budynki Kolonii i Dominium mają dokładniejsze modele: fazowany pancerz, gąsienice z kołami jezdnymi, lufy z hamulcem wylotowym, reflektory, anteny, włazy, okna świecące nocą, kominy i dźwigi. Koła toczą się w jeździe, a pojazdy przechylają się na stokach.</p>" +
+				"<h2>0.63 / Plansza 3D bez płaskich elementów</h2><p>Mury, ślady gąsienic, kratery, siedliska stworzeń i wraki do odzysku są w 3D. Gaje, świecące jeziora i lawa rozświetlają noc, budynki oświetlają modele obok, wybuchy mają kulę ognia i falę uderzeniową, a podgląd budowy pokazuje model budynku pod kursorem.</p>" +
+				"<h2>0.62 / Pogoda 3D</h2><p>Deszcz pada ukośnie z wiatrem i moczy ziemię, śnieg osiada na terenie i topnieje, burza piaskowa niesie pył nisko nad ziemią, a w ulewie biją rozgałęzione pioruny.</p>" +
+				"<h2>0.61 / Czytelna bitwa w 3D</h2><p>Pod każdą jednostką krąg w kolorze jej strony. Trafione jednostki i budynki rozbłyskują, a zniszczone ciemnieją i zapadają się.</p>" +
+				"<h2>0.60 / Cele i zniszczenia w 3D</h2><p>Kopuły osłon, kolumna światła przed uderzeniem orbitalnym, złoty artefakt i słupy światła nad celami misji. Budynki rosną w rusztowaniu, a zniszczone zapadają się i przechylają.</p>" +
+				"<h2>0.59 / Kamera i jakość w 3D</h2><p>Ustawienia grafiki planszy działają w trybie 3D. Kamerę obrócisz też myszą (Alt + środkowy przycisk), przesuwanie trzyma teren pod kursorem, a kąt kamery zapisuje się w zapisie gry.</p>" +
+				"<h2>0.58 / Złoża i teren w 3D</h2><p>Złoża rudy, gazu i kryształów oraz przekaźniki są modelami 3D, teren ma pagórki i fakturę biomu, a na ziemi leżą kamienie, kępy trawy, zaspy i świecące grzybki.</p>" +
+				"<h2>0.57 / Obrót kamery</h2><p>W trybie 3D przecinek i kropka obracają kamerę, a ukośnik wraca do widoku od południa. Wyspy, iglice i wielkie grzyby prześwitują, gdy zasłaniają twoje jednostki.</p>" +
+				"<h2>0.56 / Krajobraz 3D</h2><p>Iglice skalne, olbrzymie grzyby, rozbity statek, ruiny, gniazda jaj i głazy w kolorze planety. Nad wydmami wiatr niesie piasek.</p>" +
+				"<h2>0.55 / 3D także z dysku</h2><p>Tryb 3D działa również w grze otwartej z pliku. Nazwy złóż i przekaźników stoją nad nimi jako tabliczki, a pociski lecą wyraźnymi smugami.</p>" +
+				"<h2>0.54 / Żywa planeta w 3D</h2><p>Zwierzęta, ptaki, ryby i latające wyspy w 3D, wraki zniszczonych jednostek, zarodniki, iskry nad lawą i mgła z przepaści. Pociski i rakiety lecą od lufy do celu.</p>" +
+				"<h2>0.53 / Woda, noc i pogoda w 3D</h2><p>Jeziora z odbiciem słońca, płynąca lawa, światła budynków i reflektory nocą, deszcz, śnieżyce i burze piaskowe, dym i ogień uszkodzonych obiektów.</p>" +
+				"<h2>0.52 / Plansza 3D</h2><p>Nowy renderer w Ustawieniach: „3D (Three.js)” — teren z wysokością, modele 3D wszystkich jednostek i budynków, prawdziwe cienie i kamera 3D. Sterowanie bez zmian.</p>" +
+				"<h2>0.51 / Styl gry AI</h2><p>Dowódca AI gra inaczej każdą frakcją: Dominium buduje twierdzę i uderza rzadko, ale mocno, a Kolonie często nękają małymi grupami i walczą o przekaźniki.</p>" +
+				"<h2>0.50 / Wybory z konsekwencjami</h2><p>Decyzja o losie kompleksu Hefajstos w akcie II zmienia akt III: posiłki i eskorta Dominium albo słabszy Rój i więcej metalu na start.</p>" +
+				"<h2>0.49 / Handel</h2><p>Logistyka → Handel: wymiana metalu, gazu i kryształów po niekorzystnym kursie. Wymaga magazynu polowego lub laboratorium.</p>" +
+				"<h2>0.48 / Rewanż</h2><p>Po bitwie wieloosobowej przycisk Rewanż rozpoczyna nową bitwę z tym samym graczem na nowym układzie mapy.</p>" +
+				"<h2>0.47.2 / Czat obok lobby</h2><p>Czat lobby ma własny panel obok okna lobby, z dłuższą historią rozmowy.</p>" +
+				"<h2>0.47.1 / Panel oddziału</h2><p>Rozkazy w równej siatce ze skrótami, a formacja jako przełącznik z ikonami szyku.</p>" +
+				"<h2>0.47 / Wspólna pauza</h2><p>W grze wieloosobowej Spacja zatrzymuje bitwę u obu graczy: 3 pauzy po najwyżej 60 s i odliczanie przed wznowieniem.</p>" +
+				"<h2>0.46.2 / Płynna gra sieciowa</h2><p>Bitwa sieciowa rusza się tak płynnie jak jednoosobowa.</p>" +
+				"<h2>0.46.1 / Czat</h2><p>Gracze rozmawiają w lobby i w bitwie: Enter otwiera linię wiadomości.</p>" +
+				"<h2>0.46 / Gra wieloosobowa</h2><p>Bitwa jeden na jeden z drugim człowiekiem przez przeglądarkę, bez serwera gry: wystarczy wymienić kody zaproszenia i odpowiedzi.</p>" +
+				"<h2>0.45 / Dźwięk</h2><p>Nowe efekty z próbek, dźwięk cichszy z daleka, pogłos, tło otoczenia narastające przed burzą i muzyka grana przez instrumenty.</p>" +
+				"<h2>0.44 / Złoża</h2><p>Ruda, gaz i kryształy mają nowy wygląd, maleją w sześciu etapach, a wyczerpane złoże wygląda inaczej. Przy kopaniu lecą odpryski, nocą gaz i kryształy świecą.</p>" +
+				"<h2>0.43 / Światło na jednostkach</h2><p>W trybie WebGL jednostki są oświetlone od strony słońca lub księżyca, a uszkodzone pojazdy pokrywa sadza.</p>" +
+				"<h2>0.42.1 / Wskaźnik burzy</h2><p>Nadciągającą burzę pokazuje linia na krawędzi ekranu, z której nadchodzi, z zegarem odliczającym sekundy.</p>" +
+				"<h2>0.42 / Obsydianowi Strażnicy</h2><p>Rój ma nowy wygląd: czarne monolity ze spiczastymi czubkami i kanciaste strażniki, a jedynym kolorem jest pasek drużyny.</p>" +
 				"<h2>0.41 / Mapa galaktyki</h2><p>Kampania ma teraz mapę galaktyki: układy z własnymi słońcami, planety o różnych klimatach z pierścieniami, księżycami i pasami asteroid, a także trasę przez wszystkie trzy akty. Kliknij świat, żeby zobaczyć jego rozdziały i scenariusze.</p>" +
 				"<h2>0.40 / Akt III — Przebudzenie Roju</h2><p>Trzy nowe rozdziały kampanii przeciw Rojowi Kryształowemu: wyścig po artefakt na Lumerii V, sojusz z Dominium na Nivalis i szturm na Serce Roju z pomocą stacji orbitalnej. Kampania ma teraz mapę — gwiezdny szlak przez planety wszystkich trzech aktów.</p>" +
 				"<h2>0.39 / Rój Kryształowy</h2><p>Trzecia frakcja: obce, krystaliczne organizmy przebudzone przez artefakty. Tanie i szybkie jednostki, które się regenerują, wybuchające pełzacze, żrące pluwacze, kolosy i monolit spowalniający wrogów. Rój można wybrać dla siebie albo dla przeciwnika.</p>" +
@@ -298,7 +346,7 @@ class CommandMenu {
 		if (WINDOW_SCREENS.includes(screen)) this.windowed();
 		if (screen === "knowledge") KnowledgeBase.mount(this.root);
 		this.root.querySelector(".menu-footer span").textContent =
-			"PROTOTYP 0.53 · ZAPIS LOKALNY";
+			"PROTOTYP 0.80.1 · ZAPIS LOKALNY";
 		if (
 			screen === "scenarios" ||
 			(screen === "briefing" &&
@@ -629,8 +677,10 @@ class CommandMenu {
 						const gpu = SceneFX.options.renderer !== "canvas",
 							name = { webgl: "WebGL (PixiJS)", webgpu: "WebGPU (PixiJS)", three: "3D (Three.js)" };
 						// The effects stay available when WebGPU fell back to WebGL, not when the board fell back to Canvas 2D.
-						// They belong to the PixiJS renderer; the 3D board has its own light and shadows.
-						for (const box of this.root.querySelectorAll(".webgl-effect")) box.disabled = !gpu || s.mode === "three" || (s.mode === "canvas" && !!s.note);
+						// The 3D board uses lights, shadows, water, scars and relief (webgl3d/three-renderer.js applyQuality);
+						// bloom, volume light and the 2.5D tilt belong to the PixiJS renderer only.
+						const only2d = ["visual-bloom", "visual-volume", "visual-tilt"];
+						for (const box of this.root.querySelectorAll(".webgl-effect")) box.disabled = !gpu || (s.mode === "three" && only2d.includes(box.id)) || (s.mode === "canvas" && !!s.note);
 						status.textContent = s.note || (name[s.mode] ? `Aktywny: ${name[s.mode]}.` : gpu ? `${name[SceneFX.options.renderer]} uruchomi się razem z planszą.` : "Aktywny: Canvas 2D.");
 					};
 				rendererSelect.value = SceneFX.options.renderer;

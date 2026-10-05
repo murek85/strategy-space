@@ -114,6 +114,7 @@ host.addEventListener("pointerdown", (e) => {
 	press = { button: e.button, start: local(e), rig: { x: view.rig.x, y: view.rig.y }, ground: view.screenToMap(local(e)) };
 });
 host.addEventListener("pointermove", (e) => {
+	view.setPointer(local(e));
 	if (!press) return;
 	const p = local(e);
 	if (press.button === 1) {

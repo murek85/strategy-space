@@ -25,6 +25,11 @@ function createCanvasRenderer(canvas, mini) {
 		shadeBody = null,
 		underUnits = null,
 		viewOutline = null,
+		groundLabels = true,
+		groundDeposits = true,
+		objects3D = false,
+		weather3D = false,
+		ground3D = false,
 		nativeGrains = false,
 		terrain = null;
 	function world(p) {
@@ -37,6 +42,18 @@ function createCanvasRenderer(canvas, mini) {
 		({ game, width, height, dpr, scale, camera, selected, colors, mouse, drag, building, wallDrag, shadeBody, underUnits } = view);
 		// A renderer with a perspective camera outlines on the minimap the ground it shows (map points).
 		viewOutline = view.viewOutline || null;
+		// A renderer that shows the names and amounts itself (the 3D board: signs facing the camera)
+		// asks for the ground without them.
+		groundLabels = view.groundLabels !== false;
+		// A renderer with its own deposit and relay models (the 3D board) asks for the ground without them.
+		groundDeposits = view.groundDeposits !== false;
+		// The 3D board shows objective objects (the artifact) as models; the overlay keeps rings and captions.
+		objects3D = !!view.objects3D;
+		// The 3D board draws rain, snow, sand and lightning in 3D; the screen layer keeps the sky ornaments.
+		weather3D = !!view.weather3D;
+		// The 3D board builds tracks, craters, wrecks, habitats, wall links and map effects itself: its
+		// ground painting is only the static ground.
+		ground3D = !!view.ground3D;
 		nativeGrains = !!view.nativeGrains;
 	}
 	const fog = document.createElement("canvas");
@@ -77,7 +94,19 @@ function createCanvasRenderer(canvas, mini) {
 		fog.width = W / 40;
 		fog.height = H / 40;
 	}
+	// Bare ground (for the 3D board, which builds rocks, plants and pebbles in 3D): the painters skip
+	// decorations, obstacle bodies and their 2D shadows; ground colour, patches, water beds, roads and base
+	// markings stay. The art files read RTS.bareGround while this painting runs.
+	let bareGround = false;
 	function terrainTexture() {
+		RTS.bareGround = bareGround;
+		try {
+			paintTerrain();
+		} finally {
+			RTS.bareGround = false;
+		}
+	}
+	function paintTerrain() {
 		syncWorld();
 		terrain = document.createElement("canvas");
 		terrain.width = W;
@@ -121,7 +150,8 @@ function createCanvasRenderer(canvas, mini) {
 			c.lineTo(W, y);
 			c.stroke();
 		}
-		for (let i = 0; i < 7500; i++) {
+		// Specks of grit (the 3D board scatters real gravel instead: bareGround).
+		for (let i = 0; i < (bareGround ? 0 : 7500); i++) {
 			const x = rand() * W,
 				y = rand() * H;
 			c.fillStyle = rand() > 0.5 ? "#cfcaab12" : "#080f1920";
@@ -139,13 +169,28 @@ function createCanvasRenderer(canvas, mini) {
 			c.strokeStyle = "#af986514";
 			c.lineJoin = "round";
 			c.stroke();
+			// The dashed track marks: only on the 2D board (the 3D board has real tread marks).
+			if (bareGround) continue;
 			c.lineWidth = 2;
 			c.setLineDash([10, 30]);
 			c.strokeStyle = "#ad9c7430";
 			c.stroke();
 			c.setLineDash([]);
 		}
-		for (const r of game.obstacles.filter((o) => !o.kind)) {
+		// Bare ground: a soft rock-coloured patch where the obstacle's raised ground stands.
+		if (bareGround)
+			for (const r of game.obstacles) {
+				const cx = r.x + r.w / 2,
+					cy = r.y + r.h / 2,
+					g = c.createRadialGradient(cx, cy, 0, cx, cy, Math.max(r.w, r.h) * 0.75);
+				g.addColorStop(0, biome === "ice" ? "#8d9ea866" : biome === "ash" ? "#2a252566" : "#6d5d4855");
+				g.addColorStop(1, "#00000000");
+				c.fillStyle = g;
+				c.beginPath();
+				c.ellipse(cx, cy, r.w * 0.75, r.h * 0.75, 0, 0, Math.PI * 2);
+				c.fill();
+			}
+		for (const r of game.obstacles.filter((o) => !o.kind && !bareGround)) {
 			c.fillStyle = "#0b131950";
 			c.beginPath();
 			c.ellipse(
@@ -201,7 +246,8 @@ function createCanvasRenderer(canvas, mini) {
 				c.fillRect(x, y, 3 + rand() * 7, 2);
 			}
 		}
-		for (const b of game.entities.filter((e) => e.type === "hq")) {
+		// The painted base pad around the HQ (the 3D HQ stands on its own foundation).
+		for (const b of game.entities.filter((e) => e.type === "hq" && !bareGround)) {
 			c.strokeStyle = b.team !== (game.viewer ?? 0) ? "#c0796828" : "#9acbb02b";
 			c.lineWidth = 2;
 			c.strokeRect(b.x - 135, b.y - 120, 270, 240);
@@ -220,6 +266,7 @@ function createCanvasRenderer(canvas, mini) {
 		AdvancedArt.terrain(c, game);
 		SceneFX.terrain(c, game);
 		MapArt.terrain(c, game);
+		if (bareGround) return;
 		c.font = "13px Segoe UI";
 		c.fillStyle = "#849d9b55";
 		c.fillText(MISSIONS[game.missionId].planet.toUpperCase(), 70, 80);
@@ -314,22 +361,30 @@ function createCanvasRenderer(canvas, mini) {
 			);
 			ctx.stroke();
 		}
-		ctx.font = "12px Segoe UI";
-		ctx.textAlign = "center";
-		ctx.fillStyle = color;
-		ctx.fillText(n.name, 0, 55);
-		ctx.font = "10px Segoe UI";
-		ctx.fillStyle = "#9aaba7";
-		ctx.fillText(
-			n.owner === (game.viewer ?? 0)
-				? "+5 METALU / S"
-				: n.owner >= 1 && n.owner !== 2
-					? (game.sideName?.(n.owner) || "PRZECIWNIK").toUpperCase()
-					: "PRZEJMIJ",
-			0,
-			71,
-		);
+		if (groundLabels) {
+			const label = nodeLabel(n);
+			ctx.font = "12px Segoe UI";
+			ctx.textAlign = "center";
+			ctx.fillStyle = label.color;
+			ctx.fillText(label.name, 0, 55);
+			ctx.font = "10px Segoe UI";
+			ctx.fillStyle = "#9aaba7";
+			ctx.fillText(label.status, 0, 71);
+		}
 		ctx.restore();
+	}
+	// A relay's caption: its name in the owner's colour and what it gives or who holds it.
+	function nodeLabel(n) {
+		return {
+			name: n.name,
+			color: n.owner === -1 ? "#d4bf86" : colors[n.owner],
+			status:
+				n.owner === (game.viewer ?? 0)
+					? "+5 METALU / S"
+					: n.owner >= 1 && n.owner !== 2
+						? (game.sideName?.(n.owner) || "PRZECIWNIK").toUpperCase()
+						: "PRZEJMIJ",
+		};
 	}
 	function drawOre(o) {
 		BoardArt.resource(
@@ -337,6 +392,7 @@ function createCanvasRenderer(canvas, mini) {
 			o,
 			false,
 			game.isVisible(o.x, o.y) ? game.time : 0,
+			groundLabels,
 		);
 	}
 	// A gas field pumped by a working extractor (its gas rises faster and denser).
@@ -581,31 +637,33 @@ function createCanvasRenderer(canvas, mini) {
 	}
 	// Animated ground, deposits, wrecks, relays, selected paths, habitats and walls.
 	function drawGround() {
-		PlanetArt.ground(ctx, game, {
-			x: camera.x,
-			y: camera.y,
-			w: width / scale,
-			h: height / scale,
-		});
-		MapArt.effects(ctx, game, { x: camera.x, y: camera.y, w: width / scale, h: height / scale });
+		if (!ground3D) {
+			PlanetArt.ground(ctx, game, {
+				x: camera.x,
+				y: camera.y,
+				w: width / scale,
+				h: height / scale,
+			});
+			MapArt.effects(ctx, game, { x: camera.x, y: camera.y, w: width / scale, h: height / scale });
+		}
 		for (const o of game.ores)
-			if (game.explored[game.visionIndex(o.x, o.y)]) drawOre(o);
+			if (groundDeposits && game.explored[game.visionIndex(o.x, o.y)]) drawOre(o);
 		for (const o of game.gasFields)
-			if (game.explored[game.visionIndex(o.x, o.y)])
+			if (groundDeposits && game.explored[game.visionIndex(o.x, o.y)])
 				BoardArt.resource(
 					ctx,
 					o,
 					true,
 					game.isVisible(o.x, o.y) ? game.time : 0,
-					true,
+					groundLabels,
 					gasFlowing(o),
 				);
 		for (const o of game.crystalFields)
-			if (game.explored[game.visionIndex(o.x, o.y)])
-				BoardArt.crystal(ctx, o);
-		if (typeof FxArt !== "undefined") FxArt.craters(ctx, game, { x: camera.x, y: camera.y, w: width / scale, h: height / scale });
+			if (groundDeposits && game.explored[game.visionIndex(o.x, o.y)])
+				BoardArt.crystal(ctx, o, groundLabels);
+		if (typeof FxArt !== "undefined" && !ground3D) FxArt.craters(ctx, game, { x: camera.x, y: camera.y, w: width / scale, h: height / scale });
 		for (const d of game.debris)
-			if (game.isVisible(d.x, d.y)) {
+			if (!ground3D && game.isVisible(d.x, d.y)) {
 				ctx.save();
 				ctx.globalAlpha = Math.min(1, d.life / 5);
 				ctx.translate(d.x, d.y);
@@ -622,34 +680,20 @@ function createCanvasRenderer(canvas, mini) {
 				);
 				ctx.restore();
 			}
-		if (typeof SupportArt !== "undefined") SupportArt.wrecks(ctx, game);
+		if (typeof SupportArt !== "undefined" && !ground3D) SupportArt.wrecks(ctx, game);
 		for (const n of game.nodes)
-			if (game.explored[game.visionIndex(n.x, n.y)])
+			if (groundDeposits && game.explored[game.visionIndex(n.x, n.y)])
 				drawNode(
 					game.isVisible(n.x, n.y) || n.owner === (game.viewer ?? 0)
 						? n
 						: { ...n, owner: -1, progress: 0 },
 				);
-		for (const id of selected) {
-			const e = game.get(id);
-			if (e?.path.length) {
-				ctx.strokeStyle = "#aee5c738";
-				ctx.lineWidth = 1.5;
-				ctx.setLineDash([5, 8]);
-				ctx.beginPath();
-				ctx.moveTo(e.x, e.y);
-				e.path.forEach((p) => ctx.lineTo(p.x, p.y));
-				ctx.stroke();
-				ctx.setLineDash([]);
-				const p = e.path[e.path.length - 1];
-				ctx.strokeStyle = "#aee5c780";
-				ctx.beginPath();
-				ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
-				ctx.stroke();
-			}
+		// The 3D board paints this ground once; its order marks come with the overlay (drawOrderMarks).
+		if (!ground3D) drawPaths(false);
+		if (!ground3D) {
+			AdvancedArt.habitats(ctx, game);
+			AdvancedArt.walls(ctx, game);
 		}
-		AdvancedArt.habitats(ctx, game);
-		AdvancedArt.walls(ctx, game);
 	}
 	// The part of the ground the WebGL renderer keeps in Canvas when it draws the rest natively:
 	// animated map effects (with plugins), habitats and walls.
@@ -660,7 +704,47 @@ function createCanvasRenderer(canvas, mini) {
 	function drawMapEffects() {
 		MapArt.effects(ctx, game, { x: camera.x, y: camera.y, w: width / scale, h: height / scale });
 	}
+	// Dashed paths of the selected units and a ring where each is heading. strong: the 3D board's overlay,
+	// painted at a lower resolution and draped over the terrain, needs wider, brighter lines.
+	function drawPaths(strong) {
+		for (const id of selected) {
+			const e = game.get(id);
+			if (!e?.path.length) continue;
+			ctx.strokeStyle = strong ? "#aee5c7a0" : "#aee5c738";
+			ctx.lineWidth = strong ? 3.5 : 1.5;
+			ctx.setLineDash(strong ? [10, 12] : [5, 8]);
+			ctx.beginPath();
+			ctx.moveTo(e.x, e.y);
+			e.path.forEach((p) => ctx.lineTo(p.x, p.y));
+			ctx.stroke();
+			ctx.setLineDash([]);
+			const p = e.path[e.path.length - 1];
+			ctx.strokeStyle = strong ? "#aee5c7e0" : "#aee5c780";
+			ctx.lineWidth = strong ? 3 : 1.5;
+			ctx.beginPath();
+			ctx.arc(p.x, p.y, strong ? 10 : 6, 0, Math.PI * 2);
+			ctx.stroke();
+		}
+	}
+	// The order marks of the 3D board (its ground is painted once, its units are models): selected paths
+	// and the expanding ring where a move or attack order was given.
+	function drawOrderMarks() {
+		drawPaths(true);
+		for (const ef of game.effects) {
+			if (ef.kind !== "command") continue;
+			const alpha = ef.life / ef.maxLife;
+			ctx.save();
+			ctx.strokeStyle = ef.attack ? "#ed8c78" : "#aee5c7";
+			ctx.globalAlpha = alpha;
+			ctx.lineWidth = 4;
+			ctx.beginPath();
+			ctx.arc(ef.x, ef.y, 12 + (1 - alpha) * 28, 0, Math.PI * 2);
+			ctx.stroke();
+			ctx.restore();
+		}
+	}
 	function drawGroundTop() {
+		if (ground3D) return;
 		MapArt.effects(ctx, game, { x: camera.x, y: camera.y, w: width / scale, h: height / scale });
 		AdvancedArt.habitats(ctx, game);
 		AdvancedArt.walls(ctx, game);
@@ -806,33 +890,35 @@ function createCanvasRenderer(canvas, mini) {
 			ctx.ellipse(a.x, a.y + 4, 24, 13, 0, 0, Math.PI * 2);
 			ctx.stroke();
 		}
-		ctx.globalAlpha = 0.22 + 0.2 * pulse;
-		ctx.fillStyle = "#f5e27a";
-		ctx.beginPath();
-		ctx.arc(a.x, y, 24 + 8 * pulse, 0, Math.PI * 2);
-		ctx.fill();
-		ctx.globalAlpha = 1;
 		const s = 1 + 0.08 * pulse;
-		polygon(
-			ctx,
-			[
-				[a.x, y - 20 * s],
-				[a.x + 12 * s, y],
-				[a.x, y + 20 * s],
-				[a.x - 12 * s, y],
-			],
-			"#f5e27a",
-			"#5b4510",
-		);
-		polygon(
-			ctx,
-			[
-				[a.x, y - 12 * s],
-				[a.x + 5 * s, y],
-				[a.x, y + 12 * s],
-			],
-			"#fffbe0",
-		);
+		if (!objects3D) {
+			ctx.globalAlpha = 0.22 + 0.2 * pulse;
+			ctx.fillStyle = "#f5e27a";
+			ctx.beginPath();
+			ctx.arc(a.x, y, 24 + 8 * pulse, 0, Math.PI * 2);
+			ctx.fill();
+			ctx.globalAlpha = 1;
+			polygon(
+				ctx,
+				[
+					[a.x, y - 20 * s],
+					[a.x + 12 * s, y],
+					[a.x, y + 20 * s],
+					[a.x - 12 * s, y],
+				],
+				"#f5e27a",
+				"#5b4510",
+			);
+			polygon(
+				ctx,
+				[
+					[a.x, y - 12 * s],
+					[a.x + 5 * s, y],
+					[a.x, y + 12 * s],
+				],
+				"#fffbe0",
+			);
+		}
 		if (!carried && a.progress > 0) {
 			ctx.strokeStyle = a.claimant === 0 ? "#b0efd0" : "#f07d78";
 			ctx.lineWidth = 4;
@@ -878,6 +964,7 @@ function createCanvasRenderer(canvas, mini) {
 		ctx.restore();
 	}
 	function drawOverlay() {
+		if (objects3D) drawOrderMarks();
 		if (game.act2) Act2Art.markers(ctx, game);
 		drawArtifact();
 		drawHill();
@@ -999,7 +1086,7 @@ function createCanvasRenderer(canvas, mini) {
 			ctx.fillRect(drag.x, drag.y, mouse.x - drag.x, mouse.y - drag.y);
 			ctx.strokeRect(drag.x, drag.y, mouse.x - drag.x, mouse.y - drag.y);
 		}
-		PlanetArt.atmosphere(ctx, game, width, height, !nativeGrains);
+		PlanetArt.atmosphere(ctx, game, width, height, !nativeGrains, !weather3D);
 		MapArt.atmosphere(ctx, game, width, height);
 		if (typeof FxArt !== "undefined") FxArt.stormEdge(ctx, game, width, height);
 	}
@@ -1165,6 +1252,12 @@ function createCanvasRenderer(canvas, mini) {
 	return {
 		kind: "canvas",
 		fogCanvas: fog,
+		// Bare ground for the 3D board (see terrainTexture); repaints the terrain when it changes.
+		setBareGround(on) {
+			if (bareGround === !!on) return;
+			bareGround = !!on;
+			if (game) terrainTexture();
+		},
 		// New or loaded game: follow its map size and paint the static terrain.
 		setGame(nextGame) {
 			game = nextGame;
@@ -1198,6 +1291,11 @@ function createCanvasRenderer(canvas, mini) {
 		gasFlowing(view, o) {
 			useView(view);
 			return gasFlowing(o);
+		},
+		// A relay's caption (name, colour, status) for renderers that draw captions themselves.
+		nodeLabel(view, node) {
+			useView(view);
+			return nodeLabel(node);
 		},
 		// One relay drawn alone (at node.x, node.y) into another canvas, with the view's team colours.
 		paintNode(target, view, node) {

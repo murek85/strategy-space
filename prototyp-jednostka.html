@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="pl">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Prototyp jednostki 3D · Pogranicze Galaktyki</title>
+		<style>
+			html,
+			body {
+				margin: 0;
+				height: 100%;
+				background: #0b141c;
+				color: #d7e4e6;
+				font: 14px "Segoe UI", sans-serif;
+				overflow: hidden;
+			}
+			#view {
+				position: fixed;
+				inset: 0;
+			}
+			#view canvas {
+				display: block;
+			}
+			#panel {
+				position: fixed;
+				left: 16px;
+				top: 16px;
+				width: 310px;
+				max-height: calc(100vh - 32px);
+				overflow: auto;
+				background: #0a1524e6;
+				border: 1px solid #3b535d;
+				border-radius: 8px;
+				padding: 14px 16px;
+				box-sizing: border-box;
+			}
+			h1 {
+				font-size: 18px;
+				font-weight: 500;
+				margin: 0 0 4px;
+			}
+			h2 {
+				font-size: 12px;
+				letter-spacing: 0.08em;
+				text-transform: uppercase;
+				color: #8fb3b8;
+				margin: 14px 0 4px;
+			}
+			p,
+			li {
+				line-height: 1.4;
+				color: #a9bec3;
+			}
+			p {
+				margin: 6px 0 10px;
+			}
+			ul {
+				margin: 4px 0;
+				padding-left: 18px;
+			}
+			.row {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 6px;
+				margin: 8px 0;
+				align-items: center;
+			}
+			button {
+				background: #13283a;
+				color: #d7e4e6;
+				border: 1px solid #3b535d;
+				border-radius: 5px;
+				padding: 5px 9px;
+				font: inherit;
+				font-size: 13px;
+				cursor: pointer;
+			}
+			button:hover {
+				border-color: #8dffc8;
+			}
+			button.on {
+				background: #1d4a3c;
+				border-color: #8dffc8;
+			}
+			input[type="range"] {
+				flex: 1;
+			}
+			#hpValue {
+				width: 44px;
+				text-align: right;
+			}
+			#hint {
+				position: fixed;
+				right: 16px;
+				bottom: 14px;
+				color: #8fa7ad;
+				font-size: 12px;
+			}
+		</style>
+	</head>
+	<body>
+		<div id="view"></div>
+		<div id="panel">
+			<h1>Prototyp jednostki 3D</h1>
+			<p>Czołg w nowym standardzie modeli. Na placu obok stoi obecny model z gry (po lewej, ciemniejszy kolor drużyny) — do porównania.</p>
+			<h2>Model</h2>
+			<div class="row">
+				<button data-model="blender" class="on">Z Blendera</button>
+				<button data-model="code">Z kodu</button>
+			</div>
+			<p id="modelNote">Model z Blendera: <code>assets/models/tank.blend</code> (do edycji), eksport <code>tank.glb</code>, skrypt <code>tools/blender/tank.py</code>.</p>
+			<h2>Tryb</h2>
+			<div class="row">
+				<button id="drive" class="on">Jazda po wzgórzach</button>
+				<button id="parade">Obok starego modelu</button>
+				<button id="stop">Stój</button>
+			</div>
+			<h2>Walka</h2>
+			<div class="row">
+				<button id="fire">Strzał</button>
+				<button id="auto">Ogień ciągły</button>
+				<button id="hit">Trafienie −15</button>
+				<button id="repair">Napraw</button>
+			</div>
+			<div class="row">Pancerz <input id="hp" type="range" min="1" max="100" value="100" /><span id="hpValue">100%</span></div>
+			<h2>Ulepszenia</h2>
+			<div class="row">
+				<button data-level="0" class="on">Podstawowy</button>
+				<button data-level="1">Pancerz reaktywny</button>
+				<button data-level="2">Pełne</button>
+			</div>
+			<h2>Otoczenie</h2>
+			<div class="row">
+				<button id="day" class="on">Dzień</button>
+				<button id="night">Noc</button>
+				<button id="follow" class="on">Kamera za czołgiem</button>
+			</div>
+			<h2>Co nowego</h2>
+			<ul>
+				<li>Fazowane krawędzie, pochyły pancerz, koła jezdne, koło napędowe, osłony boczne, wylot lufy, właz, antena.</li>
+				<li>Gąsienice przesuwają się z prędkością, koła się toczą, w ziemi zostają ślady.</li>
+				<li>Kadłub układa się na stoku, buja na zawieszeniu, przysiada przy ruszaniu i nurkuje przy hamowaniu.</li>
+				<li>Wystrzał: błysk i światło, odrzut lufy i kadłuba, dym, pocisk i wybuch.</li>
+				<li>Uszkodzenia: okopcenie, odpadające osłony, dym z silnika, ogień i iskry.</li>
+				<li>Ulepszenia widać na modelu: kostki pancerza reaktywnego, karabin na wieży, dłuższa lufa, skrzynie.</li>
+				<li>Noc: reflektory oświetlają teren, świecą światła tylne i pas drużyny.</li>
+			</ul>
+		</div>
+		<div id="hint">Przeciągnij — obrót kamery · kółko — przybliżenie</div>
+		<script type="importmap">
+			{ "imports": { "three": "./vendor/three.module.js" } }
+		</script>
+		<script src="engine.js"></script>
+		<script type="module" src="webgl3d/unit-showcase.js"></script>
+	</body>

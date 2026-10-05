@@ -1098,7 +1098,8 @@ const AdvancedArt = (() => {
 		}
 	}
 	function terrain(c, g) {
-		for (const r of g.obstacles.filter((r) => !r.kind)) {
+		// Rock details stay off the bare ground of the 3D board (its boulders are 3D).
+		for (const r of g.obstacles.filter((r) => !r.kind && !RTS.bareGround)) {
 			poly(
 				c,
 				[

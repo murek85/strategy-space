@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="pl">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Modele 3D · Pogranicze Galaktyki</title>
+		<style>
+			html,
+			body {
+				margin: 0;
+				height: 100%;
+				background: #0b141c;
+				color: #d7e4e6;
+				font: 14px "Segoe UI", sans-serif;
+				overflow: hidden;
+			}
+			#view canvas {
+				display: block;
+			}
+			#panel {
+				position: fixed;
+				left: 16px;
+				top: 16px;
+				width: 280px;
+				background: #0a1524e6;
+				border: 1px solid #3b535d;
+				border-radius: 8px;
+				padding: 14px 16px;
+				box-sizing: border-box;
+			}
+			h1 {
+				font-size: 18px;
+				font-weight: 500;
+				margin: 0 0 6px;
+			}
+			p {
+				color: #a9bec3;
+				line-height: 1.4;
+				margin: 6px 0;
+			}
+			.row {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 6px;
+				margin: 8px 0;
+			}
+			button,
+			select {
+				background: #13283a;
+				color: #d7e4e6;
+				border: 1px solid #3b535d;
+				border-radius: 5px;
+				padding: 5px 9px;
+				font: inherit;
+				font-size: 13px;
+				cursor: pointer;
+			}
+			button.on {
+				background: #1d4a3c;
+				border-color: #8dffc8;
+			}
+			#stats {
+				font: 12px monospace;
+				color: #8fa7ad;
+			}
+			.label {
+				position: fixed;
+				transform: translate(-50%, 0);
+				font-size: 12px;
+				color: #e8f2f3;
+				text-shadow: 0 1px 3px #000;
+				pointer-events: none;
+				white-space: nowrap;
+			}
+		</style>
+	</head>
+	<body>
+		<div id="view"></div>
+		<div id="panel">
+			<h1>Modele 3D</h1>
+			<p>Modele z kodu (<code>webgl3d/models-detail-3d.js</code>), dokładnie te, które rysuje gra. Przeciągnij, żeby obrócić kamerę, kółko przybliża, kliknij model, żeby do niego podjechać.</p>
+			<div class="row">
+				<button data-faction="colonies" class="on">Kolonie</button>
+				<button data-faction="dominion">Dominium</button>
+				<button data-faction="swarm">Rój</button>
+				<button data-faction="nature">Przyroda</button>
+			</div>
+			<div class="row">
+				<button id="move">Ruch i ogień</button>
+				<button id="night">Noc</button>
+			</div>
+			<div id="stats"></div>
+		</div>
+		<script type="importmap">
+			{ "imports": { "three": "./vendor/three.module.js" } }
+		</script>
+		<script src="engine.js"></script>
+		<script src="advanced-rules.js"></script>
+		<script src="army-rules.js"></script>
+		<script src="campaign-act2.js"></script>
+		<script src="scenario-modes.js"></script>
+		<script src="frontier-maps.js"></script>
+		<script src="themed-maps.js"></script>
+		<script src="support-rules.js"></script>
+		<script src="scenario-setup.js"></script>
+		<script src="scenario-challenges.js"></script>
+		<script src="enemy-ai.js"></script>
+		<script src="teams-rules.js"></script>
+		<script src="factions-rules.js"></script>
+		<script src="swarm-rules.js"></script>
+		<script src="campaign-act3.js"></script>
+		<script src="trade-rules.js"></script>
+		<script src="network-rules.js"></script>
+		<script type="module" src="webgl3d/model-gallery.js"></script>
+	</body>
+</html>

@@ -222,6 +222,8 @@
 					["Canvas 2D", async () => canvasRenderer],
 					["WebGL", () => createPixiGameRenderer({ gameCanvas: canvas, canvasRenderer, preference: "webgl" })],
 					["WebGPU", () => createPixiGameRenderer({ gameCanvas: canvas, canvasRenderer, preference: "webgpu" })],
+					// The 3D board (webgl3d/, ES modules: this page must be served, npm start).
+					["3D", async () => (await import("../webgl3d/three-game-renderer.js")).createThreeGameRenderer({ gameCanvas: canvas, canvasRenderer })],
 				]) {
 					$("out").textContent = "Pomiar: " + name + "…";
 					rows.push(await measure(name, make, seconds));

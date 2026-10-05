@@ -86,6 +86,14 @@
 			y: (e.y - camera.y) * scale + height / 2,
 		};
 	}
+	// 3D board, middle-button drag: move the camera so the grabbed ground point is under the pointer again,
+	// measured on the frame last drawn (one correction per frame, so fast pointers do not overshoot).
+	function panTowardsPointer() {
+		if (!pan || pan.turn || rendererMode !== "three") return;
+		const now = world(pointer({ clientX: pan.client.x, clientY: pan.client.y }));
+		camera.x = clamp(camera.x + pan.ground.x - now.x, 0, W);
+		camera.y = clamp(camera.y + pan.ground.y - now.y, 0, H);
+	}
 	function pointer(e) {
 		const r = canvas.getBoundingClientRect(),
 			p = { x: e.clientX - r.left, y: e.clientY - r.top };
@@ -145,6 +153,23 @@
 		rendererMode = "canvas",
 		rendererRequested = null,
 		rendererNote = "";
+	async function load3D() {
+		if (location.protocol !== "file:")
+			try {
+				return await import("./webgl3d/three-game-renderer.js");
+			} catch (error) {
+				console.warn(error);
+			}
+		if (!window.Board3D)
+			await new Promise((resolve, reject) => {
+				const script = document.createElement("script");
+				script.src = "webgl3d/bundle-3d.js";
+				script.onload = resolve;
+				script.onerror = () => reject(Error("Brak webgl3d/bundle-3d.js"));
+				document.head.appendChild(script);
+			});
+		return window.Board3D;
+	}
 	// 3D or WebGL when chosen and available; 3D falls back to WebGL, and Canvas 2D stays the fallback at every step.
 	async function applyRenderer() {
 		const wanted = SceneFX.options.renderer;
@@ -158,16 +183,13 @@
 		let board = null,
 			note = "";
 		if (wanted === "three") {
-			// An ES module loaded on demand (webgl3d/): it needs WebGL and a page served over http.
+			// Loaded on demand: the ES modules of webgl3d/ when served over http, else (page opened from
+			// disk, where modules cannot load) the same code built into one classic script (npm run build:3d).
 			try {
-				const { createThreeGameRenderer } = await import("./webgl3d/three-game-renderer.js");
-				board = createThreeGameRenderer({ gameCanvas: canvas, canvasRenderer, onContextLost: lost });
+				board = (await load3D()).createThreeGameRenderer({ gameCanvas: canvas, canvasRenderer, onContextLost: lost });
 			} catch (error) {
 				console.warn(error);
-				note =
-					location.protocol === "file:"
-						? "Tryb 3D wymaga uruchomienia gry przez serwer (npm start) — działa WebGL (PixiJS)."
-						: "Tryb 3D nie uruchomił się w tej przeglądarce — działa WebGL (PixiJS).";
+				note = "Tryb 3D nie uruchomił się w tej przeglądarce — działa WebGL (PixiJS).";
 			}
 		}
 		try {
@@ -1287,6 +1309,8 @@
 							x: clamp(saved.camera.x, 0, W),
 							y: clamp(saved.camera.y, 0, H),
 							zoom: clamp(saved.camera.zoom, 1, 5.5),
+							// The 3D board's turn (0 = looking north; ignored by the flat renderers).
+							yaw: Number.isFinite(saved.camera.yaw) ? saved.camera.yaw : 0,
 						}
 					: { x: W / 2, y: H / 2, zoom: 1 };
 			selected = new Set(
@@ -1680,7 +1704,7 @@
 		document.querySelector(".briefing-controls").innerHTML =
 			"<span><b>Ctrl+1–9 / 1–9</b>Zapisz / wybierz grupę</span><span><b>Wybierz budynek → PPM</b>Ustaw punkt zbiórki</span><span><b>Kilka koszar / fabryk</b>Produkuj równolegle</span><span><b>J / kliknij alarm</b>Pokaż atakowaną bazę</span>";
 		document.querySelector(".controls-note p").innerHTML =
-			"<b>Ctrl+1–9</b> przypisz · <b>1–9</b> grupa<br><b>Shift+S</b> utrzymaj pozycję<br><b>J</b> alarm · <b>Ctrl+S</b> zapis";
+			"<b>Ctrl+1–9</b> przypisz · <b>1–9</b> grupa<br><b>Shift+S</b> utrzymaj pozycję<br><b>J</b> alarm · <b>Ctrl+S</b> zapis<br><b>, / .</b> lub <b>Alt+ŚPM</b> obrót kamery 3D · <b>/</b> od południa";
 		try {
 			const save = JSON.parse(localStorage.getItem(SAVE_KEY));
 			if ([2, 3, 4, 5, 6].includes(save?.state?.version)) {
@@ -1889,7 +1913,9 @@
 		const p = world(mouse);
 		if (e.button === 1) {
 			e.preventDefault();
-			pan = { ...mouse, cx: camera.x, cy: camera.y };
+			// On the 3D board: Alt + middle button turns the camera; a plain drag keeps the grabbed ground
+			// point under the pointer (the board is in perspective, so flat-frame deltas are not enough).
+			pan = { ...mouse, cx: camera.x, cy: camera.y, ground: p, turn: e.altKey && rendererMode === "three", sx: e.clientX, client: { x: e.clientX, y: e.clientY }, yaw: camera.yaw || 0 };
 			canvas.setPointerCapture(e.pointerId);
 			return;
 		}
@@ -2041,7 +2067,11 @@
 	});
 	canvas.addEventListener("pointermove", (e) => {
 		mouse = pointer(e);
-		if (pan) {
+		if (pan?.turn) camera.yaw = pan.yaw + (e.clientX - pan.sx) * 0.008;
+		// 3D: only remember where the pointer is; the camera follows once per frame (panTowardsPointer),
+		// because the 3D view (and so the ground under the pointer) changes only when a frame is drawn.
+		else if (pan && rendererMode === "three") pan.client = { x: e.clientX, y: e.clientY };
+		else if (pan) {
 			camera.x = clamp(pan.cx - (mouse.x - pan.x) / scale, 0, W);
 			camera.y = clamp(pan.cy - (mouse.y - pan.y) / scale, 0, H);
 		}
@@ -2194,6 +2224,7 @@
 		keys.add(key);
 		if (e.repeat || !started) return;
 		if (key === " ") togglePause();
+		else if (key === "/") camera.yaw = 0;
 		else if (key === "j") focusAlert();
 		else if (key === "f") selectAll();
 		else if (key === "r") selectWorkers();
@@ -2490,10 +2521,17 @@
 			}
 		} else accumulator = 0;
 		const speed = 650 / camera.zoom;
-		if (keys.has("arrowleft")) camera.x -= speed * dt;
-		if (keys.has("arrowright")) camera.x += speed * dt;
-		if (keys.has("arrowup")) camera.y -= speed * dt;
-		if (keys.has("arrowdown")) camera.y += speed * dt;
+		// The 3D board turns around the view centre (, and . hold to turn, / faces north again); the
+		// arrows then move along the screen, not the map axes.
+		if (rendererMode === "three") {
+			if (keys.has(",")) camera.yaw = (camera.yaw || 0) - 1.5 * dt;
+			if (keys.has(".")) camera.yaw = (camera.yaw || 0) + 1.5 * dt;
+		} else camera.yaw = 0;
+		const yaw = camera.yaw || 0,
+			ahead = (keys.has("arrowup") ? 1 : 0) - (keys.has("arrowdown") ? 1 : 0),
+			side = (keys.has("arrowright") ? 1 : 0) - (keys.has("arrowleft") ? 1 : 0);
+		camera.x += (side * Math.cos(yaw) - ahead * Math.sin(yaw)) * speed * dt;
+		camera.y += (-side * Math.sin(yaw) - ahead * Math.cos(yaw)) * speed * dt;
 		camera.x = clamp(camera.x, 0, W);
 		camera.y = clamp(camera.y, 0, H);
 		sound.update(game, {
@@ -2516,6 +2554,7 @@
 			hudTimer = 0;
 		}
 		applyRenderer();
+		panTowardsPointer();
 		const renderStart = performance.now();
 		render();
 		SceneFX.measure(performance.now() - renderStart);

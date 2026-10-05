@@ -4,16 +4,26 @@
      a scrolling ripple normal map, glowing pools (Lumeria) shine teal, lava flows with scrolling
      glowing cracks; chasms stay dark ground. Surfaces go through the same fog-of-war shader as the
      terrain.
-   - Night lights: additive light pools on the ground under buildings and headlight cones in front of
-     vehicles and infantry, two instanced draws, faded in with game.night.
-   - Weather (game.weather: kind and intensity): rain as falling streaks with lightning flashes,
-     snow as drifting flakes, sandstorms as fast low dust plus a sand-coloured haze. Particles live in a
-     box around the camera focus and wrap around it.
+   - Night lights: every headlight, flashlight, searchlight and building floodlight in the view lights the
+     terrain and the models (webgl3d/night-lights-3d.js, in their shaders), with beams visible in the air;
+     soft glow of the windows and of the map (groves, glowing pools, lava) laid on the ground. Faded in
+     with game.night.
+   - Weather: webgl3d/weather-3d.js (rain with splashes and a wet ground, snow settling, sandstorms,
+     lightning bolts), animated on the graphics card.
    - Particles: smoke and fire on damaged buildings and vehicles, fire sparks and smoke puffs on every
-     explosion; one point draw for smoke, one (additive) for fire. */
+     explosion; one point draw for smoke, one (additive) for fire.
+   - Map effects around the camera focus: spores over Lumeria, embers rising from Pyrrhos' lava, mist
+     welling up from Aerion's chasms, sand blown over the dune maps, motes over the derelict fields and the
+     frozen hive.
+   - Shots (called by the renderer): muzzle flashes, rocket smoke trails, impact sparks. */
+import { createWeather3D } from "./weather-3d.js";
+import { createNightLights } from "./night-lights-3d.js";
+
 export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 	const TAU = Math.PI * 2;
 	const { TYPES } = RTS;
+	// Share of particles to make (graphics settings: weather particles; set each frame by update()).
+	let density = 1;
 
 	// ---------- textures made in code ----------
 	// Periodic ripple heights: a few sine waves that tile seamlessly.
@@ -123,23 +133,6 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 		x.fillStyle = g;
 		x.fillRect(0, 0, s, s);
 	});
-	// Headlight: a fan opening towards +X from the middle of the left edge.
-	const cone = canvasTexture(128, (x, s) => {
-		x.save();
-		x.beginPath();
-		x.moveTo(0, s / 2);
-		x.lineTo(s, s * 0.08);
-		x.lineTo(s, s * 0.92);
-		x.closePath();
-		x.clip();
-		const g = x.createRadialGradient(0, s / 2, 0, 0, s / 2, s);
-		g.addColorStop(0, "#ffffffdd");
-		g.addColorStop(0.5, "#ffffff55");
-		g.addColorStop(1, "#ffffff00");
-		x.fillStyle = g;
-		x.fillRect(0, 0, s, s);
-		x.restore();
-	});
 
 	// ---------- water ----------
 	const ripples = normalMap(),
@@ -152,6 +145,72 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 		glow: () => new THREE.MeshStandardMaterial({ color: "#1f8f9c", emissive: "#23a9b8", emissiveIntensity: 0.3, roughness: 0.1, metalness: 0, transparent: true, opacity: 0.78, normalMap: ripples, normalScale: new THREE.Vector2(0.4, 0.4) }),
 		lava: () => new THREE.MeshStandardMaterial({ color: "#2a0d06", emissive: "#ffffff", emissiveMap: cracks, emissiveIntensity: 1.3, roughness: 0.85, metalness: 0 }),
 	};
+	// The look of open water (lakes, crevasses, glowing pools; not lava), on top of the fog-of-war shader:
+	// small waves, a second ripple layer against tiling, the sky reflected at grazing angles (fresnel),
+	// lighter shallows towards the shore (the shore fade is the depth), foam along the shore line, and
+	// rings from the drops while it rains.
+	const waterUniforms = { waterTime: { value: 0 }, waterRain: { value: 0 }, waterSky: { value: new THREE.Color("#8fa6b4") } };
+	const WATER_COMMON = `
+		uniform float waterTime; uniform float waterRain; uniform vec3 waterSky;
+		float wvHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+		float wvNoise(vec2 p) {
+			vec2 i = floor(p), f = fract(p);
+			f = f * f * (3.0 - 2.0 * f);
+			return mix(mix(wvHash(i), wvHash(i + vec2(1.0, 0.0)), f.x), mix(wvHash(i + vec2(0.0, 1.0)), wvHash(i + vec2(1.0, 1.0)), f.x), f.y);
+		}
+		float wvRings(vec2 p, float t) {
+			float s = 0.0;
+			for (int k = 0; k < 3; k++) {
+				vec2 q = p / 11.0 + float(k) * 0.31, c = floor(q);
+				vec2 o = vec2(wvHash(c), wvHash(c + 7.1)) * 0.6 + 0.2;
+				float ph = fract(t * 0.8 + wvHash(c + 3.3));
+				float d = length(fract(q) - o) * 11.0;
+				s += smoothstep(0.8, 0.0, abs(d - ph * 5.0)) * (1.0 - ph);
+			}
+			return s;
+		}`;
+	function waterLook(material) {
+		const before = material.onBeforeCompile;
+		material.onBeforeCompile = (shader, renderer) => {
+			before?.call(material, shader, renderer);
+			Object.assign(shader.uniforms, waterUniforms);
+			shader.vertexShader = shader.vertexShader
+				.replace("#include <common>", "#include <common>\nuniform float waterTime;")
+				.replace(
+					"#include <begin_vertex>",
+					"#include <begin_vertex>\n#ifdef USE_COLOR_ALPHA\ntransformed.y += (sin(position.x * 0.045 + waterTime * 1.3) + sin(position.z * 0.06 - waterTime * 1.05)) * 0.35 * color.a;\n#endif",
+				);
+			shader.fragmentShader = shader.fragmentShader
+				.replace("#include <common>", "#include <common>\n" + WATER_COMMON)
+				.replace(
+					"#include <normal_fragment_maps>",
+					`#include <normal_fragment_maps>
+					#ifdef USE_NORMALMAP
+					vec3 detailN = texture2D(normalMap, vNormalMapUv * 0.37 + vec2(-waterTime * 0.005, waterTime * 0.007)).xyz * 2.0 - 1.0;
+					normal = normalize(normal + vec3(detailN.xy * 0.18, 0.0));
+					#endif`,
+				)
+				.replace(
+					"#include <opaque_fragment>",
+					`#ifdef USE_COLOR_ALPHA
+					float depthK = vColor.a;
+					#else
+					float depthK = 1.0;
+					#endif
+					float fres = pow(1.0 - clamp(abs(dot(normalize(vViewPosition), normal)), 0.0, 1.0), 3.0);
+					outgoingLight = mix(outgoingLight, waterSky * 1.1, fres * 0.55);
+					outgoingLight = mix(outgoingLight * vec3(1.15, 1.22, 1.05) + vec3(0.04, 0.06, 0.04), outgoingLight, smoothstep(0.0, 0.8, depthK));
+					float foamNoise = wvNoise(vMapXY * 0.21 + vec2(waterTime * 0.35, -waterTime * 0.25)) * 0.6 + wvNoise(vMapXY * 0.53 - vec2(waterTime * 0.2, 0.0)) * 0.4;
+					float foam = smoothstep(0.04, 0.16, depthK) * (1.0 - smoothstep(0.2, 0.42, depthK)) * smoothstep(0.42, 0.8, foamNoise);
+					outgoingLight += vec3(0.85, 0.9, 0.92) * foam * 0.35;
+					diffuseColor.a = max(diffuseColor.a, foam * 0.55);
+					outgoingLight += vec3(0.8, 0.86, 0.92) * waterRain * wvRings(vMapXY, waterTime) * 0.4;
+					#include <opaque_fragment>`,
+				);
+		};
+		material.customProgramCacheKey = () => "water";
+		return material;
+	}
 	let waters = [];
 	// Water surfaces are grids (the terrain grid) over each body, faded out towards the shore: every grid
 	// point gets an opacity from its distance to the wavy shore (opaque inside 70% of the radius, clear at
@@ -232,7 +291,7 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 			waterPoints(w, game, kind, byKind.get(kind));
 		}
 		for (const [kind, cells] of byKind) {
-			const material = fogged(WATER[kind]());
+			const material = kind === "lava" ? fogged(WATER[kind]()) : waterLook(fogged(WATER[kind]()));
 			// Per-vertex opacity fades the shore.
 			Object.assign(material, { vertexColors: true, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
 			const mesh = new THREE.Mesh(waterMesh(cells, kind), material);
@@ -243,10 +302,44 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 		}
 	}
 
+	// ---------- weather (webgl3d/weather-3d.js: rain, snow, sand, lightning on the graphics card) ----------
+	// Made before the night lights: they lie on the ground through its height map texture.
+	const weather3d = createWeather3D(THREE, { world, heightAt });
+	let weatherNow = { kind: null, intensity: 0 };
+
 	// ---------- night lights ----------
-	const flat = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+	// Ground light (pools under buildings and map glow, headlight fans of the other vehicles, flashlights of
+	// infantry): additive textured quads, one instanced draw per texture. Each quad is a fine grid that the
+	// vertex shader lays on the terrain (bilinear height map, as the terrain mesh), so on a slope the light
+	// follows the ground instead of cutting into it or hanging over it.
+	const drape = new THREE.PlaneGeometry(1, 1, 12, 12).rotateX(-Math.PI / 2);
 	function lightBatch(texture, max) {
-		const m = new THREE.InstancedMesh(flat, new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -4 }), max);
+		const material = new THREE.ShaderMaterial({
+			uniforms: { map: { value: texture }, heightMap: weather3d.ground.heightMap, heightInfo: weather3d.ground.heightInfo },
+			vertexShader: `uniform sampler2D heightMap; uniform vec4 heightInfo; varying vec2 vUv; varying vec3 vTint;
+				float cellHeight(vec2 c) { return texture2D(heightMap, (c + 0.5) / heightInfo.xy).r; }
+				float groundAt(vec2 p) {
+					vec2 g = clamp(p / heightInfo.z, vec2(0.0), heightInfo.xy - 1.001), f = floor(g), t = g - f;
+					return mix(mix(cellHeight(f), cellHeight(f + vec2(1.0, 0.0)), t.x), mix(cellHeight(f + vec2(0.0, 1.0)), cellHeight(f + vec2(1.0, 1.0)), t.x), t.y);
+				}
+				void main() {
+					vUv = uv;
+					vTint = instanceColor;
+					vec4 w = modelMatrix * instanceMatrix * vec4(position, 1.0);
+					w.y = groundAt(w.xz) + 1.2;
+					gl_Position = projectionMatrix * viewMatrix * w;
+				}`,
+			fragmentShader: `uniform sampler2D map; varying vec2 vUv; varying vec3 vTint;
+				void main() {
+					vec4 c = texture2D(map, vUv);
+					gl_FragColor = vec4(c.rgb * vTint * c.a, 1.0);
+					#include <colorspace_fragment>
+				}`,
+			transparent: true,
+			depthWrite: false,
+			blending: THREE.AdditiveBlending,
+		});
+		const m = new THREE.InstancedMesh(drape, material, max);
 		m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(max * 3), 3);
 		m.frustumCulled = false;
 		m.renderOrder = 2;
@@ -254,8 +347,7 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 		world.add(m);
 		return m;
 	}
-	const pools = lightBatch(pool, 400),
-		cones = lightBatch(cone, 600),
+	const pools = lightBatch(pool, 900),
 		matrix = new THREE.Matrix4(),
 		quat = new THREE.Quaternion(),
 		up = new THREE.Vector3(0, 1, 0),
@@ -265,32 +357,110 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 	function place(batch, x, y, angle, sx, sz, c, strength) {
 		if (batch.count >= batch.instanceMatrix.count) return;
 		quat.setFromAxisAngle(up, -angle);
-		batch.setMatrixAt(batch.count, matrix.compose(pos.set(x, heightAt(x, y) + 1.2, y), quat, scl.set(sx, 1, sz)));
+		batch.setMatrixAt(batch.count, matrix.compose(pos.set(x, 0, y), quat, scl.set(sx, 1, sz)));
 		batch.setColorAt(batch.count, color.set(c).multiplyScalar(strength));
 		batch.count++;
 	}
-	function nightLights(game, night, hidden) {
-		pools.count = cones.count = 0;
+	// Map glow (MapArt glow in 2D): groves, glowing pools and lava throw coloured light on the ground;
+	// lava glows a little by day too. Spots are found once per map (setGame).
+	let glowSpots = [];
+	function findGlow(game) {
+		glowSpots = [];
+		for (const o of game.obstacles || []) if (o.kind === "grove") glowSpots.push({ x: o.x + o.w / 2, y: o.y + o.h / 2, r: Math.max(o.w, o.h) * 1.4, color: "#3fd8c8", day: 0, night: 0.5 });
+		for (const w of game.waters || [])
+			if (w.kind === "glow") glowSpots.push({ x: w.x, y: w.y, r: Math.max(w.rx, w.ry) * 2.2, color: "#2fd0de", day: 0.05, night: 0.4 });
+			else if (w.kind === "lava") glowSpots.push({ x: w.x, y: w.y, r: Math.max(w.rx, w.ry) * 2.4, color: "#ff6a2a", day: 0.12, night: 0.42 });
+	}
+	// Night lights (webgl3d/night-lights-3d.js): every lamp in the view at once, lighting the terrain and
+	// the models in their shaders — no fixed set of Three.js lights handed to the things nearest the
+	// camera, so nothing switches as the camera moves.
+	// Light colour of a building at night: warm in the base, cool in the lab, energy blue at reactors and
+	// batteries, fire at the forge, white at the medical post.
+	const BUILDING_LIGHT = { lab: "#cfe8ff", uplink: "#cfe8ff", reactor: "#9ff2ff", battery: "#9ff2ff", shieldgen: "#9ff2ff", forge: "#ff9a4a", medbay: "#f4f8ff" };
+	const buildingLight = (type) => BUILDING_LIGHT[type] || "#ffcf8a";
+	const lights = createNightLights(THREE, { world });
+	// A lamp on the front of an entity (reach ahead of its centre, height over the ground), aimed along its
+	// facing at the ground len ahead.
+	function headlamp(e, { len, reach, height, angle, color, power, range, haze }) {
+		const c = Math.cos(e.angle || 0),
+			sn = Math.sin(e.angle || 0),
+			x = e.x + c * reach,
+			y = e.y + sn * reach,
+			tx = e.x + c * len,
+			ty = e.y + sn * len;
+		lights.spot(x, y, heightAt(e.x, e.y) + height, tx, ty, heightAt(tx, ty), { angle, color, power, range, haze });
+	}
+	const ground = (s) => !s.speed || s.flying ? false : true;
+	function nightLights(game, night, hidden, focus, span) {
+		pools.count = 0;
+		for (const g of glowSpots) {
+			const strength = g.day + (g.night - g.day) * night;
+			if (strength > 0.02) place(pools, g.x, g.y, 0, g.r, g.r, g.color, strength);
+		}
+		lights.begin();
+		const weather = weatherNow.kind ? weatherNow.intensity : 0,
+			reach = span * 1.3;
 		if (night > 0.05)
 			for (const e of game.entities) {
 				if (e.hp <= 0 || hidden(e)) continue;
 				const s = TYPES[e.type];
-				if (!s || s.threat || e.team === 2) continue;
+				if (!s || s.threat || e.team === 2 || Math.abs(e.x - focus.x) > reach || Math.abs(e.y - focus.y) > reach) continue;
+				const r = s.radius;
 				if (!s.speed) {
 					if (e.constructionLeft > 0 || e.type === "wall") continue;
-					place(pools, e.x, e.y, 0, s.radius * 3.4, s.radius * 3.4, "#ffcf8a", night * 0.55);
-				} else if (!s.flying) {
-					const len = s.radius >= 16 ? 190 : 120,
-						c = Math.cos(e.angle || 0),
-						sn = Math.sin(e.angle || 0);
-					place(cones, e.x + c * (len / 2 + s.radius * 0.5), e.y + sn * (len / 2 + s.radius * 0.5), e.angle || 0, len, len * 0.7, "#fff1cc", night * (s.radius >= 16 ? 0.42 : 0.26));
+					// The footprint of the 3D building is about 1.6 × its radius; buildings face +X (their
+					// doors). A soft glow of the windows on the ground, two floodlights on the front corners
+					// slanting out-forward and down, a light before the front washing the walls.
+					const tint = buildingLight(e.type),
+						len = r * 1.3 + 90,
+						h = heightAt(e.x, e.y) + Math.max(12, r * 0.55);
+					place(pools, e.x, e.y, 0, r * 3, r * 3, tint, night * 0.1);
+					for (const side of [-1, 1]) {
+						const a = side * 0.6,
+							fx = e.x + r * 0.78,
+							fy = e.y + side * r * 0.72,
+							tx = fx + Math.cos(a) * len,
+							ty = fy + Math.sin(a) * len;
+						lights.spot(fx, fy, h, tx, ty, heightAt(tx, ty), { angle: 0.62, soft: 0.8, color: tint, power: night * 1500, range: len * 1.9, haze: night * (0.07 + weather * 0.3) });
+					}
+					lights.point(e.x + r * 1.25 + 8, e.y, heightAt(e.x, e.y) + Math.max(14, r * 0.42), { color: tint, power: night * 480, range: r * 2 + 70 });
+				} else if (s.flying)
+					// Searchlight from the nose, down and ahead (the flight height of the renderer is 90).
+					headlamp(e, { len: 150, reach: r * 0.9, height: 88, angle: 0.3, color: "#e8f0ff", power: night * 1400, range: 240, haze: night * (0.14 + weather * 0.3) });
+				else if (ground(s)) {
+					if (r >= 12) {
+						const len = r >= 16 ? 200 : 140;
+						headlamp(e, { len, reach: r * 0.95, height: Math.max(8, r * 0.5), angle: 0.5, color: "#fff1cc", power: night * 1800, range: len * 1.6, haze: night * (0.05 + weather * 0.3) });
+					} else headlamp(e, { len: 90, reach: r * 0.5, height: 14, angle: 0.26, color: "#eef4ff", power: night * 420, range: 144, haze: night * (0.04 + weather * 0.22) });
 				}
 			}
-		for (const b of [pools, cones]) {
-			b.visible = b.count > 0;
-			b.instanceMatrix.needsUpdate = true;
-			if (b.instanceColor) b.instanceColor.needsUpdate = true;
+		lights.end(focus, span, night > 0.05);
+		pools.visible = pools.count > 0;
+		pools.instanceMatrix.needsUpdate = true;
+		pools.instanceColor.needsUpdate = true;
+	}
+	// Engine trails of aircraft in the air: a short glowing streak at the nozzle and a pale vapour trail
+	// thinning out behind (only flying units that move, near the view).
+	const lastAir = new Map();
+	function airTrails(game, dt, hidden, focus, span) {
+		const seen = new Set();
+		for (const e of game.entities) {
+			const s = TYPES[e.type];
+			if (!s?.flying || e.hp <= 0 || hidden(e) || Math.hypot(e.x - focus.x, e.y - focus.y) > span) continue;
+			seen.add(e.id);
+			const was = lastAir.get(e.id);
+			lastAir.set(e.id, { x: e.x, y: e.y });
+			if (!was || Math.hypot(e.x - was.x, e.y - was.y) < 0.2) continue;
+			const c = Math.cos(e.angle || 0),
+				sn = Math.sin(e.angle || 0),
+				r = s.radius * 0.95,
+				x = e.x - c * r,
+				z = e.y - sn * r,
+				y = heightAt(e.x, e.y) + 90;
+			if (e.type !== "drone") fire.spawn({ x, y, z, vx: -c * 20, vy: 0, vz: -sn * 20, lift: 0, life: 0, max: 0.18, s0: 6, s1: 2, r: 1, g: 0.75, b: 0.45, a: 0.8 });
+			if (Math.random() < dt * 30) smoke.spawn({ x: x - c * 4, y, z: z - sn * 4, vx: rand(-1, 1), vy: rand(-0.5, 0.5), vz: rand(-1, 1), life: 0, max: e.type === "drone" ? 0.6 : 1.6, s0: e.type === "drone" ? 2 : 3.5, s1: e.type === "drone" ? 5 : 12, r: 0.9, g: 0.92, b: 0.95, a: 0.28 });
 		}
+		for (const id of lastAir.keys()) if (!seen.has(id)) lastAir.delete(id);
 	}
 
 	// ---------- particle systems (points with size and colour per particle) ----------
@@ -337,13 +507,24 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 					p.y += p.vy * dt;
 					p.z += p.vz * dt;
 					const t = p.life / p.max;
-					positions.set([p.x, p.y, p.z], n * 3);
+					positions[n * 3] = p.x;
+					positions[n * 3 + 1] = p.y;
+					positions[n * 3 + 2] = p.z;
 					sizes[n] = p.s0 + (p.s1 - p.s0) * t;
-					colors.set([p.r, p.g, p.b, p.a * (t < 0.15 ? t / 0.15 : 1 - (t - 0.15) / 0.85)], n * 4);
+					colors[n * 4] = p.r;
+					colors[n * 4 + 1] = p.g;
+					colors[n * 4 + 2] = p.b;
+					colors[n * 4 + 3] = p.a * (t < 0.15 ? t / 0.15 : 1 - (t - 0.15) / 0.85);
 					n++;
 				}
 				geometry.setDrawRange(0, n);
-				for (const name of ["position", "size", "rgba"]) geometry.attributes[name].needsUpdate = true;
+				// Upload only the live part of each buffer.
+				for (const name of ["position", "size", "rgba"]) {
+					const a = geometry.attributes[name];
+					a.clearUpdateRanges();
+					a.addUpdateRange(0, n * a.itemSize);
+					a.needsUpdate = true;
+				}
 				points.visible = n > 0;
 				return n;
 			},
@@ -355,10 +536,10 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 	const rand = (a, b) => a + Math.random() * (b - a);
 	const seenExplosions = new WeakSet();
 	let emitClock = 0;
-	function damageAndExplosions(game, dt, hidden) {
+	function damageAndExplosions(game, dt, hidden, scars = true) {
 		emitClock += dt;
 		// Emitters run 10 times a second; each spawn carries its own randomness.
-		if (emitClock >= 0.1) {
+		if (emitClock >= 0.1 && scars) {
 			emitClock = 0;
 			for (const e of game.entities) {
 				if (e.hp <= 0 || e.constructionLeft > 0 || hidden(e)) continue;
@@ -370,9 +551,9 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 				if (!(building ? f < 0.5 : vehicle && f < 0.35)) continue;
 				const ground = heightAt(e.x, e.y),
 					top = building ? Math.min(60, s.radius * 0.8) : 18;
-				if (Math.random() < (building ? 0.8 : 0.45))
+				if (Math.random() < (building ? 0.8 : 0.45) * density)
 					smoke.spawn({ x: e.x + rand(-s.radius, s.radius) * 0.4, y: ground + top, z: e.y + rand(-s.radius, s.radius) * 0.4, vx: rand(4, 14), vy: rand(18, 32), vz: rand(-4, 4), life: 0, max: rand(2.5, 4.2), s0: s.radius * 0.6, s1: s.radius * 2.6, r: 0.42, g: 0.41, b: 0.4, a: 0.5 });
-				if (f < (building ? 0.3 : 0.2) && Math.random() < 0.9)
+				if (f < (building ? 0.3 : 0.2) && Math.random() < 0.9 * density)
 					fire.spawn({ x: e.x + rand(-s.radius, s.radius) * 0.35, y: ground + top * 0.8, z: e.y + rand(-s.radius, s.radius) * 0.35, vx: rand(-3, 3), vy: rand(20, 40), vz: rand(-3, 3), life: 0, max: rand(0.4, 0.8), s0: s.radius * 0.45, s1: s.radius * 0.1, r: 1, g: rand(0.45, 0.65), b: 0.15, a: 0.9 });
 			}
 		}
@@ -382,98 +563,119 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 			if (hidden({ x: ef.x, y: ef.y, team: -1 })) continue;
 			const size = ef.size || 40,
 				ground = heightAt(ef.x, ef.y);
-			for (let i = 0; i < 16; i++) {
+			for (let i = 0; i < Math.ceil(16 * density); i++) {
 				const a = rand(0, TAU),
 					sp = rand(40, 140) * (size / 50);
 				fire.spawn({ x: ef.x, y: ground + 8, z: ef.y, vx: Math.cos(a) * sp, vy: rand(40, 160), vz: Math.sin(a) * sp, lift: -260, life: 0, max: rand(0.35, 0.8), s0: rand(4, 9), s1: 1, r: 1, g: rand(0.55, 0.85), b: 0.3, a: 1 });
 			}
-			for (let i = 0; i < 7; i++)
+			for (let i = 0; i < Math.ceil(7 * density); i++)
 				smoke.spawn({ x: ef.x + rand(-size, size) * 0.25, y: ground + rand(4, 16), z: ef.y + rand(-size, size) * 0.25, vx: rand(-10, 10), vy: rand(10, 26), vz: rand(-10, 10), life: 0, max: rand(1.6, 3), s0: size * 0.5, s1: size * 1.5, r: 0.38, g: 0.35, b: 0.32, a: 0.55 });
 		}
 	}
 
-	// ---------- weather ----------
-	const RAIN = 3000,
-		FLAKES = 3500;
-	const rainGeometry = new THREE.BufferGeometry(),
-		rainPositions = new Float32Array(RAIN * 6);
-	rainGeometry.setAttribute("position", new THREE.BufferAttribute(rainPositions, 3));
-	const rain = new THREE.LineSegments(rainGeometry, new THREE.LineBasicMaterial({ color: "#a9c4d6", transparent: true, opacity: 0.45, depthWrite: false }));
-	rain.frustumCulled = false;
-	world.add(rain);
-	const flakeGeometry = new THREE.BufferGeometry(),
-		flakePositions = new Float32Array(FLAKES * 3);
-	flakeGeometry.setAttribute("position", new THREE.BufferAttribute(flakePositions, 3));
-	const flakes = new THREE.Points(flakeGeometry, new THREE.PointsMaterial({ map: softDot, size: 7, sizeAttenuation: true, transparent: true, depthWrite: false, color: "#ffffff", opacity: 0.85 }));
-	flakes.frustumCulled = false;
-	world.add(flakes);
-	// Particle seeds: position in the unit box, plus a speed factor.
-	const seeds = Float32Array.from({ length: Math.max(RAIN, FLAKES) * 4 }, Math.random);
-	const wrap = (v, size) => ((v % size) + size) % size;
-	function weather(game, time, focus, span) {
-		const w = game.weather,
-			kind = w.kind,
-			k = w.intensity;
-		rain.visible = kind === "rain" && k > 0.02;
-		flakes.visible = (kind === "snow" || kind === "sand") && k > 0.02;
-		const ground = heightAt(focus.x, focus.y),
-			x0 = focus.x - span / 2,
-			z0 = focus.y - span / 2;
-		if (rain.visible) {
-			const n = Math.floor(RAIN * k),
-				fallH = 520,
-				wind = 0.25;
-			for (let i = 0; i < n; i++) {
-				const s = seeds[i * 4 + 3] * 0.4 + 0.8,
-					drop = wrap(seeds[i * 4 + 1] * fallH - time * 900 * s, fallH),
-					x = x0 + wrap(seeds[i * 4] * span + time * 900 * s * wind, span),
-					z = z0 + seeds[i * 4 + 2] * span,
-					y = ground + drop;
-				rainPositions.set([x, y, z, x - 26 * wind, y + 26, z], i * 6);
-			}
-			rainGeometry.setDrawRange(0, n * 2);
-			rainGeometry.attributes.position.needsUpdate = true;
-			rain.material.opacity = 0.25 + k * 0.3;
+	// ---------- map effects (MapArt.effects in 2D), around the camera focus ----------
+	// Lumeria: glowing spores drifting over the ground, brighter at night. Pyrrhos: embers rising from the
+	// lava. Aerion: mist welling up from the chasms.
+	let byKind = {},
+		theme = null;
+	const owed = { spores: 0, embers: 0, mist: 0 },
+		vapour = new WeakMap();
+	function emit(name, rate, dt) {
+		owed[name] += rate * dt * density;
+		const n = Math.floor(owed[name]);
+		owed[name] -= n;
+		return n;
+	}
+	function mapEffects(game, dt, focus, span, night, visible, gasFlow) {
+		const near = (w) => Math.abs(w.x - focus.x) < span / 2 + w.rx && Math.abs(w.y - focus.y) < span / 2 + w.ry;
+		// Gas fields breathe violet vapour; a pumping extractor draws it out thick (as the 2D vent).
+		for (const o of game.gasFields || []) {
+			if (!o.amount || !near({ x: o.x, y: o.y, rx: 60, ry: 60 }) || !visible(o.x, o.y) || !game.explored[game.visionIndex(o.x, o.y)]) continue;
+			const flow = gasFlow?.(o);
+			// Kept here, never on the game's deposit (saves and network checksums must not change).
+			let v = (vapour.get(o) || 0) + dt * (flow ? 9 : 2.5) * density;
+			for (; v >= 1; v--)
+				smoke.spawn({ x: o.x + rand(-6, 6), y: heightAt(o.x, o.y) + 3, z: o.y + 4 + rand(-3, 3), vx: rand(-4, 4), vy: rand(14, flow ? 34 : 22), vz: rand(-4, 4), life: 0, max: rand(1.8, 3.2), s0: 8, s1: flow ? 34 : 24, r: 0.78, g: 0.55, b: 0.9, a: flow ? 0.38 : 0.22 });
+			vapour.set(o, v);
 		}
-		if (flakes.visible) {
-			const sand = kind === "sand",
-				n = Math.floor(FLAKES * k),
-				fallH = sand ? 140 : 420;
-			for (let i = 0; i < n; i++) {
-				const s = seeds[i * 4 + 3] * 0.6 + 0.7;
-				let x, y, z;
-				if (sand) {
-					// Low dust racing across the ground.
-					x = x0 + wrap(seeds[i * 4] * span + time * 520 * s, span);
-					y = ground + seeds[i * 4 + 1] * fallH + Math.sin(time * 3 + i) * 6;
-					z = z0 + wrap(seeds[i * 4 + 2] * span + time * 90 * s, span);
-				} else {
-					x = x0 + wrap(seeds[i * 4] * span + Math.sin(time * 0.8 + i) * 18 + time * 30, span);
-					y = ground + wrap(seeds[i * 4 + 1] * fallH - time * 70 * s, fallH);
-					z = z0 + seeds[i * 4 + 2] * span;
-				}
-				flakePositions.set([x, y, z], i * 3);
+		if (theme === "lumen")
+			for (let i = emit("spores", 60 * (span / 1600) ** 2, dt); i-- > 0; ) {
+				const x = focus.x + rand(-0.5, 0.5) * span,
+					y = focus.y + rand(-0.5, 0.5) * span;
+				if (!visible(x, y)) continue;
+				const violet = Math.random() < 0.33;
+				fire.spawn({ x, y: heightAt(x, y) + rand(6, 55), z: y, vx: rand(-6, 6), vy: rand(-2, 5), vz: rand(-6, 6), life: 0, max: rand(5, 8), s0: rand(3, 6), s1: rand(3, 6), r: violet ? 0.78 : 0.43, g: violet ? 0.55 : 0.95, b: violet ? 1 : 0.88, a: 0.12 + 0.75 * night });
 			}
-			flakeGeometry.setDrawRange(0, n);
-			flakeGeometry.attributes.position.needsUpdate = true;
-			flakes.material.color.set(sand ? "#d8b47c" : "#ffffff");
-			flakes.material.size = sand ? 5 : 7;
-			flakes.material.opacity = sand ? 0.55 * k + 0.2 : 0.9;
+		if (theme === "magma") {
+			const lava = byKind.lava.filter(near);
+			for (let i = lava.length ? emit("embers", 90, dt) : 0; i-- > 0; ) {
+				const w = lava[Math.floor(Math.random() * lava.length)],
+					x = w.x + rand(-0.5, 0.5) * w.rx * 1.4,
+					y = w.y + rand(-0.5, 0.5) * w.ry;
+				if (!visible(x, y)) continue;
+				fire.spawn({ x, y: heightAt(x, y) + 2, z: y, vx: rand(-10, 10), vy: rand(50, 120), vz: rand(-10, 10), lift: -25, life: 0, max: rand(1.2, 2.4), s0: rand(3, 5), s1: 1, r: 1, g: rand(0.55, 0.85), b: 0.25, a: 0.9 });
+			}
 		}
-		// Lightning in thunderstorms (the same timing as the Canvas and WebGL sky).
-		const strike = time % 17,
-			flash = kind === "rain" && k > 0.4 && strike < 1.3 ? Math.sin((Math.PI * strike) / 1.3) * (strike < 0.25 || (strike > 0.45 && strike < 0.6) ? 1 : 0.35) : 0;
-		return { kind, intensity: k, flash, haze: kind === "sand" ? k : kind === "snow" ? k * 0.6 : k * 0.35 };
+		// Themed maps (themed-art.js): sand blown low over the dunes, motes drifting over the derelict
+		// fields (ash) and the frozen hive (frost).
+		if (theme === "dunesea" || theme === "goldsand")
+			for (let i = emit("spores", 30 * (span / 1600) ** 2, dt); i-- > 0; ) {
+				const x = focus.x + rand(-0.5, 0.5) * span,
+					y = focus.y + rand(-0.5, 0.5) * span;
+				if (!visible(x, y)) continue;
+				smoke.spawn({ x, y: heightAt(x, y) + rand(2, 10), z: y, vx: rand(70, 120), vy: rand(0, 4), vz: rand(8, 20), life: 0, max: rand(1.5, 2.5), s0: rand(14, 24), s1: rand(40, 70), r: theme === "goldsand" ? 1 : 0.96, g: theme === "goldsand" ? 0.92 : 0.86, b: theme === "goldsand" ? 0.75 : 0.67, a: 0.16 });
+			}
+		if (theme === "derelict" || theme === "frozenhive")
+			for (let i = emit("spores", 45 * (span / 1600) ** 2, dt); i-- > 0; ) {
+				const x = focus.x + rand(-0.5, 0.5) * span,
+					y = focus.y + rand(-0.5, 0.5) * span;
+				if (!visible(x, y)) continue;
+				const ice = theme === "frozenhive";
+				smoke.spawn({ x, y: heightAt(x, y) + rand(5, 60), z: y, vx: rand(-8, 8), vy: rand(2, 8), vz: rand(-8, 8), life: 0, max: rand(4, 7), s0: rand(2, 3.5), s1: rand(2, 3.5), r: ice ? 0.95 : 0.6, g: ice ? 0.97 : 0.68, b: ice ? 1 : 0.65, a: 0.7 });
+			}
+		if (theme === "skyfall") {
+			const chasms = byKind.chasm.filter(near);
+			for (let i = chasms.length ? emit("mist", 12, dt) : 0; i-- > 0; ) {
+				const w = chasms[Math.floor(Math.random() * chasms.length)],
+					x = w.x + rand(-0.4, 0.4) * w.rx,
+					y = w.y + rand(-0.4, 0.4) * w.ry;
+				if (!visible(x, y)) continue;
+				smoke.spawn({ x, y: heightAt(x, y) + rand(-10, 10), z: y, vx: rand(-6, 6), vy: rand(4, 10), vz: rand(-6, 6), life: 0, max: rand(6, 9), s0: 70, s1: 190, r: 0.78, g: 0.82, b: 0.88, a: 0.16 });
+			}
+		}
+	}
+
+	// ---------- shots: muzzle flashes, rocket trails, impact sparks ----------
+	function shotFx(what, x, y, z, rocket) {
+		if (what === "muzzle") fire.spawn({ x, y, z, vx: 0, vy: 0, vz: 0, life: 0, max: 0.08, s0: rocket ? 16 : 11, s1: 4, r: 1, g: 0.85, b: 0.5, a: 1 });
+		else if (what === "trail") smoke.spawn({ x, y, z, vx: rand(-3, 3), vy: rand(4, 10), vz: rand(-3, 3), life: 0, max: rand(0.6, 1), s0: 5, s1: 18, r: 0.62, g: 0.6, b: 0.58, a: 0.45 });
+		else
+			for (let i = 0; i < (rocket ? 10 : 4); i++) {
+				const a = rand(0, TAU),
+					sp = rand(30, rocket ? 120 : 70);
+				fire.spawn({ x, y, z, vx: Math.cos(a) * sp, vy: rand(20, 90), vz: Math.sin(a) * sp, lift: -240, life: 0, max: rand(0.15, 0.35), s0: rand(2.5, 5), s1: 1, r: 1, g: rand(0.7, 0.95), b: 0.45, a: 1 });
+			}
 	}
 
 	return {
-		setGame(game) {
+		setGame(game, heights) {
+			if (heights) weather3d.setTerrain(heights);
+			weather3d.reset();
 			buildWater(game);
 			smoke.clear();
 			fire.clear();
+			theme = RTS.MISSIONS[game.missionId]?.theme || null;
+			findGlow(game);
+			byKind = { lava: [], chasm: [], glow: [] };
+			for (const w of game.waters || []) byKind[w.kind]?.push(w);
 		},
+		shot: shotFx,
 		// One frame: returns the weather state for the renderer (haze, lightning flash).
-		update(dt, { game, time, night, focus, span, hidden, scale, light }) {
+		update(dt, { game, time, night, focus, span, hidden, scale, light, gasFlow, sky, quality = {} }) {
+			density = quality.particles ?? 1;
+			waterUniforms.waterTime.value = time;
+			waterUniforms.waterRain.value = weatherNow.kind === "rain" ? weatherNow.intensity || 0 : 0;
+			if (sky) waterUniforms.waterSky.value.copy(sky);
 			for (const w of waters) {
 				const m = w.mesh.material;
 				if (m.normalMap) m.normalMap.offset.set(time * 0.012, time * 0.007);
@@ -483,13 +685,23 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 				}
 				if (w.kind === "glow") m.emissiveIntensity = 0.25 + night * 0.4;
 			}
-			nightLights(game, night, hidden);
-			damageAndExplosions(game, dt, hidden);
+			waterGroup.visible = quality.water !== false;
+			nightLights(game, quality.lights === false ? 0 : night, hidden, focus, span);
+			airTrails(game, dt, hidden, focus, span);
+			damageAndExplosions(game, dt, hidden, quality.scars !== false);
+			mapEffects(game, dt, focus, span, night, (x, y) => !hidden({ x, y, team: -1 }), gasFlow);
 			for (const sys of [smoke, fire]) sys.material.uniforms.scale.value = scale;
 			smoke.material.uniforms.light.value = light;
 			const n = smoke.update(dt) + fire.update(dt);
-			const state = weather(game, time, focus, span);
+			const state = weather3d.update(game, time, dt, { focus, span, density, flashes: quality.flashes !== false, mist: night * 0.3, mistTint: sky });
+			// Where the lightning strikes: sparks and a puff of smoke.
+			if (state.strike) {
+				const { x, y, ground } = state.strike;
+				for (let i = 0; i < 4; i++) shotFx("impact", x + rand(-10, 10), ground + 2, y + rand(-10, 10), true);
+				for (let i = 0; i < 6; i++) smoke.spawn({ x: x + rand(-12, 12), y: ground + 4, z: y + rand(-12, 12), vx: rand(-8, 8), vy: rand(10, 25), vz: rand(-8, 8), life: 0, max: rand(1.5, 2.5), s0: 10, s1: 34, r: 0.35, g: 0.35, b: 0.38, a: 0.5 });
+			}
 			state.particles = n;
+			weatherNow = state;
 			return state;
 		},
 	};

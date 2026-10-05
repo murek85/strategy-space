@@ -61,6 +61,18 @@ export function createThreeGameRenderer({ gameCanvas, canvasRenderer, onContextL
 	const flatOf = (m, v = view) => ({ x: (m.x - v.camera.x) * v.scale + v.width / 2, y: (m.y - v.camera.y) * v.scale + v.height / 2 });
 	const fromFlat = (p) => (view ? base.mapToScreen(mapOf(p)) : p);
 
+	// Where the building being placed would stand (the overlay's rules in render-canvas.js: an extractor
+	// snaps to a gas field, a rebuild to the old foundation; a dragged wall is a row of segments).
+	function placementsOf(v) {
+		if (!v.building || !v.mouse) return [];
+		const p = mapOf(v.mouse),
+			field = v.building === "extractor" ? game.gasFields.find((o) => o.amount > 0 && Math.hypot(o.x - p.x, o.y - p.y) < 55) : null;
+		if (field) Object.assign(p, { x: field.x, y: field.y });
+		const anchor = game.replacement?.(v.building, p.x, p.y);
+		if (anchor) Object.assign(p, { x: anchor.x, y: anchor.y });
+		const points = v.building === "wall" && v.wallDrag ? game.wallPoints(v.wallDrag, p) : [p];
+		return points.map((q) => ({ type: v.building, x: q.x, y: q.y, valid: game.canBuild(q.x, q.y, v.building) }));
+	}
 	function size(canvas, w, h) {
 		if (canvas.width !== w || canvas.height !== h) {
 			canvas.width = w;
@@ -77,7 +89,13 @@ export function createThreeGameRenderer({ gameCanvas, canvasRenderer, onContextL
 		rig.x = v.camera.x;
 		rig.y = v.camera.y;
 		rig.distance = v.height / 2 / (v.scale * Math.tan((FOV * Math.PI) / 360));
+		rig.yaw = v.camera.yaw || 0;
+		// Far out the camera looks down steeply (overview); close in it lowers for a more cinematic view.
+		const zoom = Math.max(1, Math.min(5.5, v.camera.zoom || 1));
+		rig.pitch = 1.05 - ((zoom - 1) / 4.5) * 0.35;
 		base.setSelection(v.selected);
+		// Tall things (floating islands, spires, giant mushrooms) fade in front of the pointer.
+		base.setPointer(v.mouse ? fromFlat(v.mouse) : null);
 		const phase = (game.time / 360) % 1;
 		base.setSun({ elevation: 1 - 2 * game.night, across: Math.sin(phase * Math.PI * 2), night: game.night });
 
@@ -87,7 +105,16 @@ export function createThreeGameRenderer({ gameCanvas, canvasRenderer, onContextL
 			shift = (p) => p && { ...p, x: p.x + (ow - v.width) / 2, y: p.y + (oh - v.height) / 2 };
 		size(overlayCanvas, Math.round(ow * OVERLAY_RES), Math.round(oh * OVERLAY_RES));
 		overlayInk = false;
-		canvasRenderer.drawLayer(overlayCtx, { ...v, width: ow, height: oh, dpr: OVERLAY_RES, mouse: shift(v.mouse), drag: null }, ["overlay"]);
+		// Mission markers of act II become light pillars: collect where the overlay draws them.
+		const beacons = [];
+		if (typeof Act2Art !== "undefined") Act2Art.onBeacon = (p, color, radius) => beacons.push({ x: p.x, y: p.y, color, radius });
+		try {
+			canvasRenderer.drawLayer(overlayCtx, { ...v, width: ow, height: oh, dpr: OVERLAY_RES, mouse: shift(v.mouse), drag: null, objects3D: true }, ["overlay"]);
+		} finally {
+			if (typeof Act2Art !== "undefined") Act2Art.onBeacon = null;
+		}
+		base.setBeacons(beacons);
+		base.setPlacements(placementsOf(v));
 		if (overlayInk) base.setOverlay(overlayCanvas, { x: v.camera.x, y: v.camera.y, scale: v.scale, width: ow, height: oh });
 		else if (overlayShown) base.setOverlay(null);
 		overlayShown = overlayInk;
@@ -103,7 +130,7 @@ export function createThreeGameRenderer({ gameCanvas, canvasRenderer, onContextL
 
 		// Screen layer: the selection box corners go to where their map points are on the 3D board.
 		size(screenCanvas, Math.round(v.width * v.dpr), Math.round(v.height * v.dpr));
-		canvasRenderer.drawLayer(screenCanvas.getContext("2d"), { ...v, mouse: v.mouse && fromFlat(v.mouse), drag: v.drag && { ...v.drag, ...fromFlat(v.drag) } }, ["screen"]);
+		canvasRenderer.drawLayer(screenCanvas.getContext("2d"), { ...v, mouse: v.mouse && fromFlat(v.mouse), drag: v.drag && { ...v.drag, ...fromFlat(v.drag) }, weather3D: true, nativeGrains: true }, ["screen"]);
 		canvasRenderer.drawMinimap({ ...v, viewOutline: corners });
 	}
 
