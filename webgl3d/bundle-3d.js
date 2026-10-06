@@ -55868,9 +55868,34 @@ function createDetail3D(THREE, { group }) {
 		pipe(body, k.steel, [3, 13.5, -4], [3, 20, -4], 0.5, 6); // exhaust stack
 		box(body, k.warn, [1.4, 0.8, 1.4], [5, 18.6, 3], null, 0.2); // beacon
 		lamps(body, k, 11, 8.5, [-4, 4]);
-		const cargo = group(body, [-5, 13.5, 0]);
-		mesh(cargo, loftGeo("hop", [[[-5, 0, -5], [5, 0, -5], [5, 0, 5], [-5, 0, 5]], [[-6, 5, -6], [6, 5, -6], [6, 5, 6], [-6, 5, 6]]]), k.warn, [0, 0, 0]);
-		for (let i = 0; i < 4; i++) ball(cargo, k.hub, 1.8, [-3 + (i % 2) * 5, 5, -2.5 + (i >> 1) * 5], [1, 0.7, 1]); // ore lumps
+		// Hopper: an open bin with flared walls, a reinforced rim, ribs and a tipping hinge at the back,
+		// always there; the load inside rises with the cargo — grey lumps of ore with a metal sheen, or
+		// golden crystal shards (keep: the renderer shows and scales them, they are never merged).
+		const bin = group(body, [-5, 13.5, 0]);
+		box(bin, k.black, [10, 0.6, 10], [0, 0.3, 0], null, 0.2); // floor
+		for (const side of [-1, 1]) {
+			box(bin, k.warn, [12, 5, 0.6], [0, 2.6, side * 5.5], [side * 0.2, 0, 0], 0.2);
+			box(bin, k.warn, [0.6, 5, 12], [side * 5.5, 2.6, 0], [0, 0, -side * 0.2], 0.2);
+			box(bin, k.dark, [13, 0.7, 0.9], [0, 5.1, side * 6], null, 0.2); // rim
+			box(bin, k.dark, [0.9, 0.7, 13], [side * 6, 5.1, 0], null, 0.2);
+			for (const x of [-3.5, 3.5]) box(bin, k.dark, [0.6, 4.6, 0.5], [x, 2.5, side * 5.95], [side * 0.2, 0, 0], 0.1); // ribs
+		}
+		cyl(bin, k.steel, 0.6, 12, [-6, 0.4, 0], { axis: "z", segs: 8 }); // hinge
+		const pile = { ore: ball(bin, k.metal, 1, [0, 1, 0], [4.8, 1, 4.8]), crystal: ball(bin, k.warn, 1, [0, 1, 0], [4.8, 1, 4.8]) },
+			lumps = { ore: [], crystal: [] };
+		for (let n = 0; n < 7; n++) {
+			const a = n * 2.4,
+				d = n ? 2.6 : 0,
+				x = Math.cos(a) * d,
+				z = Math.sin(a) * d;
+			const lump = mesh(bin, cached("lump", () => new THREE.IcosahedronGeometry(1, 0)), n % 3 ? k.metal : k.steel, [x, 0, z], [a, a * 0.7, 0]),
+				r = 1.5 + (n % 3) * 0.25;
+			lump.scale.set(r, r * 0.75, r * 1.1);
+			lumps.ore.push(lump);
+			const shard = mesh(bin, cylGeo(0.05, 0.9, 3, 6), k.crystal, [x, 0, z], [Math.cos(a) * 0.4, 0, Math.sin(a) * 0.4]);
+			lumps.crystal.push(shard);
+		}
+		for (const m of [pile.ore, pile.crystal, ...lumps.ore, ...lumps.crystal]) m.userData.keep = true;
 		const arm = group(body, [9, 9, 3.5]);
 		box(arm, k.dark, [9, 2, 2], [4.5, 0, 0], null, 0.4);
 		pipe(arm, k.steel, [0, -1.4, 0], [6, -1, 0], 0.4);
@@ -55879,7 +55904,20 @@ function createDetail3D(THREE, { group }) {
 		return {
 			root,
 			update(e, i) {
-				cargo.visible = (e.cargo || 0) > 0;
+				// The load: a mound rising with the cargo (capacity 30), lumps or shards appearing on it.
+				const fill = Math.min(1, (e.cargo || 0) / 30),
+					kind = e.cargoKind === "crystal" ? "crystal" : "ore",
+					top = 0.6 + fill * 3.8;
+				for (const key of ["ore", "crystal"]) {
+					const on = key === kind && fill > 0;
+					pile[key].visible = on;
+					pile[key].scale.y = 0.3 + fill * 2.6;
+					pile[key].position.y = 0.6 + fill * 1.2;
+					lumps[key].forEach((m, n) => {
+						m.visible = on && n < Math.ceil(fill * 7);
+						m.position.y = top - (n ? 0.5 : 0) + (key === "crystal" ? 1 : 0);
+					});
+				}
 				const gathering = e.order?.kind === "gather" && !i.moving;
 				arm.rotation.z = gathering ? Math.sin(i.time * 8 + e.id) * 0.4 - 0.4 : 0.15;
 				drill.rotation.x = gathering ? i.time * 20 : 0;
@@ -57058,26 +57096,44 @@ function createNature3D(THREE, { tools, group, materials }) {
 
 	// ---------- four-legged animals ----------
 	// o: length, width, depth (torso), legs (length), neck [forward, up], head (length), tail (length),
-	// ears ("pointy", "long", "round", "none"), coat, belly, foot (hoof material), extra(parts, s).
+	// ears ("pointy", "long", "round", "none"), coat, belly, foot (hoof material), extra(parts, s);
+	// optional: torso (stations), thick (legs), leg (lower legs), paws (paws, not hooves), bib (chest and
+	// throat), muzzle, rump (patch), earTip, hop (hops: the hare), longFeet (hare's hind legs: thighs flat on
+	// the flanks, long feet on the ground), haunch (their thighs, × size), shoulder (front shoulders, × size).
 	function quadruped(key, s, o) {
 		const L = o.length * s,
 			W = o.width * s,
 			H = o.depth * s,
 			legH = o.legs * s,
+			lift = legH + H * 0.3,
 			root = new THREE.Group(),
-			body = group(root, [0, legH + H * 0.3, 0]);
-		mesh(body, loft("q" + key, (o.torso || [[-0.5, 0.5, 0.6, 0.05], [-0.34, 0.92, 0.95, 0], [0.02, 0.86, 0.9, -0.04], [0.3, 0.96, 1.04, 0.08], [0.48, 0.62, 0.75, 0.28]]).map(([x, w, h, y]) => [x * L, w * W, h * H, y * H]), 10), o.coat);
-		ball(body, o.belly, 1, [0, -H * 0.42, 0], [L * 0.34, H * 0.42, W * 0.68]);
-		// Neck and head.
+			body = group(root, [0, lift, 0]);
+		// Torso: rump, haunches, a waist, the chest, the withers rising into the neck.
+		const torso = o.torso || [[-0.53, 0.32, 0.38, 0.18], [-0.45, 0.78, 0.82, 0.1], [-0.3, 0.97, 1, 0.04], [-0.1, 0.84, 0.88, -0.02], [0.12, 0.9, 0.97, 0], [0.3, 0.97, 1.06, 0.08], [0.45, 0.74, 0.86, 0.26], [0.53, 0.42, 0.52, 0.42]];
+		mesh(body, loft("q" + key, torso.map(([x, w, h, y]) => [x * L, w * W, h * H, y * H]), 12), o.coat);
+		ball(body, o.belly, 1, [L * 0.04, -H * 0.5, 0], [L * 0.3, H * 0.34, W * 0.66]);
+		if (o.bib) ball(body, o.bib, 1, [L * 0.42, -H * 0.08, 0], [L * 0.1, H * 0.5, W * 0.56]);
+		if (o.rump) ball(body, o.rump, 1, [-L * 0.47, H * 0.12, 0], [L * 0.07, H * 0.42, W * 0.6]);
+		// Neck: thick at the shoulders, thinner to the head, a little bent.
 		const [nf, nu] = o.neck,
-			neckBase = [L * 0.4, H * 0.35, 0],
-			neckTop = [L * 0.4 + nf * s, H * 0.35 + nu * s, 0];
-		limb(body, o.coat, neckBase, neckTop, W * 0.55, W * 0.38, 8);
+			neckBase = [L * 0.42, H * 0.3, 0],
+			neckMid = [L * 0.42 + nf * s * 0.45, H * 0.3 + nu * s * 0.55, 0],
+			neckTop = [L * 0.42 + nf * s, H * 0.3 + nu * s, 0];
+		limb(body, o.coat, neckBase, neckMid, W * 0.62, W * 0.46, 10);
+		ball(body, o.coat, W * 0.46, neckMid);
+		limb(body, o.coat, neckMid, neckTop, W * 0.46, W * 0.36, 10);
+		if (o.bib) limb(body, o.bib, [neckBase[0] + W * 0.25, neckBase[1] - W * 0.25, 0], [neckMid[0] + W * 0.22, neckMid[1] - W * 0.2, 0], W * 0.4, W * 0.28, 8);
+		// Head: skull, cheeks, a tapering muzzle, the nose; eyes with a glint; ears.
 		const head = group(body, neckTop),
-			hl = o.head * s;
-		mesh(head, loft("h" + key, [[-0.15, 0.42, 0.48, 0], [0.25, 0.4, 0.44, 0.05], [0.65, 0.24, 0.27, -0.12], [1, 0.14, 0.16, -0.2]].map(([x, w, h, y]) => [x * hl, w * hl, h * hl, y * hl]), 8), o.coat);
-		ball(head, dark, hl * 0.09, [hl * 0.98, -hl * 0.19, 0], [1, 0.8, 1.2]); // nose
-		for (const z of [-1, 1]) ball(head, nature.eye === o.eye ? nature.eye : dark, hl * 0.07, [hl * 0.38, hl * 0.12, z * hl * 0.3]);
+			hl = o.head * s,
+			ears = [];
+		mesh(head, loft("h" + key, [[-0.2, 0.36, 0.4, 0.06], [0.08, 0.42, 0.46, 0.08], [0.36, 0.32, 0.34, -0.02], [0.66, 0.2, 0.22, -0.12], [0.92, 0.13, 0.14, -0.17], [1, 0.06, 0.07, -0.18]].map(([x, w, h, y]) => [x * hl, w * hl, h * hl, y * hl]), 10), o.coat);
+		if (o.muzzle) ball(head, o.muzzle, hl * 0.2, [hl * 0.58, -hl * 0.14, 0], [1.7, 0.6, 1.15]);
+		ball(head, dark, hl * 0.085, [hl * 0.98, -hl * 0.16, 0], [1, 0.8, 1.25]); // nose
+		for (const z of [-1, 1]) {
+			ball(head, o.eye || dark, hl * 0.075, [hl * 0.32, hl * 0.12, z * hl * 0.31]);
+			ball(head, white, hl * 0.022, [hl * 0.37, hl * 0.16, z * hl * 0.37]); // glint
+		}
 		if (o.ears === "pointy" || o.ears === "long" || o.ears === "round")
 			for (const z of [-1, 1]) {
 				const ear = group(head, [hl * 0.05, hl * 0.35, z * hl * 0.22]);
@@ -57085,61 +57141,95 @@ function createNature3D(THREE, { tools, group, materials }) {
 				if (o.ears === "round") ball(ear, o.coat, hl * 0.14, [0, hl * 0.08, 0], [0.6, 1, 0.9]);
 				else {
 					const eh = hl * (o.ears === "long" ? 1.1 : 0.42);
-					limb(ear, o.coat, [0, 0, 0], [0, eh, 0], hl * (o.ears === "long" ? 0.12 : 0.12), hl * 0.03, 5);
+					limb(ear, o.coat, [0, 0, 0], [0, eh, 0], hl * 0.12, hl * 0.03, 6);
 					limb(ear, pink, [0.04 * hl, eh * 0.1, 0], [0.04 * hl, eh * 0.8, 0], hl * 0.07, hl * 0.02, 4);
+					if (o.earTip) limb(ear, o.earTip, [0, eh * 0.72, 0], [0, eh * 1.01, 0], hl * 0.055, hl * 0.012, 5);
 				}
+				ears.push(ear);
 			}
-		// Legs: a pivot at the hip or shoulder, thigh and shin (joined by a knee), a hoof or paw.
+		// Legs: a muscled shoulder or haunch; the upper leg to the elbow (stifle behind), the lower leg in
+		// its own joint — forearm and cannon in front, the hock bent back behind — and a hoof or a paw.
 		const legs = [];
-		for (const [x, back] of [[L * 0.3, false], [-L * 0.32, true]])
+		for (const [x, back] of [[L * 0.3, false], [-L * 0.3, true]])
 			for (const side of [-1, 1]) {
 				const pivot = group(body, [x, -H * 0.3, side * W * 0.55]),
-					knee = [back ? -0.9 * s : 0.5 * s, -legH * 0.5, 0],
-					thick = W * (o.thick ?? 0.32) * (back ? 1.15 : 1);
-				limb(pivot, o.coat, [0, H * 0.25, 0], knee, thick * 1.3, thick * 0.8, 7);
-				ball(pivot, o.coat, thick * 0.8, knee);
-				limb(pivot, o.leg ?? o.coat, knee, [0.2 * s, -legH * 0.93, 0], thick * 0.75, thick * 0.55, 6);
-				box(pivot, o.foot ?? hoof, [thick * 1.9, thick * 0.9, thick * 1.5], [0.35 * s, -legH + thick * 0.4, 0], null, thick * 0.3);
-				legs.push(pivot);
+					thick = W * (o.thick ?? 0.3) * (back ? 1.15 : 1),
+					lower = o.leg ?? o.coat,
+					J = back ? [0.35 * s, -legH * 0.32, 0] : [0.05 * s, -legH * 0.36, 0];
+				// A hare's hind leg: a big thigh lying flat along the flank, the hock low and the long foot flat
+				// on the ground, pointing forward.
+				const hare = back && o.longFeet;
+				if (hare) {
+					ball(pivot, o.coat, thick * 1.5 * (o.haunch ?? 1), [-0.1 * s, -H * 0.06, 0], [1.5, 1.2, 0.5]);
+					J[0] = 0.4 * s;
+					J[1] = -legH * 0.4;
+				} else ball(pivot, o.coat, thick * 1.5 * (back ? 1 : o.shoulder ?? 1), [back ? -0.1 * s : 0.05 * s, H * 0.12, 0], [back ? 1.5 : 1.1, 1.6, 1]);
+				limb(pivot, o.coat, [0, H * 0.3, 0], J, thick * 1.35, thick * 0.85, 8);
+				const joint = group(pivot, J),
+					K = hare ? [-1.3 * s, -legH * 0.48, 0] : back ? [-0.75 * s, -legH * 0.3, 0] : [0.05 * s, -legH * 0.33, 0],
+					F = hare ? [K[0] + L * 0.3, -legH - J[1] + thick * 0.3, 0] : [K[0] + (back ? 0.15 : 0.12) * s, -legH - J[1] + thick * 0.5, 0];
+				ball(joint, o.coat, thick * 0.82, [0, 0, 0]);
+				limb(joint, lower, [0, 0, 0], K, thick * 0.8, thick * 0.52, 7);
+				ball(joint, lower, thick * 0.52, K);
+				limb(joint, lower, K, F, thick * 0.5, thick * 0.42, 6);
+				if (hare) ball(joint, o.foot ?? dark, thick * 0.55, [F[0], F[1] - thick * 0.05, 0], [1.6, 0.6, 1]);
+				else if (o.paws) ball(joint, o.foot ?? dark, thick * 0.72, [F[0] + thick * 0.35, F[1] - thick * 0.18, 0], [1.45, 0.6, 1]);
+				else cyl(joint, o.foot ?? hoof, thick * 0.5, thick * 1.1, [F[0] + thick * 0.1, F[1] - thick * 0.25, 0], { top: thick * 0.4, segs: 7 });
+				legs.push({ pivot, joint, back });
 			}
 		// Tail.
-		const tail = group(body, [-L * 0.48, H * 0.3, 0]),
+		const tail = group(body, [-L * 0.5, H * 0.3, 0]),
 			tl = (o.tail ?? 6) * s;
-		if (o.bushy) mesh(tail, loft("t" + key, [[0, 0.12, 0.12, 0], [-0.35, 0.3, 0.3, -0.1], [-0.75, 0.24, 0.24, -0.25], [-1, 0.05, 0.05, -0.35]].map(([x, w, h, y]) => [x * tl, w * tl, h * tl, y * tl]), 8), o.coat);
-		else if (tl > 0) limb(tail, o.coat, [0, 0, 0], [-tl * 0.85, -tl * 0.5, 0], W * 0.16, W * 0.04, 5);
-		if (o.tip) ball(tail, o.tip, tl * 0.16, [-tl * 0.92, -tl * 0.38, 0]);
+		if (o.bushy) mesh(tail, loft("t" + key, [[0, 0.1, 0.1, 0], [-0.2, 0.24, 0.24, -0.04], [-0.45, 0.32, 0.31, -0.14], [-0.75, 0.25, 0.24, -0.28], [-0.92, 0.12, 0.12, -0.34], [-1, 0.03, 0.03, -0.36]].map(([x, w, h, y]) => [x * tl, w * tl, h * tl, y * tl]), 9), o.coat);
+		else if (tl > 0) limb(tail, o.coat, [0, 0, 0], [-tl * 0.85, -tl * 0.5, 0], W * 0.16, W * 0.06, 6);
+		if (o.tip) ball(tail, o.tip, tl * (o.bushy ? 0.15 : 0.3), [-tl * 0.92, o.bushy ? -tl * 0.35 : -tl * 0.45, 0], o.bushy ? [1.4, 1, 1] : [0.8, 1, 1]);
 		o.extra?.({ head, body, tail, hl, L, W, H }, s);
 		const speed = o.gait ?? 13;
 		return {
 			root,
 			update(e, i) {
-				const t = i.time * speed + e.id,
-					swing = i.moving ? Math.sin(t) * 0.55 : 0;
-				legs.forEach((l, n) => (l.rotation.z = n === 0 || n === 3 ? swing : -swing));
-				body.position.y = legH + H * 0.3 + (i.moving ? Math.abs(Math.sin(t)) * s * 0.8 : 0);
+				const t = i.time * speed + e.id;
+				if (o.hop) {
+					// Hops: the hind legs push together, the front legs reach together, the body arcs.
+					const ph = i.moving ? Math.sin(t) : 0;
+					for (const l of legs) {
+						l.pivot.rotation.z = (l.back ? -0.7 : 0.55) * ph;
+						l.joint.rotation.z = (l.back ? 0.6 : -0.4) * Math.max(0, -ph);
+					}
+					body.position.y = lift + (i.moving ? Math.max(0, Math.sin(t)) * s * 3.2 : 0);
+					body.rotation.z = i.moving ? Math.cos(t) * 0.16 : 0;
+				} else {
+					// A walk: diagonal pairs, the lower legs folding as they swing forward.
+					legs.forEach((l, n) => {
+						const ph = t + (n === 0 || n === 3 ? 0 : Math.PI);
+						l.pivot.rotation.z = i.moving ? Math.sin(ph) * 0.5 : 0;
+						l.joint.rotation.z = i.moving ? (l.back ? 0.7 : -0.75) * Math.max(0, Math.sin(ph + 1.3)) : 0;
+					});
+					body.position.y = lift + (i.moving ? Math.abs(Math.sin(t)) * s * 0.8 : Math.sin(i.time * 1.8 + e.id) * s * 0.06);
+				}
 				head.rotation.y = -Math.max(-0.6, Math.min(0.6, i.aim));
 				head.rotation.z = i.recoil * 0.4 + (i.moving ? Math.sin(t * 2) * 0.04 : Math.sin(i.time * 0.7 + e.id) * 0.08);
+				// Ears twitch now and then.
+				ears.forEach((ear, n) => (ear.rotation.y = Math.max(0, Math.sin(i.time * 0.9 + e.id * 3 + n * 2) - 0.93) * 4));
 				tail.rotation.y = Math.sin(i.time * (i.moving ? 9 : 2.5) + e.id) * 0.3;
 			},
 		};
 	}
-	// Branching antlers on a deer's head.
+	// Antlers: a curving main beam with tines rising from it, on each side.
 	function antlers({ head, hl }, s) {
 		for (const z of [-1, 1]) {
 			const a = group(head, [hl * 0.05, hl * 0.4, z * hl * 0.15]);
-			a.rotation.x = z * 0.35;
-			const tip = [-hl * 0.15, hl * 0.95, 0];
-			limb(a, antler, [0, 0, 0], tip, hl * 0.06, hl * 0.035, 5);
-			limb(a, antler, [-hl * 0.05, hl * 0.35, 0], [hl * 0.35, hl * 0.6, 0], hl * 0.04, hl * 0.02, 4);
-			limb(a, antler, [-hl * 0.1, hl * 0.65, 0], [hl * 0.2, hl * 1.0, 0], hl * 0.035, hl * 0.015, 4);
-			limb(a, antler, tip, [-hl * 0.45, hl * 1.15, 0], hl * 0.03, hl * 0.012, 4);
+			a.rotation.x = z * 0.4;
+			const beam = [[0, 0, 0], [-hl * 0.12, hl * 0.4, 0], [-hl * 0.1, hl * 0.8, 0], [hl * 0.05, hl * 1.12, 0]];
+			for (let n = 1; n < beam.length; n++) limb(a, antler, beam[n - 1], beam[n], hl * (0.065 - n * 0.012), hl * (0.055 - n * 0.012), 5);
+			for (const [p, t] of [[beam[1], [hl * 0.3, hl * 0.62, 0]], [beam[2], [hl * 0.22, hl * 1.02, 0]], [beam[2], [-hl * 0.42, hl * 1.05, 0]], [beam[3], [-hl * 0.15, hl * 1.36, 0]]]) limb(a, antler, p, t, hl * 0.035, hl * 0.012, 4);
 		}
 	}
 	const ANIMALS = {
-		deer: (biome) => quadruped("deer", 1.25, { length: 20, width: 3.4, depth: 4.4, legs: 9, neck: [2.8, 6.5], head: 6, tail: 2.5, ears: "pointy", coat: scenery.deer, belly: nature.belly, gait: 11, extra: antlers, tip: white }),
+		deer: (biome) => quadruped("deer", 1.25, { length: 20, width: 3.4, depth: 4.4, legs: 9, neck: [2.8, 6.5], head: 6, tail: 2.5, ears: "pointy", coat: scenery.deer, belly: nature.belly, rump: white, thick: 0.27, gait: 11, extra: antlers, tip: white }),
 		fox: (biome) => {
 			const coat = biome === "ice" ? scenery.snowfox : scenery.fox;
-			return quadruped("fox" + (biome === "ice" ? "i" : ""), 0.7, { length: 20, width: 3.2, depth: 3.8, legs: 6, neck: [2.6, 3.2], head: 6.5, tail: 11, bushy: true, tip: white, ears: "pointy", coat, belly: white, leg: dark, foot: dark, gait: 14 });
+			return quadruped("fox" + (biome === "ice" ? "i" : ""), 0.7, { length: 20, width: 3.2, depth: 3.8, legs: 6, neck: [2.6, 3.2], head: 6.5, tail: 11, bushy: true, tip: white, ears: "pointy", earTip: biome === "ice" ? null : dark, coat, belly: white, bib: white, muzzle: white, leg: biome === "ice" ? coat : dark, foot: dark, paws: true, gait: 14 });
 		},
 		hare: () =>
 			quadruped("hare", 0.5, {
@@ -57152,76 +57242,133 @@ function createNature3D(THREE, { tools, group, materials }) {
 				tail: 1.5,
 				tip: white,
 				ears: "long",
+				earTip: dark,
 				coat: scenery.hare,
 				belly: white,
 				thick: 0.38,
-				gait: 16,
-				torso: [[-0.5, 0.55, 0.65, 0.1], [-0.3, 0.95, 1, 0.05], [0.05, 0.85, 0.9, 0], [0.3, 0.75, 0.82, 0.1], [0.46, 0.5, 0.6, 0.3]],
+				haunch: 1.1,
+				shoulder: 0.6,
+				longFeet: true,
+				paws: true,
+				foot: scenery.hare,
+				hop: true,
+				gait: 9,
+				torso: [[-0.5, 0.5, 0.6, 0.12], [-0.38, 0.95, 1, 0.06], [-0.15, 0.95, 1, 0.02], [0.08, 0.85, 0.9, 0], [0.3, 0.74, 0.8, 0.1], [0.46, 0.5, 0.6, 0.3]],
 			}),
 	};
 
-	// Lizard: low and long, the tail curving, legs sprawled to the sides.
+	// Lizard: flat and low, a wedge of a head with bulging eyes, legs sprawled out to the sides with the
+	// elbows bent and toes spread on the ground, a long tail swinging the other way to the body; blotches
+	// along the back.
 	function lizard() {
 		const root = new THREE.Group(),
-			body = group(root, [0, 3, 0]),
+			body = group(root, [0, 1.7, 0]),
 			legs = [];
 		const c = scenery.lizard;
-		mesh(body, loft("liz", [[11, 0.3, 0.3, -0.2], [9, 1.5, 1.2, 0], [6, 1.3, 1.1, 0], [3, 2.2, 1.5, 0.1], [-3, 2.4, 1.6, 0.1], [-6, 1.5, 1.1, 0], [-11, 0.8, 0.6, -0.4], [-17, 0.35, 0.3, -0.8], [-22, 0.05, 0.05, -1]], 8), c);
-		for (const z of [-1, 1]) ball(body, nature.eye, 0.35, [8.2, 0.9, z * 1.1]);
-		for (let n = 0; n < 6; n++) box(body, dark, [1.2, 0.5, 0.6], [3 - n * 2, 1.6, 0], [0, 0, 0.3], 0.15); // spine ridge
-		for (const x of [3.5, -3.5])
+		mesh(body, loft("liz2", [[10.6, 0.2, 0.14, -0.25], [9.4, 0.9, 0.55, -0.05], [8, 1.35, 0.85, 0.1], [6.4, 1.05, 0.7, 0.05], [4.5, 1.7, 1, 0.12], [1.5, 2.2, 1.2, 0.2], [-1.5, 2.1, 1.1, 0.16], [-4.2, 1.4, 0.8, 0.05], [-5.2, 1, 0.62, 0]], 10), c);
+		for (const z of [-1, 1]) {
+			ball(body, c, 0.5, [7.9, 0.55, z * 0.9]); // eye bulge
+			ball(body, nature.eye, 0.3, [8.05, 0.7, z * 1.15]);
+			ball(body, white, 0.09, [8.25, 0.8, z * 1.33]);
+		}
+		for (let n = 0; n < 6; n++) ball(body, dark, 0.55, [3.6 - n * 1.6, 1.05 - Math.abs(n - 2) * 0.05, (n % 2 ? 1 : -1) * 0.35], [1.3, 0.25, 0.75]); // blotches
+		const tail = group(body, [-5, 0, 0]);
+		mesh(tail, loft("lizT", [[0.2, 1, 0.62, 0], [-3, 0.7, 0.48, -0.12], [-7, 0.45, 0.32, -0.3], [-11, 0.25, 0.2, -0.45], [-15, 0.1, 0.1, -0.55], [-17.5, 0.03, 0.03, -0.6]], 8), c);
+		for (let n = 0; n < 4; n++) ball(tail, dark, 0.38 - n * 0.06, [-1.5 - n * 3, 0.5 - n * 0.1, 0], [1.2, 0.25, 0.8]);
+		for (const x of [3.6, -3.4])
 			for (const z of [-1, 1]) {
-				const leg = group(body, [x, 0, z * 1.8]);
-				limb(leg, c, [0, 0, 0], [x > 0 ? 1 : -1, -0.6, z * 3], 0.6, 0.45, 5);
-				limb(leg, c, [x > 0 ? 1 : -1, -0.6, z * 3], [x > 0 ? 2 : -0.5, -2.8, z * 3.6], 0.45, 0.3, 5);
-				for (const f of [-1, 0, 1]) limb(leg, dark, [x > 0 ? 2 : -0.5, -2.8, z * 3.6], [(x > 0 ? 2.9 : 0.4) + f * 0.2, -2.9, z * 3.6 + f * 0.6], 0.16, 0.06, 3);
+				const leg = group(body, [x, -0.2, z * 1.6]),
+					fwd = x > 0 ? 1 : -1,
+					elbow = [fwd * 0.4, 0.15, z * 2],
+					wrist = [fwd * 1.1, -1.35, z * 2.9];
+				limb(leg, c, [0, 0, 0], elbow, 0.55, 0.42, 6);
+				ball(leg, c, 0.42, elbow);
+				limb(leg, c, elbow, wrist, 0.4, 0.28, 6);
+				for (const f of [-1.2, -0.4, 0.4, 1.2]) limb(leg, dark, wrist, [wrist[0] + fwd * 0.7 + f * 0.25, -1.55, wrist[2] + z * 0.45 + f * 0.35], 0.13, 0.05, 3);
 				legs.push(leg);
 			}
 		return {
 			root,
 			update(e, i) {
-				legs.forEach((l, n) => (l.rotation.y = Math.sin(i.time * 10 + e.id + n * 1.6) * 0.5));
-				body.rotation.y = Math.sin(i.time * 10 + e.id) * 0.08;
+				const t = i.time * 10 + e.id,
+					run = i.moving ? 1 : 0.15;
+				legs.forEach((l, n) => (l.rotation.y = Math.sin(t + n * 1.6) * 0.5 * run));
+				body.rotation.y = Math.sin(t) * 0.1 * run;
+				tail.rotation.y = -Math.sin(t - 0.6) * 0.32 * run;
 			},
 		};
 	}
-	// Bird: body, head and beak, two-part wings flapping (the outer part more), a fanned tail.
+	// Bird: a round body with a lighter breast, a head with a two-part beak and glinting eyes, wings with a
+	// rounded leading edge and the primary feathers spread at the tips, a fan of tail feathers, the legs
+	// tucked. It flaps, then glides on held wings.
+	const birdBelly = std("#d8cdb8", { roughness: 0.9, metalness: 0 }),
+		beakMat = std("#d9a640", { roughness: 0.6, metalness: 0 });
 	function bird() {
 		const root = new THREE.Group(),
 			m = scenery.bird,
 			wings = [];
-		mesh(root, loft("bird", [[5.5, 0.3, 0.3, 0.6], [4, 1.3, 1.3, 0.4], [1, 1.9, 1.8, 0], [-2.5, 1.4, 1.2, -0.1], [-5, 0.5, 0.4, 0]], 8), m);
-		ball(root, m, 1.3, [5.2, 1, 0]);
-		limb(root, std("#d9a640", { roughness: 0.6 }), [6.2, 0.9, 0], [8.2, 0.6, 0], 0.4, 0.05, 5); // beak
-		for (const z of [-1, 1]) ball(root, nature.eye, 0.25, [5.8, 1.4, z * 0.8]);
-		plate(root, m, [[-4.5, 0], [-9, -2.2], [-9.6, 0], [-9, 2.2]], 0.3, [0, 0.2, 0]); // tail
+		mesh(root, loft("bird2", [[5.3, 0.25, 0.25, 0.35], [4.3, 1.05, 1, 0.4], [2.6, 1.75, 1.7, 0.12], [0, 2, 1.9, -0.1], [-2.5, 1.5, 1.3, 0], [-4.6, 0.6, 0.5, 0.15]], 12), m);
+		ball(root, birdBelly, 1, [1.3, -0.65, 0], [2.7, 1.2, 1.55]);
+		ball(root, m, 1.25, [5, 1.1, 0]);
+		limb(root, beakMat, [6, 1.05, 0], [8.1, 0.75, 0], 0.42, 0.06, 6); // upper beak
+		limb(root, beakMat, [5.9, 0.75, 0], [7.4, 0.62, 0], 0.26, 0.05, 5); // lower beak
 		for (const z of [-1, 1]) {
-			const wing = group(root, [0.5, 0.6, z * 1.4]),
-				outer = group(wing, [0, 0, z * 5.5]);
-			plate(wing, m, [[2.2, 0], [-2, 0], [-2.6, z * 5.8], [1.6, z * 5.8]], 0.35, [0, 0, 0]);
-			plate(outer, m, [[1.6, 0], [-2.6, 0], [-4.4, z * 6.5], [-1, z * 7.2]], 0.3, [0, 0, 0]);
+			ball(root, nature.eye, 0.26, [5.8, 1.45, z * 0.82]);
+			ball(root, white, 0.08, [5.95, 1.55, z * 1.02]);
+			limb(root, dark, [-0.5, -1.2, z * 0.6], [-2.6, -1.6, z * 0.6], 0.18, 0.12, 4); // tucked legs
+		}
+		// Tail: seven feathers fanned out.
+		for (let n = 0; n < 7; n++) {
+			const a = (n - 3) * 0.13;
+			plate(root, n % 2 ? birdBelly : m, [[0, -0.32], [0, 0.32], [-4.6, 0.55], [-5.1, 0], [-4.6, -0.55]], 0.14, [-4.2, 0.25 + Math.abs(n - 3) * 0.02, 0], [0, 0, a]);
+		}
+		for (const z of [-1, 1]) {
+			const wing = group(root, [0.6, 0.65, z * 1.4]),
+				outer = group(wing, [0, 0, z * 5.4]);
+			// Arm: a rounded leading edge; the lighter underwing coverts show from below.
+			plate(wing, m, [[2.4, 0], [2.3, z * 2.6], [1.6, z * 5.4], [-1.9, z * 5.4], [-2.6, z * 2.6], [-2.5, 0]], 0.32, [0, 0, 0]);
+			plate(wing, birdBelly, [[2.2, z * 0.4], [2.1, z * 2.6], [1.4, z * 5.2], [0.2, z * 5.2], [-0.2, z * 2.6], [0, z * 0.4]], 0.1, [0, -0.22, 0]);
+			// Hand: a tapering plate and five primaries spread like fingers.
+			plate(outer, m, [[1.6, 0], [0.8, z * 3.4], [-1.2, z * 4], [-2.4, z * 1.8], [-1.9, 0]], 0.28, [0, 0, 0]);
+			for (let k = 0; k < 5; k++) {
+				const bx = 0.8 - k * 0.65,
+					tx = 0.2 - k * 1.25,
+					tz = z * (7.2 - k * 0.55);
+				plate(outer, m, [[bx + 0.3, z * 3.2], [tx + 0.25, tz], [tx - 0.3, tz - z * 0.25], [bx - 0.35, z * 3.2]], 0.12, [0, -k * 0.03, 0]);
+			}
 			wings.push([wing, outer, z]);
 		}
 		return {
 			root,
 			update(e, i) {
-				const f = Math.sin(i.time * 7 + e.id);
+				// Flapping for a while, then gliding with the wings held a little up.
+				const cycle = (i.time * 0.35 + e.id * 0.37) % 1,
+					flap = cycle < 0.6,
+					f = flap ? Math.sin(i.time * 8 + e.id) : 0.18,
+					lag = flap ? Math.sin(i.time * 8 + e.id - 0.7) : 0.1;
 				wings.forEach(([w, o, z]) => {
-					w.rotation.x = z * f * 0.55;
-					o.rotation.x = z * (f * 0.45 + Math.sin(i.time * 7 + e.id - 0.6) * 0.25);
+					w.rotation.x = z * f * 0.6;
+					o.rotation.x = z * (f * 0.35 + lag * 0.35);
 				});
 			},
 		};
 	}
-	// Fish: a lofted body, eyes, a dorsal fin, a tail fin swinging.
+	// Fish: a lofted body with a lighter belly, eyes, a dorsal fin, pectoral fins and a forked tail
+	// swinging.
+	const fishBelly = std("#d6dcd8", { roughness: 0.5, metalness: 0.2 });
 	function fish() {
 		const root = new THREE.Group(),
 			m = scenery.fish,
 			tail = group(root, [-4.4, 0, 0]);
-		mesh(root, loft("fish", [[4.8, 0.2, 0.3, 0], [3.4, 0.9, 1.4, 0.05], [0, 1.2, 1.8, 0.1], [-3, 0.7, 1, 0], [-4.5, 0.2, 0.3, 0]], 8), m);
-		for (const z of [-1, 1]) ball(root, dark, 0.28, [3.6, 0.4, z * 0.7]);
-		fin(root, m, [[1.5, 0], [-1.8, 0], [-1.2, 1.4], [0.8, 1.2]], 0.15, [0, 1.6, 0]);
-		fin(tail, m, [[0.2, 0], [-2.8, 1.8], [-2.2, 0], [-2.8, -1.8]], 0.15, [0, 0, 0]);
+		mesh(root, loft("fish2", [[4.9, 0.18, 0.25, -0.05], [3.6, 0.85, 1.25, 0.05], [1, 1.2, 1.8, 0.12], [-1.8, 1, 1.4, 0.08], [-3.6, 0.55, 0.75, 0], [-4.6, 0.2, 0.28, 0]], 10), m);
+		ball(root, fishBelly, 1, [0.6, -0.75, 0], [3.4, 0.9, 0.95]);
+		for (const z of [-1, 1]) {
+			ball(root, dark, 0.3, [3.5, 0.35, z * 0.72]);
+			ball(root, white, 0.08, [3.62, 0.45, z * 0.86]);
+			fin(root, m, [[0.6, 0], [-0.6, 0], [-1.8, -0.9], [-0.6, -0.8]], 0.1, [2, -0.6, z * 1], [z * 0.6, 0, 0]); // pectoral
+		}
+		fin(root, m, [[1.5, 0], [-1.8, 0], [-1.4, 1.5], [0.5, 1.3]], 0.15, [0, 1.6, 0]);
+		fin(tail, m, [[0.2, 0], [-2.2, 1.9], [-3.1, 1.9], [-1.9, 0], [-3.1, -1.9], [-2.2, -1.9]], 0.15, [0, 0, 0]);
 		return { root, update: (e, i) => (tail.rotation.y = Math.sin(i.time * 9 + e.id) * 0.5) };
 	}
 
@@ -58727,6 +58874,8 @@ function createModels3D(THREE) {
 		k.navRed = std("#ff3b30", { emissive: "#ff2a1a", emissiveIntensity: 1.6 });
 		k.navGreen = std("#3bff6a", { emissive: "#22e04a", emissiveIntensity: 1.6 });
 		k.strobe = std("#ffffff", { emissive: "#ffffff", emissiveIntensity: 2 });
+		// Crystal in a robot's hopper (the colour of the crystal deposits).
+		k.crystal = std("#f4d989", { roughness: 0.15, metalness: 0.1, emissive: "#c9962a", emissiveIntensity: 0.35 });
 		for (const m of Object.values(k)) if (m.isMaterial && m.emissiveIntensity && m.emissive.getHex()) glowing.push([m, m.emissiveIntensity]);
 		kits.set(key, k);
 		return k;
@@ -59190,7 +59339,7 @@ function createModels3D(THREE) {
    is from the time and its own seed (no per-particle work on the CPU), and reads the ground height from
    a texture of the height map, so rain ends exactly on the terrain. Visual only (game.weather: kind and
    intensity; the same lightning rhythm as the 2D sky).
-   - Rain: slanted streaks falling with the wind, splash rings where they hit the ground; the ground gets
+   - Rain: slanted streaks falling with the wind, small crowns of droplets where they hit the ground; the ground gets
      wet (darker, glossy in the sun) and dries afterwards.
    - Snow: flakes drifting and swaying; snow settles on the upward faces of the ground and of the stones
      while it falls, and melts away afterwards.
@@ -59300,42 +59449,81 @@ function createWeather3D(THREE, { world, heightAt }) {
 			gl_FragColor = vec4(0.72, 0.78, 0.86, vAlpha * edge * (0.25 + streak) * 0.09);
 		}`,
 	);
-	// Ground mist: wide soft sheets drifting low over the terrain (rain, snow, night).
+	// Ground mist: low banks of churning fog drifting slowly with the wind, in the colour of the sky;
+	// thicker in hollows (where the ground lies below its surroundings), thinning at the edges and near
+	// the camera (rain, snow, night, dawn and dusk).
 	const mistColor = { value: new THREE.Color("#a9b6bf") },
 		mistIntensity = { value: 0 };
 	const mist = layer(
-		160,
+		220,
 		quad,
-		`varying float vAlpha; varying vec2 vUv;
+		`varying float vAlpha; varying vec2 vUv; varying vec2 vSeed;
 		void main() {
-			vec2 p = inBox(seed.xy, wind * time * 25.0 + vec2(sin(time * 0.05 + seed.z * 9.0), cos(time * 0.04 + seed.x * 7.0)) * 40.0);
-			vec3 c = vec3(p.x, groundAt(p) + 6.0 + seed.z * 22.0, p.y);
-			vec3 right = vec3(viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0]);
-			vec3 up = vec3(viewMatrix[0][1], viewMatrix[1][1], viewMatrix[2][1]);
-			float size = 180.0 + seed.w * 160.0;
-			vec3 pos = c + right * position.x * size * 1.8 + up * (position.y - 0.5) * size * 0.5;
+			vec2 p = inBox(seed.xy, wind * time * 18.0 + vec2(sin(time * 0.05 + seed.z * 9.0), cos(time * 0.04 + seed.x * 7.0)) * 40.0);
+			float g = groundAt(p),
+				around = (groundAt(p + vec2(160.0, 0.0)) + groundAt(p - vec2(160.0, 0.0)) + groundAt(p + vec2(0.0, 160.0)) + groundAt(p - vec2(0.0, 160.0))) * 0.25,
+				hollow = smoothstep(-6.0, 22.0, around - g);
+			float w = 260.0 + 240.0 * seed.w, h = 40.0 + 50.0 * seed.z;
+			vec3 c = vec3(p.x, g - 4.0, p.y);
+			vec3 right = normalize(vec3(viewMatrix[0][0], 0.0, viewMatrix[2][0]));
+			vec3 pos = c + right * position.x * w + vec3(0.0, position.y * h * (1.0 + hollow * 0.6), 0.0);
 			vUv = uv;
-			vAlpha = intensity * edgeFade(p) * smoothstep(150.0, 450.0, distance(cameraPosition, c));
+			vSeed = seed.xy * 30.0;
+			vAlpha = intensity * edgeFade(p) * (0.45 + 0.75 * hollow) * smoothstep(140.0, 420.0, distance(cameraPosition, c));
 			gl_Position = projectionMatrix * viewMatrix * vec4(pos, 1.0);
 		}`,
-		`uniform vec3 mistColor; varying float vAlpha; varying vec2 vUv;
-		void main() { float d = length((vUv - 0.5) * vec2(2.0, 2.0)); gl_FragColor = vec4(mistColor, vAlpha * 0.075 * (1.0 - smoothstep(0.2, 1.0, d))); }`,
+		`uniform vec3 mistColor; uniform float time; varying float vAlpha; varying vec2 vUv; varying vec2 vSeed;
+		float mHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+		float mNoise(vec2 p) {
+			vec2 i = floor(p), f = fract(p);
+			f = f * f * (3.0 - 2.0 * f);
+			return mix(mix(mHash(i), mHash(i + vec2(1.0, 0.0)), f.x), mix(mHash(i + vec2(0.0, 1.0)), mHash(i + vec2(1.0, 1.0)), f.x), f.y);
+		}
+		void main() {
+			vec2 q = vUv * vec2(2.6, 1.1) + vSeed + vec2(time * 0.03, time * 0.012);
+			float n = mNoise(q) * 0.55 + mNoise(q * 2.2 + 3.7) * 0.3 + mNoise(q * 4.7 - 1.3) * 0.15;
+			float body = smoothstep(0.3, 0.7, n) * (1.0 - smoothstep(0.35, 1.0, vUv.y)) * smoothstep(0.0, 0.12, vUv.y) * (1.0 - smoothstep(0.5, 1.0, abs(vUv.x - 0.5) * 2.0));
+			gl_FragColor = vec4(mistColor * (0.92 + 0.12 * vUv.y), vAlpha * body * 0.2);
+		}`,
 		{ mistColor, intensity: mistIntensity },
 	);
+	// Splashes: where a drop hits, a tiny crown of droplets thrown up and out for a fraction of a second
+	// and a thin flick along the ground — upright, facing the camera; each splash lands somewhere else
+	// (a new random point each time, fixed on the ground, not following the camera).
 	const splashes = layer(
-		1600,
-		flatQuad,
-		`varying float vAlpha; varying vec2 vUv;
+		2400,
+		quad,
+		`varying float vAlpha; varying vec2 vUv; varying float vT;
+		float sHash(vec2 v) { return fract(sin(dot(v, vec2(12.9898, 78.233))) * 43758.5453); }
 		void main() {
-			float t = fract(time * 2.2 * (0.7 + 0.6 * seed.w) + seed.z);
-			vec2 p = focus + (seed.xy - 0.5) * span * 0.75;
-			float size = 2.0 + t * 8.0;
+			float cyc = time * 2.4 * (0.7 + 0.6 * seed.w) + seed.z,
+				n = floor(cyc),
+				tt = fract(cyc) / 0.28;
+			float region = span * 0.75;
+			vec2 base = focus - region * 0.5,
+				u = vec2(sHash(seed.xy + n * 0.137), sHash(seed.yx + n * 0.311)),
+				p = base + mod(u * region - base, region);
+			vec3 c = vec3(p.x, groundAt(p) + 0.2, p.y);
+			vec3 right = normalize(vec3(viewMatrix[0][0], 0.0, viewMatrix[2][0]));
+			float size = 3.2 * (0.7 + 0.6 * seed.w);
 			vUv = uv;
-			vAlpha = intensity * (1.0 - t) * edgeFade(p);
-			gl_Position = projectionMatrix * viewMatrix * vec4(p.x + position.x * size, groundAt(p) + 1.4, p.y + position.z * size, 1.0);
+			vT = min(tt, 1.0);
+			vAlpha = tt < 1.0 ? intensity * edgeFade(p) * (1.0 - tt) : 0.0;
+			vec3 pos = tt < 1.0 ? c + right * position.x * size * 1.4 + vec3(0.0, position.y * size, 0.0) : c;
+			gl_Position = projectionMatrix * viewMatrix * vec4(pos, 1.0);
 		}`,
-		`varying float vAlpha; varying vec2 vUv;
-		void main() { float r = length(vUv - 0.5); float ring = smoothstep(0.32, 0.42, r) * (1.0 - smoothstep(0.42, 0.5, r)); gl_FragColor = vec4(0.82, 0.88, 0.95, vAlpha * ring * 0.3); }`,
+		`varying float vAlpha; varying vec2 vUv; varying float vT;
+		void main() {
+			if (vAlpha <= 0.0) discard;
+			float a = 0.0;
+			for (int k = 0; k < 5; k++) {
+				float f = float(k) - 2.0;
+				vec2 d = vec2(0.5 + f * 0.11 * (0.3 + vT), 0.06 + sin(3.14159 * min(1.0, vT * 1.1)) * (0.55 - abs(f) * 0.12) * (1.0 - vT * 0.3));
+				a += smoothstep(0.055, 0.0, length((vUv - d) * vec2(1.4, 1.0)));
+			}
+			a += smoothstep(0.08, 0.0, abs(vUv.y - 0.04)) * smoothstep(0.1 + vT * 0.35, 0.0, abs(vUv.x - 0.5)) * 0.6;
+			gl_FragColor = vec4(0.85, 0.9, 0.96, min(1.0, a) * vAlpha * 0.45);
+		}`,
 	);
 	// Camera-facing billboards (flakes, grains, dust curtains): size, stretch along the wind, speeds.
 	const billboard = (fallSpeed, windSpeed, height, size, stretch, sway) => `varying float vAlpha; varying vec2 vUv;
@@ -59357,8 +59545,60 @@ function createWeather3D(THREE, { world, heightAt }) {
 	const softDot = (color, strength) => `varying float vAlpha; varying vec2 vUv;
 		void main() { float d = length((vUv - 0.5) * 2.0); gl_FragColor = vec4(${color}, vAlpha * ${strength.toFixed(2)} * (1.0 - smoothstep(0.35, 1.0, d))); }`;
 	const snow = layer(7000, quad, billboard(65, 60, 460, 3.6, 1, 14), softDot("0.96, 0.98, 1.0", 0.9));
-	const sand = layer(4500, quad, billboard(0, 560, 140, 2.4, 5, 0), softDot("0.86, 0.72, 0.5", 0.3));
-	const curtains = layer(220, quad, billboard(0, 300, 90, 150, 2.5, 0), softDot("0.8, 0.66, 0.46", 0.08));
+	// Sand: thin streaks of grains blown along the wind, low over the ground, hopping (saltation).
+	const sand = layer(
+		7000,
+		quad,
+		`varying float vAlpha; varying vec2 vUv;
+		void main() {
+			float s = 0.7 + 0.6 * seed.w;
+			vec2 dir = normalize(wind);
+			vec2 p = inBox(seed.xy, dir * time * 520.0 * s);
+			float hop = fract(seed.z * 7.0 + time * 1.3 * s);
+			vec3 c = vec3(p.x, groundAt(p) + 1.5 + seed.z * seed.z * 34.0 + sin(hop * 3.14159) * 6.0, p.y);
+			vec3 along = normalize(vec3(dir.x, 0.0, dir.y));
+			vec3 side = normalize(cross(along, normalize(cameraPosition - c)));
+			vec3 pos = c + along * (position.y - 0.5) * (10.0 + 10.0 * s) + side * position.x * 0.55;
+			vUv = uv;
+			vAlpha = intensity * edgeFade(p) * smoothstep(60.0, 200.0, distance(cameraPosition, c));
+			gl_Position = projectionMatrix * viewMatrix * vec4(pos, 1.0);
+		}`,
+		`varying float vAlpha; varying vec2 vUv;
+		void main() { float a = vAlpha * (1.0 - abs(vUv.x - 0.5) * 2.0) * sin(vUv.y * 3.14159); gl_FragColor = vec4(0.86, 0.72, 0.5, a * 0.38); }`,
+	);
+	// Dust: rolling billows of fine sand along the ground — wide sheets of churning noise drifting with
+	// the wind, denser and darker low down, lighter on top, thinning at their edges.
+	const curtains = layer(
+		240,
+		quad,
+		`varying float vAlpha; varying vec2 vUv; varying vec2 vSeed;
+		void main() {
+			float s = 0.7 + 0.6 * seed.w;
+			vec2 p = inBox(seed.xy, normalize(wind) * time * 300.0 * s);
+			float w = 260.0 + 220.0 * seed.w, h = 110.0 + 100.0 * seed.z;
+			vec3 c = vec3(p.x, groundAt(p) - h * 0.12, p.y);
+			vec3 right = normalize(vec3(viewMatrix[0][0], 0.0, viewMatrix[2][0]));
+			vec3 pos = c + right * position.x * w + vec3(0.0, position.y * h, 0.0);
+			vUv = uv;
+			vSeed = seed.xy * 40.0;
+			vAlpha = intensity * edgeFade(p) * smoothstep(120.0, 420.0, distance(cameraPosition, c));
+			gl_Position = projectionMatrix * viewMatrix * vec4(pos, 1.0);
+		}`,
+		`uniform float time; varying float vAlpha; varying vec2 vUv; varying vec2 vSeed;
+		float dHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+		float dNoise(vec2 p) {
+			vec2 i = floor(p), f = fract(p);
+			f = f * f * (3.0 - 2.0 * f);
+			return mix(mix(dHash(i), dHash(i + vec2(1.0, 0.0)), f.x), mix(dHash(i + vec2(0.0, 1.0)), dHash(i + vec2(1.0, 1.0)), f.x), f.y);
+		}
+		void main() {
+			vec2 q = vUv * vec2(3.0, 1.6) + vSeed + vec2(-time * 0.35, time * 0.08);
+			float n = dNoise(q) * 0.55 + dNoise(q * 2.3 + 4.1) * 0.3 + dNoise(q * 5.1 - 2.3) * 0.15;
+			float body = smoothstep(0.32, 0.72, n) * (1.0 - smoothstep(0.25, 1.0, vUv.y)) * smoothstep(0.0, 0.08, vUv.y) * (1.0 - smoothstep(0.55, 1.0, abs(vUv.x - 0.5) * 2.0));
+			vec3 col = mix(vec3(0.76, 0.62, 0.44), vec3(0.92, 0.82, 0.64), vUv.y + n * 0.3);
+			gl_FragColor = vec4(col, vAlpha * body * 0.22);
+		}`,
+	);
 
 	// Lightning: a branching bolt of thin glowing boxes, rebuilt for each strike, and a light at its foot.
 	const bolt = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: "#dfe8ff", transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }), 160);
@@ -59497,6 +59737,9 @@ function createWeather3D(THREE, { world, heightAt }) {
      lightning bolts), animated on the graphics card.
    - Particles: smoke and fire on damaged buildings and vehicles, fire sparks and smoke puffs on every
      explosion; one point draw for smoke, one (additive) for fire.
+   - Mining: sparks and rock dust at a working robot's drill, chunks of ore tossed into its hopper,
+     glinting crystal chips, vapour from a working pump; a flickering drill light at night; silver
+     flecks over ore and golden sparkles rising over crystals (thinner as a field runs out).
    - Map effects around the camera focus: spores over Lumeria, embers rising from Pyrrhos' lava, mist
      welling up from Aerion's chasms, sand blown over the dune maps, motes over the derelict fields and the
      frozen hive.
@@ -59632,9 +59875,9 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 	// small waves, a second ripple layer against tiling, the sky reflected at grazing angles (fresnel),
 	// lighter shallows towards the shore (the shore fade is the depth), foam along the shore line, and
 	// rings from the drops while it rains.
-	const waterUniforms = { waterTime: { value: 0 }, waterRain: { value: 0 }, waterSky: { value: new THREE.Color("#8fa6b4") } };
+	const waterUniforms = { waterTime: { value: 0 }, waterRain: { value: 0 }, waterSky: { value: new THREE.Color("#8fa6b4") }, waterSunDir: { value: new THREE.Vector3(0, 1, 0) }, waterSun: { value: new THREE.Color("#ffffff") } };
 	const WATER_COMMON = `
-		uniform float waterTime; uniform float waterRain; uniform vec3 waterSky;
+		uniform float waterTime; uniform float waterRain; uniform vec3 waterSky; uniform vec3 waterSunDir; uniform vec3 waterSun;
 		float wvHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 		float wvNoise(vec2 p) {
 			vec2 i = floor(p), f = fract(p);
@@ -59648,7 +59891,7 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 				vec2 o = vec2(wvHash(c), wvHash(c + 7.1)) * 0.6 + 0.2;
 				float ph = fract(t * 0.8 + wvHash(c + 3.3));
 				float d = length(fract(q) - o) * 11.0;
-				s += smoothstep(0.8, 0.0, abs(d - ph * 5.0)) * (1.0 - ph);
+				s += smoothstep(0.38, 0.0, abs(d - ph * (2.5 + 3.0 * wvHash(c + 5.7)))) * (1.0 - ph) * (1.0 - ph);
 			}
 			return s;
 		}`;
@@ -59681,13 +59924,24 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 					float depthK = 1.0;
 					#endif
 					float fres = pow(1.0 - clamp(abs(dot(normalize(vViewPosition), normal)), 0.0, 1.0), 3.0);
+					// Deep water darker and bluer towards the middle, turquoise shallows at the shore.
+					outgoingLight *= mix(1.0, 0.72, smoothstep(0.45, 1.0, depthK));
 					outgoingLight = mix(outgoingLight, waterSky * 1.1, fres * 0.55);
-					outgoingLight = mix(outgoingLight * vec3(1.15, 1.22, 1.05) + vec3(0.04, 0.06, 0.04), outgoingLight, smoothstep(0.0, 0.8, depthK));
+					outgoingLight = mix(outgoingLight * vec3(1.12, 1.25, 1.12) + vec3(0.04, 0.07, 0.06), outgoingLight, smoothstep(0.0, 0.8, depthK));
+					// Light shimmering on the bed of the shallows.
+					float shimmer = pow(abs(sin(wvNoise(vMapXY * 0.08 + waterTime * 0.12) * 9.0 + waterTime * 1.1)), 8.0);
+					outgoingLight += vec3(0.75, 0.9, 0.85) * shimmer * (1.0 - smoothstep(0.25, 0.7, depthK)) * smoothstep(0.05, 0.2, depthK) * 0.12 * waterSun.b;
+					// Glitter: the sun caught on the ripples, a few bright points twinkling.
+					vec3 sunView = normalize((viewMatrix * vec4(waterSunDir, 0.0)).xyz);
+					float glint = pow(max(dot(reflect(-normalize(vViewPosition), normal), sunView), 0.0), 60.0) * step(0.86, wvNoise(vMapXY * 0.9 + waterTime * 0.6));
+					outgoingLight += waterSun * glint * 2.2;
+					// Foam along the shore, lapping in and out with the small waves.
+					float lap = 0.06 * sin(waterTime * 1.4 + wvNoise(vMapXY * 0.02) * 6.0);
 					float foamNoise = wvNoise(vMapXY * 0.21 + vec2(waterTime * 0.35, -waterTime * 0.25)) * 0.6 + wvNoise(vMapXY * 0.53 - vec2(waterTime * 0.2, 0.0)) * 0.4;
-					float foam = smoothstep(0.04, 0.16, depthK) * (1.0 - smoothstep(0.2, 0.42, depthK)) * smoothstep(0.42, 0.8, foamNoise);
+					float foam = smoothstep(0.04 + lap, 0.14 + lap, depthK) * (1.0 - smoothstep(0.2 + lap, 0.4 + lap, depthK)) * smoothstep(0.42, 0.8, foamNoise);
 					outgoingLight += vec3(0.85, 0.9, 0.92) * foam * 0.35;
 					diffuseColor.a = max(diffuseColor.a, foam * 0.55);
-					outgoingLight += vec3(0.8, 0.86, 0.92) * waterRain * wvRings(vMapXY, waterTime) * 0.4;
+					outgoingLight += vec3(0.8, 0.86, 0.92) * waterRain * wvRings(vMapXY, waterTime) * 0.2;
 					#include <opaque_fragment>`,
 				);
 		};
@@ -59716,7 +59970,8 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 		}
 		// Lakes and crevasses on level ground are flat mirrors; glowing pools and lava (chains of bodies
 		// along a channel) always lie on their bed.
-		const level = (kind === "lake" || kind === "crevasse") && rimHigh - rimLow < 8 ? rimHigh + 0.6 : null;
+		// (On uneven shores a lake is still flat, at its lowest rim point.)
+		const level = kind === "lake" || kind === "crevasse" ? (rimHigh - rimLow < 8 ? rimHigh : rimLow) + 0.6 : null;
 		for (let y = Math.max(0, Math.floor((w.y - w.ry * 1.1) / STEP) * STEP); y <= Math.min(game.H, w.y + w.ry * 1.1); y += STEP)
 			for (let x = Math.max(0, Math.floor((w.x - w.rx * 1.1) / STEP) * STEP); x <= Math.min(game.W, w.x + w.rx * 1.1); x += STEP) {
 				const nx = (x - w.x) / w.rx,
@@ -59917,6 +60172,20 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 					} else headlamp(e, { len: 90, reach: r * 0.5, height: 14, angle: 0.26, color: "#eef4ff", power: night * 420, range: 144, haze: night * (0.04 + weather * 0.22) });
 				}
 			}
+		// Fires on burning buildings and vehicles flicker over their surroundings at night.
+		if (night > 0.05)
+			for (const e of game.entities) {
+				const s = TYPES[e.type];
+				if (!s || e.hp <= 0 || s.flying || e.team === 2 || e.constructionLeft > 0 || hidden(e) || Math.abs(e.x - focus.x) > span || Math.abs(e.y - focus.y) > span) continue;
+				const building = !s.speed;
+				if (!(building || s.radius >= 16) || e.hp / e.maxHp >= (building ? 0.3 : 0.2)) continue;
+				const flick = 0.75 + 0.25 * Math.sin(clockNow * 17 + e.id) * Math.sin(clockNow * 7.3 + e.id * 2);
+				lights.point(e.x, e.y, heightAt(e.x, e.y) + Math.min(60, s.radius * 0.8) + 6, { color: "#ff8a3a", power: night * flick * (building ? 560 : 300), range: s.radius * 2.6 + 80 });
+			}
+		// A working drill flickers on the deposit at night (warm on ore, golden on crystal).
+		if (night > 0.05)
+			for (const m of miners)
+				if (m.resource !== "gas") lights.point(m.x, m.y, heightAt(m.x, m.y) + 10, { color: m.resource === "crystal" ? "#ffd98a" : "#ffb35c", power: night * (110 + Math.random() * 120), range: 90 });
 		// Explosions light the ground and the models around them for a moment, by day too.
 		for (const ef of game.effects) {
 			if (ef.kind !== "explosion" || hidden({ x: ef.x, y: ef.y, team: -1 })) continue;
@@ -59955,20 +60224,69 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 	}
 
 	// ---------- particle systems (points with size and colour per particle) ----------
+	// Each particle also carries misc: its age (0…1), a seed, and a style — smoke: 0 a billowing puff,
+	// 1 a hard dot (debris, chunks); fire: 0 a soft dot (sparks, embers, flashes), 1 a flame tongue.
+	const PUFF = `
+		float pHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+		float pNoise(vec2 p) {
+			vec2 i = floor(p), f = fract(p);
+			f = f * f * (3.0 - 2.0 * f);
+			return mix(mix(pHash(i), pHash(i + vec2(1.0, 0.0)), f.x), mix(pHash(i + vec2(0.0, 1.0)), pHash(i + vec2(1.0, 1.0)), f.x), f.y);
+		}`;
 	function particleSystem(max, additive) {
 		const geometry = new THREE.BufferGeometry(),
 			positions = new Float32Array(max * 3),
 			sizes = new Float32Array(max),
-			colors = new Float32Array(max * 4);
+			colors = new Float32Array(max * 4),
+			misc = new Float32Array(max * 3);
 		geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
 		geometry.setAttribute("size", new THREE.BufferAttribute(sizes, 1));
 		geometry.setAttribute("rgba", new THREE.BufferAttribute(colors, 4));
+		geometry.setAttribute("misc", new THREE.BufferAttribute(misc, 3));
 		const material = new THREE.ShaderMaterial({
 			uniforms: { map: { value: softDot }, scale: { value: 500 }, light: { value: 1 } },
-			vertexShader: `attribute float size; attribute vec4 rgba; varying vec4 vC; uniform float scale;
-				void main() { vC = rgba; vec4 mv = modelViewMatrix * vec4(position, 1.0); gl_PointSize = size * scale / -mv.z; gl_Position = projectionMatrix * mv; }`,
-			fragmentShader: `uniform sampler2D map; uniform float light; varying vec4 vC;
-				void main() { float a = texture2D(map, gl_PointCoord).a * vC.a; if (a < 0.01) discard; gl_FragColor = vec4(vC.rgb * light, a); }`,
+			vertexShader: `attribute float size; attribute vec4 rgba; attribute vec3 misc; varying vec4 vC; varying vec3 vM; uniform float scale;
+				void main() { vC = rgba; vM = misc; vec4 mv = modelViewMatrix * vec4(position, 1.0); gl_PointSize = size * scale / -mv.z; gl_Position = projectionMatrix * mv; }`,
+			fragmentShader: additive
+				? `uniform sampler2D map; uniform float light; varying vec4 vC; varying vec3 vM;
+				${PUFF}
+				void main() {
+					vec2 q = gl_PointCoord;
+					float a;
+					vec3 col = vC.rgb;
+					if (vM.z > 0.5) {
+						// A flame tongue: narrow at the top, flickering edges; white-hot → orange → red with age.
+						vec2 d = vec2((q.x - 0.5) * 2.0, (q.y - 0.5) * 2.0);
+						float w = mix(0.95, 0.25, smoothstep(-0.9, 0.9, -d.y));
+						float n = pNoise(vec2(q.x * 4.0 + vM.y * 13.0, q.y * 3.0 + vM.x * 6.0 + vM.y * 7.0));
+						a = smoothstep(w, w * 0.35, abs(d.x) + (n - 0.5) * 0.35) * smoothstep(1.0, 0.55, length(d * vec2(0.8, 1.0)));
+						col = vM.x < 0.3 ? mix(vec3(1.0, 0.82, 0.45), vec3(0.95, 0.45, 0.12), vM.x / 0.3) : mix(vec3(0.95, 0.45, 0.12), vec3(0.5, 0.09, 0.03), (vM.x - 0.3) / 0.7);
+						col *= vC.rgb;
+					} else a = texture2D(map, q).a;
+					a *= vC.a;
+					if (a < 0.01) discard;
+					gl_FragColor = vec4(col * light, a);
+				}`
+				: `uniform sampler2D map; uniform float light; varying vec4 vC; varying vec3 vM;
+				${PUFF}
+				void main() {
+					vec2 q = gl_PointCoord;
+					float a;
+					float shade = 1.0;
+					if (vM.z > 0.5) a = smoothstep(0.5, 0.3, length(q - 0.5));
+					else {
+						// A puff: a ragged round edge from noise turned by the seed, billowing as it ages;
+						// lit from above, darker underneath.
+						float ang = vM.y * 6.283 + vM.x * 0.8, cs = cos(ang), sn = sin(ang);
+						vec2 r = mat2(cs, -sn, sn, cs) * (q - 0.5);
+						float n = pNoise(r * 4.0 + vM.y * 17.0 + vM.x * 1.5) * 0.6 + pNoise(r * 9.0 - vM.y * 5.0) * 0.4;
+						a = smoothstep(0.5, 0.18, length(r) + (n - 0.5) * 0.32) * (0.75 + 0.4 * n);
+						shade = mix(1.12, 0.78, q.y);
+					}
+					a *= vC.a;
+					if (a < 0.01) discard;
+					gl_FragColor = vec4(vC.rgb * light * shade, a);
+				}`,
 			transparent: true,
 			depthWrite: false,
 			blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
@@ -60013,11 +60331,14 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 					colors[n * 4 + 1] = p.g;
 					colors[n * 4 + 2] = p.b;
 					colors[n * 4 + 3] = p.a * (t < 0.15 ? t / 0.15 : 1 - (t - 0.15) / 0.85);
+					misc[n * 3] = t;
+					misc[n * 3 + 1] = p.seed ?? (p.seed = Math.random());
+					misc[n * 3 + 2] = p.style || 0;
 					n++;
 				}
 				geometry.setDrawRange(0, n);
 				// Upload only the live part of each buffer.
-				for (const name of ["position", "size", "rgba"]) {
+				for (const name of ["position", "size", "rgba", "misc"]) {
 					const a = geometry.attributes[name];
 					a.clearUpdateRanges();
 					a.addUpdateRange(0, n * a.itemSize);
@@ -60049,10 +60370,21 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 				if (!(building ? f < 0.5 : vehicle && f < 0.35)) continue;
 				const ground = heightAt(e.x, e.y),
 					top = building ? Math.min(60, s.radius * 0.8) : 18;
-				if (Math.random() < (building ? 0.8 : 0.45) * density)
-					smoke.spawn({ x: e.x + rand(-s.radius, s.radius) * 0.4, y: ground + top, z: e.y + rand(-s.radius, s.radius) * 0.4, vx: rand(4, 14), vy: rand(18, 32), vz: rand(-4, 4), life: 0, max: rand(2.5, 4.2), s0: s.radius * 0.6, s1: s.radius * 2.6, r: 0.42, g: 0.41, b: 0.4, a: 0.5 });
-				if (f < (building ? 0.3 : 0.2) && Math.random() < 0.9 * density)
-					fire.spawn({ x: e.x + rand(-s.radius, s.radius) * 0.35, y: ground + top * 0.8, z: e.y + rand(-s.radius, s.radius) * 0.35, vx: rand(-3, 3), vy: rand(20, 40), vz: rand(-3, 3), life: 0, max: rand(0.4, 0.8), s0: s.radius * 0.45, s1: s.radius * 0.1, r: 1, g: rand(0.45, 0.65), b: 0.15, a: 0.9 });
+				const burning = f < (building ? 0.3 : 0.2);
+				// Smoke: grey from a damaged one, thick and dark over a fire; it leans with the wind.
+				for (let n = burning ? 2 : 1; n-- > 0; )
+					if (Math.random() < (building ? 0.8 : 0.45) * density) {
+						const k = burning ? rand(0.16, 0.26) : rand(0.36, 0.46);
+						smoke.spawn({ x: e.x + rand(-s.radius, s.radius) * 0.4, y: ground + top, z: e.y + rand(-s.radius, s.radius) * 0.4, vx: rand(8, 18), vy: rand(18, 34), vz: rand(1, 6), drag: 0.15, life: 0, max: rand(2.8, 4.6), s0: s.radius * 0.55, s1: s.radius * (burning ? 3 : 2.6), r: k, g: k * 0.97, b: k * 0.94, a: burning ? 0.62 : 0.5 });
+					}
+				if (burning) {
+					// Flame tongues licking up from a few spots, and embers rising out of them.
+					for (let n = 0; n < 3; n++)
+						if (Math.random() < 0.95 * density)
+							fire.spawn({ x: e.x + rand(-s.radius, s.radius) * 0.35, y: ground + top * 0.7, z: e.y + rand(-s.radius, s.radius) * 0.35, vx: rand(-3, 3), vy: rand(18, 36), vz: rand(-3, 3), life: 0, max: rand(0.45, 0.85), s0: s.radius * 0.42, s1: s.radius * 0.12, r: 1, g: 1, b: 1, a: 0.42, style: 1 });
+					if (Math.random() < 0.6 * density)
+						fire.spawn({ x: e.x + rand(-s.radius, s.radius) * 0.3, y: ground + top, z: e.y + rand(-s.radius, s.radius) * 0.3, vx: rand(-6, 10), vy: rand(30, 60), vz: rand(-6, 6), drag: 0.6, life: 0, max: rand(1, 1.8), s0: rand(1.5, 2.6), s1: 0.6, r: 1, g: rand(0.5, 0.7), b: 0.15, a: 1 });
+				}
 			}
 		}
 		for (const ef of game.effects) {
@@ -60081,7 +60413,7 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 				const a = rand(0, TAU),
 					sp = rand(50, 150) * scale,
 					c = rand(0.08, 0.16);
-				smoke.spawn({ x: ef.x, y, z: ef.y, vx: Math.cos(a) * sp, vy: rand(ef.air ? -20 : 90, 220), vz: Math.sin(a) * sp, lift: -420, life: 0, max: rand(0.8, 1.4), s0: rand(2, 4) * Math.max(1, scale), s1: rand(1.5, 3), r: c, g: c * 0.95, b: c * 0.9, a: 1 });
+				smoke.spawn({ x: ef.x, y, z: ef.y, vx: Math.cos(a) * sp, vy: rand(ef.air ? -20 : 90, 220), vz: Math.sin(a) * sp, lift: -420, life: 0, max: rand(0.8, 1.4), s0: rand(2, 4) * Math.max(1, scale), s1: rand(1.5, 3), r: c, g: c * 0.95, b: c * 0.9, a: 1, style: 1 });
 			}
 			// The smoke column: dark puffs welling up one after another, growing.
 			for (let i = 0; i < n(12); i++)
@@ -60168,8 +60500,102 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 		}
 	}
 
+	// ---------- mining (robots at work, motes over the deposits) ----------
+	// Who is mining right now (from the renderer: the same check that animates the tools), each frame:
+	// [{ e, x, y (the tool), dx, dy (towards the deposit), resource }]; gas robots at a pump: { pump }.
+	let miners = [];
+	function findMiners(game, hidden, focus, span, working) {
+		miners = [];
+		if (!working) return;
+		for (const e of game.entities) {
+			if (e.type !== "worker" || e.hp <= 0 || hidden(e) || Math.abs(e.x - focus.x) > span || Math.abs(e.y - focus.y) > span) continue;
+			const kind = e.order?.kind;
+			if (kind !== "gather" && kind !== "gas") continue;
+			if (!working(e)) continue;
+			const target = kind === "gather" ? game.resourceFields(e.order.resource).find((o) => o.id === e.order.oreId) : game.get(e.order.extractorId);
+			if (!target) continue;
+			const d = Math.hypot(target.x - e.x, target.y - e.y) || 1,
+				dx = (target.x - e.x) / d,
+				dy = (target.y - e.y) / d,
+				reach = Math.min(d * 0.6, 16);
+			miners.push({ e, x: e.x + dx * reach, y: e.y + dy * reach, dx, dy, resource: kind === "gas" ? "gas" : e.order.resource || "ore", target });
+		}
+	}
+	const mineOwed = new WeakMap(),
+		moteOwed = new WeakMap();
+	// Spawns `rate` per second for a key (fractions carried over between frames).
+	function due(map, key, rate, dt) {
+		const v = (map.get(key) || 0) + rate * dt * density,
+			n = Math.floor(v);
+		map.set(key, v - n);
+		return n;
+	}
+	function miningFx(game, dt, focus, span, visible) {
+		for (const m of miners) {
+			const ground = heightAt(m.x, m.y),
+				y = ground + 11;
+			if (m.resource === "gas") {
+				// The pump's relief valve: a plume of vapour now and then.
+				for (let n = due(mineOwed, m.e, 3, dt); n-- > 0; )
+					smoke.spawn({ x: m.target.x + rand(-6, 6), y: heightAt(m.target.x, m.target.y) + 34, z: m.target.y + rand(-6, 6), vx: rand(-4, 4), vy: rand(18, 30), vz: rand(-4, 4), life: 0, max: rand(0.9, 1.5), s0: 5, s1: 18, r: 0.86, g: 0.84, b: 0.92, a: 0.3 });
+				continue;
+			}
+			const crystal = m.resource === "crystal",
+				k = due(mineOwed, m.e, crystal ? 30 : 42, dt);
+			for (let n = 0; n < k; n++) {
+				const a = Math.atan2(m.dy, m.dx) + Math.PI + rand(-1.3, 1.3),
+					sp = rand(30, 80);
+				// Sparks off the drill (ore) or glinting chips of crystal, flying back from the face.
+				if (crystal) fire.spawn({ x: m.x, y: y + rand(0, 4), z: m.y, vx: Math.cos(a) * sp, vy: rand(30, 90), vz: Math.sin(a) * sp, lift: -200, life: 0, max: rand(0.3, 0.6), s0: rand(3, 5), s1: 0.8, r: 1, g: rand(0.82, 0.95), b: rand(0.45, 0.75), a: 1 });
+				else fire.spawn({ x: m.x, y: y + rand(-1, 3), z: m.y, vx: Math.cos(a) * sp, vy: rand(20, 70), vz: Math.sin(a) * sp, lift: -260, life: 0, max: rand(0.2, 0.45), s0: rand(2.6, 4.4), s1: 0.6, r: 1, g: rand(0.65, 0.9), b: 0.35, a: 1 });
+			}
+			// Rock dust (ore) or pale crystal dust welling up from the face.
+			for (let n = due(moteOwed, m.e, crystal ? 5 : 9, dt); n-- > 0; )
+				smoke.spawn({ x: m.x + rand(-5, 5), y: ground + 6, z: m.y + rand(-5, 5), vx: rand(-8, 8), vy: rand(8, 18), vz: rand(-8, 8), drag: 1, life: 0, max: rand(1.1, 2), s0: 6, s1: 22, r: crystal ? 0.92 : 0.36, g: crystal ? 0.88 : 0.33, b: crystal ? 0.72 : 0.3, a: crystal ? 0.26 : 0.5 });
+			// Chunks of ore tossed back into the robot's hopper.
+			if (!crystal && Math.random() < dt * 2.5 * density) {
+				const hx = m.e.x - m.dx * 5,
+					hy = m.e.y - m.dy * 5,
+					t = 0.55;
+				smoke.spawn({ x: m.x, y: y + 2, z: m.y, vx: (hx - m.x) / t, vy: 22 + 260 * t * 0.5, vz: (hy - m.y) / t, lift: -260, life: 0, max: t, s0: 2.6, s1: 2.2, r: 0.3, g: 0.32, b: 0.33, a: 1, style: 1 });
+			}
+		}
+		// Motes over the deposits near the view: silver flecks and a little dust over ore, golden sparkles
+		// rising over crystals (brighter at night); thinner as a field runs out.
+		const near = (o) => Math.abs(o.x - focus.x) < span / 2 + 60 && Math.abs(o.y - focus.y) < span / 2 + 60;
+		const seen = (o) => visible(o.x, o.y) && game.explored[game.visionIndex(o.x, o.y)];
+		for (const o of game.ores || []) {
+			if (!o.amount || !near(o) || !seen(o)) continue;
+			const rich = Math.min(1, o.amount / 3000),
+				ground = heightAt(o.x, o.y);
+			for (let n = due(moteOwed, o, 3 * rich, dt); n-- > 0; )
+				fire.spawn({ x: o.x + rand(-30, 30), y: ground + rand(4, 16), z: o.y + rand(-30, 30), vx: rand(-2, 2), vy: rand(3, 8), vz: rand(-2, 2), life: 0, max: rand(1.4, 2.4), s0: rand(1, 1.8), s1: 0.4, r: 0.85, g: 0.9, b: 0.95, a: 0.7 * (0.5 + nightNow * 0.5) });
+			for (let n = due(mineOwed, o, 0.8 * rich, dt); n-- > 0; )
+				smoke.spawn({ x: o.x + rand(-25, 25), y: ground + 2, z: o.y + rand(-25, 25), vx: rand(-3, 3), vy: rand(2, 5), vz: rand(-3, 3), life: 0, max: rand(2, 3.2), s0: 6, s1: 20, r: 0.55, g: 0.52, b: 0.48, a: 0.12 });
+		}
+		for (const o of game.crystalFields || []) {
+			if (!o.amount || !near(o) || !seen(o)) continue;
+			const rich = Math.min(1, o.amount / 1200),
+				ground = heightAt(o.x, o.y);
+			for (let n = due(moteOwed, o, 6 * rich, dt); n-- > 0; )
+				fire.spawn({ x: o.x + rand(-26, 26), y: ground + rand(6, 34), z: o.y + rand(-26, 26), vx: rand(-3, 3), vy: rand(6, 14), vz: rand(-3, 3), drag: 0.3, life: 0, max: rand(1.6, 2.8), s0: rand(1.2, 2.4), s1: 0.3, r: 1, g: rand(0.82, 0.92), b: rand(0.45, 0.62), a: 0.75 + nightNow * 0.25 });
+		}
+	}
+	let nightNow = 0,
+		clockNow = 0;
+
 	// ---------- shots: muzzle flashes, rocket trails, impact sparks ----------
 	function shotFx(what, x, y, z, rocket) {
+		if (what === "splash") {
+			// Droplets thrown up and out, and a little white water.
+			for (let i = 0; i < Math.ceil(12 * density); i++) {
+				const a = rand(0, TAU),
+					sp = rand(8, 26);
+				smoke.spawn({ x, y, z, vx: Math.cos(a) * sp, vy: rand(20, 45), vz: Math.sin(a) * sp, lift: -160, life: 0, max: rand(0.4, 0.7), s0: rand(0.9, 1.6), s1: 0.6, r: 0.88, g: 0.94, b: 0.98, a: 0.9, style: 1 });
+			}
+			smoke.spawn({ x, y: y + 1, z, vx: 0, vy: 3, vz: 0, life: 0, max: 0.6, s0: 4, s1: 12, r: 0.92, g: 0.96, b: 1, a: 0.5 });
+			return;
+		}
 		if (what === "muzzle") fire.spawn({ x, y, z, vx: 0, vy: 0, vz: 0, life: 0, max: 0.08, s0: rocket ? 16 : 11, s1: 4, r: 1, g: 0.85, b: 0.5, a: 1 });
 		else if (what === "trail") smoke.spawn({ x, y, z, vx: rand(-3, 3), vy: rand(4, 10), vz: rand(-3, 3), life: 0, max: rand(0.6, 1), s0: 5, s1: 18, r: 0.62, g: 0.6, b: 0.58, a: 0.45 });
 		else
@@ -60194,11 +60620,15 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 		},
 		shot: shotFx,
 		// One frame: returns the weather state for the renderer (haze, lightning flash).
-		update(dt, { game, time, night, focus, span, hidden, scale, light, gasFlow, sky, quality = {} }) {
+		update(dt, { game, time, night, focus, span, hidden, scale, light, gasFlow, working, sky, mistLevel, sun, quality = {} }) {
 			density = quality.particles ?? 1;
 			waterUniforms.waterTime.value = time;
 			waterUniforms.waterRain.value = weatherNow.kind === "rain" ? weatherNow.intensity || 0 : 0;
 			if (sky) waterUniforms.waterSky.value.copy(sky);
+			if (sun) {
+				waterUniforms.waterSunDir.value.copy(sun.dir);
+				waterUniforms.waterSun.value.copy(sun.color).multiplyScalar(Math.min(1, sun.intensity / 2.4));
+			}
 			for (const w of waters) {
 				const m = w.mesh.material;
 				if (m.normalMap) m.normalMap.offset.set(time * 0.012, time * 0.007);
@@ -60209,14 +60639,18 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 				if (w.kind === "glow") m.emissiveIntensity = 0.25 + night * 0.4;
 			}
 			waterGroup.visible = quality.water !== false;
+			nightNow = night;
+			clockNow = time;
+			findMiners(game, hidden, focus, span, working);
 			nightLights(game, quality.lights === false ? 0 : night, hidden, focus, span);
 			airTrails(game, dt, hidden, focus, span);
 			damageAndExplosions(game, dt, hidden, quality.scars !== false);
 			mapEffects(game, dt, focus, span, night, (x, y) => !hidden({ x, y, team: -1 }), gasFlow);
+			miningFx(game, dt, focus, span, (x, y) => !hidden({ x, y, team: -1 }));
 			for (const sys of [smoke, fire]) sys.material.uniforms.scale.value = scale;
 			smoke.material.uniforms.light.value = light;
 			const n = smoke.update(dt) + fire.update(dt);
-			const state = weather3d.update(game, time, dt, { focus, span, density, flashes: quality.flashes !== false, mist: night * 0.3, mistTint: sky });
+			const state = weather3d.update(game, time, dt, { focus, span, density, flashes: quality.flashes !== false, mist: Math.max(night * 0.3, mistLevel || 0), mistTint: sky });
 			// Where the lightning strikes: sparks and a puff of smoke.
 			if (state.strike) {
 				const { x, y, ground } = state.strike;
@@ -60247,7 +60681,27 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
      hulls, alien ribs, ruins, resin, eggs, a processor, boulders).
    Everything outside the viewer's sight is hidden when the fog of war is on (islands and obstacles stay:
    they are part of the landscape, as on the 2D boards). */
-function createSceneLife3D(THREE, { world, heightAt, models3d, hiddenLayer }) {
+function createSceneLife3D(THREE, { world, heightAt, models3d, hiddenLayer, splash }) {
+	// The surface of a lake: as scene-fx-3d.js lays it (flat, at the rim; the lowest rim on uneven shores).
+	const levels = new Map(),
+		leapt = new Set(),
+		landed = new Set();
+	function lakeLevel(w, wi) {
+		const key = wi + "|" + w.x + "|" + w.y;
+		if (!levels.has(key)) {
+			let low = Infinity,
+				high = -Infinity;
+			for (let i = 0; i < 48; i++) {
+				const a = (i / 48) * Math.PI * 2,
+					r = RTS.waterRadius(w, a) * 0.92,
+					h = heightAt(w.x + Math.cos(a) * w.rx * r, w.y + Math.sin(a) * w.ry * r);
+				low = Math.min(low, h);
+				high = Math.max(high, h);
+			}
+			levels.set(key, (high - low < 8 ? high : low) + 0.6);
+		}
+		return levels.get(key);
+	}
 	const TAU = Math.PI * 2;
 	const group = new THREE.Group();
 	world.add(group);
@@ -60358,18 +60812,51 @@ function createSceneLife3D(THREE, { world, heightAt, models3d, hiddenLayer }) {
 			r.holder.rotation.y = -Math.atan2(Math.cos(time * 0.12 + i) * 0.12 * 35, 20 + (i % 3) * 4);
 			r.model.update({ id: i }, { time });
 		}
-		// Fish (webgl/fauna-native.js): seven per plain lake, circling just under the surface.
+		// Fish: two loose schools per plain lake, wandering just under the surface along their own winding
+		// paths (each fish weaving around its school), turning the way they swim; now and then one leaps
+		// out in an arc, with a splash where it leaves the water and where it falls back.
 		(game.waters || []).forEach((w, wi) => {
 			if (w.kind) return;
-			for (let i = 0; i < 7; i++) {
-				const a = time * 0.13 + i * 0.9 + wi,
-					x = w.x + Math.cos(a) * w.rx * 0.65,
-					y = w.y + Math.sin(a * 1.3) * w.ry * 0.6;
+			const level = lakeLevel(w, wi),
+				at = (i, t) => {
+					const school = i % 2,
+						ph = wi * 1.7 + school * 3.1,
+						cx = Math.sin(t * 0.07 + ph) * 0.45 + Math.sin(t * 0.031 + ph * 2.3) * 0.15,
+						cy = Math.cos(t * 0.053 + ph * 1.4) * 0.42 + Math.sin(t * 0.027 + ph) * 0.12,
+						ox = Math.sin(t * 0.4 + i * 2.1) * 0.08,
+						oy = Math.cos(t * 0.33 + i * 1.3) * 0.08;
+					return [w.x + (cx + ox) * w.rx, w.y + (cy + oy) * w.ry];
+				};
+			for (let i = 0; i < 8; i++) {
+				const [x, y] = at(i, time);
 				if (!visible(x, y)) continue;
-				const r = make("fish|" + wi + "|" + i, () => models3d.scenery("fish"));
-				r.holder.position.set(x, heightAt(x, y) + 1.5, y);
-				r.holder.rotation.y = -Math.atan2(Math.cos(a * 1.3) * w.ry * 1.3, -Math.sin(a) * w.rx);
-				r.model.update({ id: i }, { time });
+				const [nx, ny] = at(i, time + 0.2),
+					r = make("fish|" + wi + "|" + i, () => models3d.scenery("fish")),
+					// A leap: every 20–40 s for 1.1 s.
+					period = 20 + ((i * 7 + wi * 3) % 20),
+					leap = (time + i * 5.3 + wi * 2.1) % period,
+					jump = leap < 1.1 ? leap / 1.1 : -1,
+					key = wi * 100 + i;
+				let y0 = level - 2.6 - Math.sin(time * 0.6 + i) * 0.8,
+					pitch = 0;
+				if (jump >= 0) {
+					y0 = level - 2 + Math.sin(jump * Math.PI) * 13;
+					pitch = Math.cos(jump * Math.PI) * 0.9;
+					if (!leapt.has(key)) {
+						leapt.add(key);
+						splash?.(x, level, y);
+					}
+					if (jump > 0.85 && !landed.has(key)) {
+						landed.add(key);
+						splash?.(x, level, y);
+					}
+				} else if (leapt.has(key)) {
+					leapt.delete(key);
+					landed.delete(key);
+				}
+				r.holder.position.set(x, y0, y);
+				r.holder.rotation.set(0, -Math.atan2(ny - y, nx - x), pitch, "YXZ");
+				r.model.update({ id: i }, { time: time * 1.4 });
 			}
 		});
 		// Obstacles (game.obstacles): props on the raised ground — spires, giant mushrooms, wrecks, ruins,
@@ -60512,7 +60999,8 @@ function createSceneLife3D(THREE, { world, heightAt, models3d, hiddenLayer }) {
    reeds, shrubs, ferns, rounded and angular stones, gravel, rock slabs, snow drifts, ice shards, glowing
    mushrooms, bones, cinders — so the plains are not a flat picture (the 2D ground painting leaves out its
    blades, pebbles and bones on the 3D board: RTS.bareGround). Visual only.
-   - Kinds, colours and amounts follow the biome and the map theme.
+   - Kinds, colours and amounts follow the biome and the map theme. Plants and trees carry their shading
+     in vertex colours (darker inside, underneath and at the root, lighter at the tips).
    - Placed from a seeded generator (the same for every player of a map) on a meadow field: grass grows
      in meadows, gravel and stones gather on the bare patches between them, and everything clumps. Away
      from water, obstacles, deposits, relays and the map edge; lake shores get reeds and pebbles.
@@ -60553,47 +61041,74 @@ function createScatter3D(THREE, { world, heightAt, fogged }) {
 		return material;
 	}
 	const std = (c, o = {}) => fogged(new THREE.MeshStandardMaterial({ color: c, roughness: 0.95, metalness: 0, flatShading: true, ...o }));
-	const plant = (c, o = {}) => windy(std(c, { side: THREE.DoubleSide, roughness: 0.85, ...o }));
+	// Plants and bark carry their own shading in vertex colours (darker inside and at the root, lighter at
+	// the tips), multiplied by the material colour and each instance's shade.
+	const plant = (c, o = {}) => windy(std(c, { side: THREE.DoubleSide, roughness: 0.85, vertexColors: true, ...o }));
+	const bark = (c, o = {}) => std(c, { vertexColors: true, ...o });
 
 	// ---------- geometry (unit size: about 1 wide, 1 tall) ----------
 	let shapeSeed = 7;
 	const srand = () => (shapeSeed = (Math.imul(shapeSeed, 1664525) + 1013904223) >>> 0) / 4294967296;
-	// Minimal merge of non-indexed copies (position + normal).
+	// Vertex colours: a grey level or [r, g, b], or a function of the position giving one.
+	function paint(g, fn) {
+		const p = g.attributes.position,
+			c = new Float32Array(p.count * 3);
+		for (let i = 0; i < p.count; i++) {
+			const v = typeof fn === "function" ? fn(p.getX(i), p.getY(i), p.getZ(i)) : fn;
+			c.set(typeof v === "number" ? [v, v, v] : v, i * 3);
+		}
+		g.setAttribute("color", new THREE.BufferAttribute(c, 3));
+		return g;
+	}
+	// Minimal merge of non-indexed copies (position, normal, colour — white where a part has none).
 	function merge(list) {
 		const parts = list.map((g) => (g.index ? g.toNonIndexed() : g)),
 			count = parts.reduce((n, g) => n + g.attributes.position.count, 0),
 			position = new Float32Array(count * 3),
-			normal = new Float32Array(count * 3);
+			normal = new Float32Array(count * 3),
+			color = new Float32Array(count * 3).fill(1);
 		let at = 0;
 		for (const g of parts) {
 			g.computeVertexNormals();
 			position.set(g.attributes.position.array, at * 3);
 			normal.set(g.attributes.normal.array, at * 3);
+			if (g.attributes.color) color.set(g.attributes.color.array, at * 3);
 			at += g.attributes.position.count;
 		}
 		const out = new THREE.BufferGeometry();
 		out.setAttribute("position", new THREE.BufferAttribute(position, 3));
 		out.setAttribute("normal", new THREE.BufferAttribute(normal, 3));
+		out.setAttribute("color", new THREE.BufferAttribute(color, 3));
 		return out;
 	}
-	// A blade: a tapering, curving strip from the root to a tip, leaning out by `lean`.
+	// A blade: a tapering, curving strip from the root to a tip, leaning out by `lean`; dark at the root.
 	function blade(h, w, lean, turn, [x, z] = [0, 0]) {
 		const mid = lean * 0.35,
 			pos = [-w, 0, 0, w, 0, 0, -w * 0.6, h * 0.55, mid, w * 0.6, h * 0.55, mid, 0, h, lean];
 		const g = new THREE.BufferGeometry();
 		g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
 		g.setIndex([0, 1, 3, 0, 3, 2, 2, 3, 4]);
+		paint(g, (px, py) => 0.5 + 0.65 * (py / h));
 		return g.rotateY(turn).translate(x, 0, z);
 	}
-	// A clump of blades of different heights, leaning outwards.
-	function clump(n, { spread = 0.25, width = 0.07, lean = 0.35, low = 0.55 } = {}) {
-		return merge(
-			Array.from({ length: n }, (_, i) => {
-				const a = (i / n) * Math.PI * 2 + srand() * 0.8,
-					r = srand() * spread;
-				return blade(low + srand() * (1 - low), width * (0.7 + srand() * 0.6), lean * (0.5 + srand()), a + Math.PI / 2, [Math.cos(a) * r, Math.sin(a) * r]);
-			}),
-		);
+	// A clump of blades of different heights, leaning outwards; `heads`: a share with a seed head.
+	function clump(n, { spread = 0.25, width = 0.07, lean = 0.35, low = 0.55, heads = 0 } = {}) {
+		const parts = [];
+		for (let i = 0; i < n; i++) {
+			const a = (i / n) * Math.PI * 2 + srand() * 0.8,
+				r = srand() * spread,
+				h = low + srand() * (1 - low),
+				l = lean * (0.5 + srand()),
+				turn = a + Math.PI / 2;
+			parts.push(blade(h, width * (0.7 + srand() * 0.6), l, turn, [Math.cos(a) * r, Math.sin(a) * r]));
+			if (srand() < heads) {
+				// Where the tip ends after the turn: the blade leans along its local +Z.
+				const tx = Math.cos(a) * r + Math.sin(turn) * l,
+					tz = Math.sin(a) * r + Math.cos(turn) * l;
+				parts.push(paint(new THREE.IcosahedronGeometry(0.045, 0).scale(1, 2.6, 1).translate(tx, h + 0.06, tz), 1.35));
+			}
+		}
+		return merge(parts);
 	}
 	// A rock: a polyhedron with its corners pushed in and out (corners shared by faces move together).
 	function rock(base, rough, flat) {
@@ -60609,18 +61124,76 @@ function createScatter3D(THREE, { world, heightAt, fogged }) {
 		g.computeVertexNormals();
 		return g;
 	}
-	const geo = {
-		grass: clump(9),
-		tallGrass: clump(12, { spread: 0.3, width: 0.05, lean: 0.25, low: 0.6 }),
-		reeds: merge([clump(10, { spread: 0.2, width: 0.04, lean: 0.12, low: 0.7 }), ...[0, 1].map((i) => new THREE.CylinderGeometry(0.05, 0.05, 0.16, 5).translate(i ? 0.08 : -0.06, 0.82 + i * 0.08, i ? 0.03 : -0.02))]),
-		fern: merge(Array.from({ length: 6 }, (_, i) => blade(0.6 + srand() * 0.2, 0.16, 0.65, (i / 6) * Math.PI * 2))),
-		shrub: merge([
-			...Array.from({ length: 6 }, (_, i) => {
-				const a = (i / 6) * Math.PI * 2;
-				return new THREE.CylinderGeometry(0.02, 0.05, 0.75, 4).translate(0, 0.37, 0).rotateZ(0.5 + srand() * 0.3).rotateY(a);
+	// A fern frond: a curving spine with leaflets on both sides, shorter towards the tip.
+	function frond(len, lean, turn) {
+		const parts = [],
+			steps = 7,
+			at = (t) => [0, Math.sin(t * 1.4) * len * 0.62, t * len * lean],
+			tri = (a, b, c, shade) => {
+				const g = new THREE.BufferGeometry();
+				g.setAttribute("position", new THREE.Float32BufferAttribute([...a, ...b, ...c], 3));
+				return paint(g, shade);
+			};
+		for (let s = 0; s < steps; s++) {
+			const t0 = s / steps,
+				t1 = (s + 1) / steps,
+				[, y0, z0] = at(t0),
+				[, y1, z1] = at(t1),
+				w = 0.11 * (1 - t0 * 0.75),
+				shade = 0.6 + 0.5 * t0;
+			for (const side of [-1, 1]) parts.push(tri([0, y0, z0], [side * w, (y0 + y1) / 2 + 0.02, (z0 + z1) / 2 + 0.03], [0, y1, z1], shade));
+		}
+		return merge(parts).rotateY(turn);
+	}
+	// Leaves of a crown: rough lumps in vertex-colour shade — darker underneath and inside, lighter on top.
+	const leafShade = (cx, cy, cz, r) => (x, y, z) => {
+		const up = (y - cy) / r,
+			out = Math.hypot(x - cx, z - cz) / r;
+		return Math.max(0.45, Math.min(1.25, 0.72 + up * 0.32 + out * 0.15));
+	};
+	function crown(lumps, centre, radius) {
+		return merge(lumps.map(([r, [x, y, z]]) => paint(rock(new THREE.IcosahedronGeometry(r, 1), 0.42, 0.85).translate(x, y, z), leafShade(...centre, radius))));
+	}
+	// Lumps spread over a dome: n of them, r0…r1 big, around `centre`, `spread` wide, `flat` squashed.
+	function dome(n, centre, spread, [r0, r1], flat = 0.75) {
+		return Array.from({ length: n }, (_, i) => {
+			const a = (i / n) * Math.PI * 2 + srand() * 0.7,
+				up = i === 0 ? 1 : srand() * 0.85,
+				d = i === 0 ? 0 : spread * (0.55 + srand() * 0.45) * Math.cos(up * 0.9);
+			return [r0 + srand() * (r1 - r0), [centre[0] + Math.cos(a) * d, centre[1] + Math.sin(up * 1.2) * spread * flat - (1 - up) * spread * 0.25, centre[2] + Math.sin(a) * d]];
+		});
+	}
+	// A flower: a thin stem and a head of petals in its own colours (the material is white).
+	function flower(h, lean, turn, [x, z], petal, heart) {
+		const stem = paint(blade(h, 0.022, lean, turn), [0.36, 0.55, 0.26]).translate(x, 0, z),
+			tx = x + Math.sin(turn) * lean,
+			tz = z + Math.cos(turn) * lean,
+			head = [paint(new THREE.CylinderGeometry(0.15, 0.04, 0.06, 7).translate(tx, h, tz), petal), paint(new THREE.IcosahedronGeometry(0.055, 0).translate(tx, h + 0.04, tz), heart)];
+		return merge([stem, ...head]);
+	}
+	const flowers = (petal, heart) =>
+		merge([
+			// Leaves round the stems, green (the material is white).
+			paint(clump(5, { spread: 0.2, width: 0.05, lean: 0.25, low: 0.4 }).scale(1, 0.6, 1), (x, y) => {
+				const t = 0.5 + 1.1 * y;
+				return [0.34 * t, 0.52 * t, 0.24 * t];
 			}),
-			...Array.from({ length: 5 }, () => new THREE.IcosahedronGeometry(0.22 + srand() * 0.1, 0).translate((srand() - 0.5) * 0.7, 0.55 + srand() * 0.3, (srand() - 0.5) * 0.7)),
+			...Array.from({ length: 5 }, (_, i) => {
+				const a = (i / 5) * Math.PI * 2 + srand() * 0.6;
+				return flower(0.45 + srand() * 0.5, 0.15 + srand() * 0.18, a, [Math.cos(a) * 0.32, Math.sin(a) * 0.32], petal(), heart);
+			}),
+		]);
+	const geo = {
+		grass: clump(11),
+		tallGrass: clump(14, { spread: 0.3, width: 0.05, lean: 0.25, low: 0.6, heads: 0.45 }),
+		reeds: merge([clump(10, { spread: 0.2, width: 0.04, lean: 0.12, low: 0.7 }), ...[0, 1].map((i) => paint(new THREE.CylinderGeometry(0.05, 0.05, 0.16, 5).translate(i ? 0.08 : -0.06, 0.82 + i * 0.08, i ? 0.03 : -0.02), [0.55, 0.4, 0.28]))]),
+		fern: merge(Array.from({ length: 7 }, (_, i) => frond(0.62 + srand() * 0.25, 0.75 + srand() * 0.2, (i / 7) * Math.PI * 2 + srand() * 0.4))),
+		shrub: merge([
+			...Array.from({ length: 5 }, (_, i) => paint(new THREE.CylinderGeometry(0.02, 0.05, 0.6, 4).translate(0, 0.3, 0).rotateZ(0.45 + srand() * 0.3).rotateY((i / 5) * Math.PI * 2), [0.5, 0.42, 0.34])),
+			crown(dome(13, [0, 0.42, 0], 0.36, [0.12, 0.2], 0.9), [0, 0.42, 0], 0.4),
 		]),
+		flowersWarm: flowers(() => (srand() < 0.5 ? [1, 0.55, 0.7] : [1, 0.82, 0.3]), [1, 0.9, 0.4]),
+		flowersCool: flowers(() => (srand() < 0.5 ? [0.95, 0.95, 1] : [0.7, 0.55, 1]), [1, 0.85, 0.35]),
 		stone: rock(new THREE.IcosahedronGeometry(1, 1), 0.35, 0.72),
 		angular: rock(new THREE.DodecahedronGeometry(1, 0), 0.4, 0.8),
 		slab: rock(new THREE.CylinderGeometry(1, 1.1, 0.4, 7), 0.3, 1),
@@ -60632,41 +61205,119 @@ function createScatter3D(THREE, { world, heightAt, fogged }) {
 		scrap: rock(new THREE.BoxGeometry(1, 0.25, 0.6), 0.5, 1),
 	};
 	// ---------- trees (unit height; trunk and crown are separate instanced draws sharing the placement) ----------
-	const cone = (r, h, y, seg = 7) => new THREE.ConeGeometry(r, h, seg).translate(0, y + h / 2, 0);
-	const rod = (r0, r1, a, b) => {
+	const rod = (r0, r1, a, b, seg = 6) => {
 		const A = new THREE.Vector3(...a),
 			B = new THREE.Vector3(...b),
-			g = new THREE.CylinderGeometry(r1, r0, A.distanceTo(B), 6).translate(0, A.distanceTo(B) / 2, 0);
+			g = new THREE.CylinderGeometry(r1, r0, A.distanceTo(B), seg).translate(0, A.distanceTo(B) / 2, 0);
 		g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), B.clone().sub(A).normalize()));
 		return g.translate(...a);
 	};
-	const blob = (r, [x, y, z]) => rock(new THREE.IcosahedronGeometry(r, 1), 0.3, 0.85).translate(x, y, z);
-	const branches = (list) => merge(list.map(([r0, r1, a, b]) => rod(r0, r1, a, b)));
+	// Bark darker at the foot (the ground's shade), lighter up the limbs.
+	const barkShade = (top) => (x, y) => Math.min(1.1, 0.62 + (y / top) * 0.5);
+	const branches = (list, top = 0.7) => merge(list.map(([r0, r1, a, b]) => paint(rod(r0, r1, a, b), barkShade(top))));
+	// Roots: short flaring rods round the foot of a trunk.
+	const roots = (r, n = 4) => Array.from({ length: n }, (_, i) => {
+		const a = (i / n) * Math.PI * 2 + srand() * 0.5;
+		return [r * 0.9, r * 0.3, [0, 0.06, 0], [Math.cos(a) * r * 3.2, -0.01, Math.sin(a) * r * 3.2]];
+	});
+	// A pine crown: tiers of drooping, ragged branch whorls (every other rim point pulled in), each tier
+	// turned a little; dark inside and below, lighter at the tips.
+	function pineCrown(tiers = 7) {
+		const parts = [];
+		for (let i = 0; i < tiers; i++) {
+			const f = i / tiers,
+				r = 0.4 * Math.pow(1 - f, 0.85) + 0.05,
+				h = 0.24,
+				y = 0.2 + f * 0.62,
+				seg = 10,
+				g = new THREE.ConeGeometry(r, h, seg, 1).toNonIndexed(),
+				p = g.attributes.position;
+			for (let k = 0; k < p.count; k++) {
+				const px = p.getX(k),
+					py = p.getY(k),
+					pz = p.getZ(k);
+				if (py > -h / 2 + 1e-4) continue;
+				const a = Math.atan2(pz, px),
+					step = Math.round((a / (Math.PI * 2)) * seg + seg) % 2,
+					rr = Math.hypot(px, pz),
+					s = step ? 0.68 : 1 + (srand() - 0.5) * 0.12;
+				p.setXYZ(k, px * s, py - (rr > r * 0.5 ? 0.05 * s : 0), pz * s);
+			}
+			g.rotateY(srand() * Math.PI).translate(0, y + h / 2, 0);
+			parts.push(paint(g, (x, py, z) => Math.min(1.25, (0.55 + 0.6 * Math.hypot(x, z) / r) * (0.82 + 0.25 * f))));
+		}
+		return merge(parts);
+	}
 	const TREE_GEO = {
-		pineTrunk: rod(0.05, 0.03, [0, 0, 0], [0, 0.4, 0]),
-		pineCrown: merge([cone(0.36, 0.38, 0.18, 8), cone(0.3, 0.34, 0.38, 8), cone(0.23, 0.3, 0.56, 8), cone(0.15, 0.28, 0.72, 7)]),
-		snowCaps: merge([cone(0.25, 0.14, 0.48, 8), cone(0.19, 0.14, 0.66, 8), cone(0.12, 0.16, 0.86, 7)]),
-		broadTrunk: branches([[0.06, 0.045, [0, 0, 0], [0.04, 0.5, 0]], [0.035, 0.02, [0.03, 0.4, 0], [0.22, 0.62, 0.05]], [0.035, 0.02, [0.03, 0.45, 0], [-0.18, 0.66, -0.08]]]),
-		broadCrown: merge([blob(0.3, [0.02, 0.72, 0]), blob(0.22, [0.22, 0.64, 0.08]), blob(0.22, [-0.2, 0.66, -0.1]), blob(0.2, [0.05, 0.62, -0.22]), blob(0.19, [-0.04, 0.9, 0.08])]),
-		acaciaTrunk: branches([[0.05, 0.035, [0, 0, 0], [0.12, 0.55, 0]], [0.03, 0.02, [0.12, 0.55, 0], [0.35, 0.72, 0.1]], [0.03, 0.02, [0.12, 0.55, 0], [-0.15, 0.74, -0.12]]]),
-		acaciaCrown: merge([blob(0.26, [0.3, 0.78, 0.08]), blob(0.24, [-0.12, 0.8, -0.1]), blob(0.22, [0.08, 0.84, 0.18])].map((g) => g.translate(0, -0.8, 0).scale(1, 0.4, 1).translate(0, 0.82, 0))),
-		dead: branches([
-			[0.06, 0.035, [0, 0, 0], [0.02, 0.6, 0]],
-			[0.035, 0.015, [0.02, 0.35, 0], [0.25, 0.55, 0.08]],
-			[0.03, 0.012, [0.02, 0.45, 0], [-0.22, 0.68, -0.05]],
-			[0.025, 0.01, [0.02, 0.6, 0], [0.1, 0.85, -0.12]],
-			[0.02, 0.008, [0.15, 0.47, 0.04], [0.2, 0.68, 0.2]],
+		pineTrunk: branches([[0.055, 0.03, [0, 0, 0], [0, 0.45, 0]], ...roots(0.05, 3)], 0.45),
+		pineCrown: pineCrown(),
+		// Snow lying on the upper side of every other tier (where the tier is as wide as the cap).
+		snowCaps: merge(
+			[1, 3, 5, 6].map((i) => {
+				const f = i / 7,
+					r = 0.4 * Math.pow(1 - f, 0.85) + 0.05;
+				return new THREE.ConeGeometry(r * 0.62, 0.09, 10).translate(0, 0.2 + f * 0.62 + 0.24 * 0.42, 0);
+			}),
+		),
+		broadTrunk: branches([
+			[0.065, 0.045, [0, 0, 0], [0.03, 0.46, 0]],
+			[0.04, 0.022, [0.03, 0.4, 0], [0.24, 0.62, 0.06]],
+			[0.04, 0.022, [0.03, 0.44, 0], [-0.2, 0.64, -0.1]],
+			[0.035, 0.02, [0.03, 0.46, 0], [0.04, 0.7, 0.2]],
+			...roots(0.06),
 		]),
-		fungalStem: branches([[0.05, 0.04, [0, 0, 0], [0.04, 0.5, 0]], [0.04, 0.03, [0.04, 0.5, 0], [-0.02, 0.85, 0.03]]]),
-		fungalCap: merge([new THREE.SphereGeometry(0.3, 10, 4, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.45, 1).translate(-0.02, 0.84, 0.03), ...[0, 1, 2, 3].map((i) => new THREE.SphereGeometry(0.06, 6, 4).translate(Math.cos(i * 1.6) * 0.08, 0.3 + i * 0.12, Math.sin(i * 1.6) * 0.08))]),
+		broadCrown: crown(dome(12, [0.02, 0.7, 0], 0.32, [0.13, 0.22], 0.8), [0.02, 0.7, 0], 0.36),
+		acaciaTrunk: branches([
+			[0.05, 0.035, [0, 0, 0], [0.1, 0.42, 0]],
+			[0.032, 0.018, [0.1, 0.42, 0], [0.36, 0.72, 0.1]],
+			[0.032, 0.018, [0.1, 0.42, 0], [-0.16, 0.74, -0.14]],
+			[0.028, 0.016, [0.1, 0.42, 0], [0.12, 0.76, 0.26]],
+			[0.022, 0.012, [0.24, 0.58, 0.06], [0.42, 0.66, -0.16]],
+			...roots(0.05, 3),
+		]),
+		// Umbrella canopy: overlapping flat pads, ragged rims, darker underneath.
+		acaciaCrown: merge(
+			[
+				[0.3, [0.32, 0.76, 0.08]],
+				[0.26, [-0.14, 0.78, -0.12]],
+				[0.24, [0.12, 0.82, 0.26]],
+				[0.22, [0.1, 0.86, -0.06]],
+				[0.2, [0.44, 0.7, -0.16]],
+			].map(([r, [x, y, z]]) => paint(rock(new THREE.CylinderGeometry(r, r * 0.85, 0.09, 9), 0.35, 1).translate(x, y, z), (px, py) => (py > y ? 1.1 : 0.62))),
+		),
+		dead: branches(
+			(() => {
+				// Trunk and two orders of limbs, thinner and shorter each order.
+				const list = [[0.06, 0.035, [0, 0, 0], [0.02, 0.6, 0]], ...roots(0.055)];
+				const grow = (from, dir, len, r, order) => {
+					const to = [from[0] + dir[0] * len, from[1] + dir[1] * len, from[2] + dir[2] * len];
+					list.push([r, r * 0.55, from, to]);
+					if (order < 2)
+						for (let k = 0; k < 2; k++) {
+							const a = srand() * Math.PI * 2;
+							grow(to, [dir[0] * 0.6 + Math.cos(a) * 0.5, dir[1] * 0.7 + 0.3, dir[2] * 0.6 + Math.sin(a) * 0.5], len * 0.55, r * 0.5, order + 1);
+						}
+				};
+				for (const [y, a] of [[0.32, 0.4], [0.44, 2.6], [0.56, 4.4]]) grow([0.02, y, 0], [Math.cos(a) * 0.75, 0.6, Math.sin(a) * 0.75], 0.24, 0.03, 0);
+				grow([0.02, 0.6, 0], [0.15, 1, -0.1], 0.2, 0.025, 1);
+				return list;
+			})(),
+		),
+		fungalStem: branches([[0.05, 0.04, [0, 0, 0], [0.04, 0.5, 0]], [0.04, 0.03, [0.04, 0.5, 0], [-0.02, 0.85, 0.03]], ...roots(0.04, 3)], 0.85),
+		fungalCap: merge([
+			paint(new THREE.SphereGeometry(0.3, 12, 4, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.45, 1).translate(-0.02, 0.84, 0.03), (x, y) => 0.8 + (y - 0.84) * 2.5),
+			// Gills under the cap.
+			paint(new THREE.CylinderGeometry(0.29, 0.06, 0.05, 16, 1, true).translate(-0.02, 0.82, 0.03), 0.55),
+			...[0, 1, 2, 3].map((i) => new THREE.SphereGeometry(0.06, 6, 4).translate(Math.cos(i * 1.6) * 0.08, 0.3 + i * 0.12, Math.sin(i * 1.6) * 0.08)),
+		]),
 	};
 	const TREES = {
-		pine: () => [[TREE_GEO.pineTrunk, std("#4a3a2a")], [TREE_GEO.pineCrown, plant("#3c5e3a")]],
-		broad: () => [[TREE_GEO.broadTrunk, std("#5a4632")], [TREE_GEO.broadCrown, plant("#5f8a44")]],
-		snowPine: () => [[TREE_GEO.pineTrunk, std("#3e3428")], [TREE_GEO.pineCrown, plant("#2f4a3a")], [TREE_GEO.snowCaps, plant("#eef4f6", { roughness: 0.7 })]],
-		acacia: (dusty) => [[TREE_GEO.acaciaTrunk, std("#6a5236")], [TREE_GEO.acaciaCrown, plant(dusty ? "#7d7a3e" : "#6a7f3e")]],
-		dead: (charred) => [[TREE_GEO.dead, std(charred ? "#231d1b" : "#6b5a46")]],
-		fungal: () => [[TREE_GEO.fungalStem, std("#cfc6b0")], [TREE_GEO.fungalCap, plant("#6ff2e0", { emissive: "#2fb8a8", emissiveIntensity: 0.55 })]],
+		pine: () => [[TREE_GEO.pineTrunk, bark("#4a3a2a")], [TREE_GEO.pineCrown, plant("#3f6a3c")]],
+		broad: () => [[TREE_GEO.broadTrunk, bark("#5a4632")], [TREE_GEO.broadCrown, plant("#64924a")]],
+		snowPine: () => [[TREE_GEO.pineTrunk, bark("#3e3428")], [TREE_GEO.pineCrown, plant("#335240")], [TREE_GEO.snowCaps, plant("#eef4f6", { roughness: 0.7 })]],
+		acacia: (dusty) => [[TREE_GEO.acaciaTrunk, bark("#6a5236")], [TREE_GEO.acaciaCrown, plant(dusty ? "#82803f" : "#6e8640")]],
+		dead: (charred) => [[TREE_GEO.dead, bark(charred ? "#2a2321" : "#6b5a46")]],
+		fungal: () => [[TREE_GEO.fungalStem, bark("#cfc6b0")], [TREE_GEO.fungalCap, plant("#6ff2e0", { emissive: "#2fb8a8", emissiveIntensity: 0.55 })]],
 	};
 	// Placement of a kind on the ground: how it sits, scales and turns.
 	const SHAPE = {
@@ -60674,6 +61325,8 @@ function createScatter3D(THREE, { world, heightAt, fogged }) {
 		tallGrass: { sink: 0.3, tall: 1, tilt: 0.12 },
 		reeds: { sink: 0.5, tall: 1, tilt: 0.1 },
 		fern: { sink: 0.3, tall: 1, tilt: 0.15 },
+		flowersWarm: { sink: 0.3, tall: 1, tilt: 0.15 },
+		flowersCool: { sink: 0.3, tall: 1, tilt: 0.15 },
 		shrub: { sink: 0.5, tall: 1, tilt: 0.2 },
 		stone: { sink: 0.3, tall: 0.75, tilt: 0.8 },
 		angular: { sink: 0.35, tall: 0.8, tilt: 0.9 },
@@ -60706,6 +61359,9 @@ function createScatter3D(THREE, { world, heightAt, fogged }) {
 				["grass", plant("#7f9f62"), 4200, [5, 11], "meadow", false, 0.25],
 				["tallGrass", plant("#8faa6a"), 900, [8, 15], "meadow", false, 0.2],
 				["shrub", plant("#5f7a48"), 500, [7, 13], "any", true, 0.2],
+				["fern", plant("#58804a"), 500, [7, 12], "meadow", false, 0.2],
+				["flowersWarm", plant("#ffffff"), 450, [5, 9], "meadow", false, 0.15],
+				["flowersCool", plant("#ffffff"), 350, [5, 9], "meadow", false, 0.15],
 				["stone", std("#8a8f86"), 900, [3, 8], "bare", true, 0.2],
 				["pebble", std("#7c8079"), 2500, [1.4, 3.4], "bare", false, 0.25],
 				["tree", TREES.broad(), 140, [28, 44], "meadow", true, 0.2],
@@ -60743,6 +61399,7 @@ function createScatter3D(THREE, { world, heightAt, fogged }) {
 			["tallGrass", plant(dusty ? "#c2a65c" : "#93924f"), dusty ? 200 : 600, [9, 15], "meadow", false, 0.2],
 			["shrub", plant(dusty ? "#7d6a3e" : "#6a6a3a"), dusty ? 250 : 450, [7, 13], "any", true, 0.2],
 		];
+		if (!dusty) list.push(["flowersWarm", plant("#ffffff"), 260, [5, 9], "meadow", false, 0.15]);
 		if (dusty) list.push(["bone", std("#e2d6ba", { roughness: 0.7 }), 140, [5, 9], "bare", false, 0.1]);
 		list.push(["tree", TREES.dead(false), dusty ? 30 : 40, [22, 34], "any", true, 0.15]);
 		if (!dusty) list.push(["tree", TREES.acacia(false), 60, [26, 40], "meadow", true, 0.15]);
@@ -60900,10 +61557,35 @@ function createScatter3D(THREE, { world, heightAt, fogged }) {
 		const storm = weather.kind ? weather.intensity || 0 : 0;
 		wind.power.value += (0.3 + storm * (weather.kind === "snow" ? 0.6 : 1.2) - wind.power.value) * 0.05;
 	}
+	// One of each tree and plant as plain meshes, for the model gallery: [name, group].
+	function specimens() {
+		const one = (name, parts, size) => {
+			const g = new THREE.Group();
+			for (const [geometry, material] of parts) g.add(new THREE.Mesh(geometry, material));
+			g.scale.setScalar(size);
+			return [name, g];
+		};
+		return [
+			one("Sosna", TREES.pine(), 42),
+			one("Sosna w śniegu", TREES.snowPine(), 42),
+			one("Drzewo liściaste", TREES.broad(), 40),
+			one("Akacja", TREES.acacia(false), 38),
+			one("Martwe drzewo", TREES.dead(false), 32),
+			one("Grzyb olbrzymi", TREES.fungal(), 38),
+			one("Trawa", [[geo.grass, plant("#8a8a4e")]], 12),
+			one("Wysoka trawa", [[geo.tallGrass, plant("#93924f")]], 15),
+			one("Paproć", [[geo.fern, plant("#58804a")]], 14),
+			one("Krzew", [[geo.shrub, plant("#6a6a3a")]], 14),
+			one("Kwiaty", [[geo.flowersWarm, plant("#ffffff")]], 12),
+			one("Kwiaty", [[geo.flowersCool, plant("#ffffff")]], 12),
+			one("Trzciny", [[geo.reeds, plant("#6f8a4a")]], 14),
+		];
+	}
 	return {
 		setGame,
 		update,
 		tick,
+		specimens,
 		stats: () => ({ scatter: batches.reduce((n, b) => n + b.spots.length, 0) }),
 	};
 }
@@ -61254,6 +61936,184 @@ function createMarks3D(THREE, { world, heightAt, fogged }) {
 	return { update, stats: () => ({ decals: decals.n, wallLinks: wallBody.count }) };
 }
 
+// ---- webgl3d/relief-3d.js ----
+/* Relief of the 3D board (visual only: movement, vision and saves do not change; the 2D boards keep
+   webgl/terrain-height.js). A height map twice as fine as the 2D one (6 units a cell) built from the
+   map itself:
+   - hills: warped swells, ridges and hollows from seeded noise (gentler on ice, rougher on ash);
+   - mesas: steep cliffs with a ragged edge, a flat top, ledges of rock strata on the walls and a talus
+     apron of scree at the foot; outcrops and rocks: rugged knolls with steep sides;
+   - spires: sharp peaks with ridges and gullies running down;
+   - groves, wrecks, ruins and the like: soft mounds (as before); waters: lake beds, chasms, lava
+     channels sunk in, dunes raised (with a sharp crest);
+   - rock: how much of each cell is bare rock (steep slopes, cliffs, peaks), for the terrain shader.
+   Heights in world units. */
+function createRelief3D({ RISE }) {
+	const CELL = 6;
+	const sm = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
+	function noiseOf(seedText) {
+		let seed = [...String(seedText)].reduce((h, c) => Math.imul(h ^ c.charCodeAt(0), 16777619), 2166136261) >>> 0;
+		const rand = () => (seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296,
+			grid = Float32Array.from({ length: 128 * 128 }, rand);
+		// Value noise 0…1 on a tiling 128 grid, size = world units per cell.
+		return (x, y, size) => {
+			const gx = x / size,
+				gy = y / size,
+				i = Math.floor(gx),
+				j = Math.floor(gy),
+				tx = sm(gx - i),
+				ty = sm(gy - j),
+				at = (a, b) => grid[((b & 127) << 7) | (a & 127)],
+				top = at(i, j) + (at(i + 1, j) - at(i, j)) * tx,
+				bottom = at(i, j + 1) + (at(i + 1, j + 1) - at(i, j + 1)) * tx;
+			return top + (bottom - top) * ty;
+		};
+	}
+	// Plateau-shaped obstacles: [height (× RISE), profile]; cliff: mesa walls, knoll: rugged rock, mound: soft.
+	const RAISED = { mesa: [1, "cliff"], outcrop: [0.7, "knoll"], rock: [0.75, "knoll"], spire: [1.4, "peak"], grove: [0.3, "soft"], eggs: [0.18, "soft"], wreck: [0.55, "mound"], derelict: [0.6, "mound"], ruin: [0.4, "mound"], debris: [0.3, "mound"], resin: [0.3, "mound"], processor: [0.2, "mound"] };
+	const WATER = { lake: -0.35, glow: -0.35, chasm: -1.3, crevasse: -1, lava: -0.25, dune: 0.5 };
+	const ROUGH = { ice: 0.75, dust: 1, ash: 1.25 };
+
+	function build(game, { relief = true } = {}) {
+		const cols = Math.ceil(game.W / CELL) + 1,
+			rows = Math.ceil(game.H / CELL) + 1,
+			n = cols * rows,
+			hills = new Float32Array(n),
+			up = new Float32Array(n),
+			down = new Float32Array(n),
+			crag = new Float32Array(n),
+			noise = noiseOf(game.missionId + ":" + game.W + "x" + game.H),
+			rough = ROUGH[RTS.MISSIONS[game.missionId]?.biome] ?? 1;
+		const fbm = (x, y, size) => noise(x, y, size) * 0.55 + noise(x + 71, y - 33, size / 2.1) * 0.3 + noise(x - 19, y + 57, size / 4.4) * 0.15;
+		// Ridged noise: sharp crests where the noise crosses its middle (ridges, gullies).
+		const ridge = (x, y, size) => 1 - Math.abs(fbm(x, y, size) - 0.5) * 2;
+
+		// Hills: domain-warped swells (no grid look), ridges on some of them, small bumps everywhere.
+		if (relief)
+			for (let j = 0; j < rows; j++)
+				for (let i = 0; i < cols; i++) {
+					const x = i * CELL,
+						y = j * CELL,
+						wx = x + (noise(x, y, 900) - 0.5) * 500,
+						wy = y + (noise(x + 400, y - 300, 900) - 0.5) * 500,
+						swell = (fbm(wx, wy, 760) - 0.5) * 2,
+						ridges = Math.pow(ridge(wx + 200, wy, 520), 3) * sm((fbm(wx, wy, 1500) - 0.42) / 0.3),
+						bumps = (noise(x, y, 70) - 0.5) * 2;
+					hills[j * cols + i] = (swell * 20 + ridges * 18 * rough + bumps * 1.6) * (0.8 + 0.2 * rough);
+				}
+
+		const box = (x0, y0, x1, y1, fn) => {
+			for (let j = Math.max(0, Math.floor(y0 / CELL)); j <= Math.min(rows - 1, Math.ceil(y1 / CELL)); j++)
+				for (let i = Math.max(0, Math.floor(x0 / CELL)); i <= Math.min(cols - 1, Math.ceil(x1 / CELL)); i++) fn(j * cols + i, i * CELL, j * CELL);
+		};
+		for (const o of game.obstacles || []) {
+			const [amp, shape] = RAISED[o.kind || "rock"] || RAISED.rock,
+				H = amp * RISE,
+				cx = o.x + o.w / 2,
+				cy = o.y + o.h / 2,
+				small = Math.min(o.w, o.h),
+				hx = o.w / 2,
+				hy = o.h / 2;
+			if (shape === "peak" || shape === "soft") {
+				const r = Math.max(o.w, o.h) * (shape === "peak" ? 0.8 : 0.75);
+				box(cx - r, cy - r, cx + r, cy + r, (k, px, py) => {
+					// A ragged outline, a sharp top; ridges and gullies on the flanks of a peak.
+					const a = Math.atan2(py - cy, px - cx),
+						edge = r * (0.85 + noise(Math.cos(a) * 60 + cx, Math.sin(a) * 60 + cy, 40) * 0.3),
+						t = Math.max(0, 1 - Math.hypot(px - cx, py - cy) / edge);
+					if (t <= 0) return;
+					let h = H * Math.pow(t, shape === "peak" ? 1.15 : 1.4);
+					if (shape === "peak") {
+						h *= 0.82 + 0.3 * ridge(px * 1.3, py * 1.3, 90) * t;
+						crag[k] = Math.max(crag[k], sm(t * 1.6));
+					}
+					up[k] = Math.max(up[k], h);
+				});
+				continue;
+			}
+			// Distance outside the obstacle's rectangle (rounded corners), negative inside, with a ragged edge.
+			const round = small * 0.28,
+				wob = small * 0.09 + 10,
+				reach = shape === "cliff" ? 16 + H * 0.35 : shape === "knoll" ? small * 0.22 + 18 : small * 0.3 + 22,
+				apron = shape === "cliff" ? 46 : shape === "knoll" ? 26 : 0;
+			box(o.x - reach - apron - wob, o.y - reach - apron - wob, o.x + o.w + reach + apron + wob, o.y + o.h + reach + apron + wob, (k, px, py) => {
+				const qx = Math.abs(px - cx) - (hx - round),
+					qy = Math.abs(py - cy) - (hy - round),
+					d = Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - round + (noise(px, py, 34) - 0.5) * 2 * wob;
+				let h;
+				if (shape === "cliff") {
+					// The wall from a little inside the edge to `reach` outside it, in three ledges of strata;
+					// a flat top with a gentle swell; scree piled at the foot.
+					const t = sm((d + reach * 0.35) / reach),
+						steps = 3,
+						s = (1 - t) * steps,
+						ledge = (Math.floor(s) + sm((s - Math.floor(s) - 0.3) / 0.4)) / steps,
+						top = 1 + (fbm(px, py, 120) - 0.5) * 0.08,
+						scree = 0.24 * (1 - sm((d - reach * 0.4) / apron)) * (0.8 + 0.4 * noise(px, py, 22));
+					h = H * Math.max(Math.min(ledge, 1) * (t <= 0 ? top : 1), d > 0 ? scree : 0);
+					crag[k] = Math.max(crag[k], t > 0.02 && t < 0.98 ? 1 : 0);
+				} else if (shape === "knoll") {
+					// A rugged rock knoll: steep sides, a lumpy top.
+					const t = 1 - sm((d + reach * 0.5) / reach),
+						lumps = 0.75 + 0.45 * ridge(px * 1.4, py * 1.4, 70);
+					h = H * Math.pow(t, 0.7) * lumps + (d > 0 ? H * 0.12 * (1 - sm(d / apron)) * noise(px, py, 18) : 0);
+					crag[k] = Math.max(crag[k], sm(t * 2) * 0.8);
+				} else h = H * sm(1 - Math.max(0, d) / reach);
+				up[k] = Math.max(up[k], h);
+			});
+		}
+		for (const w of game.waters || []) {
+			const amp = (WATER[w.kind || "lake"] ?? WATER.lake) * RISE,
+				r = Math.max(w.rx, w.ry) * 1.35,
+				dune = w.kind === "dune";
+			// Standing water lies level: the hills under a lake are flattened to the lowest point of its
+			// shore, blending back into them past the rim, so the surface is flat and the bowl even.
+			if (!dune && w.kind !== "lava" && w.kind !== "chasm") {
+				let rimMin = Infinity;
+				for (let n = 0; n < 32; n++) {
+					const a = (n / 32) * Math.PI * 2,
+						e = RTS.waterRadius ? RTS.waterRadius(w, a) : 1,
+						i = Math.round((w.x + Math.cos(a) * w.rx * e) / CELL),
+						j = Math.round((w.y + Math.sin(a) * w.ry * e) / CELL);
+					if (i >= 0 && j >= 0 && i < cols && j < rows) rimMin = Math.min(rimMin, hills[j * cols + i]);
+				}
+				if (rimMin < Infinity)
+					box(w.x - r, w.y - r, w.x + r, w.y + r, (k, px, py) => {
+						const a = Math.atan2(py - w.y, px - w.x),
+							e = RTS.waterRadius ? RTS.waterRadius(w, a) : 1,
+							q = Math.hypot((px - w.x) / (w.rx * e), (py - w.y) / (w.ry * e)),
+							flat = 1 - sm((q - 0.95) / 0.35);
+						hills[k] += (rimMin - hills[k]) * flat;
+					});
+			}
+			box(w.x - r, w.y - r, w.x + r, w.y + r, (k, px, py) => {
+				const a = Math.atan2(py - w.y, px - w.x),
+					edge = RTS.waterRadius ? RTS.waterRadius(w, a) : 1,
+					q = Math.hypot((px - w.x) / (w.rx * edge), (py - w.y) / (w.ry * edge));
+				// Dunes: a crest, steeper on the lee side; beds: a bowl.
+				let h = amp * (1 - sm((q - 0.55) / 0.75));
+				if (dune) h = amp * Math.pow(Math.max(0, 1 - q / 1.3), 1.6) * (0.85 + 0.3 * noise(px, py, 60));
+				if (amp > 0) up[k] = Math.max(up[k], h);
+				else down[k] = Math.min(down[k], h);
+			});
+		}
+		const data = new Float32Array(n);
+		for (let k = 0; k < n; k++) data[k] = hills[k] + up[k] + down[k];
+		// Bare rock: steep ground, cliffs and peaks.
+		const rock = new Float32Array(n);
+		for (let j = 0; j < rows; j++)
+			for (let i = 0; i < cols; i++) {
+				const k = j * cols + i,
+					dx = (data[j * cols + Math.min(cols - 1, i + 1)] - data[j * cols + Math.max(0, i - 1)]) / (2 * CELL),
+					dy = (data[Math.min(rows - 1, j + 1) * cols + i] - data[Math.max(0, j - 1) * cols + i]) / (2 * CELL),
+					slope = Math.hypot(dx, dy);
+				rock[k] = Math.max(sm((slope - 0.65) / 0.6), crag[k] * sm((slope - 0.15) / 0.35));
+			}
+		return { cols, rows, cell: CELL, data, rock };
+	}
+	return { cell: CELL, build };
+}
+
 // ---- webgl3d/three-renderer.js ----
 /* 3D renderer prototype (Three.js). Visual only: the simulation, orders and saves stay 2D (x, y on the
    map); the renderer places them in 3D with X = x, Z = y and Y = terrain height.
@@ -61287,7 +62147,8 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		COLORS_ART = ["#9ae5cb", "#ed8277"];
 	const RISE = 70,
 		GROUND_EVERY = 0.5,
-		TILE = 60,
+		// Ground tiles of 720 × 720 map units (each with its own painting).
+		TILE_SIZE = 720,
 		TAU = Math.PI * 2;
 
 	// The ground is painted bare: rocks, plants and pebbles are 3D here (render-canvas.js setBareGround).
@@ -61328,7 +62189,8 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		groundClock = GROUND_EVERY,
 		timeOfDay = null,
 		clock = 0;
-	const terrainHeight = createTerrainHeight();
+	const terrainHeight = createTerrainHeight(),
+		relief3d = createRelief3D({ RISE });
 	// Water, night lights, weather and particles (webgl3d/scene-fx-3d.js).
 	const fx = createSceneFx3D(THREE, { world, heightAt: (x, y) => heightAt(x, y), fogged: (m) => fogged(m) });
 	// Stones, grass, drifts, shards and small mushrooms on the ground (webgl3d/scatter-3d.js).
@@ -61382,34 +62244,6 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		return (v(0, 0) * (1 - tx) + v(1, 0) * tx) * (1 - ty) + (v(0, 1) * (1 - tx) + v(1, 1) * tx) * ty;
 	}
 
-	// Rolling relief over the whole map, from seeded value noise (visual only, like the height map: movement
-	// and vision do not change): long swells and smaller bumps, a few units high, so even plains are not flat.
-	function reliefNoise(seedText) {
-		let seed = [...String(seedText)].reduce((h, c) => Math.imul(h ^ c.charCodeAt(0), 16777619), 40503) >>> 0;
-		const rand = () => (seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296,
-			octaves = [
-				[620, 9],
-				[230, 4.5],
-				[70, 1.4],
-			].map(([size, amp]) => ({ size, amp, grid: Array.from({ length: 64 * 64 }, rand) })),
-			sm = (t) => t * t * (3 - 2 * t);
-		return (x, y) => {
-			let v = 0;
-			for (const { size, amp, grid } of octaves) {
-				const gx = x / size,
-					gy = y / size,
-					i = Math.floor(gx),
-					j = Math.floor(gy),
-					tx = sm(gx - i),
-					ty = sm(gy - j),
-					at = (a, b) => grid[((b & 63) << 6) | (a & 63)],
-					top = at(i, j) + (at(i + 1, j) - at(i, j)) * tx,
-					bottom = at(i, j + 1) + (at(i + 1, j + 1) - at(i, j + 1)) * tx;
-				v += (top + (bottom - top) * ty - 0.5) * 2 * amp;
-			}
-			return v;
-		};
-	}
 	// Fine surface texture of the biome as a tiling normal map (catches the low sun): wind ripples in sand,
 	// grain in ash, smooth ice with cracks. One per biome, cached.
 	const detailMaps = new Map();
@@ -61469,14 +62303,17 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 
 	function buildTerrain() {
 		terrainHeight.setGame(game);
-		const cell = terrainHeight.cell,
-			cols = Math.ceil(game.W / cell) + 1,
-			rows = Math.ceil(game.H / cell) + 1,
-			data = new Float32Array(cols * rows),
-			relief = reliefNoise(game.missionId + ":" + game.W + "x" + game.H);
-		const rolling = quality.relief ? relief : () => 0;
-		for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) data[j * cols + i] = terrainHeight.heightAt(i * cell, j * cell) * RISE + rolling(i * cell, j * cell);
+		// The relief of the 3D board (webgl3d/relief-3d.js): hills, mesa cliffs, peaks, beds; bare rock.
+		const built = relief3d.build(game, { relief: quality.relief }),
+			{ cols, rows, cell, data, rock } = built;
 		heights = { cols, rows, cell, data };
+		// Where low mist lies: from the 15th percentile of the heights (thick) to the median (none).
+		{
+			const sample = [];
+			for (let k = 0; k < data.length; k += 37) sample.push(data[k]);
+			sample.sort((a, b) => a - b);
+			groundWeather.mistBand.value.set(sample[Math.floor(sample.length * 0.15)], sample[Math.floor(sample.length * 0.5)] + 6);
+		}
 		// Normals and shading from the whole height map (no seams between tiles): steep slopes and hollows
 		// darker, crests a little lighter — the ground reads as relief under any light.
 		const h = (i, j) => data[Math.max(0, Math.min(rows - 1, j)) * cols + Math.max(0, Math.min(cols - 1, i))],
@@ -61490,7 +62327,7 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 					k = j * cols + i;
 				normals.set([-dx / l, 1 / l, -dz / l], k * 3);
 				let around = 0;
-				for (const [a, b] of [[-3, 0], [3, 0], [0, -3], [0, 3], [-2, -2], [2, 2], [-2, 2], [2, -2]]) around += h(i + a, j + b);
+				for (const [a, b] of [[-6, 0], [6, 0], [0, -6], [0, 6], [-4, -4], [4, 4], [-4, 4], [4, -4]]) around += h(i + a, j + b);
 				const cavity = around / 8 - data[k],
 					slope = 1 - 1 / l;
 				shade[k] = Math.max(0.55, Math.min(1.12, 1 - slope * 0.9 - Math.max(0, cavity) * 0.018 + Math.max(0, -cavity) * 0.008));
@@ -61506,9 +62343,9 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			t.texture.dispose();
 		}
 		tiles = [];
-		// Tiles of TILE cells, each with its own full-resolution painting: a changed deposit repaints and
-		// uploads one tile, not the whole map.
-		const size = TILE * cell;
+		// Tiles, each with its own full-resolution painting: a changed deposit repaints and uploads one
+		// tile, not the whole map.
+		const size = TILE_SIZE;
 		for (let y0 = 0; y0 < game.H; y0 += size)
 			for (let x0 = 0; x0 < game.W; x0 += size) {
 				const w = Math.min(size, game.W - x0),
@@ -61518,7 +62355,8 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 				geometry.translate(x0 + w / 2, 0, y0 + h / 2);
 				const pos = geometry.attributes.position,
 					nrm = geometry.attributes.normal,
-					colors = new Float32Array(pos.count * 3);
+					colors = new Float32Array(pos.count * 3),
+					bare = new Float32Array(pos.count);
 				for (let k = 0; k < pos.count; k++) {
 					const i = Math.round(pos.getX(k) / cell),
 						j = Math.round(pos.getZ(k) / cell),
@@ -61526,8 +62364,10 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 					pos.setY(k, heightAt(pos.getX(k), pos.getZ(k)));
 					nrm.setXYZ(k, normals[g * 3], normals[g * 3 + 1], normals[g * 3 + 2]);
 					colors.fill(shade[g], k * 3, k * 3 + 3);
+					bare[k] = rock[g];
 				}
 				geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+				geometry.setAttribute("rock", new THREE.BufferAttribute(bare, 1));
 				const canvas = document.createElement("canvas");
 				canvas.width = w;
 				canvas.height = h;
@@ -61571,21 +62411,27 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			c.getImageData(0, 0, 1, 1).data.slice(0, 3).forEach((v, i) => (sum[i] += v / tiles.length));
 		}
 		const [r, g, b] = sum.map(Math.round);
+		// Bare rock: the mean ground colour, darker and a little greyer (the terrain shader).
+		const mean = new THREE.Color(`rgb(${r},${g},${b})`);
+		groundWeather.rockTint.value.copy(mean).lerp(new THREE.Color(mean.r * 0.3 + mean.g * 0.55 + mean.b * 0.15, mean.r * 0.3 + mean.g * 0.55 + mean.b * 0.15, mean.r * 0.3 + mean.g * 0.55 + mean.b * 0.15), 0.3).multiplyScalar(0.82);
 		let low = Infinity;
 		for (let x = 0; x <= game.W; x += 48) low = Math.min(low, heightAt(x, 0), heightAt(x, game.H));
 		for (let y = 0; y <= game.H; y += 48) low = Math.min(low, heightAt(0, y), heightAt(game.W, y));
-		const size = Math.max(game.W, game.H) * 8,
-			geometry = new THREE.PlaneGeometry(size, size).rotateX(-Math.PI / 2);
+		// A ring round the map (a hole where the map is): under the map it would cover deep lake beds.
+		const size = Math.max(game.W, game.H) * 4,
+			ring = new THREE.Shape([new THREE.Vector2(-size, size), new THREE.Vector2(game.W + size, size), new THREE.Vector2(game.W + size, -game.H - size), new THREE.Vector2(-size, -game.H - size)]);
+		ring.holes.push(new THREE.Path([new THREE.Vector2(4, -4), new THREE.Vector2(4, -game.H + 4), new THREE.Vector2(game.W - 4, -game.H + 4), new THREE.Vector2(game.W - 4, -4)]));
+		const geometry = new THREE.ShapeGeometry(ring).rotateX(-Math.PI / 2);
 		outskirts = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color: new THREE.Color(`rgb(${r},${g},${b})`).multiplyScalar(0.7), roughness: 1, metalness: 0 }));
-		outskirts.position.set(game.W / 2, low - 3, game.H / 2);
+		outskirts.position.set(0, low - 3, 0);
 		outskirts.receiveShadow = true;
 		world.add(outskirts);
 	}
 
 	// Fog of war on the ground: visible 255, explored 110, unknown 25, smoothed (see refreshFog); the
 	// terrain shader darkens and desaturates by it.
-	const fogUniforms = { fogMap: { value: null }, fogSize: { value: new THREE.Vector2(1, 1) }, fogOn: { value: 1 } },
-		groundWeather = { wetness: { value: 0 }, snowCover: { value: 0 }, rainLevel: { value: 0 }, weatherTime: { value: 0 }, skyTint: { value: new THREE.Color() } };
+	const fogUniforms = { fogMap: { value: null }, fogSize: { value: new THREE.Vector2(1, 1) }, fogOn: { value: 1 }, fogTime: { value: 0 } },
+		groundWeather = { wetness: { value: 0 }, snowCover: { value: 0 }, rainLevel: { value: 0 }, weatherTime: { value: 0 }, skyTint: { value: new THREE.Color() }, rockTint: { value: new THREE.Color("#7a6a58") }, sandLevel: { value: 0 }, mistLevel: { value: 0 }, mistBand: { value: new THREE.Vector2(0, 40) } };
 	// The vision grid is upsampled FOG_UP times and box-blurred twice, so the edge of sight is a soft
 	// curve instead of 40-unit steps.
 	const FOG_UP = 3;
@@ -61650,7 +62496,7 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 	// drops while it rains — and dry out after it.
 	const GROUND_COMMON = `
 		varying float vUpward;
-		uniform float wetness; uniform float snowCover; uniform float rainLevel; uniform float weatherTime; uniform vec3 skyTint;
+		uniform float wetness; uniform float snowCover; uniform float rainLevel; uniform float weatherTime; uniform vec3 skyTint; uniform vec3 rockTint; uniform float sandLevel; uniform float mistLevel; uniform vec2 mistBand;
 		float wHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 		float wNoise(vec2 p) {
 			vec2 i = floor(p), f = fract(p);
@@ -61665,32 +62511,84 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 				vec2 o = vec2(wHash(c), wHash(c + 7.1)) * 0.6 + 0.2;
 				float ph = fract(t * 0.9 + wHash(c + 3.3));
 				float d = length(fract(q) - o) * 12.0;
-				s += smoothstep(0.7, 0.0, abs(d - ph * 4.0)) * (1.0 - ph);
+				// Thin rings of different sizes, gone before they grow large.
+				s += smoothstep(0.32, 0.0, abs(d - ph * (2.0 + 2.5 * wHash(c + 5.7)))) * (1.0 - ph) * (1.0 - ph);
 			}
 			return s;
 		}
 		float puddleMask = 0.0;
-		float snowMask = 0.0;`;
+		float snowMask = 0.0;
+		#ifdef TERRAIN
+		varying float vRock; varying float vWorldY;
+		#endif`;
 	const GROUND_COLOR = `
 		#ifdef TERRAIN
+		// Bare rock on cliffs, peaks and steep slopes: the ground's colour darkened and greyed, in strata
+		// (bands by height, wavering), with grain; the rock never holds puddles or much snow.
+		{
+			// The painted ground stretches on a wall: the stone takes the map's mean ground colour instead,
+			// with grain running along the wall and up it (not seen from above).
+			vec2 wall = vec2((vMapXY.x + vMapXY.y) * 0.7, vWorldY);
+			float band = sin(vWorldY * 0.55 + wNoise(vMapXY * 0.018) * 4.0) * 0.5 + 0.5;
+			float grain = wNoise(wall * vec2(0.18, 0.5)) * 0.55 + wNoise(wall * vec2(0.05, 0.12)) * 0.45;
+			float r = smoothstep(0.1, 0.6, vRock);
+			vec3 stone = rockTint * mix(0.68, 1.05, band) * (0.78 + 0.44 * grain);
+			diffuseColor.rgb = mix(diffuseColor.rgb, stone, r);
+		}
 		float wn = wNoise(vMapXY * 0.011) * 0.65 + wNoise(vMapXY * 0.043) * 0.35;
-		puddleMask = smoothstep(0.86, 0.97, vUpward) * smoothstep(0.86 - wetness * 0.18, 0.9 - wetness * 0.18, wn) * smoothstep(0.12, 0.45, wetness);
+		puddleMask = smoothstep(0.86, 0.97, vUpward) * smoothstep(0.86 - wetness * 0.18, 0.9 - wetness * 0.18, wn) * smoothstep(0.12, 0.45, wetness) * (1.0 - smoothstep(0.1, 0.4, vRock));
 		#endif
+		// A sandstorm: streams of sand snaking fast over the ground along the wind (lighter streaks).
+		if (sandLevel > 0.01) {
+			vec2 wd = normalize(vec2(0.35, 0.12)), q = vec2(dot(vMapXY, wd) * 0.018 - weatherTime * 2.6, dot(vMapXY, vec2(-wd.y, wd.x)) * 0.12);
+			float stream = smoothstep(0.58, 0.85, wNoise(q) * 0.7 + wNoise(q * vec2(2.0, 3.1) + 3.3) * 0.3) * smoothstep(0.5, 0.9, vUpward);
+			diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 1.22 + vec3(0.05, 0.04, 0.02), stream * sandLevel * 0.55);
+		}
 		diffuseColor.rgb *= 1.0 - 0.32 * wetness;
 		diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.42 + vec3(0.03, 0.04, 0.05), puddleMask);
-		float sn = wNoise(vMapXY * 0.008) * 0.6 + wNoise(vMapXY * 0.05) * 0.4, th = 1.05 - snowCover * 1.25;
-		snowMask = smoothstep(0.55, 0.9, vUpward) * smoothstep(th - 0.08, th + 0.08, sn) * min(1.0, snowCover * 3.0);
-		diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.9, 0.94, 0.98), snowMask);`;
+		// Snow settles in patches first (noise), then nearly everywhere (a few bare spots stay); not on
+		// steep ground nor on bare rock walls. Bright, faintly blue in the hollows, with ripples blown by the
+		// wind; thin and grey at the edges of a patch, the ground showing through.
+		float sn = wNoise(vMapXY * 0.008) * 0.55 + wNoise(vMapXY * 0.05) * 0.3 + wNoise(vMapXY * 0.21) * 0.15, th = 1.05 - snowCover * 1.15;
+		float settle = smoothstep(0.55, 0.9, vUpward);
+		#ifdef TERRAIN
+		settle *= 1.0 - 0.75 * smoothstep(0.2, 0.7, vRock);
+		#endif
+		snowMask = settle * smoothstep(th - 0.06, th + 0.06, sn) * min(1.0, snowCover * 3.0);
+		float ripple = sin(dot(vMapXY, vec2(0.21, 0.13)) + wNoise(vMapXY * 0.03) * 6.0) * 0.5 + 0.5;
+		vec3 snowColor = mix(vec3(0.76, 0.82, 0.92), vec3(0.95, 0.97, 1.0), 0.55 + 0.25 * ripple + 0.2 * wNoise(vMapXY * 0.4));
+		snowColor = mix(diffuseColor.rgb * 0.65 + vec3(0.28, 0.3, 0.33), snowColor, smoothstep(0.0, 0.65, snowMask));
+		diffuseColor.rgb = mix(diffuseColor.rgb, snowColor, smoothstep(0.0, 0.35, snowMask));`;
 	const GROUND_ROUGH = `
 		roughnessFactor = mix(roughnessFactor, 0.5, wetness * 0.8);
 		roughnessFactor = mix(roughnessFactor, 0.04, puddleMask);
 		roughnessFactor = mix(roughnessFactor, 0.55, snowMask);`;
 	const GROUND_GLOW = `
 		totalEmissiveRadiance += skyTint * puddleMask * 0.1;
-		totalEmissiveRadiance += vec3(0.75, 0.82, 0.9) * puddleMask * rainLevel * wRipples(vMapXY, weatherTime) * 0.25;
-		totalEmissiveRadiance += vec3(step(0.985, wHash(floor(vMapXY * 0.9) + floor(weatherTime * 0.5))) * snowMask * 0.5);`;
+		#ifdef TERRAIN
+		// Low mist lying over the lower ground (dawn, dusk, rain, snow, night): drifting patches in the
+		// colour of the sky, thickest in the lowest parts of the map.
+		if (mistLevel > 0.01) {
+			float mistK = mistLevel * smoothstep(mistBand.y, mistBand.x, vWorldY) * smoothstep(0.3, 0.75, wNoise(vMapXY * 0.004 + vec2(weatherTime * 0.012, weatherTime * 0.007)) * 0.65 + wNoise(vMapXY * 0.013 - vec2(weatherTime * 0.02, 0.0)) * 0.35);
+			totalEmissiveRadiance = mix(totalEmissiveRadiance, skyTint * 0.85 + vec3(0.06, 0.065, 0.07), mistK * 0.65);
+			diffuseColor.rgb *= 1.0 - mistK * 0.35;
+		}
+		#endif
+		totalEmissiveRadiance += vec3(0.75, 0.82, 0.9) * puddleMask * rainLevel * wRipples(vMapXY, weatherTime) * 0.12;
+		// Glints of snow crystals: rare, tiny, twinkling.
+		totalEmissiveRadiance += vec3(step(0.993, wHash(floor(vMapXY * 1.7) + floor(weatherTime * 0.7))) * snowMask * 0.3);`;
+	const FOG_NOISE = `
+		float fwHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+		float fwNoise(vec2 p) {
+			vec2 i = floor(p), f = fract(p);
+			f = f * f * (3.0 - 2.0 * f);
+			return mix(mix(fwHash(i), fwHash(i + vec2(1.0, 0.0)), f.x), mix(fwHash(i + vec2(0.0, 1.0)), fwHash(i + vec2(1.0, 1.0)), f.x), f.y);
+		}`;
 	function fogged(material, ground = false, terrain = false) {
 		if (terrain) material.defines = { ...material.defines, TERRAIN: "" };
+		// Its own shader program per kind (ground or not), with whatever wraps onBeforeCompile later
+		// (wind, water): the source of the hook alone would not tell them apart.
+		material.customProgramCacheKey = () => "fogged|" + ground + "|" + terrain + "|" + material.onBeforeCompile.toString();
 		material.onBeforeCompile = (shader) => {
 			Object.assign(shader.uniforms, fogUniforms, overlayUniforms, groundWeather);
 			cloudShade(THREE, shader);
@@ -61698,7 +62596,11 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			if (ground) {
 				shader.vertexShader = shader.vertexShader
 					.replace("#include <common>", "#include <common>\nvarying float vUpward;")
-					.replace("#include <defaultnormal_vertex>", "#include <defaultnormal_vertex>\nvUpward = (vec4(transformedNormal, 0.0) * viewMatrix).y;");
+					.replace("#include <defaultnormal_vertex>", "#include <defaultnormal_vertex>\nvUpward = normalize((vec4(transformedNormal, 0.0) * viewMatrix).xyz).y;"); // normalised: instancing scales the normal
+				if (terrain)
+					shader.vertexShader = shader.vertexShader
+						.replace("#include <common>", "#include <common>\nattribute float rock;\nvarying float vRock;\nvarying float vWorldY;")
+						.replace("#include <worldpos_vertex>", "#include <worldpos_vertex>\nvRock = rock;\nvWorldY = (modelMatrix * vec4(transformed, 1.0)).y;");
 				shader.fragmentShader = shader.fragmentShader
 					.replace("#include <common>", "#include <common>\n" + GROUND_COMMON)
 					.replace("#include <map_fragment>", "#include <map_fragment>\n" + GROUND_COLOR)
@@ -61712,14 +62614,20 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			shader.fragmentShader = shader.fragmentShader
 				.replace(
 					"#include <common>",
-					"#include <common>\nvarying vec2 vMapXY;\nuniform sampler2D fogMap;\nuniform float fogOn;\nuniform vec2 fogSize;\nuniform sampler2D overlayMap;\nuniform float overlayOn;\nuniform vec4 overlayFrame;\nuniform vec2 overlaySize;",
+					"#include <common>\nvarying vec2 vMapXY;\nuniform sampler2D fogMap;\nuniform float fogOn;\nuniform float fogTime;\nuniform vec2 fogSize;\nuniform sampler2D overlayMap;\nuniform float overlayOn;\nuniform vec4 overlayFrame;\nuniform vec2 overlaySize;\n" + FOG_NOISE,
 				)
 				.replace(
 					"#include <dithering_fragment>",
 					`#include <dithering_fragment>
-					float seen = mix(1.0, texture2D(fogMap, vMapXY / fogSize).r, fogOn);
+					// Fog of war: the edge of sight ragged and shifting (drifting noise); what was seen before
+					// in cool grey, remembered; the unknown under dark murk slowly drifting over the land.
+					float raw = texture2D(fogMap, vMapXY / fogSize).r;
+					float drift = fwNoise(vMapXY * 0.011 + vec2(fogTime * 0.018, fogTime * 0.011)) * 0.6 + fwNoise(vMapXY * 0.034 - vec2(fogTime * 0.03, 0.0)) * 0.4;
+					float seen = mix(1.0, clamp(raw + (drift - 0.5) * 0.4 * (1.0 - raw * raw), 0.0, 1.0), fogOn);
 					vec3 grey = vec3(dot(gl_FragColor.rgb, vec3(0.3, 0.55, 0.15)));
-					gl_FragColor.rgb = mix(grey * vec3(0.55, 0.65, 0.8), gl_FragColor.rgb, smoothstep(0.35, 0.95, seen)) * (0.25 + 0.75 * seen);
+					gl_FragColor.rgb = mix(grey * vec3(0.58, 0.66, 0.8), gl_FragColor.rgb, smoothstep(0.35, 0.95, seen)) * (0.25 + 0.75 * seen);
+					float unknown = (1.0 - smoothstep(0.08, 0.3, seen)) * fogOn;
+					gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.05, 0.065, 0.09) * (0.6 + 0.8 * drift), unknown * 0.5);
 					if (overlayOn > 0.5) {
 						vec2 f = ((vMapXY - overlayFrame.xy) * overlayFrame.z + overlaySize * 0.5) / overlaySize;
 						if (f.x > 0.0 && f.x < 1.0 && f.y > 0.0 && f.y < 1.0) {
@@ -62135,7 +63043,7 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		}
 	}
 	// Wildlife, birds, fish, floating islands and wrecks (webgl3d/scene-life-3d.js), drawn in the same batches.
-	const life = createSceneLife3D(THREE, { world, heightAt: (x, y) => heightAt(x, y), models3d, hiddenLayer: HIDDEN_LAYER });
+	const life = createSceneLife3D(THREE, { world, heightAt: (x, y) => heightAt(x, y), models3d, hiddenLayer: HIDDEN_LAYER, splash: (x, y, z) => fx.shot("splash", x, y, z) });
 
 	// Selection rings and health bars (selected, damaged or recently hit).
 	const ringGeometry = new THREE.RingGeometry(0.92, 1, 40);
@@ -62699,6 +63607,7 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			placeCamera();
 			const night = sunOverride?.night ?? 1 - day;
 			models3d.setNight(night);
+			const dawnMist = Math.max(0, 1 - Math.abs(skyState.e - 0.05) / 0.18) * 0.45;
 			weatherState = fx.update(dt, {
 				game,
 				time: game.time,
@@ -62709,7 +63618,11 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 				scale: renderer.domElement.height / (2 * Math.tan((camera.fov * Math.PI) / 360)),
 				light: 0.3 + 0.7 * day,
 				gasFlow: (o) => canvasRenderer.gasFlowing(gasView, o),
+				working: canvasRenderer.entityWorking ? (e) => canvasRenderer.entityWorking(gasView, e) : null,
 				sky: scene.background,
+				// Mist at dawn and dusk (morning fog, evening haze), besides rain, snow and night.
+				mistLevel: dawnMist,
+				sun: { dir: sun.position.clone().sub(sun.target.position).normalize(), color: sun.color, intensity: sun.intensity },
 				quality,
 			});
 			weatherLight(weatherState);
@@ -62717,7 +63630,13 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			groundWeather.wetness.value = weatherState.wetness || 0;
 			groundWeather.snowCover.value = weatherState.snowCover || 0;
 			groundWeather.rainLevel.value = weatherState.kind === "rain" ? weatherState.intensity || 0 : 0;
+			groundWeather.sandLevel.value = weatherState.kind === "sand" ? weatherState.intensity || 0 : 0;
+			{
+				const k = weatherState.intensity || 0;
+				groundWeather.mistLevel.value = Math.max(dawnMist, night * 0.3, weatherState.kind === "rain" ? k * 0.6 : weatherState.kind === "snow" ? k * 0.5 : 0);
+			}
 			groundWeather.weatherTime.value = clock;
+			fogUniforms.fogTime.value = clock;
 			groundWeather.skyTint.value.copy(scene.background);
 			// Models: snow settling on their tops, a sheen when wet (models-detail-3d.js paint).
 			models3d.setWeather(weatherState.snowCover || 0, weatherState.wetness || 0);

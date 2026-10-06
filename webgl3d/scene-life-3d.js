@@ -14,7 +14,27 @@
      hulls, alien ribs, ruins, resin, eggs, a processor, boulders).
    Everything outside the viewer's sight is hidden when the fog of war is on (islands and obstacles stay:
    they are part of the landscape, as on the 2D boards). */
-export function createSceneLife3D(THREE, { world, heightAt, models3d, hiddenLayer }) {
+export function createSceneLife3D(THREE, { world, heightAt, models3d, hiddenLayer, splash }) {
+	// The surface of a lake: as scene-fx-3d.js lays it (flat, at the rim; the lowest rim on uneven shores).
+	const levels = new Map(),
+		leapt = new Set(),
+		landed = new Set();
+	function lakeLevel(w, wi) {
+		const key = wi + "|" + w.x + "|" + w.y;
+		if (!levels.has(key)) {
+			let low = Infinity,
+				high = -Infinity;
+			for (let i = 0; i < 48; i++) {
+				const a = (i / 48) * Math.PI * 2,
+					r = RTS.waterRadius(w, a) * 0.92,
+					h = heightAt(w.x + Math.cos(a) * w.rx * r, w.y + Math.sin(a) * w.ry * r);
+				low = Math.min(low, h);
+				high = Math.max(high, h);
+			}
+			levels.set(key, (high - low < 8 ? high : low) + 0.6);
+		}
+		return levels.get(key);
+	}
 	const TAU = Math.PI * 2;
 	const group = new THREE.Group();
 	world.add(group);
@@ -125,18 +145,51 @@ export function createSceneLife3D(THREE, { world, heightAt, models3d, hiddenLaye
 			r.holder.rotation.y = -Math.atan2(Math.cos(time * 0.12 + i) * 0.12 * 35, 20 + (i % 3) * 4);
 			r.model.update({ id: i }, { time });
 		}
-		// Fish (webgl/fauna-native.js): seven per plain lake, circling just under the surface.
+		// Fish: two loose schools per plain lake, wandering just under the surface along their own winding
+		// paths (each fish weaving around its school), turning the way they swim; now and then one leaps
+		// out in an arc, with a splash where it leaves the water and where it falls back.
 		(game.waters || []).forEach((w, wi) => {
 			if (w.kind) return;
-			for (let i = 0; i < 7; i++) {
-				const a = time * 0.13 + i * 0.9 + wi,
-					x = w.x + Math.cos(a) * w.rx * 0.65,
-					y = w.y + Math.sin(a * 1.3) * w.ry * 0.6;
+			const level = lakeLevel(w, wi),
+				at = (i, t) => {
+					const school = i % 2,
+						ph = wi * 1.7 + school * 3.1,
+						cx = Math.sin(t * 0.07 + ph) * 0.45 + Math.sin(t * 0.031 + ph * 2.3) * 0.15,
+						cy = Math.cos(t * 0.053 + ph * 1.4) * 0.42 + Math.sin(t * 0.027 + ph) * 0.12,
+						ox = Math.sin(t * 0.4 + i * 2.1) * 0.08,
+						oy = Math.cos(t * 0.33 + i * 1.3) * 0.08;
+					return [w.x + (cx + ox) * w.rx, w.y + (cy + oy) * w.ry];
+				};
+			for (let i = 0; i < 8; i++) {
+				const [x, y] = at(i, time);
 				if (!visible(x, y)) continue;
-				const r = make("fish|" + wi + "|" + i, () => models3d.scenery("fish"));
-				r.holder.position.set(x, heightAt(x, y) + 1.5, y);
-				r.holder.rotation.y = -Math.atan2(Math.cos(a * 1.3) * w.ry * 1.3, -Math.sin(a) * w.rx);
-				r.model.update({ id: i }, { time });
+				const [nx, ny] = at(i, time + 0.2),
+					r = make("fish|" + wi + "|" + i, () => models3d.scenery("fish")),
+					// A leap: every 20–40 s for 1.1 s.
+					period = 20 + ((i * 7 + wi * 3) % 20),
+					leap = (time + i * 5.3 + wi * 2.1) % period,
+					jump = leap < 1.1 ? leap / 1.1 : -1,
+					key = wi * 100 + i;
+				let y0 = level - 2.6 - Math.sin(time * 0.6 + i) * 0.8,
+					pitch = 0;
+				if (jump >= 0) {
+					y0 = level - 2 + Math.sin(jump * Math.PI) * 13;
+					pitch = Math.cos(jump * Math.PI) * 0.9;
+					if (!leapt.has(key)) {
+						leapt.add(key);
+						splash?.(x, level, y);
+					}
+					if (jump > 0.85 && !landed.has(key)) {
+						landed.add(key);
+						splash?.(x, level, y);
+					}
+				} else if (leapt.has(key)) {
+					leapt.delete(key);
+					landed.delete(key);
+				}
+				r.holder.position.set(x, y0, y);
+				r.holder.rotation.set(0, -Math.atan2(ny - y, nx - x), pitch, "YXZ");
+				r.model.update({ id: i }, { time: time * 1.4 });
 			}
 		});
 		// Obstacles (game.obstacles): props on the raised ground — spires, giant mushrooms, wrecks, ruins,

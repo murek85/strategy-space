@@ -864,9 +864,34 @@ export function createDetail3D(THREE, { group }) {
 		pipe(body, k.steel, [3, 13.5, -4], [3, 20, -4], 0.5, 6); // exhaust stack
 		box(body, k.warn, [1.4, 0.8, 1.4], [5, 18.6, 3], null, 0.2); // beacon
 		lamps(body, k, 11, 8.5, [-4, 4]);
-		const cargo = group(body, [-5, 13.5, 0]);
-		mesh(cargo, loftGeo("hop", [[[-5, 0, -5], [5, 0, -5], [5, 0, 5], [-5, 0, 5]], [[-6, 5, -6], [6, 5, -6], [6, 5, 6], [-6, 5, 6]]]), k.warn, [0, 0, 0]);
-		for (let i = 0; i < 4; i++) ball(cargo, k.hub, 1.8, [-3 + (i % 2) * 5, 5, -2.5 + (i >> 1) * 5], [1, 0.7, 1]); // ore lumps
+		// Hopper: an open bin with flared walls, a reinforced rim, ribs and a tipping hinge at the back,
+		// always there; the load inside rises with the cargo — grey lumps of ore with a metal sheen, or
+		// golden crystal shards (keep: the renderer shows and scales them, they are never merged).
+		const bin = group(body, [-5, 13.5, 0]);
+		box(bin, k.black, [10, 0.6, 10], [0, 0.3, 0], null, 0.2); // floor
+		for (const side of [-1, 1]) {
+			box(bin, k.warn, [12, 5, 0.6], [0, 2.6, side * 5.5], [side * 0.2, 0, 0], 0.2);
+			box(bin, k.warn, [0.6, 5, 12], [side * 5.5, 2.6, 0], [0, 0, -side * 0.2], 0.2);
+			box(bin, k.dark, [13, 0.7, 0.9], [0, 5.1, side * 6], null, 0.2); // rim
+			box(bin, k.dark, [0.9, 0.7, 13], [side * 6, 5.1, 0], null, 0.2);
+			for (const x of [-3.5, 3.5]) box(bin, k.dark, [0.6, 4.6, 0.5], [x, 2.5, side * 5.95], [side * 0.2, 0, 0], 0.1); // ribs
+		}
+		cyl(bin, k.steel, 0.6, 12, [-6, 0.4, 0], { axis: "z", segs: 8 }); // hinge
+		const pile = { ore: ball(bin, k.metal, 1, [0, 1, 0], [4.8, 1, 4.8]), crystal: ball(bin, k.warn, 1, [0, 1, 0], [4.8, 1, 4.8]) },
+			lumps = { ore: [], crystal: [] };
+		for (let n = 0; n < 7; n++) {
+			const a = n * 2.4,
+				d = n ? 2.6 : 0,
+				x = Math.cos(a) * d,
+				z = Math.sin(a) * d;
+			const lump = mesh(bin, cached("lump", () => new THREE.IcosahedronGeometry(1, 0)), n % 3 ? k.metal : k.steel, [x, 0, z], [a, a * 0.7, 0]),
+				r = 1.5 + (n % 3) * 0.25;
+			lump.scale.set(r, r * 0.75, r * 1.1);
+			lumps.ore.push(lump);
+			const shard = mesh(bin, cylGeo(0.05, 0.9, 3, 6), k.crystal, [x, 0, z], [Math.cos(a) * 0.4, 0, Math.sin(a) * 0.4]);
+			lumps.crystal.push(shard);
+		}
+		for (const m of [pile.ore, pile.crystal, ...lumps.ore, ...lumps.crystal]) m.userData.keep = true;
 		const arm = group(body, [9, 9, 3.5]);
 		box(arm, k.dark, [9, 2, 2], [4.5, 0, 0], null, 0.4);
 		pipe(arm, k.steel, [0, -1.4, 0], [6, -1, 0], 0.4);
@@ -875,7 +900,20 @@ export function createDetail3D(THREE, { group }) {
 		return {
 			root,
 			update(e, i) {
-				cargo.visible = (e.cargo || 0) > 0;
+				// The load: a mound rising with the cargo (capacity 30), lumps or shards appearing on it.
+				const fill = Math.min(1, (e.cargo || 0) / 30),
+					kind = e.cargoKind === "crystal" ? "crystal" : "ore",
+					top = 0.6 + fill * 3.8;
+				for (const key of ["ore", "crystal"]) {
+					const on = key === kind && fill > 0;
+					pile[key].visible = on;
+					pile[key].scale.y = 0.3 + fill * 2.6;
+					pile[key].position.y = 0.6 + fill * 1.2;
+					lumps[key].forEach((m, n) => {
+						m.visible = on && n < Math.ceil(fill * 7);
+						m.position.y = top - (n ? 0.5 : 0) + (key === "crystal" ? 1 : 0);
+					});
+				}
 				const gathering = e.order?.kind === "gather" && !i.moving;
 				arm.rotation.z = gathering ? Math.sin(i.time * 8 + e.id) * 0.4 - 0.4 : 0.15;
 				drill.rotation.x = gathering ? i.time * 20 : 0;

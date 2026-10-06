@@ -2,7 +2,7 @@
    is from the time and its own seed (no per-particle work on the CPU), and reads the ground height from
    a texture of the height map, so rain ends exactly on the terrain. Visual only (game.weather: kind and
    intensity; the same lightning rhythm as the 2D sky).
-   - Rain: slanted streaks falling with the wind, splash rings where they hit the ground; the ground gets
+   - Rain: slanted streaks falling with the wind, small crowns of droplets where they hit the ground; the ground gets
      wet (darker, glossy in the sun) and dries afterwards.
    - Snow: flakes drifting and swaying; snow settles on the upward faces of the ground and of the stones
      while it falls, and melts away afterwards.
@@ -112,42 +112,81 @@ export function createWeather3D(THREE, { world, heightAt }) {
 			gl_FragColor = vec4(0.72, 0.78, 0.86, vAlpha * edge * (0.25 + streak) * 0.09);
 		}`,
 	);
-	// Ground mist: wide soft sheets drifting low over the terrain (rain, snow, night).
+	// Ground mist: low banks of churning fog drifting slowly with the wind, in the colour of the sky;
+	// thicker in hollows (where the ground lies below its surroundings), thinning at the edges and near
+	// the camera (rain, snow, night, dawn and dusk).
 	const mistColor = { value: new THREE.Color("#a9b6bf") },
 		mistIntensity = { value: 0 };
 	const mist = layer(
-		160,
+		220,
 		quad,
-		`varying float vAlpha; varying vec2 vUv;
+		`varying float vAlpha; varying vec2 vUv; varying vec2 vSeed;
 		void main() {
-			vec2 p = inBox(seed.xy, wind * time * 25.0 + vec2(sin(time * 0.05 + seed.z * 9.0), cos(time * 0.04 + seed.x * 7.0)) * 40.0);
-			vec3 c = vec3(p.x, groundAt(p) + 6.0 + seed.z * 22.0, p.y);
-			vec3 right = vec3(viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0]);
-			vec3 up = vec3(viewMatrix[0][1], viewMatrix[1][1], viewMatrix[2][1]);
-			float size = 180.0 + seed.w * 160.0;
-			vec3 pos = c + right * position.x * size * 1.8 + up * (position.y - 0.5) * size * 0.5;
+			vec2 p = inBox(seed.xy, wind * time * 18.0 + vec2(sin(time * 0.05 + seed.z * 9.0), cos(time * 0.04 + seed.x * 7.0)) * 40.0);
+			float g = groundAt(p),
+				around = (groundAt(p + vec2(160.0, 0.0)) + groundAt(p - vec2(160.0, 0.0)) + groundAt(p + vec2(0.0, 160.0)) + groundAt(p - vec2(0.0, 160.0))) * 0.25,
+				hollow = smoothstep(-6.0, 22.0, around - g);
+			float w = 260.0 + 240.0 * seed.w, h = 40.0 + 50.0 * seed.z;
+			vec3 c = vec3(p.x, g - 4.0, p.y);
+			vec3 right = normalize(vec3(viewMatrix[0][0], 0.0, viewMatrix[2][0]));
+			vec3 pos = c + right * position.x * w + vec3(0.0, position.y * h * (1.0 + hollow * 0.6), 0.0);
 			vUv = uv;
-			vAlpha = intensity * edgeFade(p) * smoothstep(150.0, 450.0, distance(cameraPosition, c));
+			vSeed = seed.xy * 30.0;
+			vAlpha = intensity * edgeFade(p) * (0.45 + 0.75 * hollow) * smoothstep(140.0, 420.0, distance(cameraPosition, c));
 			gl_Position = projectionMatrix * viewMatrix * vec4(pos, 1.0);
 		}`,
-		`uniform vec3 mistColor; varying float vAlpha; varying vec2 vUv;
-		void main() { float d = length((vUv - 0.5) * vec2(2.0, 2.0)); gl_FragColor = vec4(mistColor, vAlpha * 0.075 * (1.0 - smoothstep(0.2, 1.0, d))); }`,
+		`uniform vec3 mistColor; uniform float time; varying float vAlpha; varying vec2 vUv; varying vec2 vSeed;
+		float mHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+		float mNoise(vec2 p) {
+			vec2 i = floor(p), f = fract(p);
+			f = f * f * (3.0 - 2.0 * f);
+			return mix(mix(mHash(i), mHash(i + vec2(1.0, 0.0)), f.x), mix(mHash(i + vec2(0.0, 1.0)), mHash(i + vec2(1.0, 1.0)), f.x), f.y);
+		}
+		void main() {
+			vec2 q = vUv * vec2(2.6, 1.1) + vSeed + vec2(time * 0.03, time * 0.012);
+			float n = mNoise(q) * 0.55 + mNoise(q * 2.2 + 3.7) * 0.3 + mNoise(q * 4.7 - 1.3) * 0.15;
+			float body = smoothstep(0.3, 0.7, n) * (1.0 - smoothstep(0.35, 1.0, vUv.y)) * smoothstep(0.0, 0.12, vUv.y) * (1.0 - smoothstep(0.5, 1.0, abs(vUv.x - 0.5) * 2.0));
+			gl_FragColor = vec4(mistColor * (0.92 + 0.12 * vUv.y), vAlpha * body * 0.2);
+		}`,
 		{ mistColor, intensity: mistIntensity },
 	);
+	// Splashes: where a drop hits, a tiny crown of droplets thrown up and out for a fraction of a second
+	// and a thin flick along the ground — upright, facing the camera; each splash lands somewhere else
+	// (a new random point each time, fixed on the ground, not following the camera).
 	const splashes = layer(
-		1600,
-		flatQuad,
-		`varying float vAlpha; varying vec2 vUv;
+		2400,
+		quad,
+		`varying float vAlpha; varying vec2 vUv; varying float vT;
+		float sHash(vec2 v) { return fract(sin(dot(v, vec2(12.9898, 78.233))) * 43758.5453); }
 		void main() {
-			float t = fract(time * 2.2 * (0.7 + 0.6 * seed.w) + seed.z);
-			vec2 p = focus + (seed.xy - 0.5) * span * 0.75;
-			float size = 2.0 + t * 8.0;
+			float cyc = time * 2.4 * (0.7 + 0.6 * seed.w) + seed.z,
+				n = floor(cyc),
+				tt = fract(cyc) / 0.28;
+			float region = span * 0.75;
+			vec2 base = focus - region * 0.5,
+				u = vec2(sHash(seed.xy + n * 0.137), sHash(seed.yx + n * 0.311)),
+				p = base + mod(u * region - base, region);
+			vec3 c = vec3(p.x, groundAt(p) + 0.2, p.y);
+			vec3 right = normalize(vec3(viewMatrix[0][0], 0.0, viewMatrix[2][0]));
+			float size = 3.2 * (0.7 + 0.6 * seed.w);
 			vUv = uv;
-			vAlpha = intensity * (1.0 - t) * edgeFade(p);
-			gl_Position = projectionMatrix * viewMatrix * vec4(p.x + position.x * size, groundAt(p) + 1.4, p.y + position.z * size, 1.0);
+			vT = min(tt, 1.0);
+			vAlpha = tt < 1.0 ? intensity * edgeFade(p) * (1.0 - tt) : 0.0;
+			vec3 pos = tt < 1.0 ? c + right * position.x * size * 1.4 + vec3(0.0, position.y * size, 0.0) : c;
+			gl_Position = projectionMatrix * viewMatrix * vec4(pos, 1.0);
 		}`,
-		`varying float vAlpha; varying vec2 vUv;
-		void main() { float r = length(vUv - 0.5); float ring = smoothstep(0.32, 0.42, r) * (1.0 - smoothstep(0.42, 0.5, r)); gl_FragColor = vec4(0.82, 0.88, 0.95, vAlpha * ring * 0.3); }`,
+		`varying float vAlpha; varying vec2 vUv; varying float vT;
+		void main() {
+			if (vAlpha <= 0.0) discard;
+			float a = 0.0;
+			for (int k = 0; k < 5; k++) {
+				float f = float(k) - 2.0;
+				vec2 d = vec2(0.5 + f * 0.11 * (0.3 + vT), 0.06 + sin(3.14159 * min(1.0, vT * 1.1)) * (0.55 - abs(f) * 0.12) * (1.0 - vT * 0.3));
+				a += smoothstep(0.055, 0.0, length((vUv - d) * vec2(1.4, 1.0)));
+			}
+			a += smoothstep(0.08, 0.0, abs(vUv.y - 0.04)) * smoothstep(0.1 + vT * 0.35, 0.0, abs(vUv.x - 0.5)) * 0.6;
+			gl_FragColor = vec4(0.85, 0.9, 0.96, min(1.0, a) * vAlpha * 0.45);
+		}`,
 	);
 	// Camera-facing billboards (flakes, grains, dust curtains): size, stretch along the wind, speeds.
 	const billboard = (fallSpeed, windSpeed, height, size, stretch, sway) => `varying float vAlpha; varying vec2 vUv;
@@ -169,8 +208,60 @@ export function createWeather3D(THREE, { world, heightAt }) {
 	const softDot = (color, strength) => `varying float vAlpha; varying vec2 vUv;
 		void main() { float d = length((vUv - 0.5) * 2.0); gl_FragColor = vec4(${color}, vAlpha * ${strength.toFixed(2)} * (1.0 - smoothstep(0.35, 1.0, d))); }`;
 	const snow = layer(7000, quad, billboard(65, 60, 460, 3.6, 1, 14), softDot("0.96, 0.98, 1.0", 0.9));
-	const sand = layer(4500, quad, billboard(0, 560, 140, 2.4, 5, 0), softDot("0.86, 0.72, 0.5", 0.3));
-	const curtains = layer(220, quad, billboard(0, 300, 90, 150, 2.5, 0), softDot("0.8, 0.66, 0.46", 0.08));
+	// Sand: thin streaks of grains blown along the wind, low over the ground, hopping (saltation).
+	const sand = layer(
+		7000,
+		quad,
+		`varying float vAlpha; varying vec2 vUv;
+		void main() {
+			float s = 0.7 + 0.6 * seed.w;
+			vec2 dir = normalize(wind);
+			vec2 p = inBox(seed.xy, dir * time * 520.0 * s);
+			float hop = fract(seed.z * 7.0 + time * 1.3 * s);
+			vec3 c = vec3(p.x, groundAt(p) + 1.5 + seed.z * seed.z * 34.0 + sin(hop * 3.14159) * 6.0, p.y);
+			vec3 along = normalize(vec3(dir.x, 0.0, dir.y));
+			vec3 side = normalize(cross(along, normalize(cameraPosition - c)));
+			vec3 pos = c + along * (position.y - 0.5) * (10.0 + 10.0 * s) + side * position.x * 0.55;
+			vUv = uv;
+			vAlpha = intensity * edgeFade(p) * smoothstep(60.0, 200.0, distance(cameraPosition, c));
+			gl_Position = projectionMatrix * viewMatrix * vec4(pos, 1.0);
+		}`,
+		`varying float vAlpha; varying vec2 vUv;
+		void main() { float a = vAlpha * (1.0 - abs(vUv.x - 0.5) * 2.0) * sin(vUv.y * 3.14159); gl_FragColor = vec4(0.86, 0.72, 0.5, a * 0.38); }`,
+	);
+	// Dust: rolling billows of fine sand along the ground — wide sheets of churning noise drifting with
+	// the wind, denser and darker low down, lighter on top, thinning at their edges.
+	const curtains = layer(
+		240,
+		quad,
+		`varying float vAlpha; varying vec2 vUv; varying vec2 vSeed;
+		void main() {
+			float s = 0.7 + 0.6 * seed.w;
+			vec2 p = inBox(seed.xy, normalize(wind) * time * 300.0 * s);
+			float w = 260.0 + 220.0 * seed.w, h = 110.0 + 100.0 * seed.z;
+			vec3 c = vec3(p.x, groundAt(p) - h * 0.12, p.y);
+			vec3 right = normalize(vec3(viewMatrix[0][0], 0.0, viewMatrix[2][0]));
+			vec3 pos = c + right * position.x * w + vec3(0.0, position.y * h, 0.0);
+			vUv = uv;
+			vSeed = seed.xy * 40.0;
+			vAlpha = intensity * edgeFade(p) * smoothstep(120.0, 420.0, distance(cameraPosition, c));
+			gl_Position = projectionMatrix * viewMatrix * vec4(pos, 1.0);
+		}`,
+		`uniform float time; varying float vAlpha; varying vec2 vUv; varying vec2 vSeed;
+		float dHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+		float dNoise(vec2 p) {
+			vec2 i = floor(p), f = fract(p);
+			f = f * f * (3.0 - 2.0 * f);
+			return mix(mix(dHash(i), dHash(i + vec2(1.0, 0.0)), f.x), mix(dHash(i + vec2(0.0, 1.0)), dHash(i + vec2(1.0, 1.0)), f.x), f.y);
+		}
+		void main() {
+			vec2 q = vUv * vec2(3.0, 1.6) + vSeed + vec2(-time * 0.35, time * 0.08);
+			float n = dNoise(q) * 0.55 + dNoise(q * 2.3 + 4.1) * 0.3 + dNoise(q * 5.1 - 2.3) * 0.15;
+			float body = smoothstep(0.32, 0.72, n) * (1.0 - smoothstep(0.25, 1.0, vUv.y)) * smoothstep(0.0, 0.08, vUv.y) * (1.0 - smoothstep(0.55, 1.0, abs(vUv.x - 0.5) * 2.0));
+			vec3 col = mix(vec3(0.76, 0.62, 0.44), vec3(0.92, 0.82, 0.64), vUv.y + n * 0.3);
+			gl_FragColor = vec4(col, vAlpha * body * 0.22);
+		}`,
+	);
 
 	// Lightning: a branching bolt of thin glowing boxes, rebuilt for each strike, and a light at its foot.
 	const bolt = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: "#dfe8ff", transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }), 160);

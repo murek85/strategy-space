@@ -28,6 +28,7 @@ import { createObjectives3D } from "./objectives-3d.js";
 import { createMarks3D } from "./marks-3d.js";
 import { createSky3D, cloudShade } from "./sky-3d.js";
 import { nightLightShade } from "./night-lights-3d.js";
+import { createRelief3D } from "./relief-3d.js";
 
 export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 	const { TYPES } = RTS;
@@ -38,7 +39,8 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		COLORS_ART = ["#9ae5cb", "#ed8277"];
 	const RISE = 70,
 		GROUND_EVERY = 0.5,
-		TILE = 60,
+		// Ground tiles of 720 × 720 map units (each with its own painting).
+		TILE_SIZE = 720,
 		TAU = Math.PI * 2;
 
 	// The ground is painted bare: rocks, plants and pebbles are 3D here (render-canvas.js setBareGround).
@@ -79,7 +81,8 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		groundClock = GROUND_EVERY,
 		timeOfDay = null,
 		clock = 0;
-	const terrainHeight = createTerrainHeight();
+	const terrainHeight = createTerrainHeight(),
+		relief3d = createRelief3D({ RISE });
 	// Water, night lights, weather and particles (webgl3d/scene-fx-3d.js).
 	const fx = createSceneFx3D(THREE, { world, heightAt: (x, y) => heightAt(x, y), fogged: (m) => fogged(m) });
 	// Stones, grass, drifts, shards and small mushrooms on the ground (webgl3d/scatter-3d.js).
@@ -133,34 +136,6 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		return (v(0, 0) * (1 - tx) + v(1, 0) * tx) * (1 - ty) + (v(0, 1) * (1 - tx) + v(1, 1) * tx) * ty;
 	}
 
-	// Rolling relief over the whole map, from seeded value noise (visual only, like the height map: movement
-	// and vision do not change): long swells and smaller bumps, a few units high, so even plains are not flat.
-	function reliefNoise(seedText) {
-		let seed = [...String(seedText)].reduce((h, c) => Math.imul(h ^ c.charCodeAt(0), 16777619), 40503) >>> 0;
-		const rand = () => (seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296,
-			octaves = [
-				[620, 9],
-				[230, 4.5],
-				[70, 1.4],
-			].map(([size, amp]) => ({ size, amp, grid: Array.from({ length: 64 * 64 }, rand) })),
-			sm = (t) => t * t * (3 - 2 * t);
-		return (x, y) => {
-			let v = 0;
-			for (const { size, amp, grid } of octaves) {
-				const gx = x / size,
-					gy = y / size,
-					i = Math.floor(gx),
-					j = Math.floor(gy),
-					tx = sm(gx - i),
-					ty = sm(gy - j),
-					at = (a, b) => grid[((b & 63) << 6) | (a & 63)],
-					top = at(i, j) + (at(i + 1, j) - at(i, j)) * tx,
-					bottom = at(i, j + 1) + (at(i + 1, j + 1) - at(i, j + 1)) * tx;
-				v += (top + (bottom - top) * ty - 0.5) * 2 * amp;
-			}
-			return v;
-		};
-	}
 	// Fine surface texture of the biome as a tiling normal map (catches the low sun): wind ripples in sand,
 	// grain in ash, smooth ice with cracks. One per biome, cached.
 	const detailMaps = new Map();
@@ -220,14 +195,17 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 
 	function buildTerrain() {
 		terrainHeight.setGame(game);
-		const cell = terrainHeight.cell,
-			cols = Math.ceil(game.W / cell) + 1,
-			rows = Math.ceil(game.H / cell) + 1,
-			data = new Float32Array(cols * rows),
-			relief = reliefNoise(game.missionId + ":" + game.W + "x" + game.H);
-		const rolling = quality.relief ? relief : () => 0;
-		for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) data[j * cols + i] = terrainHeight.heightAt(i * cell, j * cell) * RISE + rolling(i * cell, j * cell);
+		// The relief of the 3D board (webgl3d/relief-3d.js): hills, mesa cliffs, peaks, beds; bare rock.
+		const built = relief3d.build(game, { relief: quality.relief }),
+			{ cols, rows, cell, data, rock } = built;
 		heights = { cols, rows, cell, data };
+		// Where low mist lies: from the 15th percentile of the heights (thick) to the median (none).
+		{
+			const sample = [];
+			for (let k = 0; k < data.length; k += 37) sample.push(data[k]);
+			sample.sort((a, b) => a - b);
+			groundWeather.mistBand.value.set(sample[Math.floor(sample.length * 0.15)], sample[Math.floor(sample.length * 0.5)] + 6);
+		}
 		// Normals and shading from the whole height map (no seams between tiles): steep slopes and hollows
 		// darker, crests a little lighter — the ground reads as relief under any light.
 		const h = (i, j) => data[Math.max(0, Math.min(rows - 1, j)) * cols + Math.max(0, Math.min(cols - 1, i))],
@@ -241,7 +219,7 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 					k = j * cols + i;
 				normals.set([-dx / l, 1 / l, -dz / l], k * 3);
 				let around = 0;
-				for (const [a, b] of [[-3, 0], [3, 0], [0, -3], [0, 3], [-2, -2], [2, 2], [-2, 2], [2, -2]]) around += h(i + a, j + b);
+				for (const [a, b] of [[-6, 0], [6, 0], [0, -6], [0, 6], [-4, -4], [4, 4], [-4, 4], [4, -4]]) around += h(i + a, j + b);
 				const cavity = around / 8 - data[k],
 					slope = 1 - 1 / l;
 				shade[k] = Math.max(0.55, Math.min(1.12, 1 - slope * 0.9 - Math.max(0, cavity) * 0.018 + Math.max(0, -cavity) * 0.008));
@@ -257,9 +235,9 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			t.texture.dispose();
 		}
 		tiles = [];
-		// Tiles of TILE cells, each with its own full-resolution painting: a changed deposit repaints and
-		// uploads one tile, not the whole map.
-		const size = TILE * cell;
+		// Tiles, each with its own full-resolution painting: a changed deposit repaints and uploads one
+		// tile, not the whole map.
+		const size = TILE_SIZE;
 		for (let y0 = 0; y0 < game.H; y0 += size)
 			for (let x0 = 0; x0 < game.W; x0 += size) {
 				const w = Math.min(size, game.W - x0),
@@ -269,7 +247,8 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 				geometry.translate(x0 + w / 2, 0, y0 + h / 2);
 				const pos = geometry.attributes.position,
 					nrm = geometry.attributes.normal,
-					colors = new Float32Array(pos.count * 3);
+					colors = new Float32Array(pos.count * 3),
+					bare = new Float32Array(pos.count);
 				for (let k = 0; k < pos.count; k++) {
 					const i = Math.round(pos.getX(k) / cell),
 						j = Math.round(pos.getZ(k) / cell),
@@ -277,8 +256,10 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 					pos.setY(k, heightAt(pos.getX(k), pos.getZ(k)));
 					nrm.setXYZ(k, normals[g * 3], normals[g * 3 + 1], normals[g * 3 + 2]);
 					colors.fill(shade[g], k * 3, k * 3 + 3);
+					bare[k] = rock[g];
 				}
 				geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+				geometry.setAttribute("rock", new THREE.BufferAttribute(bare, 1));
 				const canvas = document.createElement("canvas");
 				canvas.width = w;
 				canvas.height = h;
@@ -322,21 +303,27 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			c.getImageData(0, 0, 1, 1).data.slice(0, 3).forEach((v, i) => (sum[i] += v / tiles.length));
 		}
 		const [r, g, b] = sum.map(Math.round);
+		// Bare rock: the mean ground colour, darker and a little greyer (the terrain shader).
+		const mean = new THREE.Color(`rgb(${r},${g},${b})`);
+		groundWeather.rockTint.value.copy(mean).lerp(new THREE.Color(mean.r * 0.3 + mean.g * 0.55 + mean.b * 0.15, mean.r * 0.3 + mean.g * 0.55 + mean.b * 0.15, mean.r * 0.3 + mean.g * 0.55 + mean.b * 0.15), 0.3).multiplyScalar(0.82);
 		let low = Infinity;
 		for (let x = 0; x <= game.W; x += 48) low = Math.min(low, heightAt(x, 0), heightAt(x, game.H));
 		for (let y = 0; y <= game.H; y += 48) low = Math.min(low, heightAt(0, y), heightAt(game.W, y));
-		const size = Math.max(game.W, game.H) * 8,
-			geometry = new THREE.PlaneGeometry(size, size).rotateX(-Math.PI / 2);
+		// A ring round the map (a hole where the map is): under the map it would cover deep lake beds.
+		const size = Math.max(game.W, game.H) * 4,
+			ring = new THREE.Shape([new THREE.Vector2(-size, size), new THREE.Vector2(game.W + size, size), new THREE.Vector2(game.W + size, -game.H - size), new THREE.Vector2(-size, -game.H - size)]);
+		ring.holes.push(new THREE.Path([new THREE.Vector2(4, -4), new THREE.Vector2(4, -game.H + 4), new THREE.Vector2(game.W - 4, -game.H + 4), new THREE.Vector2(game.W - 4, -4)]));
+		const geometry = new THREE.ShapeGeometry(ring).rotateX(-Math.PI / 2);
 		outskirts = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color: new THREE.Color(`rgb(${r},${g},${b})`).multiplyScalar(0.7), roughness: 1, metalness: 0 }));
-		outskirts.position.set(game.W / 2, low - 3, game.H / 2);
+		outskirts.position.set(0, low - 3, 0);
 		outskirts.receiveShadow = true;
 		world.add(outskirts);
 	}
 
 	// Fog of war on the ground: visible 255, explored 110, unknown 25, smoothed (see refreshFog); the
 	// terrain shader darkens and desaturates by it.
-	const fogUniforms = { fogMap: { value: null }, fogSize: { value: new THREE.Vector2(1, 1) }, fogOn: { value: 1 } },
-		groundWeather = { wetness: { value: 0 }, snowCover: { value: 0 }, rainLevel: { value: 0 }, weatherTime: { value: 0 }, skyTint: { value: new THREE.Color() } };
+	const fogUniforms = { fogMap: { value: null }, fogSize: { value: new THREE.Vector2(1, 1) }, fogOn: { value: 1 }, fogTime: { value: 0 } },
+		groundWeather = { wetness: { value: 0 }, snowCover: { value: 0 }, rainLevel: { value: 0 }, weatherTime: { value: 0 }, skyTint: { value: new THREE.Color() }, rockTint: { value: new THREE.Color("#7a6a58") }, sandLevel: { value: 0 }, mistLevel: { value: 0 }, mistBand: { value: new THREE.Vector2(0, 40) } };
 	// The vision grid is upsampled FOG_UP times and box-blurred twice, so the edge of sight is a soft
 	// curve instead of 40-unit steps.
 	const FOG_UP = 3;
@@ -401,7 +388,7 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 	// drops while it rains — and dry out after it.
 	const GROUND_COMMON = `
 		varying float vUpward;
-		uniform float wetness; uniform float snowCover; uniform float rainLevel; uniform float weatherTime; uniform vec3 skyTint;
+		uniform float wetness; uniform float snowCover; uniform float rainLevel; uniform float weatherTime; uniform vec3 skyTint; uniform vec3 rockTint; uniform float sandLevel; uniform float mistLevel; uniform vec2 mistBand;
 		float wHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 		float wNoise(vec2 p) {
 			vec2 i = floor(p), f = fract(p);
@@ -416,32 +403,84 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 				vec2 o = vec2(wHash(c), wHash(c + 7.1)) * 0.6 + 0.2;
 				float ph = fract(t * 0.9 + wHash(c + 3.3));
 				float d = length(fract(q) - o) * 12.0;
-				s += smoothstep(0.7, 0.0, abs(d - ph * 4.0)) * (1.0 - ph);
+				// Thin rings of different sizes, gone before they grow large.
+				s += smoothstep(0.32, 0.0, abs(d - ph * (2.0 + 2.5 * wHash(c + 5.7)))) * (1.0 - ph) * (1.0 - ph);
 			}
 			return s;
 		}
 		float puddleMask = 0.0;
-		float snowMask = 0.0;`;
+		float snowMask = 0.0;
+		#ifdef TERRAIN
+		varying float vRock; varying float vWorldY;
+		#endif`;
 	const GROUND_COLOR = `
 		#ifdef TERRAIN
+		// Bare rock on cliffs, peaks and steep slopes: the ground's colour darkened and greyed, in strata
+		// (bands by height, wavering), with grain; the rock never holds puddles or much snow.
+		{
+			// The painted ground stretches on a wall: the stone takes the map's mean ground colour instead,
+			// with grain running along the wall and up it (not seen from above).
+			vec2 wall = vec2((vMapXY.x + vMapXY.y) * 0.7, vWorldY);
+			float band = sin(vWorldY * 0.55 + wNoise(vMapXY * 0.018) * 4.0) * 0.5 + 0.5;
+			float grain = wNoise(wall * vec2(0.18, 0.5)) * 0.55 + wNoise(wall * vec2(0.05, 0.12)) * 0.45;
+			float r = smoothstep(0.1, 0.6, vRock);
+			vec3 stone = rockTint * mix(0.68, 1.05, band) * (0.78 + 0.44 * grain);
+			diffuseColor.rgb = mix(diffuseColor.rgb, stone, r);
+		}
 		float wn = wNoise(vMapXY * 0.011) * 0.65 + wNoise(vMapXY * 0.043) * 0.35;
-		puddleMask = smoothstep(0.86, 0.97, vUpward) * smoothstep(0.86 - wetness * 0.18, 0.9 - wetness * 0.18, wn) * smoothstep(0.12, 0.45, wetness);
+		puddleMask = smoothstep(0.86, 0.97, vUpward) * smoothstep(0.86 - wetness * 0.18, 0.9 - wetness * 0.18, wn) * smoothstep(0.12, 0.45, wetness) * (1.0 - smoothstep(0.1, 0.4, vRock));
 		#endif
+		// A sandstorm: streams of sand snaking fast over the ground along the wind (lighter streaks).
+		if (sandLevel > 0.01) {
+			vec2 wd = normalize(vec2(0.35, 0.12)), q = vec2(dot(vMapXY, wd) * 0.018 - weatherTime * 2.6, dot(vMapXY, vec2(-wd.y, wd.x)) * 0.12);
+			float stream = smoothstep(0.58, 0.85, wNoise(q) * 0.7 + wNoise(q * vec2(2.0, 3.1) + 3.3) * 0.3) * smoothstep(0.5, 0.9, vUpward);
+			diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 1.22 + vec3(0.05, 0.04, 0.02), stream * sandLevel * 0.55);
+		}
 		diffuseColor.rgb *= 1.0 - 0.32 * wetness;
 		diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.42 + vec3(0.03, 0.04, 0.05), puddleMask);
-		float sn = wNoise(vMapXY * 0.008) * 0.6 + wNoise(vMapXY * 0.05) * 0.4, th = 1.05 - snowCover * 1.25;
-		snowMask = smoothstep(0.55, 0.9, vUpward) * smoothstep(th - 0.08, th + 0.08, sn) * min(1.0, snowCover * 3.0);
-		diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.9, 0.94, 0.98), snowMask);`;
+		// Snow settles in patches first (noise), then nearly everywhere (a few bare spots stay); not on
+		// steep ground nor on bare rock walls. Bright, faintly blue in the hollows, with ripples blown by the
+		// wind; thin and grey at the edges of a patch, the ground showing through.
+		float sn = wNoise(vMapXY * 0.008) * 0.55 + wNoise(vMapXY * 0.05) * 0.3 + wNoise(vMapXY * 0.21) * 0.15, th = 1.05 - snowCover * 1.15;
+		float settle = smoothstep(0.55, 0.9, vUpward);
+		#ifdef TERRAIN
+		settle *= 1.0 - 0.75 * smoothstep(0.2, 0.7, vRock);
+		#endif
+		snowMask = settle * smoothstep(th - 0.06, th + 0.06, sn) * min(1.0, snowCover * 3.0);
+		float ripple = sin(dot(vMapXY, vec2(0.21, 0.13)) + wNoise(vMapXY * 0.03) * 6.0) * 0.5 + 0.5;
+		vec3 snowColor = mix(vec3(0.76, 0.82, 0.92), vec3(0.95, 0.97, 1.0), 0.55 + 0.25 * ripple + 0.2 * wNoise(vMapXY * 0.4));
+		snowColor = mix(diffuseColor.rgb * 0.65 + vec3(0.28, 0.3, 0.33), snowColor, smoothstep(0.0, 0.65, snowMask));
+		diffuseColor.rgb = mix(diffuseColor.rgb, snowColor, smoothstep(0.0, 0.35, snowMask));`;
 	const GROUND_ROUGH = `
 		roughnessFactor = mix(roughnessFactor, 0.5, wetness * 0.8);
 		roughnessFactor = mix(roughnessFactor, 0.04, puddleMask);
 		roughnessFactor = mix(roughnessFactor, 0.55, snowMask);`;
 	const GROUND_GLOW = `
 		totalEmissiveRadiance += skyTint * puddleMask * 0.1;
-		totalEmissiveRadiance += vec3(0.75, 0.82, 0.9) * puddleMask * rainLevel * wRipples(vMapXY, weatherTime) * 0.25;
-		totalEmissiveRadiance += vec3(step(0.985, wHash(floor(vMapXY * 0.9) + floor(weatherTime * 0.5))) * snowMask * 0.5);`;
+		#ifdef TERRAIN
+		// Low mist lying over the lower ground (dawn, dusk, rain, snow, night): drifting patches in the
+		// colour of the sky, thickest in the lowest parts of the map.
+		if (mistLevel > 0.01) {
+			float mistK = mistLevel * smoothstep(mistBand.y, mistBand.x, vWorldY) * smoothstep(0.3, 0.75, wNoise(vMapXY * 0.004 + vec2(weatherTime * 0.012, weatherTime * 0.007)) * 0.65 + wNoise(vMapXY * 0.013 - vec2(weatherTime * 0.02, 0.0)) * 0.35);
+			totalEmissiveRadiance = mix(totalEmissiveRadiance, skyTint * 0.85 + vec3(0.06, 0.065, 0.07), mistK * 0.65);
+			diffuseColor.rgb *= 1.0 - mistK * 0.35;
+		}
+		#endif
+		totalEmissiveRadiance += vec3(0.75, 0.82, 0.9) * puddleMask * rainLevel * wRipples(vMapXY, weatherTime) * 0.12;
+		// Glints of snow crystals: rare, tiny, twinkling.
+		totalEmissiveRadiance += vec3(step(0.993, wHash(floor(vMapXY * 1.7) + floor(weatherTime * 0.7))) * snowMask * 0.3);`;
+	const FOG_NOISE = `
+		float fwHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+		float fwNoise(vec2 p) {
+			vec2 i = floor(p), f = fract(p);
+			f = f * f * (3.0 - 2.0 * f);
+			return mix(mix(fwHash(i), fwHash(i + vec2(1.0, 0.0)), f.x), mix(fwHash(i + vec2(0.0, 1.0)), fwHash(i + vec2(1.0, 1.0)), f.x), f.y);
+		}`;
 	function fogged(material, ground = false, terrain = false) {
 		if (terrain) material.defines = { ...material.defines, TERRAIN: "" };
+		// Its own shader program per kind (ground or not), with whatever wraps onBeforeCompile later
+		// (wind, water): the source of the hook alone would not tell them apart.
+		material.customProgramCacheKey = () => "fogged|" + ground + "|" + terrain + "|" + material.onBeforeCompile.toString();
 		material.onBeforeCompile = (shader) => {
 			Object.assign(shader.uniforms, fogUniforms, overlayUniforms, groundWeather);
 			cloudShade(THREE, shader);
@@ -449,7 +488,11 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			if (ground) {
 				shader.vertexShader = shader.vertexShader
 					.replace("#include <common>", "#include <common>\nvarying float vUpward;")
-					.replace("#include <defaultnormal_vertex>", "#include <defaultnormal_vertex>\nvUpward = (vec4(transformedNormal, 0.0) * viewMatrix).y;");
+					.replace("#include <defaultnormal_vertex>", "#include <defaultnormal_vertex>\nvUpward = normalize((vec4(transformedNormal, 0.0) * viewMatrix).xyz).y;"); // normalised: instancing scales the normal
+				if (terrain)
+					shader.vertexShader = shader.vertexShader
+						.replace("#include <common>", "#include <common>\nattribute float rock;\nvarying float vRock;\nvarying float vWorldY;")
+						.replace("#include <worldpos_vertex>", "#include <worldpos_vertex>\nvRock = rock;\nvWorldY = (modelMatrix * vec4(transformed, 1.0)).y;");
 				shader.fragmentShader = shader.fragmentShader
 					.replace("#include <common>", "#include <common>\n" + GROUND_COMMON)
 					.replace("#include <map_fragment>", "#include <map_fragment>\n" + GROUND_COLOR)
@@ -463,14 +506,20 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			shader.fragmentShader = shader.fragmentShader
 				.replace(
 					"#include <common>",
-					"#include <common>\nvarying vec2 vMapXY;\nuniform sampler2D fogMap;\nuniform float fogOn;\nuniform vec2 fogSize;\nuniform sampler2D overlayMap;\nuniform float overlayOn;\nuniform vec4 overlayFrame;\nuniform vec2 overlaySize;",
+					"#include <common>\nvarying vec2 vMapXY;\nuniform sampler2D fogMap;\nuniform float fogOn;\nuniform float fogTime;\nuniform vec2 fogSize;\nuniform sampler2D overlayMap;\nuniform float overlayOn;\nuniform vec4 overlayFrame;\nuniform vec2 overlaySize;\n" + FOG_NOISE,
 				)
 				.replace(
 					"#include <dithering_fragment>",
 					`#include <dithering_fragment>
-					float seen = mix(1.0, texture2D(fogMap, vMapXY / fogSize).r, fogOn);
+					// Fog of war: the edge of sight ragged and shifting (drifting noise); what was seen before
+					// in cool grey, remembered; the unknown under dark murk slowly drifting over the land.
+					float raw = texture2D(fogMap, vMapXY / fogSize).r;
+					float drift = fwNoise(vMapXY * 0.011 + vec2(fogTime * 0.018, fogTime * 0.011)) * 0.6 + fwNoise(vMapXY * 0.034 - vec2(fogTime * 0.03, 0.0)) * 0.4;
+					float seen = mix(1.0, clamp(raw + (drift - 0.5) * 0.4 * (1.0 - raw * raw), 0.0, 1.0), fogOn);
 					vec3 grey = vec3(dot(gl_FragColor.rgb, vec3(0.3, 0.55, 0.15)));
-					gl_FragColor.rgb = mix(grey * vec3(0.55, 0.65, 0.8), gl_FragColor.rgb, smoothstep(0.35, 0.95, seen)) * (0.25 + 0.75 * seen);
+					gl_FragColor.rgb = mix(grey * vec3(0.58, 0.66, 0.8), gl_FragColor.rgb, smoothstep(0.35, 0.95, seen)) * (0.25 + 0.75 * seen);
+					float unknown = (1.0 - smoothstep(0.08, 0.3, seen)) * fogOn;
+					gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.05, 0.065, 0.09) * (0.6 + 0.8 * drift), unknown * 0.5);
 					if (overlayOn > 0.5) {
 						vec2 f = ((vMapXY - overlayFrame.xy) * overlayFrame.z + overlaySize * 0.5) / overlaySize;
 						if (f.x > 0.0 && f.x < 1.0 && f.y > 0.0 && f.y < 1.0) {
@@ -886,7 +935,7 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		}
 	}
 	// Wildlife, birds, fish, floating islands and wrecks (webgl3d/scene-life-3d.js), drawn in the same batches.
-	const life = createSceneLife3D(THREE, { world, heightAt: (x, y) => heightAt(x, y), models3d, hiddenLayer: HIDDEN_LAYER });
+	const life = createSceneLife3D(THREE, { world, heightAt: (x, y) => heightAt(x, y), models3d, hiddenLayer: HIDDEN_LAYER, splash: (x, y, z) => fx.shot("splash", x, y, z) });
 
 	// Selection rings and health bars (selected, damaged or recently hit).
 	const ringGeometry = new THREE.RingGeometry(0.92, 1, 40);
@@ -1450,6 +1499,7 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			placeCamera();
 			const night = sunOverride?.night ?? 1 - day;
 			models3d.setNight(night);
+			const dawnMist = Math.max(0, 1 - Math.abs(skyState.e - 0.05) / 0.18) * 0.45;
 			weatherState = fx.update(dt, {
 				game,
 				time: game.time,
@@ -1460,7 +1510,11 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 				scale: renderer.domElement.height / (2 * Math.tan((camera.fov * Math.PI) / 360)),
 				light: 0.3 + 0.7 * day,
 				gasFlow: (o) => canvasRenderer.gasFlowing(gasView, o),
+				working: canvasRenderer.entityWorking ? (e) => canvasRenderer.entityWorking(gasView, e) : null,
 				sky: scene.background,
+				// Mist at dawn and dusk (morning fog, evening haze), besides rain, snow and night.
+				mistLevel: dawnMist,
+				sun: { dir: sun.position.clone().sub(sun.target.position).normalize(), color: sun.color, intensity: sun.intensity },
 				quality,
 			});
 			weatherLight(weatherState);
@@ -1468,7 +1522,13 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			groundWeather.wetness.value = weatherState.wetness || 0;
 			groundWeather.snowCover.value = weatherState.snowCover || 0;
 			groundWeather.rainLevel.value = weatherState.kind === "rain" ? weatherState.intensity || 0 : 0;
+			groundWeather.sandLevel.value = weatherState.kind === "sand" ? weatherState.intensity || 0 : 0;
+			{
+				const k = weatherState.intensity || 0;
+				groundWeather.mistLevel.value = Math.max(dawnMist, night * 0.3, weatherState.kind === "rain" ? k * 0.6 : weatherState.kind === "snow" ? k * 0.5 : 0);
+			}
 			groundWeather.weatherTime.value = clock;
+			fogUniforms.fogTime.value = clock;
 			groundWeather.skyTint.value.copy(scene.background);
 			// Models: snow settling on their tops, a sheen when wet (models-detail-3d.js paint).
 			models3d.setWeather(weatherState.snowCover || 0, weatherState.wetness || 0);

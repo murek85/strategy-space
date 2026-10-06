@@ -99,6 +99,8 @@ export function createModels3D(THREE) {
 		k.navRed = std("#ff3b30", { emissive: "#ff2a1a", emissiveIntensity: 1.6 });
 		k.navGreen = std("#3bff6a", { emissive: "#22e04a", emissiveIntensity: 1.6 });
 		k.strobe = std("#ffffff", { emissive: "#ffffff", emissiveIntensity: 2 });
+		// Crystal in a robot's hopper (the colour of the crystal deposits).
+		k.crystal = std("#f4d989", { roughness: 0.15, metalness: 0.1, emissive: "#c9962a", emissiveIntensity: 0.35 });
 		for (const m of Object.values(k)) if (m.isMaterial && m.emissiveIntensity && m.emissive.getHex()) glowing.push([m, m.emissiveIntensity]);
 		kits.set(key, k);
 		return k;

@@ -3,6 +3,7 @@
    to fly to it, "Ruch i ogień" animates them (driving, aiming, firing), "Noc" shows their lights. */
 import * as THREE from "three";
 import { createModels3D } from "./models-3d.js";
+import { createScatter3D } from "./scatter-3d.js";
 
 const $ = (id) => document.getElementById(id);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -104,6 +105,9 @@ function buildNature() {
 		shown.push({ model, e, label: label(name), type: "beast" });
 	};
 	const row = (list, z, gap) => list.forEach(([name, make, y], n) => add(name, make(), (n - (list.length - 1) / 2) * gap, z, undefined, y));
+	// Trees and plants of the ground scatter (webgl3d/scatter-3d.js), one of each.
+	const plants = createScatter3D(THREE, { world: new THREE.Group(), heightAt: () => 0, fogged: (m) => m }).specimens();
+	plants.forEach(([name, root], n) => add(name, { root, update() {} }, (n - (plants.length - 1) / 2) * 62, -470));
 	row(
 		[
 			["Jeleń", () => models.scenery("animal", "deer", "dust")],

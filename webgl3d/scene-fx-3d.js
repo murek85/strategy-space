@@ -12,6 +12,9 @@
      lightning bolts), animated on the graphics card.
    - Particles: smoke and fire on damaged buildings and vehicles, fire sparks and smoke puffs on every
      explosion; one point draw for smoke, one (additive) for fire.
+   - Mining: sparks and rock dust at a working robot's drill, chunks of ore tossed into its hopper,
+     glinting crystal chips, vapour from a working pump; a flickering drill light at night; silver
+     flecks over ore and golden sparkles rising over crystals (thinner as a field runs out).
    - Map effects around the camera focus: spores over Lumeria, embers rising from Pyrrhos' lava, mist
      welling up from Aerion's chasms, sand blown over the dune maps, motes over the derelict fields and the
      frozen hive.
@@ -149,9 +152,9 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 	// small waves, a second ripple layer against tiling, the sky reflected at grazing angles (fresnel),
 	// lighter shallows towards the shore (the shore fade is the depth), foam along the shore line, and
 	// rings from the drops while it rains.
-	const waterUniforms = { waterTime: { value: 0 }, waterRain: { value: 0 }, waterSky: { value: new THREE.Color("#8fa6b4") } };
+	const waterUniforms = { waterTime: { value: 0 }, waterRain: { value: 0 }, waterSky: { value: new THREE.Color("#8fa6b4") }, waterSunDir: { value: new THREE.Vector3(0, 1, 0) }, waterSun: { value: new THREE.Color("#ffffff") } };
 	const WATER_COMMON = `
-		uniform float waterTime; uniform float waterRain; uniform vec3 waterSky;
+		uniform float waterTime; uniform float waterRain; uniform vec3 waterSky; uniform vec3 waterSunDir; uniform vec3 waterSun;
 		float wvHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 		float wvNoise(vec2 p) {
 			vec2 i = floor(p), f = fract(p);
@@ -165,7 +168,7 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 				vec2 o = vec2(wvHash(c), wvHash(c + 7.1)) * 0.6 + 0.2;
 				float ph = fract(t * 0.8 + wvHash(c + 3.3));
 				float d = length(fract(q) - o) * 11.0;
-				s += smoothstep(0.8, 0.0, abs(d - ph * 5.0)) * (1.0 - ph);
+				s += smoothstep(0.38, 0.0, abs(d - ph * (2.5 + 3.0 * wvHash(c + 5.7)))) * (1.0 - ph) * (1.0 - ph);
 			}
 			return s;
 		}`;
@@ -198,13 +201,24 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 					float depthK = 1.0;
 					#endif
 					float fres = pow(1.0 - clamp(abs(dot(normalize(vViewPosition), normal)), 0.0, 1.0), 3.0);
+					// Deep water darker and bluer towards the middle, turquoise shallows at the shore.
+					outgoingLight *= mix(1.0, 0.72, smoothstep(0.45, 1.0, depthK));
 					outgoingLight = mix(outgoingLight, waterSky * 1.1, fres * 0.55);
-					outgoingLight = mix(outgoingLight * vec3(1.15, 1.22, 1.05) + vec3(0.04, 0.06, 0.04), outgoingLight, smoothstep(0.0, 0.8, depthK));
+					outgoingLight = mix(outgoingLight * vec3(1.12, 1.25, 1.12) + vec3(0.04, 0.07, 0.06), outgoingLight, smoothstep(0.0, 0.8, depthK));
+					// Light shimmering on the bed of the shallows.
+					float shimmer = pow(abs(sin(wvNoise(vMapXY * 0.08 + waterTime * 0.12) * 9.0 + waterTime * 1.1)), 8.0);
+					outgoingLight += vec3(0.75, 0.9, 0.85) * shimmer * (1.0 - smoothstep(0.25, 0.7, depthK)) * smoothstep(0.05, 0.2, depthK) * 0.12 * waterSun.b;
+					// Glitter: the sun caught on the ripples, a few bright points twinkling.
+					vec3 sunView = normalize((viewMatrix * vec4(waterSunDir, 0.0)).xyz);
+					float glint = pow(max(dot(reflect(-normalize(vViewPosition), normal), sunView), 0.0), 60.0) * step(0.86, wvNoise(vMapXY * 0.9 + waterTime * 0.6));
+					outgoingLight += waterSun * glint * 2.2;
+					// Foam along the shore, lapping in and out with the small waves.
+					float lap = 0.06 * sin(waterTime * 1.4 + wvNoise(vMapXY * 0.02) * 6.0);
 					float foamNoise = wvNoise(vMapXY * 0.21 + vec2(waterTime * 0.35, -waterTime * 0.25)) * 0.6 + wvNoise(vMapXY * 0.53 - vec2(waterTime * 0.2, 0.0)) * 0.4;
-					float foam = smoothstep(0.04, 0.16, depthK) * (1.0 - smoothstep(0.2, 0.42, depthK)) * smoothstep(0.42, 0.8, foamNoise);
+					float foam = smoothstep(0.04 + lap, 0.14 + lap, depthK) * (1.0 - smoothstep(0.2 + lap, 0.4 + lap, depthK)) * smoothstep(0.42, 0.8, foamNoise);
 					outgoingLight += vec3(0.85, 0.9, 0.92) * foam * 0.35;
 					diffuseColor.a = max(diffuseColor.a, foam * 0.55);
-					outgoingLight += vec3(0.8, 0.86, 0.92) * waterRain * wvRings(vMapXY, waterTime) * 0.4;
+					outgoingLight += vec3(0.8, 0.86, 0.92) * waterRain * wvRings(vMapXY, waterTime) * 0.2;
 					#include <opaque_fragment>`,
 				);
 		};
@@ -233,7 +247,8 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 		}
 		// Lakes and crevasses on level ground are flat mirrors; glowing pools and lava (chains of bodies
 		// along a channel) always lie on their bed.
-		const level = (kind === "lake" || kind === "crevasse") && rimHigh - rimLow < 8 ? rimHigh + 0.6 : null;
+		// (On uneven shores a lake is still flat, at its lowest rim point.)
+		const level = kind === "lake" || kind === "crevasse" ? (rimHigh - rimLow < 8 ? rimHigh : rimLow) + 0.6 : null;
 		for (let y = Math.max(0, Math.floor((w.y - w.ry * 1.1) / STEP) * STEP); y <= Math.min(game.H, w.y + w.ry * 1.1); y += STEP)
 			for (let x = Math.max(0, Math.floor((w.x - w.rx * 1.1) / STEP) * STEP); x <= Math.min(game.W, w.x + w.rx * 1.1); x += STEP) {
 				const nx = (x - w.x) / w.rx,
@@ -434,6 +449,20 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 					} else headlamp(e, { len: 90, reach: r * 0.5, height: 14, angle: 0.26, color: "#eef4ff", power: night * 420, range: 144, haze: night * (0.04 + weather * 0.22) });
 				}
 			}
+		// Fires on burning buildings and vehicles flicker over their surroundings at night.
+		if (night > 0.05)
+			for (const e of game.entities) {
+				const s = TYPES[e.type];
+				if (!s || e.hp <= 0 || s.flying || e.team === 2 || e.constructionLeft > 0 || hidden(e) || Math.abs(e.x - focus.x) > span || Math.abs(e.y - focus.y) > span) continue;
+				const building = !s.speed;
+				if (!(building || s.radius >= 16) || e.hp / e.maxHp >= (building ? 0.3 : 0.2)) continue;
+				const flick = 0.75 + 0.25 * Math.sin(clockNow * 17 + e.id) * Math.sin(clockNow * 7.3 + e.id * 2);
+				lights.point(e.x, e.y, heightAt(e.x, e.y) + Math.min(60, s.radius * 0.8) + 6, { color: "#ff8a3a", power: night * flick * (building ? 560 : 300), range: s.radius * 2.6 + 80 });
+			}
+		// A working drill flickers on the deposit at night (warm on ore, golden on crystal).
+		if (night > 0.05)
+			for (const m of miners)
+				if (m.resource !== "gas") lights.point(m.x, m.y, heightAt(m.x, m.y) + 10, { color: m.resource === "crystal" ? "#ffd98a" : "#ffb35c", power: night * (110 + Math.random() * 120), range: 90 });
 		// Explosions light the ground and the models around them for a moment, by day too.
 		for (const ef of game.effects) {
 			if (ef.kind !== "explosion" || hidden({ x: ef.x, y: ef.y, team: -1 })) continue;
@@ -472,20 +501,69 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 	}
 
 	// ---------- particle systems (points with size and colour per particle) ----------
+	// Each particle also carries misc: its age (0…1), a seed, and a style — smoke: 0 a billowing puff,
+	// 1 a hard dot (debris, chunks); fire: 0 a soft dot (sparks, embers, flashes), 1 a flame tongue.
+	const PUFF = `
+		float pHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+		float pNoise(vec2 p) {
+			vec2 i = floor(p), f = fract(p);
+			f = f * f * (3.0 - 2.0 * f);
+			return mix(mix(pHash(i), pHash(i + vec2(1.0, 0.0)), f.x), mix(pHash(i + vec2(0.0, 1.0)), pHash(i + vec2(1.0, 1.0)), f.x), f.y);
+		}`;
 	function particleSystem(max, additive) {
 		const geometry = new THREE.BufferGeometry(),
 			positions = new Float32Array(max * 3),
 			sizes = new Float32Array(max),
-			colors = new Float32Array(max * 4);
+			colors = new Float32Array(max * 4),
+			misc = new Float32Array(max * 3);
 		geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
 		geometry.setAttribute("size", new THREE.BufferAttribute(sizes, 1));
 		geometry.setAttribute("rgba", new THREE.BufferAttribute(colors, 4));
+		geometry.setAttribute("misc", new THREE.BufferAttribute(misc, 3));
 		const material = new THREE.ShaderMaterial({
 			uniforms: { map: { value: softDot }, scale: { value: 500 }, light: { value: 1 } },
-			vertexShader: `attribute float size; attribute vec4 rgba; varying vec4 vC; uniform float scale;
-				void main() { vC = rgba; vec4 mv = modelViewMatrix * vec4(position, 1.0); gl_PointSize = size * scale / -mv.z; gl_Position = projectionMatrix * mv; }`,
-			fragmentShader: `uniform sampler2D map; uniform float light; varying vec4 vC;
-				void main() { float a = texture2D(map, gl_PointCoord).a * vC.a; if (a < 0.01) discard; gl_FragColor = vec4(vC.rgb * light, a); }`,
+			vertexShader: `attribute float size; attribute vec4 rgba; attribute vec3 misc; varying vec4 vC; varying vec3 vM; uniform float scale;
+				void main() { vC = rgba; vM = misc; vec4 mv = modelViewMatrix * vec4(position, 1.0); gl_PointSize = size * scale / -mv.z; gl_Position = projectionMatrix * mv; }`,
+			fragmentShader: additive
+				? `uniform sampler2D map; uniform float light; varying vec4 vC; varying vec3 vM;
+				${PUFF}
+				void main() {
+					vec2 q = gl_PointCoord;
+					float a;
+					vec3 col = vC.rgb;
+					if (vM.z > 0.5) {
+						// A flame tongue: narrow at the top, flickering edges; white-hot → orange → red with age.
+						vec2 d = vec2((q.x - 0.5) * 2.0, (q.y - 0.5) * 2.0);
+						float w = mix(0.95, 0.25, smoothstep(-0.9, 0.9, -d.y));
+						float n = pNoise(vec2(q.x * 4.0 + vM.y * 13.0, q.y * 3.0 + vM.x * 6.0 + vM.y * 7.0));
+						a = smoothstep(w, w * 0.35, abs(d.x) + (n - 0.5) * 0.35) * smoothstep(1.0, 0.55, length(d * vec2(0.8, 1.0)));
+						col = vM.x < 0.3 ? mix(vec3(1.0, 0.82, 0.45), vec3(0.95, 0.45, 0.12), vM.x / 0.3) : mix(vec3(0.95, 0.45, 0.12), vec3(0.5, 0.09, 0.03), (vM.x - 0.3) / 0.7);
+						col *= vC.rgb;
+					} else a = texture2D(map, q).a;
+					a *= vC.a;
+					if (a < 0.01) discard;
+					gl_FragColor = vec4(col * light, a);
+				}`
+				: `uniform sampler2D map; uniform float light; varying vec4 vC; varying vec3 vM;
+				${PUFF}
+				void main() {
+					vec2 q = gl_PointCoord;
+					float a;
+					float shade = 1.0;
+					if (vM.z > 0.5) a = smoothstep(0.5, 0.3, length(q - 0.5));
+					else {
+						// A puff: a ragged round edge from noise turned by the seed, billowing as it ages;
+						// lit from above, darker underneath.
+						float ang = vM.y * 6.283 + vM.x * 0.8, cs = cos(ang), sn = sin(ang);
+						vec2 r = mat2(cs, -sn, sn, cs) * (q - 0.5);
+						float n = pNoise(r * 4.0 + vM.y * 17.0 + vM.x * 1.5) * 0.6 + pNoise(r * 9.0 - vM.y * 5.0) * 0.4;
+						a = smoothstep(0.5, 0.18, length(r) + (n - 0.5) * 0.32) * (0.75 + 0.4 * n);
+						shade = mix(1.12, 0.78, q.y);
+					}
+					a *= vC.a;
+					if (a < 0.01) discard;
+					gl_FragColor = vec4(vC.rgb * light * shade, a);
+				}`,
 			transparent: true,
 			depthWrite: false,
 			blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
@@ -530,11 +608,14 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 					colors[n * 4 + 1] = p.g;
 					colors[n * 4 + 2] = p.b;
 					colors[n * 4 + 3] = p.a * (t < 0.15 ? t / 0.15 : 1 - (t - 0.15) / 0.85);
+					misc[n * 3] = t;
+					misc[n * 3 + 1] = p.seed ?? (p.seed = Math.random());
+					misc[n * 3 + 2] = p.style || 0;
 					n++;
 				}
 				geometry.setDrawRange(0, n);
 				// Upload only the live part of each buffer.
-				for (const name of ["position", "size", "rgba"]) {
+				for (const name of ["position", "size", "rgba", "misc"]) {
 					const a = geometry.attributes[name];
 					a.clearUpdateRanges();
 					a.addUpdateRange(0, n * a.itemSize);
@@ -566,10 +647,21 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 				if (!(building ? f < 0.5 : vehicle && f < 0.35)) continue;
 				const ground = heightAt(e.x, e.y),
 					top = building ? Math.min(60, s.radius * 0.8) : 18;
-				if (Math.random() < (building ? 0.8 : 0.45) * density)
-					smoke.spawn({ x: e.x + rand(-s.radius, s.radius) * 0.4, y: ground + top, z: e.y + rand(-s.radius, s.radius) * 0.4, vx: rand(4, 14), vy: rand(18, 32), vz: rand(-4, 4), life: 0, max: rand(2.5, 4.2), s0: s.radius * 0.6, s1: s.radius * 2.6, r: 0.42, g: 0.41, b: 0.4, a: 0.5 });
-				if (f < (building ? 0.3 : 0.2) && Math.random() < 0.9 * density)
-					fire.spawn({ x: e.x + rand(-s.radius, s.radius) * 0.35, y: ground + top * 0.8, z: e.y + rand(-s.radius, s.radius) * 0.35, vx: rand(-3, 3), vy: rand(20, 40), vz: rand(-3, 3), life: 0, max: rand(0.4, 0.8), s0: s.radius * 0.45, s1: s.radius * 0.1, r: 1, g: rand(0.45, 0.65), b: 0.15, a: 0.9 });
+				const burning = f < (building ? 0.3 : 0.2);
+				// Smoke: grey from a damaged one, thick and dark over a fire; it leans with the wind.
+				for (let n = burning ? 2 : 1; n-- > 0; )
+					if (Math.random() < (building ? 0.8 : 0.45) * density) {
+						const k = burning ? rand(0.16, 0.26) : rand(0.36, 0.46);
+						smoke.spawn({ x: e.x + rand(-s.radius, s.radius) * 0.4, y: ground + top, z: e.y + rand(-s.radius, s.radius) * 0.4, vx: rand(8, 18), vy: rand(18, 34), vz: rand(1, 6), drag: 0.15, life: 0, max: rand(2.8, 4.6), s0: s.radius * 0.55, s1: s.radius * (burning ? 3 : 2.6), r: k, g: k * 0.97, b: k * 0.94, a: burning ? 0.62 : 0.5 });
+					}
+				if (burning) {
+					// Flame tongues licking up from a few spots, and embers rising out of them.
+					for (let n = 0; n < 3; n++)
+						if (Math.random() < 0.95 * density)
+							fire.spawn({ x: e.x + rand(-s.radius, s.radius) * 0.35, y: ground + top * 0.7, z: e.y + rand(-s.radius, s.radius) * 0.35, vx: rand(-3, 3), vy: rand(18, 36), vz: rand(-3, 3), life: 0, max: rand(0.45, 0.85), s0: s.radius * 0.42, s1: s.radius * 0.12, r: 1, g: 1, b: 1, a: 0.42, style: 1 });
+					if (Math.random() < 0.6 * density)
+						fire.spawn({ x: e.x + rand(-s.radius, s.radius) * 0.3, y: ground + top, z: e.y + rand(-s.radius, s.radius) * 0.3, vx: rand(-6, 10), vy: rand(30, 60), vz: rand(-6, 6), drag: 0.6, life: 0, max: rand(1, 1.8), s0: rand(1.5, 2.6), s1: 0.6, r: 1, g: rand(0.5, 0.7), b: 0.15, a: 1 });
+				}
 			}
 		}
 		for (const ef of game.effects) {
@@ -598,7 +690,7 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 				const a = rand(0, TAU),
 					sp = rand(50, 150) * scale,
 					c = rand(0.08, 0.16);
-				smoke.spawn({ x: ef.x, y, z: ef.y, vx: Math.cos(a) * sp, vy: rand(ef.air ? -20 : 90, 220), vz: Math.sin(a) * sp, lift: -420, life: 0, max: rand(0.8, 1.4), s0: rand(2, 4) * Math.max(1, scale), s1: rand(1.5, 3), r: c, g: c * 0.95, b: c * 0.9, a: 1 });
+				smoke.spawn({ x: ef.x, y, z: ef.y, vx: Math.cos(a) * sp, vy: rand(ef.air ? -20 : 90, 220), vz: Math.sin(a) * sp, lift: -420, life: 0, max: rand(0.8, 1.4), s0: rand(2, 4) * Math.max(1, scale), s1: rand(1.5, 3), r: c, g: c * 0.95, b: c * 0.9, a: 1, style: 1 });
 			}
 			// The smoke column: dark puffs welling up one after another, growing.
 			for (let i = 0; i < n(12); i++)
@@ -685,8 +777,102 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 		}
 	}
 
+	// ---------- mining (robots at work, motes over the deposits) ----------
+	// Who is mining right now (from the renderer: the same check that animates the tools), each frame:
+	// [{ e, x, y (the tool), dx, dy (towards the deposit), resource }]; gas robots at a pump: { pump }.
+	let miners = [];
+	function findMiners(game, hidden, focus, span, working) {
+		miners = [];
+		if (!working) return;
+		for (const e of game.entities) {
+			if (e.type !== "worker" || e.hp <= 0 || hidden(e) || Math.abs(e.x - focus.x) > span || Math.abs(e.y - focus.y) > span) continue;
+			const kind = e.order?.kind;
+			if (kind !== "gather" && kind !== "gas") continue;
+			if (!working(e)) continue;
+			const target = kind === "gather" ? game.resourceFields(e.order.resource).find((o) => o.id === e.order.oreId) : game.get(e.order.extractorId);
+			if (!target) continue;
+			const d = Math.hypot(target.x - e.x, target.y - e.y) || 1,
+				dx = (target.x - e.x) / d,
+				dy = (target.y - e.y) / d,
+				reach = Math.min(d * 0.6, 16);
+			miners.push({ e, x: e.x + dx * reach, y: e.y + dy * reach, dx, dy, resource: kind === "gas" ? "gas" : e.order.resource || "ore", target });
+		}
+	}
+	const mineOwed = new WeakMap(),
+		moteOwed = new WeakMap();
+	// Spawns `rate` per second for a key (fractions carried over between frames).
+	function due(map, key, rate, dt) {
+		const v = (map.get(key) || 0) + rate * dt * density,
+			n = Math.floor(v);
+		map.set(key, v - n);
+		return n;
+	}
+	function miningFx(game, dt, focus, span, visible) {
+		for (const m of miners) {
+			const ground = heightAt(m.x, m.y),
+				y = ground + 11;
+			if (m.resource === "gas") {
+				// The pump's relief valve: a plume of vapour now and then.
+				for (let n = due(mineOwed, m.e, 3, dt); n-- > 0; )
+					smoke.spawn({ x: m.target.x + rand(-6, 6), y: heightAt(m.target.x, m.target.y) + 34, z: m.target.y + rand(-6, 6), vx: rand(-4, 4), vy: rand(18, 30), vz: rand(-4, 4), life: 0, max: rand(0.9, 1.5), s0: 5, s1: 18, r: 0.86, g: 0.84, b: 0.92, a: 0.3 });
+				continue;
+			}
+			const crystal = m.resource === "crystal",
+				k = due(mineOwed, m.e, crystal ? 30 : 42, dt);
+			for (let n = 0; n < k; n++) {
+				const a = Math.atan2(m.dy, m.dx) + Math.PI + rand(-1.3, 1.3),
+					sp = rand(30, 80);
+				// Sparks off the drill (ore) or glinting chips of crystal, flying back from the face.
+				if (crystal) fire.spawn({ x: m.x, y: y + rand(0, 4), z: m.y, vx: Math.cos(a) * sp, vy: rand(30, 90), vz: Math.sin(a) * sp, lift: -200, life: 0, max: rand(0.3, 0.6), s0: rand(3, 5), s1: 0.8, r: 1, g: rand(0.82, 0.95), b: rand(0.45, 0.75), a: 1 });
+				else fire.spawn({ x: m.x, y: y + rand(-1, 3), z: m.y, vx: Math.cos(a) * sp, vy: rand(20, 70), vz: Math.sin(a) * sp, lift: -260, life: 0, max: rand(0.2, 0.45), s0: rand(2.6, 4.4), s1: 0.6, r: 1, g: rand(0.65, 0.9), b: 0.35, a: 1 });
+			}
+			// Rock dust (ore) or pale crystal dust welling up from the face.
+			for (let n = due(moteOwed, m.e, crystal ? 5 : 9, dt); n-- > 0; )
+				smoke.spawn({ x: m.x + rand(-5, 5), y: ground + 6, z: m.y + rand(-5, 5), vx: rand(-8, 8), vy: rand(8, 18), vz: rand(-8, 8), drag: 1, life: 0, max: rand(1.1, 2), s0: 6, s1: 22, r: crystal ? 0.92 : 0.36, g: crystal ? 0.88 : 0.33, b: crystal ? 0.72 : 0.3, a: crystal ? 0.26 : 0.5 });
+			// Chunks of ore tossed back into the robot's hopper.
+			if (!crystal && Math.random() < dt * 2.5 * density) {
+				const hx = m.e.x - m.dx * 5,
+					hy = m.e.y - m.dy * 5,
+					t = 0.55;
+				smoke.spawn({ x: m.x, y: y + 2, z: m.y, vx: (hx - m.x) / t, vy: 22 + 260 * t * 0.5, vz: (hy - m.y) / t, lift: -260, life: 0, max: t, s0: 2.6, s1: 2.2, r: 0.3, g: 0.32, b: 0.33, a: 1, style: 1 });
+			}
+		}
+		// Motes over the deposits near the view: silver flecks and a little dust over ore, golden sparkles
+		// rising over crystals (brighter at night); thinner as a field runs out.
+		const near = (o) => Math.abs(o.x - focus.x) < span / 2 + 60 && Math.abs(o.y - focus.y) < span / 2 + 60;
+		const seen = (o) => visible(o.x, o.y) && game.explored[game.visionIndex(o.x, o.y)];
+		for (const o of game.ores || []) {
+			if (!o.amount || !near(o) || !seen(o)) continue;
+			const rich = Math.min(1, o.amount / 3000),
+				ground = heightAt(o.x, o.y);
+			for (let n = due(moteOwed, o, 3 * rich, dt); n-- > 0; )
+				fire.spawn({ x: o.x + rand(-30, 30), y: ground + rand(4, 16), z: o.y + rand(-30, 30), vx: rand(-2, 2), vy: rand(3, 8), vz: rand(-2, 2), life: 0, max: rand(1.4, 2.4), s0: rand(1, 1.8), s1: 0.4, r: 0.85, g: 0.9, b: 0.95, a: 0.7 * (0.5 + nightNow * 0.5) });
+			for (let n = due(mineOwed, o, 0.8 * rich, dt); n-- > 0; )
+				smoke.spawn({ x: o.x + rand(-25, 25), y: ground + 2, z: o.y + rand(-25, 25), vx: rand(-3, 3), vy: rand(2, 5), vz: rand(-3, 3), life: 0, max: rand(2, 3.2), s0: 6, s1: 20, r: 0.55, g: 0.52, b: 0.48, a: 0.12 });
+		}
+		for (const o of game.crystalFields || []) {
+			if (!o.amount || !near(o) || !seen(o)) continue;
+			const rich = Math.min(1, o.amount / 1200),
+				ground = heightAt(o.x, o.y);
+			for (let n = due(moteOwed, o, 6 * rich, dt); n-- > 0; )
+				fire.spawn({ x: o.x + rand(-26, 26), y: ground + rand(6, 34), z: o.y + rand(-26, 26), vx: rand(-3, 3), vy: rand(6, 14), vz: rand(-3, 3), drag: 0.3, life: 0, max: rand(1.6, 2.8), s0: rand(1.2, 2.4), s1: 0.3, r: 1, g: rand(0.82, 0.92), b: rand(0.45, 0.62), a: 0.75 + nightNow * 0.25 });
+		}
+	}
+	let nightNow = 0,
+		clockNow = 0;
+
 	// ---------- shots: muzzle flashes, rocket trails, impact sparks ----------
 	function shotFx(what, x, y, z, rocket) {
+		if (what === "splash") {
+			// Droplets thrown up and out, and a little white water.
+			for (let i = 0; i < Math.ceil(12 * density); i++) {
+				const a = rand(0, TAU),
+					sp = rand(8, 26);
+				smoke.spawn({ x, y, z, vx: Math.cos(a) * sp, vy: rand(20, 45), vz: Math.sin(a) * sp, lift: -160, life: 0, max: rand(0.4, 0.7), s0: rand(0.9, 1.6), s1: 0.6, r: 0.88, g: 0.94, b: 0.98, a: 0.9, style: 1 });
+			}
+			smoke.spawn({ x, y: y + 1, z, vx: 0, vy: 3, vz: 0, life: 0, max: 0.6, s0: 4, s1: 12, r: 0.92, g: 0.96, b: 1, a: 0.5 });
+			return;
+		}
 		if (what === "muzzle") fire.spawn({ x, y, z, vx: 0, vy: 0, vz: 0, life: 0, max: 0.08, s0: rocket ? 16 : 11, s1: 4, r: 1, g: 0.85, b: 0.5, a: 1 });
 		else if (what === "trail") smoke.spawn({ x, y, z, vx: rand(-3, 3), vy: rand(4, 10), vz: rand(-3, 3), life: 0, max: rand(0.6, 1), s0: 5, s1: 18, r: 0.62, g: 0.6, b: 0.58, a: 0.45 });
 		else
@@ -711,11 +897,15 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 		},
 		shot: shotFx,
 		// One frame: returns the weather state for the renderer (haze, lightning flash).
-		update(dt, { game, time, night, focus, span, hidden, scale, light, gasFlow, sky, quality = {} }) {
+		update(dt, { game, time, night, focus, span, hidden, scale, light, gasFlow, working, sky, mistLevel, sun, quality = {} }) {
 			density = quality.particles ?? 1;
 			waterUniforms.waterTime.value = time;
 			waterUniforms.waterRain.value = weatherNow.kind === "rain" ? weatherNow.intensity || 0 : 0;
 			if (sky) waterUniforms.waterSky.value.copy(sky);
+			if (sun) {
+				waterUniforms.waterSunDir.value.copy(sun.dir);
+				waterUniforms.waterSun.value.copy(sun.color).multiplyScalar(Math.min(1, sun.intensity / 2.4));
+			}
 			for (const w of waters) {
 				const m = w.mesh.material;
 				if (m.normalMap) m.normalMap.offset.set(time * 0.012, time * 0.007);
@@ -726,14 +916,18 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 				if (w.kind === "glow") m.emissiveIntensity = 0.25 + night * 0.4;
 			}
 			waterGroup.visible = quality.water !== false;
+			nightNow = night;
+			clockNow = time;
+			findMiners(game, hidden, focus, span, working);
 			nightLights(game, quality.lights === false ? 0 : night, hidden, focus, span);
 			airTrails(game, dt, hidden, focus, span);
 			damageAndExplosions(game, dt, hidden, quality.scars !== false);
 			mapEffects(game, dt, focus, span, night, (x, y) => !hidden({ x, y, team: -1 }), gasFlow);
+			miningFx(game, dt, focus, span, (x, y) => !hidden({ x, y, team: -1 }));
 			for (const sys of [smoke, fire]) sys.material.uniforms.scale.value = scale;
 			smoke.material.uniforms.light.value = light;
 			const n = smoke.update(dt) + fire.update(dt);
-			const state = weather3d.update(game, time, dt, { focus, span, density, flashes: quality.flashes !== false, mist: night * 0.3, mistTint: sky });
+			const state = weather3d.update(game, time, dt, { focus, span, density, flashes: quality.flashes !== false, mist: Math.max(night * 0.3, mistLevel || 0), mistTint: sky });
 			// Where the lightning strikes: sparks and a puff of smoke.
 			if (state.strike) {
 				const { x, y, ground } = state.strike;

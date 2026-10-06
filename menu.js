@@ -236,6 +236,18 @@ class CommandMenu {
 				body;
 		if (screen === "news")
 			body =
+				"<h2>0.88 / Woda i ryby</h2><p>Płaska tafla jezior (koniec z piaszczystą wyspą w środku), głębsza barwa w środku, iskry słońca na falach i piana obmywająca brzeg; ryby pływają ławicami pod powierzchnią i wyskakują z pluskiem.</p>" +
+				"<h2>0.87 / Dym i ogień</h2><p>Kłębiasty dym jaśniejszy od góry, gęste słupy dymu nad pożarami niesione wiatrem; migoczące języki ognia przechodzące od żółci do czerwieni, iskry i nocny blask pożaru.</p>" +
+				"<h2>0.86 / Mgła</h2><p>Ławice mgły w zagłębieniach, blady welon mgły na nizinach o świcie, zmierzchu, w nocy i w deszczu; mgła wojny z poszarpaną granicą i dryfującą, ciemną zasłoną nad nieznanym.</p>" +
+				"<h2>0.85.4 / Burza piaskowa</h2><p>Piasek leci smugami z wiatrem, przy ziemi toczą się kłęby pyłu, a po terenie suną strugi piasku.</p>" +
+				"<h2>0.85.3 / Śnieg na terenie</h2><p>Śnieg z niebieskawymi zagłębieniami, zmarszczkami wiatru i cienkimi brzegami płatów; śnieżne czapy na kamieniach.</p>" +
+				"<h2>0.85.2 / Krople deszczu na ziemi</h2><p>Zamiast kółek na terenie — drobne rozbryzgi kropelek w coraz to innych miejscach; delikatniejsze kręgi w kałużach i na wodzie.</p>" +
+				"<h2>0.85.1 / Kosz robota górniczego</h2><p>Robot ma zawsze otwarty kosz, a ładunek rudy albo kryształów rośnie w nim w miarę zapełniania.</p>" +
+				"<h2>0.85 / Efekty wydobycia</h2><p>Iskry, kurz i odłamki rudy spod wierteł robotów, odpryski kryształów, para z pomp gazu, migoczące światło wiertła nocą; drobiny i złote iskierki unoszące się nad złożami.</p>" +
+				"<h2>0.84.1 / Tylne nogi zająca</h2><p>Zając ma udo przy boku i długie tylne stopy na ziemi zamiast nóg jelenia.</p>" +
+				"<h2>0.84 / Zwierzęta i ptaki</h2><p>Jelenie, lisy i zające z prawdziwą budową nóg, uginającymi się w chodzie, kufą i ubarwieniem; zające kicają, jaszczurki się wiją, ptaki machają skrzydłami z lotkami i szybują.</p>" +
+				"<h2>0.83 / Drzewa i roślinność</h2><p>Postrzępione sosny, liściaste drzewa z bujną koroną, akacje z parasolem, rozgałęzione martwe drzewa; trawa z jasnymi końcami i kłosami, pierzaste paprocie, gęste krzewy i kwiaty na łąkach.</p>" +
+				"<h2>0.82 / Ukształtowanie terenu</h2><p>Mesy z urwiskami, półkami skalnymi i piargiem, strome skaliste pagóry, ostre szczyty iglic, pagórki z grzbietami i obniżeniami; strome zbocza w kolorze skały z warstwami.</p>" +
 				"<h2>0.81 / Wybuchy</h2><p>Skłębiona kula ognia przechodząca w dym, rozbłysk i światło wybuchu na otoczeniu, fala uderzeniowa i pył, odłamki, iskry, żar i słup dymu; samoloty wybuchają w powietrzu.</p>" +
 				"<h2>0.80.1 / Strzały samolotów w powietrzu</h2><p>Myśliwce strzelają z powietrza dwiema smugami z nosa, bombowce zrzucają bomby, a ogień z ziemi do samolotów leci w górę.</p>" +
 				"<h2>0.80 / Wszystkie światła nocy naraz</h2><p>Reflektory pojazdów i budynków, latarki i reflektory samolotów świecą wszystkie jednocześnie i oświetlają teren oraz modele — światła nie przeskakują już przy ruchu kamery.</p>" +
@@ -347,7 +359,7 @@ class CommandMenu {
 		if (WINDOW_SCREENS.includes(screen)) this.windowed();
 		if (screen === "knowledge") KnowledgeBase.mount(this.root);
 		this.root.querySelector(".menu-footer span").textContent =
-			"PROTOTYP 0.81 · ZAPIS LOKALNY";
+			"PROTOTYP 0.88 · ZAPIS LOKALNY";
 		if (
 			screen === "scenarios" ||
 			(screen === "briefing" &&

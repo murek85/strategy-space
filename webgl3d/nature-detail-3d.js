@@ -134,26 +134,44 @@ export function createNature3D(THREE, { tools, group, materials }) {
 
 	// ---------- four-legged animals ----------
 	// o: length, width, depth (torso), legs (length), neck [forward, up], head (length), tail (length),
-	// ears ("pointy", "long", "round", "none"), coat, belly, foot (hoof material), extra(parts, s).
+	// ears ("pointy", "long", "round", "none"), coat, belly, foot (hoof material), extra(parts, s);
+	// optional: torso (stations), thick (legs), leg (lower legs), paws (paws, not hooves), bib (chest and
+	// throat), muzzle, rump (patch), earTip, hop (hops: the hare), longFeet (hare's hind legs: thighs flat on
+	// the flanks, long feet on the ground), haunch (their thighs, × size), shoulder (front shoulders, × size).
 	function quadruped(key, s, o) {
 		const L = o.length * s,
 			W = o.width * s,
 			H = o.depth * s,
 			legH = o.legs * s,
+			lift = legH + H * 0.3,
 			root = new THREE.Group(),
-			body = group(root, [0, legH + H * 0.3, 0]);
-		mesh(body, loft("q" + key, (o.torso || [[-0.5, 0.5, 0.6, 0.05], [-0.34, 0.92, 0.95, 0], [0.02, 0.86, 0.9, -0.04], [0.3, 0.96, 1.04, 0.08], [0.48, 0.62, 0.75, 0.28]]).map(([x, w, h, y]) => [x * L, w * W, h * H, y * H]), 10), o.coat);
-		ball(body, o.belly, 1, [0, -H * 0.42, 0], [L * 0.34, H * 0.42, W * 0.68]);
-		// Neck and head.
+			body = group(root, [0, lift, 0]);
+		// Torso: rump, haunches, a waist, the chest, the withers rising into the neck.
+		const torso = o.torso || [[-0.53, 0.32, 0.38, 0.18], [-0.45, 0.78, 0.82, 0.1], [-0.3, 0.97, 1, 0.04], [-0.1, 0.84, 0.88, -0.02], [0.12, 0.9, 0.97, 0], [0.3, 0.97, 1.06, 0.08], [0.45, 0.74, 0.86, 0.26], [0.53, 0.42, 0.52, 0.42]];
+		mesh(body, loft("q" + key, torso.map(([x, w, h, y]) => [x * L, w * W, h * H, y * H]), 12), o.coat);
+		ball(body, o.belly, 1, [L * 0.04, -H * 0.5, 0], [L * 0.3, H * 0.34, W * 0.66]);
+		if (o.bib) ball(body, o.bib, 1, [L * 0.42, -H * 0.08, 0], [L * 0.1, H * 0.5, W * 0.56]);
+		if (o.rump) ball(body, o.rump, 1, [-L * 0.47, H * 0.12, 0], [L * 0.07, H * 0.42, W * 0.6]);
+		// Neck: thick at the shoulders, thinner to the head, a little bent.
 		const [nf, nu] = o.neck,
-			neckBase = [L * 0.4, H * 0.35, 0],
-			neckTop = [L * 0.4 + nf * s, H * 0.35 + nu * s, 0];
-		limb(body, o.coat, neckBase, neckTop, W * 0.55, W * 0.38, 8);
+			neckBase = [L * 0.42, H * 0.3, 0],
+			neckMid = [L * 0.42 + nf * s * 0.45, H * 0.3 + nu * s * 0.55, 0],
+			neckTop = [L * 0.42 + nf * s, H * 0.3 + nu * s, 0];
+		limb(body, o.coat, neckBase, neckMid, W * 0.62, W * 0.46, 10);
+		ball(body, o.coat, W * 0.46, neckMid);
+		limb(body, o.coat, neckMid, neckTop, W * 0.46, W * 0.36, 10);
+		if (o.bib) limb(body, o.bib, [neckBase[0] + W * 0.25, neckBase[1] - W * 0.25, 0], [neckMid[0] + W * 0.22, neckMid[1] - W * 0.2, 0], W * 0.4, W * 0.28, 8);
+		// Head: skull, cheeks, a tapering muzzle, the nose; eyes with a glint; ears.
 		const head = group(body, neckTop),
-			hl = o.head * s;
-		mesh(head, loft("h" + key, [[-0.15, 0.42, 0.48, 0], [0.25, 0.4, 0.44, 0.05], [0.65, 0.24, 0.27, -0.12], [1, 0.14, 0.16, -0.2]].map(([x, w, h, y]) => [x * hl, w * hl, h * hl, y * hl]), 8), o.coat);
-		ball(head, dark, hl * 0.09, [hl * 0.98, -hl * 0.19, 0], [1, 0.8, 1.2]); // nose
-		for (const z of [-1, 1]) ball(head, nature.eye === o.eye ? nature.eye : dark, hl * 0.07, [hl * 0.38, hl * 0.12, z * hl * 0.3]);
+			hl = o.head * s,
+			ears = [];
+		mesh(head, loft("h" + key, [[-0.2, 0.36, 0.4, 0.06], [0.08, 0.42, 0.46, 0.08], [0.36, 0.32, 0.34, -0.02], [0.66, 0.2, 0.22, -0.12], [0.92, 0.13, 0.14, -0.17], [1, 0.06, 0.07, -0.18]].map(([x, w, h, y]) => [x * hl, w * hl, h * hl, y * hl]), 10), o.coat);
+		if (o.muzzle) ball(head, o.muzzle, hl * 0.2, [hl * 0.58, -hl * 0.14, 0], [1.7, 0.6, 1.15]);
+		ball(head, dark, hl * 0.085, [hl * 0.98, -hl * 0.16, 0], [1, 0.8, 1.25]); // nose
+		for (const z of [-1, 1]) {
+			ball(head, o.eye || dark, hl * 0.075, [hl * 0.32, hl * 0.12, z * hl * 0.31]);
+			ball(head, white, hl * 0.022, [hl * 0.37, hl * 0.16, z * hl * 0.37]); // glint
+		}
 		if (o.ears === "pointy" || o.ears === "long" || o.ears === "round")
 			for (const z of [-1, 1]) {
 				const ear = group(head, [hl * 0.05, hl * 0.35, z * hl * 0.22]);
@@ -161,61 +179,95 @@ export function createNature3D(THREE, { tools, group, materials }) {
 				if (o.ears === "round") ball(ear, o.coat, hl * 0.14, [0, hl * 0.08, 0], [0.6, 1, 0.9]);
 				else {
 					const eh = hl * (o.ears === "long" ? 1.1 : 0.42);
-					limb(ear, o.coat, [0, 0, 0], [0, eh, 0], hl * (o.ears === "long" ? 0.12 : 0.12), hl * 0.03, 5);
+					limb(ear, o.coat, [0, 0, 0], [0, eh, 0], hl * 0.12, hl * 0.03, 6);
 					limb(ear, pink, [0.04 * hl, eh * 0.1, 0], [0.04 * hl, eh * 0.8, 0], hl * 0.07, hl * 0.02, 4);
+					if (o.earTip) limb(ear, o.earTip, [0, eh * 0.72, 0], [0, eh * 1.01, 0], hl * 0.055, hl * 0.012, 5);
 				}
+				ears.push(ear);
 			}
-		// Legs: a pivot at the hip or shoulder, thigh and shin (joined by a knee), a hoof or paw.
+		// Legs: a muscled shoulder or haunch; the upper leg to the elbow (stifle behind), the lower leg in
+		// its own joint — forearm and cannon in front, the hock bent back behind — and a hoof or a paw.
 		const legs = [];
-		for (const [x, back] of [[L * 0.3, false], [-L * 0.32, true]])
+		for (const [x, back] of [[L * 0.3, false], [-L * 0.3, true]])
 			for (const side of [-1, 1]) {
 				const pivot = group(body, [x, -H * 0.3, side * W * 0.55]),
-					knee = [back ? -0.9 * s : 0.5 * s, -legH * 0.5, 0],
-					thick = W * (o.thick ?? 0.32) * (back ? 1.15 : 1);
-				limb(pivot, o.coat, [0, H * 0.25, 0], knee, thick * 1.3, thick * 0.8, 7);
-				ball(pivot, o.coat, thick * 0.8, knee);
-				limb(pivot, o.leg ?? o.coat, knee, [0.2 * s, -legH * 0.93, 0], thick * 0.75, thick * 0.55, 6);
-				box(pivot, o.foot ?? hoof, [thick * 1.9, thick * 0.9, thick * 1.5], [0.35 * s, -legH + thick * 0.4, 0], null, thick * 0.3);
-				legs.push(pivot);
+					thick = W * (o.thick ?? 0.3) * (back ? 1.15 : 1),
+					lower = o.leg ?? o.coat,
+					J = back ? [0.35 * s, -legH * 0.32, 0] : [0.05 * s, -legH * 0.36, 0];
+				// A hare's hind leg: a big thigh lying flat along the flank, the hock low and the long foot flat
+				// on the ground, pointing forward.
+				const hare = back && o.longFeet;
+				if (hare) {
+					ball(pivot, o.coat, thick * 1.5 * (o.haunch ?? 1), [-0.1 * s, -H * 0.06, 0], [1.5, 1.2, 0.5]);
+					J[0] = 0.4 * s;
+					J[1] = -legH * 0.4;
+				} else ball(pivot, o.coat, thick * 1.5 * (back ? 1 : o.shoulder ?? 1), [back ? -0.1 * s : 0.05 * s, H * 0.12, 0], [back ? 1.5 : 1.1, 1.6, 1]);
+				limb(pivot, o.coat, [0, H * 0.3, 0], J, thick * 1.35, thick * 0.85, 8);
+				const joint = group(pivot, J),
+					K = hare ? [-1.3 * s, -legH * 0.48, 0] : back ? [-0.75 * s, -legH * 0.3, 0] : [0.05 * s, -legH * 0.33, 0],
+					F = hare ? [K[0] + L * 0.3, -legH - J[1] + thick * 0.3, 0] : [K[0] + (back ? 0.15 : 0.12) * s, -legH - J[1] + thick * 0.5, 0];
+				ball(joint, o.coat, thick * 0.82, [0, 0, 0]);
+				limb(joint, lower, [0, 0, 0], K, thick * 0.8, thick * 0.52, 7);
+				ball(joint, lower, thick * 0.52, K);
+				limb(joint, lower, K, F, thick * 0.5, thick * 0.42, 6);
+				if (hare) ball(joint, o.foot ?? dark, thick * 0.55, [F[0], F[1] - thick * 0.05, 0], [1.6, 0.6, 1]);
+				else if (o.paws) ball(joint, o.foot ?? dark, thick * 0.72, [F[0] + thick * 0.35, F[1] - thick * 0.18, 0], [1.45, 0.6, 1]);
+				else cyl(joint, o.foot ?? hoof, thick * 0.5, thick * 1.1, [F[0] + thick * 0.1, F[1] - thick * 0.25, 0], { top: thick * 0.4, segs: 7 });
+				legs.push({ pivot, joint, back });
 			}
 		// Tail.
-		const tail = group(body, [-L * 0.48, H * 0.3, 0]),
+		const tail = group(body, [-L * 0.5, H * 0.3, 0]),
 			tl = (o.tail ?? 6) * s;
-		if (o.bushy) mesh(tail, loft("t" + key, [[0, 0.12, 0.12, 0], [-0.35, 0.3, 0.3, -0.1], [-0.75, 0.24, 0.24, -0.25], [-1, 0.05, 0.05, -0.35]].map(([x, w, h, y]) => [x * tl, w * tl, h * tl, y * tl]), 8), o.coat);
-		else if (tl > 0) limb(tail, o.coat, [0, 0, 0], [-tl * 0.85, -tl * 0.5, 0], W * 0.16, W * 0.04, 5);
-		if (o.tip) ball(tail, o.tip, tl * 0.16, [-tl * 0.92, -tl * 0.38, 0]);
+		if (o.bushy) mesh(tail, loft("t" + key, [[0, 0.1, 0.1, 0], [-0.2, 0.24, 0.24, -0.04], [-0.45, 0.32, 0.31, -0.14], [-0.75, 0.25, 0.24, -0.28], [-0.92, 0.12, 0.12, -0.34], [-1, 0.03, 0.03, -0.36]].map(([x, w, h, y]) => [x * tl, w * tl, h * tl, y * tl]), 9), o.coat);
+		else if (tl > 0) limb(tail, o.coat, [0, 0, 0], [-tl * 0.85, -tl * 0.5, 0], W * 0.16, W * 0.06, 6);
+		if (o.tip) ball(tail, o.tip, tl * (o.bushy ? 0.15 : 0.3), [-tl * 0.92, o.bushy ? -tl * 0.35 : -tl * 0.45, 0], o.bushy ? [1.4, 1, 1] : [0.8, 1, 1]);
 		o.extra?.({ head, body, tail, hl, L, W, H }, s);
 		const speed = o.gait ?? 13;
 		return {
 			root,
 			update(e, i) {
-				const t = i.time * speed + e.id,
-					swing = i.moving ? Math.sin(t) * 0.55 : 0;
-				legs.forEach((l, n) => (l.rotation.z = n === 0 || n === 3 ? swing : -swing));
-				body.position.y = legH + H * 0.3 + (i.moving ? Math.abs(Math.sin(t)) * s * 0.8 : 0);
+				const t = i.time * speed + e.id;
+				if (o.hop) {
+					// Hops: the hind legs push together, the front legs reach together, the body arcs.
+					const ph = i.moving ? Math.sin(t) : 0;
+					for (const l of legs) {
+						l.pivot.rotation.z = (l.back ? -0.7 : 0.55) * ph;
+						l.joint.rotation.z = (l.back ? 0.6 : -0.4) * Math.max(0, -ph);
+					}
+					body.position.y = lift + (i.moving ? Math.max(0, Math.sin(t)) * s * 3.2 : 0);
+					body.rotation.z = i.moving ? Math.cos(t) * 0.16 : 0;
+				} else {
+					// A walk: diagonal pairs, the lower legs folding as they swing forward.
+					legs.forEach((l, n) => {
+						const ph = t + (n === 0 || n === 3 ? 0 : Math.PI);
+						l.pivot.rotation.z = i.moving ? Math.sin(ph) * 0.5 : 0;
+						l.joint.rotation.z = i.moving ? (l.back ? 0.7 : -0.75) * Math.max(0, Math.sin(ph + 1.3)) : 0;
+					});
+					body.position.y = lift + (i.moving ? Math.abs(Math.sin(t)) * s * 0.8 : Math.sin(i.time * 1.8 + e.id) * s * 0.06);
+				}
 				head.rotation.y = -Math.max(-0.6, Math.min(0.6, i.aim));
 				head.rotation.z = i.recoil * 0.4 + (i.moving ? Math.sin(t * 2) * 0.04 : Math.sin(i.time * 0.7 + e.id) * 0.08);
+				// Ears twitch now and then.
+				ears.forEach((ear, n) => (ear.rotation.y = Math.max(0, Math.sin(i.time * 0.9 + e.id * 3 + n * 2) - 0.93) * 4));
 				tail.rotation.y = Math.sin(i.time * (i.moving ? 9 : 2.5) + e.id) * 0.3;
 			},
 		};
 	}
-	// Branching antlers on a deer's head.
+	// Antlers: a curving main beam with tines rising from it, on each side.
 	function antlers({ head, hl }, s) {
 		for (const z of [-1, 1]) {
 			const a = group(head, [hl * 0.05, hl * 0.4, z * hl * 0.15]);
-			a.rotation.x = z * 0.35;
-			const tip = [-hl * 0.15, hl * 0.95, 0];
-			limb(a, antler, [0, 0, 0], tip, hl * 0.06, hl * 0.035, 5);
-			limb(a, antler, [-hl * 0.05, hl * 0.35, 0], [hl * 0.35, hl * 0.6, 0], hl * 0.04, hl * 0.02, 4);
-			limb(a, antler, [-hl * 0.1, hl * 0.65, 0], [hl * 0.2, hl * 1.0, 0], hl * 0.035, hl * 0.015, 4);
-			limb(a, antler, tip, [-hl * 0.45, hl * 1.15, 0], hl * 0.03, hl * 0.012, 4);
+			a.rotation.x = z * 0.4;
+			const beam = [[0, 0, 0], [-hl * 0.12, hl * 0.4, 0], [-hl * 0.1, hl * 0.8, 0], [hl * 0.05, hl * 1.12, 0]];
+			for (let n = 1; n < beam.length; n++) limb(a, antler, beam[n - 1], beam[n], hl * (0.065 - n * 0.012), hl * (0.055 - n * 0.012), 5);
+			for (const [p, t] of [[beam[1], [hl * 0.3, hl * 0.62, 0]], [beam[2], [hl * 0.22, hl * 1.02, 0]], [beam[2], [-hl * 0.42, hl * 1.05, 0]], [beam[3], [-hl * 0.15, hl * 1.36, 0]]]) limb(a, antler, p, t, hl * 0.035, hl * 0.012, 4);
 		}
 	}
 	const ANIMALS = {
-		deer: (biome) => quadruped("deer", 1.25, { length: 20, width: 3.4, depth: 4.4, legs: 9, neck: [2.8, 6.5], head: 6, tail: 2.5, ears: "pointy", coat: scenery.deer, belly: nature.belly, gait: 11, extra: antlers, tip: white }),
+		deer: (biome) => quadruped("deer", 1.25, { length: 20, width: 3.4, depth: 4.4, legs: 9, neck: [2.8, 6.5], head: 6, tail: 2.5, ears: "pointy", coat: scenery.deer, belly: nature.belly, rump: white, thick: 0.27, gait: 11, extra: antlers, tip: white }),
 		fox: (biome) => {
 			const coat = biome === "ice" ? scenery.snowfox : scenery.fox;
-			return quadruped("fox" + (biome === "ice" ? "i" : ""), 0.7, { length: 20, width: 3.2, depth: 3.8, legs: 6, neck: [2.6, 3.2], head: 6.5, tail: 11, bushy: true, tip: white, ears: "pointy", coat, belly: white, leg: dark, foot: dark, gait: 14 });
+			return quadruped("fox" + (biome === "ice" ? "i" : ""), 0.7, { length: 20, width: 3.2, depth: 3.8, legs: 6, neck: [2.6, 3.2], head: 6.5, tail: 11, bushy: true, tip: white, ears: "pointy", earTip: biome === "ice" ? null : dark, coat, belly: white, bib: white, muzzle: white, leg: biome === "ice" ? coat : dark, foot: dark, paws: true, gait: 14 });
 		},
 		hare: () =>
 			quadruped("hare", 0.5, {
@@ -228,76 +280,133 @@ export function createNature3D(THREE, { tools, group, materials }) {
 				tail: 1.5,
 				tip: white,
 				ears: "long",
+				earTip: dark,
 				coat: scenery.hare,
 				belly: white,
 				thick: 0.38,
-				gait: 16,
-				torso: [[-0.5, 0.55, 0.65, 0.1], [-0.3, 0.95, 1, 0.05], [0.05, 0.85, 0.9, 0], [0.3, 0.75, 0.82, 0.1], [0.46, 0.5, 0.6, 0.3]],
+				haunch: 1.1,
+				shoulder: 0.6,
+				longFeet: true,
+				paws: true,
+				foot: scenery.hare,
+				hop: true,
+				gait: 9,
+				torso: [[-0.5, 0.5, 0.6, 0.12], [-0.38, 0.95, 1, 0.06], [-0.15, 0.95, 1, 0.02], [0.08, 0.85, 0.9, 0], [0.3, 0.74, 0.8, 0.1], [0.46, 0.5, 0.6, 0.3]],
 			}),
 	};
 
-	// Lizard: low and long, the tail curving, legs sprawled to the sides.
+	// Lizard: flat and low, a wedge of a head with bulging eyes, legs sprawled out to the sides with the
+	// elbows bent and toes spread on the ground, a long tail swinging the other way to the body; blotches
+	// along the back.
 	function lizard() {
 		const root = new THREE.Group(),
-			body = group(root, [0, 3, 0]),
+			body = group(root, [0, 1.7, 0]),
 			legs = [];
 		const c = scenery.lizard;
-		mesh(body, loft("liz", [[11, 0.3, 0.3, -0.2], [9, 1.5, 1.2, 0], [6, 1.3, 1.1, 0], [3, 2.2, 1.5, 0.1], [-3, 2.4, 1.6, 0.1], [-6, 1.5, 1.1, 0], [-11, 0.8, 0.6, -0.4], [-17, 0.35, 0.3, -0.8], [-22, 0.05, 0.05, -1]], 8), c);
-		for (const z of [-1, 1]) ball(body, nature.eye, 0.35, [8.2, 0.9, z * 1.1]);
-		for (let n = 0; n < 6; n++) box(body, dark, [1.2, 0.5, 0.6], [3 - n * 2, 1.6, 0], [0, 0, 0.3], 0.15); // spine ridge
-		for (const x of [3.5, -3.5])
+		mesh(body, loft("liz2", [[10.6, 0.2, 0.14, -0.25], [9.4, 0.9, 0.55, -0.05], [8, 1.35, 0.85, 0.1], [6.4, 1.05, 0.7, 0.05], [4.5, 1.7, 1, 0.12], [1.5, 2.2, 1.2, 0.2], [-1.5, 2.1, 1.1, 0.16], [-4.2, 1.4, 0.8, 0.05], [-5.2, 1, 0.62, 0]], 10), c);
+		for (const z of [-1, 1]) {
+			ball(body, c, 0.5, [7.9, 0.55, z * 0.9]); // eye bulge
+			ball(body, nature.eye, 0.3, [8.05, 0.7, z * 1.15]);
+			ball(body, white, 0.09, [8.25, 0.8, z * 1.33]);
+		}
+		for (let n = 0; n < 6; n++) ball(body, dark, 0.55, [3.6 - n * 1.6, 1.05 - Math.abs(n - 2) * 0.05, (n % 2 ? 1 : -1) * 0.35], [1.3, 0.25, 0.75]); // blotches
+		const tail = group(body, [-5, 0, 0]);
+		mesh(tail, loft("lizT", [[0.2, 1, 0.62, 0], [-3, 0.7, 0.48, -0.12], [-7, 0.45, 0.32, -0.3], [-11, 0.25, 0.2, -0.45], [-15, 0.1, 0.1, -0.55], [-17.5, 0.03, 0.03, -0.6]], 8), c);
+		for (let n = 0; n < 4; n++) ball(tail, dark, 0.38 - n * 0.06, [-1.5 - n * 3, 0.5 - n * 0.1, 0], [1.2, 0.25, 0.8]);
+		for (const x of [3.6, -3.4])
 			for (const z of [-1, 1]) {
-				const leg = group(body, [x, 0, z * 1.8]);
-				limb(leg, c, [0, 0, 0], [x > 0 ? 1 : -1, -0.6, z * 3], 0.6, 0.45, 5);
-				limb(leg, c, [x > 0 ? 1 : -1, -0.6, z * 3], [x > 0 ? 2 : -0.5, -2.8, z * 3.6], 0.45, 0.3, 5);
-				for (const f of [-1, 0, 1]) limb(leg, dark, [x > 0 ? 2 : -0.5, -2.8, z * 3.6], [(x > 0 ? 2.9 : 0.4) + f * 0.2, -2.9, z * 3.6 + f * 0.6], 0.16, 0.06, 3);
+				const leg = group(body, [x, -0.2, z * 1.6]),
+					fwd = x > 0 ? 1 : -1,
+					elbow = [fwd * 0.4, 0.15, z * 2],
+					wrist = [fwd * 1.1, -1.35, z * 2.9];
+				limb(leg, c, [0, 0, 0], elbow, 0.55, 0.42, 6);
+				ball(leg, c, 0.42, elbow);
+				limb(leg, c, elbow, wrist, 0.4, 0.28, 6);
+				for (const f of [-1.2, -0.4, 0.4, 1.2]) limb(leg, dark, wrist, [wrist[0] + fwd * 0.7 + f * 0.25, -1.55, wrist[2] + z * 0.45 + f * 0.35], 0.13, 0.05, 3);
 				legs.push(leg);
 			}
 		return {
 			root,
 			update(e, i) {
-				legs.forEach((l, n) => (l.rotation.y = Math.sin(i.time * 10 + e.id + n * 1.6) * 0.5));
-				body.rotation.y = Math.sin(i.time * 10 + e.id) * 0.08;
+				const t = i.time * 10 + e.id,
+					run = i.moving ? 1 : 0.15;
+				legs.forEach((l, n) => (l.rotation.y = Math.sin(t + n * 1.6) * 0.5 * run));
+				body.rotation.y = Math.sin(t) * 0.1 * run;
+				tail.rotation.y = -Math.sin(t - 0.6) * 0.32 * run;
 			},
 		};
 	}
-	// Bird: body, head and beak, two-part wings flapping (the outer part more), a fanned tail.
+	// Bird: a round body with a lighter breast, a head with a two-part beak and glinting eyes, wings with a
+	// rounded leading edge and the primary feathers spread at the tips, a fan of tail feathers, the legs
+	// tucked. It flaps, then glides on held wings.
+	const birdBelly = std("#d8cdb8", { roughness: 0.9, metalness: 0 }),
+		beakMat = std("#d9a640", { roughness: 0.6, metalness: 0 });
 	function bird() {
 		const root = new THREE.Group(),
 			m = scenery.bird,
 			wings = [];
-		mesh(root, loft("bird", [[5.5, 0.3, 0.3, 0.6], [4, 1.3, 1.3, 0.4], [1, 1.9, 1.8, 0], [-2.5, 1.4, 1.2, -0.1], [-5, 0.5, 0.4, 0]], 8), m);
-		ball(root, m, 1.3, [5.2, 1, 0]);
-		limb(root, std("#d9a640", { roughness: 0.6 }), [6.2, 0.9, 0], [8.2, 0.6, 0], 0.4, 0.05, 5); // beak
-		for (const z of [-1, 1]) ball(root, nature.eye, 0.25, [5.8, 1.4, z * 0.8]);
-		plate(root, m, [[-4.5, 0], [-9, -2.2], [-9.6, 0], [-9, 2.2]], 0.3, [0, 0.2, 0]); // tail
+		mesh(root, loft("bird2", [[5.3, 0.25, 0.25, 0.35], [4.3, 1.05, 1, 0.4], [2.6, 1.75, 1.7, 0.12], [0, 2, 1.9, -0.1], [-2.5, 1.5, 1.3, 0], [-4.6, 0.6, 0.5, 0.15]], 12), m);
+		ball(root, birdBelly, 1, [1.3, -0.65, 0], [2.7, 1.2, 1.55]);
+		ball(root, m, 1.25, [5, 1.1, 0]);
+		limb(root, beakMat, [6, 1.05, 0], [8.1, 0.75, 0], 0.42, 0.06, 6); // upper beak
+		limb(root, beakMat, [5.9, 0.75, 0], [7.4, 0.62, 0], 0.26, 0.05, 5); // lower beak
 		for (const z of [-1, 1]) {
-			const wing = group(root, [0.5, 0.6, z * 1.4]),
-				outer = group(wing, [0, 0, z * 5.5]);
-			plate(wing, m, [[2.2, 0], [-2, 0], [-2.6, z * 5.8], [1.6, z * 5.8]], 0.35, [0, 0, 0]);
-			plate(outer, m, [[1.6, 0], [-2.6, 0], [-4.4, z * 6.5], [-1, z * 7.2]], 0.3, [0, 0, 0]);
+			ball(root, nature.eye, 0.26, [5.8, 1.45, z * 0.82]);
+			ball(root, white, 0.08, [5.95, 1.55, z * 1.02]);
+			limb(root, dark, [-0.5, -1.2, z * 0.6], [-2.6, -1.6, z * 0.6], 0.18, 0.12, 4); // tucked legs
+		}
+		// Tail: seven feathers fanned out.
+		for (let n = 0; n < 7; n++) {
+			const a = (n - 3) * 0.13;
+			plate(root, n % 2 ? birdBelly : m, [[0, -0.32], [0, 0.32], [-4.6, 0.55], [-5.1, 0], [-4.6, -0.55]], 0.14, [-4.2, 0.25 + Math.abs(n - 3) * 0.02, 0], [0, 0, a]);
+		}
+		for (const z of [-1, 1]) {
+			const wing = group(root, [0.6, 0.65, z * 1.4]),
+				outer = group(wing, [0, 0, z * 5.4]);
+			// Arm: a rounded leading edge; the lighter underwing coverts show from below.
+			plate(wing, m, [[2.4, 0], [2.3, z * 2.6], [1.6, z * 5.4], [-1.9, z * 5.4], [-2.6, z * 2.6], [-2.5, 0]], 0.32, [0, 0, 0]);
+			plate(wing, birdBelly, [[2.2, z * 0.4], [2.1, z * 2.6], [1.4, z * 5.2], [0.2, z * 5.2], [-0.2, z * 2.6], [0, z * 0.4]], 0.1, [0, -0.22, 0]);
+			// Hand: a tapering plate and five primaries spread like fingers.
+			plate(outer, m, [[1.6, 0], [0.8, z * 3.4], [-1.2, z * 4], [-2.4, z * 1.8], [-1.9, 0]], 0.28, [0, 0, 0]);
+			for (let k = 0; k < 5; k++) {
+				const bx = 0.8 - k * 0.65,
+					tx = 0.2 - k * 1.25,
+					tz = z * (7.2 - k * 0.55);
+				plate(outer, m, [[bx + 0.3, z * 3.2], [tx + 0.25, tz], [tx - 0.3, tz - z * 0.25], [bx - 0.35, z * 3.2]], 0.12, [0, -k * 0.03, 0]);
+			}
 			wings.push([wing, outer, z]);
 		}
 		return {
 			root,
 			update(e, i) {
-				const f = Math.sin(i.time * 7 + e.id);
+				// Flapping for a while, then gliding with the wings held a little up.
+				const cycle = (i.time * 0.35 + e.id * 0.37) % 1,
+					flap = cycle < 0.6,
+					f = flap ? Math.sin(i.time * 8 + e.id) : 0.18,
+					lag = flap ? Math.sin(i.time * 8 + e.id - 0.7) : 0.1;
 				wings.forEach(([w, o, z]) => {
-					w.rotation.x = z * f * 0.55;
-					o.rotation.x = z * (f * 0.45 + Math.sin(i.time * 7 + e.id - 0.6) * 0.25);
+					w.rotation.x = z * f * 0.6;
+					o.rotation.x = z * (f * 0.35 + lag * 0.35);
 				});
 			},
 		};
 	}
-	// Fish: a lofted body, eyes, a dorsal fin, a tail fin swinging.
+	// Fish: a lofted body with a lighter belly, eyes, a dorsal fin, pectoral fins and a forked tail
+	// swinging.
+	const fishBelly = std("#d6dcd8", { roughness: 0.5, metalness: 0.2 });
 	function fish() {
 		const root = new THREE.Group(),
 			m = scenery.fish,
 			tail = group(root, [-4.4, 0, 0]);
-		mesh(root, loft("fish", [[4.8, 0.2, 0.3, 0], [3.4, 0.9, 1.4, 0.05], [0, 1.2, 1.8, 0.1], [-3, 0.7, 1, 0], [-4.5, 0.2, 0.3, 0]], 8), m);
-		for (const z of [-1, 1]) ball(root, dark, 0.28, [3.6, 0.4, z * 0.7]);
-		fin(root, m, [[1.5, 0], [-1.8, 0], [-1.2, 1.4], [0.8, 1.2]], 0.15, [0, 1.6, 0]);
-		fin(tail, m, [[0.2, 0], [-2.8, 1.8], [-2.2, 0], [-2.8, -1.8]], 0.15, [0, 0, 0]);
+		mesh(root, loft("fish2", [[4.9, 0.18, 0.25, -0.05], [3.6, 0.85, 1.25, 0.05], [1, 1.2, 1.8, 0.12], [-1.8, 1, 1.4, 0.08], [-3.6, 0.55, 0.75, 0], [-4.6, 0.2, 0.28, 0]], 10), m);
+		ball(root, fishBelly, 1, [0.6, -0.75, 0], [3.4, 0.9, 0.95]);
+		for (const z of [-1, 1]) {
+			ball(root, dark, 0.3, [3.5, 0.35, z * 0.72]);
+			ball(root, white, 0.08, [3.62, 0.45, z * 0.86]);
+			fin(root, m, [[0.6, 0], [-0.6, 0], [-1.8, -0.9], [-0.6, -0.8]], 0.1, [2, -0.6, z * 1], [z * 0.6, 0, 0]); // pectoral
+		}
+		fin(root, m, [[1.5, 0], [-1.8, 0], [-1.4, 1.5], [0.5, 1.3]], 0.15, [0, 1.6, 0]);
+		fin(tail, m, [[0.2, 0], [-2.2, 1.9], [-3.1, 1.9], [-1.9, 0], [-3.1, -1.9], [-2.2, -1.9]], 0.15, [0, 0, 0]);
 		return { root, update: (e, i) => (tail.rotation.y = Math.sin(i.time * 9 + e.id) * 0.5) };
 	}
 

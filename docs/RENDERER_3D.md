@@ -343,6 +343,73 @@ Akt I (Szkolenie, I · Iskra na Eos, II · Archiwum pod lodem, III · Świt nad 
 - **Światło**: przez pierwsze ~0,35 s wybuch jest światłem punktowym na liście świateł nocy (`night-lights-3d.js`), także w dzień — oświetla teren i modele wokół.
 - **W powietrzu**: silnik zaznacza wybuch zniszczonego samolotu (`air`); kula, rozbłysk i cząstki są na wysokości lotu (bez pierścienia i pyłu), odłamki spadają.
 
+## Ukształtowanie terenu (wersja 0.82, 2026-10-06)
+
+- **Rzeźba** (`webgl3d/relief-3d.js`): własna mapa wysokości planszy 3D, komórka 6 jednostek (było 12, wspólne z rendererem WebGL; `webgl/terrain-height.js` bez zmian). Pagórki: garby z szumu z przesunięciem dziedziny (bez siatki), grzbiety z szumu „grzbietowego” na części z nich, drobne nierówności; siła zależna od biomu (lód 0,75, pył 1, popiół 1,25). Przeszkody: **mesa** — urwisko od nieco wewnątrz krawędzi prostokąta (zaokrąglone rogi, krawędź poszarpana szumem) na zewnątrz, trzy półki warstw, płaski wierzch z lekkim garbem, piarg u stóp; **wychodnia, skała** — strome, guzowate pagóry; **iglica** — ostry szczyt z poszarpanym obrysem, grzbietami i żlebami; gaje, jaja, wraki, ruiny itd. — łagodne kopce jak dotąd; wody jak dotąd, wydma ma grzbiet.
+- **Skała**: na komórkę udział gołej skały (strome zbocza, urwiska, szczyty) → atrybut wierzchołków `rock`; shader terenu (`GROUND_COLOR`, `TERRAIN`) miesza kolor ziemi z kamieniem: średni kolor ziemi mapy (`rockTint`, ciemniejszy i szarszy — rozciągnięty malunek ziemi nie pasuje do ściany), poziome warstwy wg wysokości, ziarno wzdłuż ściany i w pionie; na skale nie ma kałuż.
+- Kafle terenu nadal 720 × 720 (tyle samo rysowań), 4 razy więcej wierzchołków. Test: bitwa 238 rysowań, kursor → plansza → kursor: błąd poniżej 0,1 px; prototyp ok. 155–160 kl./s.
+
+## Drzewa i roślinność (wersja 0.83, 2026-10-06)
+
+- **Cieniowanie w geometrii** (`scatter-3d.js`): rośliny i kora mają kolory wierzchołków (`paint()`, `merge()` przenosi kolor) mnożone przez kolor materiału i odcień egzemplarza — źdźbła ciemne u nasady, korony ciemniejsze od spodu i w środku, końce gałęzi jaśniejsze, kora ciemniejsza przy ziemi. Bez nowych rysowań.
+- **Drzewa**: sosna — 7 pięter, co drugi punkt obrzeża wciągnięty (postrzępione końce), obrzeże opadające, piętra obrócone; śnieg leży na co drugim piętrze; liściaste — pień z korzeniami i trzema konarami, korona z 12 guzowatych skupisk na kopule; akacja — pień rozgałęziony w cztery konary, parasol z pięciu płaskich, postrzępionych warstw (spód ciemny); martwe — pień, korzenie i gałęzie rozgałęziające się dwukrotnie; grzyb — blaszki pod kapeluszem, korzenie.
+- **Rośliny**: trawa 11 źdźbeł, wysoka trawa 14 z kłosami, paproć — 7 pierzastych liści (oś z listkami malejącymi ku końcowi), krzew — 13 skupisk liści na łodyżkach, trzciny z brązowymi kolbami; **kwiaty** (nowe, dwa rodzaje: różowo-żółte, biało-fioletowe; materiał biały, kolory w wierzchołkach) na łąkach Aerionu i trawiastych map pyłu, paprocie także na Aerionie.
+- **Galeria** (`prototyp-modele.html`, Przyroda): rząd drzew i roślin (`scatter.specimens()`).
+
+## Zwierzęta i ptaki (wersja 0.84, 2026-10-06)
+
+- **Czworonogi** (`nature-detail-3d.js`, `quadruped()`): tułów z 8 przekrojów po 12 boków (zad, udźce, talia, klatka, kłąb), szyja z dwóch odcinków zgiętych w połowie, głowa z 6 przekrojów (czaszka, policzki, kufa, nos), oczy z błyskiem; nogi: masa łopatki lub udźca, odcinek górny do łokcia (z tyłu kolana), osobny staw z odcinkami dolnymi (przód: przedramię i nadpęcie, tył: podudzie ze stawem skokowym do tyłu i śródstopie), kopyto (zwężony walec) albo łapa. Chód: pary po przekątnej, dolne odcinki składają się w wymachu; kicanie (`hop`) — tylne nogi razem, przednie razem, łuk tułowia; w spoczynku oddech, uszy strzygą co jakiś czas. Opcje: `bib`, `muzzle`, `rump`, `earTip`, `paws`, `haunch`, `hop` (dotychczasowe drapieżniki i mamut działają jak dotąd, z nowym tułowiem i nogami).
+- **Jeleń**: lustro, poroże z wygiętej tyki z czterema odnogami; **lis**: śliniak i gardło, kufa, końce uszu, skarpetki, łapy, puszysty ogon z 6 przekrojów; **zając**: duże udźce, łapy, końce uszu, kicanie.
+- **Jaszczurka**: płaski tułów, głowa-klin, wyłupiaste oczy, plamy, osobny ogon (wije się przeciwnie do tułowia), nogi z łokciem w bok i czterema palcami na ziemi. **Ptak**: okrągły tułów, jaśniejsza pierś i spód skrzydeł, dziób z dwóch części, schowane nogi, ogon z 7 piór, skrzydło z zaokrągloną krawędzią i dłonią z 5 lotkami; lot: ok. 60% czasu machanie (dłoń opóźniona), reszta szybowanie. **Ryba**: płetwy piersiowe, rozwidlony ogon, jaśniejszy brzuch.
+
+## Tylne nogi zająca (wersja 0.84.1, 2026-10-06)
+
+- `quadruped()`: opcja `longFeet` — tylna noga zająca: udo jako spłaszczona elipsoida przy boku (`haunch` 1,1), kolano wysunięte do przodu, podudzie skośnie w dół do nisko położonego stawu skokowego, długa stopa (0,3 długości tułowia) płasko na ziemi do przodu, mała łapa na końcu; opcja `shoulder` zmniejsza łopatki (zając 0,6).
+
+## Efekty wydobycia (wersja 0.85, 2026-10-06)
+
+- **Kto wydobywa** (`scene-fx-3d.js`, `findMiners()`): roboty z rozkazem `gather` lub `gas` blisko widoku, które faktycznie pracują — ten sam test co animacja narzędzi na planszy 2D (`canvasRenderer.entityWorking`, przekazany z `three-renderer.js` jako `working`); punkt pracy: między robotem a złożem, do 16 przed robotem.
+- **Przy pracy** (`miningFx()`): ruda — iskry (ok. 42/s, opadające), kurz skalny (wznoszący się, z oporem), co ok. 0,4 s odłamek rudy łukiem do kosza; kryształ — złote i białe odpryski, jasny pył; gaz — para z zaworu pompy. Nocą migocące światło wiertła na liście świateł nocy (`night-lights-3d.js`).
+- **Nad złożami** (w widoku, odkrytymi i widocznymi): ruda — srebrzyste drobiny i lekki kurz, kryształy — złote iskierki wznoszące się powoli (jaśniejsze nocą); liczba zależy od zasobu złoża.
+
+## Kosz robota górniczego (wersja 0.85.1, 2026-10-06)
+
+- `models-detail-3d.js`, `worker()`: kosz zawsze widoczny (dno, cztery rozchylone ściany, obręcz, żebra, zawias z tyłu); ładunek w środku z `e.cargo` (pojemność 30) i `e.cargoKind`: usypisko (spłaszczona kula, rośnie w górę) i do 7 brył pojawiających się kolejno — kanciaste grudy rudy (dwudziestościan, matowy metal i stal) albo złote odłamki (`k.crystal`, nowy materiał zestawu w `models-3d.js`). Części ładunku mają `userData.keep` (nie są scalane, renderer je pokazuje i skaluje).
+
+## Krople deszczu na ziemi (wersja 0.85.2, 2026-10-06)
+
+- **Rozbryzgi** (`weather-3d.js`, `splashes`): 2400 pionowych kwadratów zwróconych do kamery (zamiast 1600 płaskich pierścieni); każdy cykl losuje nowy punkt terenu (skrót z ziarna i numeru cyklu), przypięty do świata, nie do kamery; widoczny przez pierwsze 28% cyklu: pięć kropelek wyrzuconych łukiem w górę i na boki oraz cienki prysk przy ziemi, gasnące.
+- **Kręgi**: w kałużach (`GROUND_GLOW`) i na wodzie (`waterLook`) cieńsze, o losowej największej średnicy, gasnące szybciej (kwadrat), o połowę słabsze.
+
+## Śnieg na terenie (wersja 0.85.3, 2026-10-06)
+
+- **Wygląd** (`three-renderer.js`, `GROUND_COLOR`): pokrywa z trzech oktaw szumu (próg do 1,05 − 1,15 × pokrywa, więc zostają gołe miejsca), mniej na skale (`vRock`) i stromiznach; kolor śniegu od niebieskawego (zagłębienia) do białego, zmarszczki wiatru (fala z szumem), drobna zmienność; na brzegu płatu cienki śnieg (szarawa mieszanka z ziemią); iskierki rzadsze (próg 0,993) i mniejsze.
+- **Błąd**: `vUpward` (jak bardzo powierzchnia patrzy w górę) z normalnej przeliczonej przez Three.js dla instancji — dzielonej przez kwadrat skali — był dla kamieni rozrzutu (skala 3–13) bliski zeru, więc nie leżał na nich śnieg (ani kałuże). Teraz normalna jest normalizowana.
+- `fogged()`: własny klucz programu (rodzaj materiału i źródło `onBeforeCompile`), żeby materiały ziemi i inne nie dzieliły programu.
+
+## Burza piaskowa (wersja 0.85.4, 2026-10-06)
+
+- **Ziarna** (`weather-3d.js`, `sand`): 7000 smug (kwadrat rozciągnięty wzdłuż wiatru, długość 10–20, szerokość 1,1, zwrócony bokiem do kamery), nisko nad ziemią (większość do kilku jednostek), z podskokiem (saltacja); gasną tuż przy kamerze.
+- **Kłęby pyłu** (`curtains`): 240 szerokich płatów (260–480 × 110–210) przy ziemi, z szumem w trzech oktawach przesuwanym z wiatrem i w górę; gęstsze u dołu, kolor od ciemniejszego piasku u dołu do jasnego u góry, postrzępione brzegi.
+- **Strugi na ziemi** (`three-renderer.js`, `GROUND_COLOR`, `sandLevel`): wydłużony wzdłuż wiatru szum przesuwany szybko — jaśniejsze pasma piasku na płaskim terenie.
+
+## Mgła (wersja 0.86, 2026-10-06)
+
+- **Ławice mgły** (`weather-3d.js`, `mist`): 220 szerokich, niskich płatów (260–500 × 40–90) z szumu w trzech oktawach, wolno dryfujących; gęstsze i wyższe w zagłębieniach (teren niżej od średniej z czterech punktów o 160 dalej), gasnące przy kamerze; kolor nieba.
+- **Mgła na ziemi** (`three-renderer.js`, `GROUND_GLOW`, `TERRAIN`): płaty dryfującego szumu na niższych partiach mapy — od 15. percentyla wysokości (najgęściej) do mediany (`mistBand`) — blady welon w kolorze nieba, widoczny także z góry. Ilość (`mistLevel`): świt i zmierzch (do 0,45), noc (0,3), deszcz i śnieg; ławice dostają tę samą ilość świtu i zmierzchu (`fx.update` → `mistLevel`).
+- **Mgła wojny** (`fogged()`): granica widoczności przesunięta wolno dryfującym szumem (poszarpana, zmienna), odkryte-niewidoczne obszary w chłodnej szarości, nieznane pod ciemną zasłoną z szumu (`fogTime`), która się przesuwa.
+
+## Dym i ogień (wersja 0.87, 2026-10-06)
+
+- **Cząstki** (`scene-fx-3d.js`, `particleSystem()`): nowy atrybut `misc` — wiek (0…1), ziarno, styl. Dym: styl 0 — kłąb z szumu (dwie oktawy) w obróconych ziarnem współrzędnych, „kłębiący się” z wiekiem, postrzępiony brzeg, cieniowanie jaśniejsze u góry; styl 1 — twarda kropka (odłamki, grudy rudy). Ogień: styl 0 — miękka kropka (iskry, żar, błyski); styl 1 — język ognia (zwężający się ku górze, migoczący brzeg z szumu), barwa z wieku: żółto-pomarańczowa → pomarańczowa → ciemnoczerwona.
+- **Płonące budynki i pojazdy**: dym szary z uszkodzonych, z płonących dwa razy gęstszy i ciemny, dryfujący z wiatrem (z oporem); trzy języki ognia na 0,1 s, iskry ulatujące w górę; nocą migocące światło ognia (dwa sinusy) na liście świateł nocy.
+
+## Woda i ryby (wersja 0.88, 2026-10-06)
+
+- **Błędy**: (1) tafla jeziora była płaska tylko przy brzegu równym do 8 jednostek, inaczej leżała na dnie; (2) płaszczyzna terenu wokół mapy (`buildOutskirts`, 3 poniżej najniższego punktu brzegu mapy) leżała pod całą mapą i od 0.82 (głębsze dna) przykrywała środek jezior. Teraz: tafla zawsze płaska (przy nierównym brzegu na najniższym punkcie brzegu), rzeźba (`relief-3d.js`) wyrównuje pagórki pod jeziorem do najniższego punktu brzegu (równe dno), a teren wokół mapy to pierścień z otworem na mapę.
+- **Wygląd** (`waterLook`): głębia ciemniejsza i bardziej niebieska, płycizny turkusowe z migotaniem światła nad dnem, iskry słońca (odbicie kierunku słońca/księżyca, `waterSunDir`, `waterSun` z renderera) na falkach wg szumu, piana przy brzegu przesuwająca się tam i z powrotem.
+- **Ryby** (`scene-life-3d.js`): po 8 w jeziorze, dwie ławice wędrujące gładkimi torami (sumy sinusów), każda ryba krąży wokół swojej ławicy; 2–3,4 pod taflą (poziom jak w `scene-fx-3d.js`), zwrot wg ruchu; co 20–40 s skok (1,1 s, łuk do 13 nad taflą, nos w górę, potem w dół) z pluskiem (`fx.shot("splash")`: krople i trochę piany) przy wyjściu i wejściu.
+
 ## W grze
 
 - **Kamera**: kamera gry (`camera.x`, `camera.y`, `zoom` → `scale`) steruje kamerą 3D. Patrzy na środek widoku z pochylenia ok. 54°, z odległości, przy której środek ekranu ma tyle pikseli na jednostkę mapy co widok 2D. Przesuwanie, przybliżenie, Home i minimapa działają jak dotąd; obrotu i pochylenia w grze nie ma.
