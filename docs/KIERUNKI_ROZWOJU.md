@@ -7,7 +7,7 @@ Status (2026-09-26): etapy A, B, C i D ukończone — zob. [Proponowana kolejno�
 
 Prototyp ma dwie frakcje, gospodarkę metalu/rudy, gazu i kryształów, bilans mocy, roboty budujące i wydobywające, badania, fortyfikacje, lotnictwo, pogodę, cykl dnia i nocy, neutralne zagrożenia, trzy rozdziały kampanii oraz konfigurację scenariuszy. Baza wiedzy pokazuje modele obiektów. Muzyka menu, intro i planet ma odrębne motywy; jednostki i praca robotów mają efekty dźwiękowe.
 
-Największy potencjał: połączyć te systemy w czytelne decyzje o rozwoju i sposobie wygrania bitwy. Kolejne obiekty powinny mieć rolę, koszt alternatywny i słabość. Zachowujemy 2D; tryb 3D i przebudowa strategicznego AI pozostają odłożone.
+Największy potencjał: połączyć te systemy w czytelne decyzje o rozwoju i sposobie wygrania bitwy. Kolejne obiekty powinny mieć rolę, koszt alternatywny i słabość. Zachowujemy 2D; tryb 3D i przebudowa strategicznego AI pozostają odłożone. *(Stan 2026-10-07: obie rzeczy zostały później wdrożone — dowódca AI w 0.34, renderer 3D w 0.52–0.96. Aktualne kierunki: [Plan rozwoju](PLAN_ROZWOJU.md).)*
 
 ## 1. Drzewo technologii i etapy rozwoju
 

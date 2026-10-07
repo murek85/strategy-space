@@ -52,13 +52,13 @@
 		const nightGetter = Object.getOwnPropertyDescriptor(Game.prototype, "night").get;
 		const clock = (s) => Math.floor(s / 60) + ":" + String(Math.floor(s % 60)).padStart(2, "0");
 
-		// Day length: the same curve as the engine's night, on the chosen period; "day" has no night.
+		// Day length: the same curve as the engine's night, on the chosen period; "day" has no night, "night" no day.
 		Object.defineProperty(Game.prototype, "night", {
 			configurable: true,
 			get() {
 				const p = OPTIONS.dayLength[this.scenario?.dayLength];
 				if (!p || p.period === 360) return nightGetter.call(this);
-				if (!p.period) return 0;
+				if (!p.period) return p.dark ? 1 : 0;
 				return clamp((0.2 - Math.cos((this.time / p.period) * Math.PI * 2)) / 0.65, 0, 1);
 			},
 		});

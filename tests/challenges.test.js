@@ -25,6 +25,7 @@ test("day length: short and long cycles, or no night at all", () => {
 	assert.ok(at("short", 180) < 1 && at("long", 180) < 1, "other periods differ at the default midnight");
 	assert.ok(at("short", 0) === 0 && at("long", 0) === 0);
 	for (const t of [0, 90, 180, 300, 500]) assert.equal(at("day", t), 0);
+	for (const t of [0, 90, 180, 300, 500]) assert.equal(at("night", t), 1);
 	// Unchanged default.
 	const g = skirmish({});
 	g.time = 180;
@@ -141,6 +142,7 @@ test("operation codes carry the new modes and settings; older codes stay valid",
 	assert.equal(back.startLevel, "colony");
 	assert.equal(RTS.parseScenarioCode("lumen-M2N-V-NNN-0").scenario.mode, "survival");
 	assert.equal(RTS.parseScenarioCode("lumen-M2N-C-NNN-0").scenario.dayLength, "normal");
+	assert.equal(RTS.parseScenarioCode(RTS.scenarioCode("lumen", { dayLength: "night" })).scenario.dayLength, "night");
 	assert.equal(RTS.parseScenarioCode("lumen-M2N-H77-NNN-0"), null);
 });
 

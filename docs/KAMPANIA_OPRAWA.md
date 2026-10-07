@@ -1,4 +1,6 @@
-# Kampania — portrety, sceny łączności i wybory (wersje 0.99–0.101, 2026-10-07)
+# Kampania i oprawa: sceny łączności, wybory, filmy, menu i interfejs (wersje 0.99–0.122, 2026-10-07)
+
+Najnowsze zmiany na górze. Zakres: portrety i sceny łączności, wybory, głosy, intro, prologi i epilogi, ekrany końca i ładowania, menu, pauza, ekrany menu, interfejs gry, drzewo rozwoju, panel badań, ekran kampanii, odblokowanie do testów, filmy na pełnym ekranie.
 
 ## Wybór rozdziału z podglądem (wersja 0.122, 2026-10-07)
 

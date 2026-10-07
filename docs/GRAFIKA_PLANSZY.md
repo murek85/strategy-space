@@ -1,5 +1,7 @@
 # Rozwój grafiki planszy
 
+> **Dokument historyczny (stan 2026-10-07).** Pakiety 2D opisane niżej są wdrożone; tryb 3D, tu odłożony, wdrożono później jako renderer Three.js (0.52–0.96 — [Renderer 3D](RENDERER_3D.md)), a oświetlenie i efekty 2D — jako [renderer WebGL](RENDERER_WEBGL.md).
+>
 > **Stan 0.16 (2026-09-26).** Pakiety 2D wdrożone w 0.10–0.14; sylwetki frakcji w etapie B; etapy budowy (fundament, szkielet, bryła), ustawienia jakości i licznik renderowania w [etapie D](ETAP_D_OPRAWA.md). Etap D wykonał pomiar wywołań Canvas dla sceny 200 jednostek; pełne profilowanie bitwy nadal oczekuje. Tryb 3D odłożony.
 
 Data: 2026-09-21. Punkt wyjścia: 0.6. Status: pakiet 2D do wersji 0.10 zaimplementowany i sprawdzony wizualnie; pomiar płynności pełnej bitwy oczekuje. Tryb 3D odłożony na życzenie użytkownika.

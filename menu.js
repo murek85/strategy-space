@@ -271,7 +271,7 @@ class CommandMenu {
 			body = KnowledgeBase.template() + this.button("back", "Wróć");
 		} else {
 			title = "Co nowego";
-			body = `<h2>0.11 / Pogoda i doba</h2><p>Śnieżyce, burze piaskowe i ulewy spowalniają ruch i obniżają celność. Cykl dnia i nocy, badania pogodowe w laboratorium, ptaki i ryby oraz pięć aranżacji muzycznych.</p><h2>0.10 / Budowa przez roboty</h2><p>Robot musi dotrzeć na plac budowy. Osłona piechoty przy skałach i murach, rozkaz utrzymania pozycji, opady osiadające na planszy, pożary uszkodzonych maszyn i proceduralna muzyka.</p><h2>0.9 / Rozległe pogranicze</h2><p>Pięć ręcznych slotów, osobne scenariusze i trzy rozdziały kampanii. Ciężka maszyna [Y], artyleria [O], mur [K] i brama [P]. Mapy 3360 × 2160, cztery przekaźniki, nowe złoża, jeziora i drapieżniki. Pogoda i ślady ruchu. Dolny pasek postępu i lewy panel z zakładkami.</p><h2>0.8 / Nowe światy</h2><p>Reaktory, moc, laboratoria i kryształy. Trzy mapy operacji, kampania Wolnych Kolonii z pierwszą misją, różne biomy i rozbudowana oprawa 2D.</p><h2>0.6 / Gospodarka</h2><p>Magazyny polowe, gaz i ekstraktory, bezczynne roboty oraz badanie większych ładowni. Starsze zapisy otrzymują złoża gazu, a zapas gazu zaczyna od zera.</p><h2>0.5 / Pokład dowodzenia</h2><p>Menu główne, gra jednoosobowa z odprawą, kontynuowanie zapisu, baza wiedzy, ustawienia i menu pauzy.</p><h2>0.4 / Dźwięk</h2><p>Broń, eksplozje, rozkazy, powiadomienia i regulacja głośności.</p><h2>Rozważane kierunki</h2><p>Trzeci poziom centrum (Twierdza) i doktryny frakcji. Nowe cele scenariuszy: ekspedycja po artefakt, ziarno mapy do udostępniania i gotowe zestawy ustawień. Skały blokujące ostrzał, balans frakcji na podstawie rozgrywek, pomiary dużych bitew. Później możliwe bitwy kosmiczne i gra sieciowa. To propozycje bez ustalonego terminu. Przebudowa AI i tryb 3D pozostają odłożone.</p>${this.button("back", "Wróć")}`;
+			body = `<h2>0.11 / Pogoda i doba</h2><p>Śnieżyce, burze piaskowe i ulewy spowalniają ruch i obniżają celność. Cykl dnia i nocy, badania pogodowe w laboratorium, ptaki i ryby oraz pięć aranżacji muzycznych.</p><h2>0.10 / Budowa przez roboty</h2><p>Robot musi dotrzeć na plac budowy. Osłona piechoty przy skałach i murach, rozkaz utrzymania pozycji, opady osiadające na planszy, pożary uszkodzonych maszyn i proceduralna muzyka.</p><h2>0.9 / Rozległe pogranicze</h2><p>Pięć ręcznych slotów, osobne scenariusze i trzy rozdziały kampanii. Ciężka maszyna [Y], artyleria [O], mur [K] i brama [P]. Mapy 3360 × 2160, cztery przekaźniki, nowe złoża, jeziora i drapieżniki. Pogoda i ślady ruchu. Dolny pasek postępu i lewy panel z zakładkami.</p><h2>0.8 / Nowe światy</h2><p>Reaktory, moc, laboratoria i kryształy. Trzy mapy operacji, kampania Wolnych Kolonii z pierwszą misją, różne biomy i rozbudowana oprawa 2D.</p><h2>0.6 / Gospodarka</h2><p>Magazyny polowe, gaz i ekstraktory, bezczynne roboty oraz badanie większych ładowni. Starsze zapisy otrzymują złoża gazu, a zapas gazu zaczyna od zera.</p><h2>0.5 / Pokład dowodzenia</h2><p>Menu główne, gra jednoosobowa z odprawą, kontynuowanie zapisu, baza wiedzy, ustawienia i menu pauzy.</p><h2>0.4 / Dźwięk</h2><p>Broń, eksplozje, rozkazy, powiadomienia i regulacja głośności.</p><h2>Rozważane kierunki</h2><p>Trzeci poziom centrum (Twierdza) i doktryny frakcji, mgła wojny i budynki wsparcia dla dowódcy AI, skały blokujące ostrzał, patrol i eskorta, bohaterowie, edytor map i tabele wyników, nagrane głosy, balans frakcji na podstawie rozgrywek, a później bitwy kosmiczne. To propozycje bez ustalonego terminu.</p>${this.button("back", "Wróć")}`;
 		}
 		if (screen === "news")
 			body =
@@ -291,6 +291,7 @@ class CommandMenu {
 				body;
 		if (screen === "news")
 			body =
+				"<h2>0.124 / Wieczna noc</h2><p>Nowa długość doby w scenariuszach i grze sieciowej: cała bitwa toczy się nocą, przy księżycu i reflektorach.</p>" +
 				"<h2>0.123 / Płynna gra sieciowa</h2><p>Gospodarz bitwy wieloosobowej nie ma już przycięć: czekanie na ruchy drugiego gracza nie jest potem nadrabiane skokami.</p>" +
 				"<h2>0.122 / Wybór rozdziału z podglądem</h2><p>Zamiast mapy galaktyki: lista rozdziałów i podgląd wskazanego — obracająca się planeta, stan, dane, opis, cel i przycisk odprawy.</p>" +
 				"<h2>0.121 / Mapa galaktyki na pełnym ekranie</h2><p>Ekran kampanii to sama mapa galaktyki na całym ekranie; lista rozdziałów, karta planety i powrót leżą na niej jak w grze.</p>" +
@@ -467,7 +468,7 @@ class CommandMenu {
 		queueMicrotask(() => ranges.forEach(fill));
 		if (screen === "knowledge") KnowledgeBase.mount(this.root);
 		this.root.querySelector(".menu-footer span").textContent =
-			"PROTOTYP 0.123 · ZAPIS LOKALNY";
+			"PROTOTYP 0.124 · ZAPIS LOKALNY";
 		if (
 			screen === "scenarios" ||
 			(screen === "briefing" &&

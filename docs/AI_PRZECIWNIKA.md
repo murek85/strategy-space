@@ -1,4 +1,4 @@
-# Sztuczna inteligencja przeciwnika — dowódca AI (wersja 0.34)
+# Sztuczna inteligencja przeciwnika — dowódca AI (wersja 0.34; styl frakcji 0.51, kampania 0.97–0.98 i 0.102)
 
 Aktualizacja: 2026-09-27. Realizuje pomysły [AI-01–AI-05](POMYSLY.md): gospodarkę, płatną produkcję, obronę, przejmowanie przekaźników, odbudowę i poziomy trudności. Reguły są w `enemy-ai.js` (ładowany jako ostatni moduł reguł); wszystkie liczby w `RTS.AI_LEVELS` i `RTS.AI`.
 

@@ -1,4 +1,4 @@
-# Gra wieloosobowa (wersja 0.48, 2026-09-28)
+# Gra wieloosobowa (wersje 0.46–0.49 i 0.123)
 
 Nowa pozycja menu **Gra wieloosobowa**: bitwa jeden na jeden z drugim człowiekiem, przez przeglądarkę, bez serwera gry. Zakres pierwszej wersji wybrany przez użytkownika: połączenie P2P (WebRTC), dwóch graczy, wersja minimalna (lobby z ustawieniami i sama bitwa).
 

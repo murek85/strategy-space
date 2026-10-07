@@ -26,12 +26,13 @@
 				normal: { name: "Zwykła", code: "N" },
 				harsh: { name: "Surowa", code: "H", period: 150, first: 60, duration: 70, peak: 1 },
 			},
-			// Length of a full day and night; "day" has no night at all.
+			// Length of a full day and night; "day" has no night at all, "night" no day.
 			dayLength: {
 				short: { name: "Krótka (4 min)", code: "S", period: 240 },
 				normal: { name: "Zwykła (6 min)", code: "N", period: 360 },
 				long: { name: "Długa (10 min)", code: "L", period: 600 },
 				day: { name: "Wieczny dzień", code: "D", period: 0 },
+				night: { name: "Wieczna noc", code: "E", period: 0, dark: true },
 			},
 			startLevel: {
 				outpost: { name: "Przyczółek", code: "O" },
@@ -149,7 +150,7 @@
 			].join("-") + (s.teams === "duo" ? "-T" : "") + (s.enemy === "waves" ? "-W" : "");
 		};
 		RTS.parseScenarioCode = (code) => {
-			const m = /^([a-z0-9]+)-([SML])([234])([ENH])-(C|X|V|R\d+|D\d+|H\d+)-([PNR])([FNM])([CNH])(?:([SNLD])([OC]))?-(\d{1,6})(?:-(T))?(?:-(W))?$/i.exec(String(code || "").trim());
+			const m = /^([a-z0-9]+)-([SML])([234])([ENH])-(C|X|V|R\d+|D\d+|H\d+)-([PNR])([FNM])([CNH])(?:([SNLDE])([OC]))?-(\d{1,6})(?:-(T))?(?:-(W))?$/i.exec(String(code || "").trim());
 			if (!m) return null;
 			const [, missionId, size, players, diff, modePart, res, fauna, weather, day, start, seed, duo, waves] = m;
 			if (!MISSIONS[missionId] || MISSIONS[missionId].campaign) return null;

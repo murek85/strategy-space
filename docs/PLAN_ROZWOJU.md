@@ -1,37 +1,41 @@
 # Plan rozwoju prototypu
 
-Aktualizacja: 2026-09-28. Aktualna wersja: 0.46.
+Aktualizacja: 2026-10-07. Aktualna wersja: 0.124.
 
 Ten plik jest punktem wejścia do dokumentacji: opisuje bieżący stan, otwarte kierunki i historię wersji. Instrukcja gry i sterowanie: [README](../README.md).
 
 ## Stan projektu
 
-Ukończone etapy z [Kierunków rozwoju](KIERUNKI_ROZWOJU.md): **A — Rozwój kolonii**, **B — Armia i baza**, **D — Oprawa** oraz **C — akt II kampanii (0.17), tryby scenariuszy i rozmiary map (0.18)**. Przebudowa AI wdrożona w 0.34 (dowódca AI scenariuszy); tryb 3D pozostaje odłożony.
+Ukończone etapy z [Kierunków rozwoju](KIERUNKI_ROZWOJU.md): **A — Rozwój kolonii**, **B — Armia i baza**, **C — akt II kampanii, tryby i rozmiary map**, **D — Oprawa**, **E — Wsparcie i moduły**, **F — scenariusze, frakcje, akt III**. Dowódca AI działa w scenariuszach (0.34) i w wybranych rozdziałach kampanii (0.97). Gra wieloosobowa 1 na 1 przez WebRTC (0.46–0.49, płynność gospodarza 0.123). Renderery: Canvas 2D, WebGL/WebGPU (PixiJS, 0.21–0.44) i 3D (Three.js, 0.52–0.96).
 
-Gra zawiera dwie frakcje, osiem map scenariuszy dla 2–4 uczestników w trzech trybach (Podbój, Utrzymanie przekaźników, Obrona) i trzech rozmiarach, kampanię w dwóch aktach (sześć rozdziałów) i misję szkoleniową. Gospodarka obejmuje metal, gaz, kryształy, bilans mocy z akumulatorem oraz roboty budujące i wydobywające. Rozwój: dwa poziomy centrum i drzewo rozwoju (F2). Armia: piechota, rakietowcy, czołgi, zwiadowca/bastion frakcji, ciężka maszyna, artyleria, transporter i lotnictwo. Przeciwnik nadal działa systemem fal, bez własnej gospodarki.
+Gra zawiera trzy frakcje (Wolne Kolonie, Dominium, Rój Kryształowy), osiem map scenariuszy dla 2–4 uczestników (także drużyny 2 na 2) w sześciu trybach (Podbój, Utrzymanie przekaźników, Obrona, Ekspedycja, Król wzgórza, Przetrwanie) i trzech rozmiarach, z ziarnem mapy, kodem operacji i ustawieniami (złoża, fauna, pogoda, długość doby — także wieczny dzień i wieczna noc, poziom startowy). Kampania „Odzyskany Świt” ma szkolenie i dziewięć rozdziałów w trzech aktach, z decyzjami fabularnymi, celami dodatkowymi, scenami łączności z głosami syntezowanymi, filmowymi prologami i epilogami oraz poziomem trudności. Gospodarka: metal, gaz, kryształy, moc z akumulatorem, handel, roboty budujące i wydobywające; rozwój: dwa poziomy centrum, badania i drzewo rozwoju (F2). Oprawa: proceduralna grafika 2D i 3D z dobą, pogodą, niebem i fauną, muzyka filmowa (Tone.js), menu i interfejs w stylu pokładu dowodzenia.
 
 ## Mapa dokumentacji
 
 | Dokument | Rodzaj | Status |
 |---|---|---|
-| [Kierunki rozwoju](KIERUNKI_ROZWOJU.md) | Koncepcja etapów A–D | A, B, C, D ukończone; poziom III i doktryny — propozycje |
+| [Kierunki rozwoju](KIERUNKI_ROZWOJU.md) | Koncepcja etapów A–D | Etapy ukończone; poziom III i doktryny — propozycje |
 | [Etap A — Rozwój kolonii](ETAP_A_ROZWOJ_KOLONII.md) | Opis wdrożenia | Ukończony 2026-09-24 |
-| ↳ [Drzewo rozwoju](DRZEWO_ROZWOJU.md), [Panel gospodarki](PANEL_GOSPODARKI.md), [Poziomy centrum](POZIOMY_CENTRUM.md), [Akumulator](AKUMULATOR_ENERGII.md), [Warsztat](WARSZTAT_POLOWY.md) | Podetapy A | Wdrożone |
+| ↳ [Drzewo rozwoju](DRZEWO_ROZWOJU.md), [Panel gospodarki](PANEL_GOSPODARKI.md), [Poziomy centrum](POZIOMY_CENTRUM.md), [Akumulator](AKUMULATOR_ENERGII.md), [Warsztat](WARSZTAT_POLOWY.md) | Podetapy A | Wdrożone (wygląd drzewa odnowiony w 0.116 — [opis](KAMPANIA_OPRAWA.md)) |
 | [Etap B — Armia i baza](ETAP_B_ARMIA_I_BAZA.md) | Opis wdrożenia | Ukończony, wersja 0.15 |
 | [Etap D — Oprawa](ETAP_D_OPRAWA.md) | Opis wdrożenia i pomiary | Ukończony, wersja 0.16 |
 | [Etap C — Akt II kampanii](ETAP_C_DRUGI_AKT.md) | Opis wdrożenia | Ukończony, wersja 0.17 |
 | [Etap C — Tryby i rozmiary map](ETAP_C_TRYBY_I_MAPY.md) | Opis wdrożenia | Ukończony, wersja 0.18 |
 | [Etap E — Wsparcie i moduły](ETAP_E_WSPARCIE_I_MODULY.md) | Opis wdrożenia | Ukończony, wersja 0.32 |
 | [Scenariusze: Ekspedycja, ziarno, ustawienia](SCENARIUSZE_USTAWIENIA_I_EKSPEDYCJA.md) | Opis wdrożenia | Ukończone, wersja 0.33 |
-| [AI przeciwnika](AI_PRZECIWNIKA.md) | Opis wdrożenia i symulacje | Ukończone, wersja 0.34 |
-| [Etap F](ETAP_F.md) | Opis wdrożenia (grafika, scenariusze, frakcje, kampania) | Ukończony w 0.35–0.41 (F1–F7) |
+| [AI przeciwnika](AI_PRZECIWNIKA.md) | Opis wdrożenia i symulacje | Wdrożone w 0.34; styl frakcji 0.51; kampania 0.97–0.98, 0.102 |
+| [Etap F](ETAP_F.md) | Opis wdrożenia (grafika, scenariusze, frakcje, kampania) | Ukończony w 0.35–0.42; wybory 0.50; wieczna noc 0.124 |
 | [Mapy tematyczne](MAPY_TEMATYCZNE.md) | Opis wdrożenia | Wdrożone, wersje 0.19–0.20 |
-| [Renderer WebGL](RENDERER_WEBGL.md) | Propozycja, prototyp, etapy 2–5, cała plansza natywnie, pomiary | Wdrożone i domknięte w 0.21–0.31: renderer WebGL/WebGPU z trybem awaryjnym Canvas 2D, cała plansza jako natywne obiekty PixiJS, oświetlenie, pogoda, wysokość terenu, perspektywa 2,5D; testy porównawcze i pomiar płynności |
+| [Renderer WebGL](RENDERER_WEBGL.md) | Propozycja, prototyp, etapy 2–5, cała plansza natywnie, pomiary | Wdrożone w 0.21–0.44 (WebGL/WebGPU z trybem awaryjnym Canvas 2D) |
+| [Renderer 3D](RENDERER_3D.md) | Opis wdrożenia | Wdrożone w 0.52–0.96 (Three.js: teren, modele, światło, pogoda, niebo, przyroda, kamera) |
+| [Dźwięk i muzyka](AUDIO.md) | Opis wdrożenia | Próbki i Tone.js od 0.45; muzyka filmowa 0.103–0.105 |
+| [Gra wieloosobowa](MULTIPLAYER.md) | Opis wdrożenia | Wdrożone w 0.46–0.49; płynność gospodarza 0.123 |
+| [Kampania — oprawa](KAMPANIA_OPRAWA.md) | Opis wdrożenia | Sceny łączności, wybory, głosy, filmy, menu, pauza, interfejs gry, drzewo i panel badań, wybór rozdziału (0.99–0.122) |
 | [Wersja 0.12](WERSJA_0_12.md), [0.13](WERSJA_0_13.md), [0.14](WERSJA_0_14.md) | Notatki wydań | Wdrożone |
-| [Pomysły](POMYSLY.md) | Lista możliwości | Aktualne statusy pomysłów (AI-01–05 wdrożone w 0.34) |
+| [Pomysły](POMYSLY.md) | Lista możliwości | Aktualne statusy pomysłów |
 | [Gospodarka i rozwój](GOSPODARKA_I_ROZWOJ.md) | Koncepcja z 0.3–0.8 | Historyczna; niemal całość wdrożona |
-| [Grafika planszy](GRAFIKA_PLANSZY.md) | Koncepcja i realizacja 2D | Pakiety 2D wdrożone; 3D odłożone |
-| [Menu główne](MENU_GLOWNE.md) | Koncepcja z 0.4 | Historyczna; pierwszy zakres i większość rozszerzeń wdrożone |
+| [Grafika planszy](GRAFIKA_PLANSZY.md) | Koncepcja i realizacja 2D | Historyczna; pakiety 2D wdrożone, 3D wdrożone później jako [renderer 3D](RENDERER_3D.md) |
+| [Menu główne](MENU_GLOWNE.md) | Koncepcja z 0.4 | Historyczna; obecny wygląd menu — [opis](KAMPANIA_OPRAWA.md) |
 
 ## Otwarte kierunki
 
@@ -39,18 +43,20 @@ Wpis nie oznacza zlecenia realizacji ani terminu.
 
 | Kierunek | Źródło | Status |
 |---|---|---|
-| Scenariusze dalej: edytor map, wyzwania z ziarnem i tabele wyników; balans Ekspedycji, Króla wzgórza i Przetrwania | [Kierunki §9](KIERUNKI_ROZWOJU.md), [Etap F](ETAP_F.md) | Propozycja |
-| Kampania: nagrane głosy, balans aktów II–III na podstawie rozgrywek (portrety i sceny łączności — 0.99, [opis](KAMPANIA_OPRAWA.md)) | [Etap C](ETAP_C_DRUGI_AKT.md), [Etap F](ETAP_F.md) | Propozycja |
-| Frakcje: balans trzech frakcji (koszty, cechy, jednostki unikalne) na podstawie rozgrywek | [Etap F](ETAP_F.md) | Wymaga rozgrywek |
 | Poziom III centrum (Twierdza) i doktryny frakcji | [Kierunki §1](KIERUNKI_ROZWOJU.md) | Propozycja, po ocenie tempa rozgrywki |
-| AI dalej: mgła wojny dla AI, budynki wsparcia i jednostki specjalne w rękach AI; AI w kampanii wdrożone w 0.97 (rozdziały II, III, VI) — strojenie z rozgrywek | [AI przeciwnika](AI_PRZECIWNIKA.md) | Propozycja |
+| AI dalej: mgła wojny dla AI, budynki wsparcia, moduły i jednostki specjalne w rękach AI; strojenie dowódcy w kampanii z rozgrywek | [AI przeciwnika](AI_PRZECIWNIKA.md), [Etap E](ETAP_E_WSPARCIE_I_MODULY.md) | Propozycja |
 | WAL-01: skały blokujące ostrzał | Archiwum poniżej | Propozycja |
-| Balans frakcji, kosztów i dochodu pasywnego (BAL-01, GOS-03) | [Pomysły](POMYSLY.md) | Wymaga rozgrywek porównawczych |
-| Etap E dalej: AI używające nowych budynków, jednostek i modułów; balans; dźwięki leczenia, osłony i sabotażu | [Etap E](ETAP_E_WSPARCIE_I_MODULY.md) | Propozycja |
+| DOW-01 dalej: patrol i rozkaz eskorty | [Pomysły](POMYSLY.md) | Propozycja |
+| Bohaterowie | [Pomysły](POMYSLY.md) | Propozycja |
+| Scenariusze dalej: edytor map, wyzwania z ziarnem i tabele wyników; balans Ekspedycji, Króla wzgórza i Przetrwania | [Kierunki §9](KIERUNKI_ROZWOJU.md), [Etap F](ETAP_F.md) | Propozycja |
+| Kampania: nagrane głosy (dziś syntezowane, 0.101), balans aktów II–III | [Kampania — oprawa](KAMPANIA_OPRAWA.md) | Propozycja |
+| Oprawa: dźwięki leczenia, osłony i sabotażu; dalsza czytelność efektów walki (OPR-02) | [Etap E](ETAP_E_WSPARCIE_I_MODULY.md), [Pomysły](POMYSLY.md) | Propozycja |
+| Balans trzech frakcji, kosztów i dochodu pasywnego (BAL-01, GOS-03) | [Pomysły](POMYSLY.md), [Etap F](ETAP_F.md) | Wymaga rozgrywek porównawczych |
+| Bitwy kosmiczne i transport między planetami | [Pomysły](POMYSLY.md) | Kierunek na później |
 
 ## Testy
 
-`npm test` uruchamia wszystkie pliki `tests/*.test.js` wbudowanym runnerem Node (`node --test`), również gdy któryś z nich zawiedzie. Stan 2026-09-27 (0.40): 236 testów, wszystkie przechodzą. Podgląd terenu map: `tests/maps-browser.html`. Strony `tests/*-browser.html` są kontrolami ręcznymi w przeglądarce (audio, menu, grafika, pogoda, pomiary etapu D); renderery: `tests/render-browser.html` (Canvas 2D, porównanie pikseli ze wzorcem) i `tests/render-webgl-browser.html` (WebGL, dzień/noc, efekty, wysokość terenu, perspektywa, pomiar czasu klatki; `?gpu=webgpu` — to samo na WebGPU); płynność w pętli gry: `tests/benchmark-browser.html`.
+`npm test` uruchamia wszystkie pliki `tests/*.test.js` wbudowanym runnerem Node (`node --test`), również gdy któryś z nich zawiedzie. Stan 2026-10-07 (0.124): 287 testów, wszystkie przechodzą. Strony `tests/*-browser.html` są kontrolami w przeglądarce: menu (`menu-browser.html`, 37 sprawdzeń), drzewo rozwoju (`development-browser.html`, 68), renderery (`render-browser.html` — Canvas 2D, `render-webgl-browser.html` — WebGL/WebGPU, `render-3d-browser.html` — 3D), filmy kampanii (`film-browser.html`, arkusz kadrów), mapy (`maps-browser.html`), płynność (`benchmark-browser.html`) oraz audio, grafika i pogoda.
 
 Przy każdym kolejnym etapie należy uruchomić pełny zestaw, nie tylko testy ukierunkowane. Po etapach A, B i D trzy starsze testy pozostały niezaktualizowane (wymaganie Kolonii dla fabryki, nowe pola bilansu mocy, szkolenie bez fauny); poprawiono je 2026-09-26.
 
@@ -112,6 +118,97 @@ Przy każdym kolejnym etapie należy uruchomić pełny zestaw, nie tylko testy u
 | 0.45.2 | Tone.js wczytywany dopiero po pierwszym kliknięciu — koniec ostrzeżenia „The AudioContext was not allowed to start” — [opis](AUDIO.md) |
 | 0.45.3 | Lżejszy zespół muzyczny: jeden wspólny pogłos muzyki, stary zespół usuwany zaraz po wyciszeniu — dźwięk na mapie wraca — [opis](AUDIO.md) |
 | 0.46 | Gra wieloosobowa 1 na 1 (WebRTC bez serwera): kody zaproszenia, lobby z zasadami, silnik z osobną gospodarką i mgłą dla każdego gracza, synchronizacja lockstep z sumami kontrolnymi — [opis](MULTIPLAYER.md) |
+| 0.46.1 | Czat — [opis](MULTIPLAYER.md) |
+| 0.46.2 | Płynność gry wieloosobowej — [opis](MULTIPLAYER.md) |
+| 0.47 | Wspólna pauza — [opis](MULTIPLAYER.md) |
+| 0.47.1 | Panel wybranego oddziału — [opis](MULTIPLAYER.md) |
+| 0.47.2 | Czat obok lobby — [opis](MULTIPLAYER.md) |
+| 0.48 | Rewanż — [opis](MULTIPLAYER.md) |
+| 0.49 | Handel zasobami — [opis](MULTIPLAYER.md) |
+| 0.50 | Wybory z konsekwencjami — [opis](ETAP_F.md) |
+| 0.51 | Styl gry AI zależny od frakcji — [opis](AI_PRZECIWNIKA.md) |
+| 0.52 | Plansza 3D (eksperymentalnie) — [opis](RENDERER_3D.md) |
+| 0.53 | Woda, noc i pogoda w 3D — [opis](RENDERER_3D.md) |
+| 0.54 | Żywa planeta w 3D — [opis](RENDERER_3D.md) |
+| 0.55 | Tabliczki, wyraźne pociski i 3D z dysku — [opis](RENDERER_3D.md) |
+| 0.56 | Krajobraz 3D — [opis](RENDERER_3D.md) |
+| 0.57 | Obrót kamery i prześwitujące wyspy — [opis](RENDERER_3D.md) |
+| 0.58 | Złoża i teren w 3D — [opis](RENDERER_3D.md) |
+| 0.59 | Czysty grunt, jakość i kamera 3D — [opis](RENDERER_3D.md) |
+| 0.60 | Cele i zniszczenia w 3D — [opis](RENDERER_3D.md) |
+| 0.61 | Czytelność bitwy w 3D — [opis](RENDERER_3D.md) |
+| 0.62 | Pogoda 3D — [opis](RENDERER_3D.md) |
+| 0.63 | Plansza 3D bez płaskich elementów 2D — [opis](RENDERER_3D.md) |
+| 0.64 | Szczegółowe modele 3D — [opis](RENDERER_3D.md) |
+| 0.65 | Reflektory i latarki 3D — [opis](RENDERER_3D.md) |
+| 0.66 | Teren 3D: trawa i kamienie — [opis](RENDERER_3D.md) |
+| 0.67 | Dokładniejsza przyroda 3D — [opis](RENDERER_3D.md) |
+| 0.68 | Wraki, ruiny i wyspy 3D — [opis](RENDERER_3D.md) |
+| 0.69 | Światło budynków nocą — [opis](RENDERER_3D.md) |
+| 0.70 | Okna budynków — [opis](RENDERER_3D.md) |
+| 0.71 | Rój w 3D — [opis](RENDERER_3D.md) |
+| 0.72 | Budynki specjalne aktu III w 3D — [opis](RENDERER_3D.md) |
+| 0.73 | Obiekty aktu II w 3D — [opis](RENDERER_3D.md) |
+| 0.74 | Akt I w 3D — [opis](RENDERER_3D.md) |
+| 0.75 | Woda, mgła i pogoda w 3D — [opis](RENDERER_3D.md) |
+| 0.75.1 | Znaczniki rozkazów w 3D — [opis](RENDERER_3D.md) |
+| 0.75.2 | Samoloty bez śladów, reflektory w powietrzu — [opis](RENDERER_3D.md) |
+| 0.76 | Nowe modele samolotów — [opis](RENDERER_3D.md) |
+| 0.77 | Dokładniejsze pojazdy naziemne — [opis](RENDERER_3D.md) |
+| 0.78 | Słońce, księżyc i noc — [opis](RENDERER_3D.md) |
+| 0.79 | Reflektory budynków — [opis](RENDERER_3D.md) |
+| 0.79.1 | Bez ostrych snopów światła — [opis](RENDERER_3D.md) |
+| 0.80 | Wszystkie światła nocy naraz — [opis](RENDERER_3D.md) |
+| 0.80.1 | Strzały samolotów w powietrzu — [opis](RENDERER_3D.md) |
+| 0.81 | Wybuchy — [opis](RENDERER_3D.md) |
+| 0.82 | Ukształtowanie terenu — [opis](RENDERER_3D.md) |
+| 0.83 | Drzewa i roślinność — [opis](RENDERER_3D.md) |
+| 0.84 | Zwierzęta i ptaki — [opis](RENDERER_3D.md) |
+| 0.84.1 | Tylne nogi zająca — [opis](RENDERER_3D.md) |
+| 0.85 | Efekty wydobycia — [opis](RENDERER_3D.md) |
+| 0.85.1 | Kosz robota górniczego — [opis](RENDERER_3D.md) |
+| 0.85.2 | Krople deszczu na ziemi — [opis](RENDERER_3D.md) |
+| 0.85.3 | Śnieg na terenie — [opis](RENDERER_3D.md) |
+| 0.85.4 | Burza piaskowa — [opis](RENDERER_3D.md) |
+| 0.86 | Mgła — [opis](RENDERER_3D.md) |
+| 0.87 | Dym i ogień — [opis](RENDERER_3D.md) |
+| 0.88 | Woda i ryby — [opis](RENDERER_3D.md) |
+| 0.89 | Lawa i świecące jeziora — [opis](RENDERER_3D.md) |
+| 0.90 | Kratery i ślady wybuchów — [opis](RENDERER_3D.md) |
+| 0.91 | Pociski i trafienia — [opis](RENDERER_3D.md) |
+| 0.92 | Słońce i księżyc — [opis](RENDERER_3D.md) |
+| 0.93 | Gwiazdy, Droga Mleczna i zorza — [opis](RENDERER_3D.md) |
+| 0.94 | Chmury, zmierzch i obce niebo — [opis](RENDERER_3D.md) |
+| 0.95 | Pochylanie kamery w grze — [opis](RENDERER_3D.md) |
+| 0.96 | Zachowania zwierząt — [opis](RENDERER_3D.md) |
+| 0.97 | Dowódca AI w kampanii — [opis](AI_PRZECIWNIKA.md) |
+| 0.98 | Żywsze misje kampanii — [opis](AI_PRZECIWNIKA.md) |
+| 0.99 | Portrety i sceny łączności — [opis](KAMPANIA_OPRAWA.md) |
+| 0.100 | Wybory i rozgałęzienia kampanii — [opis](KAMPANIA_OPRAWA.md) |
+| 0.101 | Głos łączności — [opis](KAMPANIA_OPRAWA.md) |
+| 0.102 | Styl Dominium w kampanii — [opis](AI_PRZECIWNIKA.md) |
+| 0.103 | Nowa muzyka — [opis](AUDIO.md) |
+| 0.104 | Odsłuch muzyki w ustawieniach — [opis](AUDIO.md) |
+| 0.105 | Cztery niepokojące motywy — [opis](AUDIO.md) |
+| 0.106 | Nowe intro kampanii — [opis](KAMPANIA_OPRAWA.md) |
+| 0.107 | Nowy prolog aktu II — [opis](KAMPANIA_OPRAWA.md) |
+| 0.108 | Sceny łączności i prolog aktu III — [opis](KAMPANIA_OPRAWA.md) |
+| 0.109 | Filmowe zakończenia aktów — [opis](KAMPANIA_OPRAWA.md) |
+| 0.110 | Ekrany zwycięstwa i porażki — [opis](KAMPANIA_OPRAWA.md) |
+| 0.111 | Ekran ładowania — [opis](KAMPANIA_OPRAWA.md) |
+| 0.112 | Menu główne w stylu filmów — [opis](KAMPANIA_OPRAWA.md) |
+| 0.113 | Pauza taktyczna — [opis](KAMPANIA_OPRAWA.md) |
+| 0.114 | Ekrany menu jako panele taktyczne — [opis](KAMPANIA_OPRAWA.md) |
+| 0.115 | Interfejs gry w stylu pokładu dowodzenia — [opis](KAMPANIA_OPRAWA.md) |
+| 0.116 | Nowe drzewo rozwoju — [opis](KAMPANIA_OPRAWA.md) |
+| 0.117 | Nowy panel badań — [opis](KAMPANIA_OPRAWA.md) |
+| 0.118 | Nowa mapa galaktyki w kampanii — [opis](KAMPANIA_OPRAWA.md) |
+| 0.119 | Odblokowanie kampanii do testów — [opis](KAMPANIA_OPRAWA.md) |
+| 0.120 | Prologi i sceny łączności na pełnym ekranie — [opis](KAMPANIA_OPRAWA.md) |
+| 0.121 | Mapa galaktyki na pełnym ekranie — [opis](KAMPANIA_OPRAWA.md) |
+| 0.122 | Wybór rozdziału z podglądem zamiast mapy galaktyki — [opis](KAMPANIA_OPRAWA.md) |
+| 0.123 | Płynna gra sieciowa u gospodarza — [opis](MULTIPLAYER.md) |
+| 0.124 | Wieczna noc — [opis](ETAP_F.md) |
 
 Wersja 0.7 nie ma osobnych notatek w dokumentacji.
 
@@ -129,7 +226,7 @@ Poniższe sekcje zachowano jako historię decyzji. Opisy statusu w nich nie zast
 
 - Propozycje rozwoju zapisujemy w plikach projektu i aktualizujemy wraz z kolejnymi decyzjami.
 - Przebudowa AI została odłożona na życzenie użytkownika (2026-09-20), a wdrożona w 0.34 (2026-09-27) — [opis](AI_PRZECIWNIKA.md).
-- Tryb 3D odłożony na życzenie użytkownika; rozwijamy grafikę 2D.
+- Tryb 3D odłożony na życzenie użytkownika (2026-09-20); później wdrożony jako renderer Three.js w 0.52–0.96 — [opis](RENDERER_3D.md).
 - Kierunek gospodarki i rozwoju bazy opisano w [GOSPODARKA_I_ROZWOJ.md](GOSPODARKA_I_ROZWOJ.md); menu w [MENU_GLOWNE.md](MENU_GLOWNE.md).
 
 ### Walka i teren

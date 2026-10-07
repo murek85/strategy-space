@@ -1,4 +1,4 @@
-# Renderer 3D (wersje 0.52–0.62, eksperymentalnie)
+# Renderer 3D (wersje 0.52–0.96)
 
 Data: 2026-09-30. Status: w grze jako Ustawienia → Renderer → „3D (Three.js)”, obok samodzielnego prototypu `prototyp-3d.html`. Tylko grafika — symulacja, zasady, zapisy i gra sieciowa bez zmian.
 

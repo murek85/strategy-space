@@ -1,4 +1,6 @@
-# Pogranicze Galaktyki — prototyp RTS 0.123
+# Pogranicze Galaktyki — prototyp RTS 0.124
+
+**Wersja 0.124 — wieczna noc.** Nowa opcja długości doby w scenariuszach i grze sieciowej: **Wieczna noc** — bitwa od początku do końca toczy się nocą (księżyc, gwiazdy, reflektory, światła budynków i nocne efekty). Kod operacji zapisuje ją literą „E” (np. `horizon-M2N-C-NNNEO-0`).
 
 **Wersja 0.123 — płynna gra sieciowa u gospodarza.** Naprawione szarpanie obrazu u gospodarza bitwy wieloosobowej (najmocniej widoczne w trybie 3D). Gospodarz zaczyna bitwę od razu, a gość dopiero po zbudowaniu planszy, więc gospodarz był stale o krok do przodu: co turę czekał na ruchy gościa, a potem nadrabiał czas po 3 kroki naraz. Teraz czas czekania nie jest nadrabiany — komputer, który wyprzedza, ustawia się równo za drugim i biegnie płynnie.
 
@@ -386,32 +388,33 @@ Zapis jest lokalny dla danej przeglądarki i adresu (port również ma znaczenie
 - Strzałki lub przeciągnięcie środkowym przyciskiem: kamera; kółko: zoom.
 - H: kamera na bazę; Home: cała mapa; kliknięcie minimapy: przesunięcie kamery.
 - Utrata fokusu okna automatycznie wstrzymuje grę. Wznów Spacją lub przyciskiem u góry.
+- F2: drzewo rozwoju; Esc: menu pauzy z raportem sytuacyjnym; Z: bezczynne roboty.
+- Tryb 3D: przecinek / kropka — obrót kamery, ukośnik — widok od południa, PageUp / PageDown albo Alt + środkowy przycisk — pochylenie kamery ku horyzontowi.
+- Gra wieloosobowa: Enter — czat, Spacja — wspólna pauza.
+- W menu, do testów: Ctrl+Shift+L odblokowuje całą kampanię, ponownie — przywraca postęp.
 
 ## Technika
 
-- `engine.js`: symulacja 30 kroków/s, rozkazy, A\* na siatce z wygładzaniem ścieżek, separacja jednostek, obrażenia i kolejka produkcji.
-- `advanced-rules.js`: scenariusze, frakcje, lotnictwo, mury, poziomy centrum, akumulator, warsztat i szkolenie. `army-rules.js`: transporter, bateria przeciwlotnicza i formacje (etap B). Oba moduły rozszerzają `Game` z `engine.js` i są ładowane także w testach.
-- `scenario-modes.js`: tryby scenariuszy i rozmiary map (skalowanie oraz generowanie zawartości dużych map).
-- `themed-maps.js`, `themed-art.js`: nowy teren i wygląd klasycznych map oraz klimat kampanii aktu I (wtyczka do `map-art.js`).
-- `frontier-maps.js`, `map-art.js`: mapy tematyczne — układy z rzekami, rozpadlinami i lawą oraz ich grafika. `tests/maps-browser.html`: podgląd terenu wszystkich map bez mgły wojny.
-- `campaign-act2.js`: akt II kampanii — rozdziały IV–VI, dialogi, cele, zapis. `act2-art.js`, `act2-film.js`, `act2.css`: modele, znaczniki, prolog i panel celów aktu II.
-- `development.js`: model drzewa rozwoju (F2); `economy-panel.js`: panel Logistyka; `campaign.js`: postęp kampanii; `knowledge.js`: baza wiedzy.
-- `app.js`: interfejs, kamera i obsługa wejścia. `render-canvas.js`: rysowanie planszy i minimapy (renderer Canvas 2D z interfejsem wspólnym dla przyszłego renderera WebGL); `tests/render-browser.html` — test i porównanie obrazu renderera. `art.js`, `advanced-art.js`, `planet-art.js`: modele jednostek, budynków, terenu i fauny; `scene-fx.js`: ustawienia jakości i licznik renderowania; `campaign-film.js`: prolog kampanii.
-- `style.css`, `expansion.css`, `index.html`: panel dowodzenia, zakładki Armia / Budowa / Badania, przewijany panel celów.
-- `cursor.js`, `cursor.css`: czytelny kursor renderowany wewnątrz strony, także w przeglądarce osadzonej.
-- `server.js`: opcjonalny lokalny serwer bez zależności.
-- `npm test`: wszystkie testy logiki (`tests/*.test.js`) wbudowanym runnerem Node.js. Strony `tests/*-browser.html` to kontrole ręczne w przeglądarce.
+- **Silnik** (wspólny dla przeglądarki i testów): `engine.js` — symulacja 30 kroków/s, rozkazy, A\* z wygładzaniem, walka, kolejki. Moduły reguł ładowane łańcuchem w `advanced-rules.js`: scenariusze, frakcje, lotnictwo, mury, poziomy centrum (`advanced-rules.js`), armia (`army-rules.js`), tryby i rozmiary map (`scenario-modes.js`, `scenario-setup.js`, `scenario-challenges.js`), mapy (`themed-maps.js`, `frontier-maps.js`), wsparcie i moduły (`support-rules.js`), frakcje i Rój (`factions-rules.js`, `swarm-rules.js`), drużyny (`teams-rules.js`), handel (`trade-rules.js`), dowódca AI (`enemy-ai.js`), kampania (`campaign-act2.js`, `campaign-act3.js`, `campaign-ai.js`, `campaign-events.js`, `campaign-choices.js`), gra sieciowa (`network-rules.js`).
+- **Rysowanie planszy**: Canvas 2D (`render-canvas.js` i pliki `*-art.js`), WebGL/WebGPU na PixiJS (`webgl/`), 3D na Three.js (`webgl3d/`, pakiet budowany poleceniem `node tools/build-3d.js` do `webgl3d/bundle-3d.js`). Wybór w Ustawieniach → Renderer, z automatycznym powrotem do Canvas 2D.
+- **Interfejs**: `app.js` (pętla gry, kamera, wejście, panele), `menu.js` i `menu-backdrop.js` (menu i jego tło), `development.js` (drzewo rozwoju), `economy-panel.js`, `knowledge.js`, `loading-screen.js`, `end-screen.js`; style `style.css`, `expansion.css`, `menu.css`, `development.css`, `act2.css`, `hud.css` (wygląd interfejsu bitwy).
+- **Kampania i filmy**: `campaign.js` (postęp), `campaign-film.js` (intro i zestaw narzędzi filmowych), `act2-film.js`, `act3-film.js`, `interludes.js` (sceny łączności), `epilogue-films.js`, `portraits.js`, `galaxy-map.js` (podgląd planety rozdziału).
+- **Dźwięk**: `audio.js` (efekty i muzyka), `audio-hq.js` (próbki i Tone.js), `audio-radio.js` (głosy łączności).
+- **Gra wieloosobowa**: `netplay.js` (WebRTC i lockstep), `netplay-menu.js` (lobby).
+- `cursor.js`, `cursor.css`: czytelny kursor renderowany wewnątrz strony. `server.js`: lokalny serwer bez zależności (`npm start`, port 4173).
+- `npm test`: wszystkie testy logiki (`tests/*.test.js`) wbudowanym runnerem Node.js. Strony `tests/*-browser.html` to kontrole w przeglądarce (menu, drzewo rozwoju, renderery, filmy, mapy, płynność).
 
 ## Ograniczenia prototypu
 
-Osiem map scenariuszy w trzech trybach i trzech rozmiarach, sześć rozdziałów kampanii w dwóch aktach i szkolenie; uproszczone AI falowe bez własnej gospodarki, brak nagranych głosów jednostek i multiplayera. Teren blokuje ruch, ale nie pociski ani zwiad. Limit gracza: 60 jednostek razem z robotami i zamówieniami, kolejka: 10 na budynek. Budynki stosują uproszczoną separację jednostek. Grafika i muzyka są proceduralne i nie używają materiałów z Gwiezdnych Wojen. Przeznaczone do gry myszą i klawiaturą.
+Gra wieloosobowa obejmuje tylko pojedynek 1 na 1, bez serwera (wymiana kodów połączenia). Głosy postaci są syntezowane, nie nagrane. Teren blokuje ruch, ale nie pociski. Dowódca AI widzi całą mapę (bez mgły wojny) i nie korzysta z budynków wsparcia ani modułów. Limit gracza: 60 jednostek razem z robotami i zamówieniami, kolejka: 10 na budynek. Grafika i muzyka są proceduralne (próbki dźwięków: Kenney, CC0). Przeznaczone do gry myszą i klawiaturą.
 
 ## Planowanie rozwoju
 
-Propozycje i decyzje zapisujemy w dokumentacji projektu. Punktem wejścia jest [Plan rozwoju](docs/PLAN_ROZWOJU.md): bieżący stan, mapa wszystkich dokumentów ze statusami, otwarte kierunki, stan testów i historia wersji.
+Propozycje i decyzje zapisujemy w dokumentacji projektu. Punktem wejścia jest [Plan rozwoju](docs/PLAN_ROZWOJU.md): bieżący stan, mapa wszystkich dokumentów ze statusami, otwarte kierunki, stan testów i pełna historia wersji.
 
-- [Kierunki rozwoju](docs/KIERUNKI_ROZWOJU.md) — etapy A–D ukończone.
-- [Pomysły](docs/POMYSLY.md) — pozostałe możliwości, w tym przebudowa AI odłożona na życzenie użytkownika.
+- [Kierunki rozwoju](docs/KIERUNKI_ROZWOJU.md) — etapy A–F ukończone; Twierdza i doktryny frakcji — propozycje.
+- [Pomysły](docs/POMYSLY.md) — pozostałe możliwości (patrol i eskorta, bohaterowie, balans, bitwy kosmiczne).
+- Opisy wdrożeń: [Renderer 3D](docs/RENDERER_3D.md), [Renderer WebGL](docs/RENDERER_WEBGL.md), [AI przeciwnika](docs/AI_PRZECIWNIKA.md), [Gra wieloosobowa](docs/MULTIPLAYER.md), [Dźwięk](docs/AUDIO.md), [Kampania i oprawa](docs/KAMPANIA_OPRAWA.md).
 - Dokumenty historyczne: [Menu główne](docs/MENU_GLOWNE.md), [Gospodarka i rozwój](docs/GOSPODARKA_I_ROZWOJ.md), [Grafika planszy](docs/GRAFIKA_PLANSZY.md).
 
 Kolejny zakres nie został jeszcze wybrany.

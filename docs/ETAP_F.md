@@ -38,7 +38,7 @@ Reguły trybów w nowym module `scenario-challenges.js` (ładowany po `scenario-
 
 ### Modyfikatory z Kierunków
 
-- **Długość doby:** krótka (4 min), zwykła (6 min), długa (10 min), wieczny dzień. Ta sama krzywa nocy co w silniku, tylko na innym okresie.
+- **Długość doby:** krótka (4 min), zwykła (6 min), długa (10 min), wieczny dzień, wieczna noc (od 0.124: `night`, `dark: true` — `game.night` stale 1). Ta sama krzywa nocy co w silniku, tylko na innym okresie.
 - **Poziom startowy:** Przyczółek albo Kolonia (centrum II od startu — fabryka, laboratorium, hangar i warsztat od razu). Dowódca AI stawia wtedy fabrykę 90 s wcześniej.
 
 ### Król wzgórza
@@ -51,7 +51,7 @@ Bez wrogiej bazy: od 90. sekundy z krawędzi mapy (z dala od bazy gracza, od 5. 
 
 ### Kod operacji
 
-Nowe litery trybu: `H` + sekundy na Szczycie (np. `H180`), `V` — Przetrwanie. Długość doby (`S/N/L/D`) i poziom startowy (`O/C`) są dopisywane do grupy złóż/fauny/pogody tylko wtedy, gdy różnią się od domyślnych (np. `NNNLC`) — wcześniejsze kody pozostają ważne.
+Nowe litery trybu: `H` + sekundy na Szczycie (np. `H180`), `V` — Przetrwanie. Długość doby (`S/N/L/D`, od 0.124 także `E` — wieczna noc) i poziom startowy (`O/C`) są dopisywane do grupy złóż/fauny/pogody tylko wtedy, gdy różnią się od domyślnych (np. `NNNLC`) — wcześniejsze kody pozostają ważne.
 
 ### Weryfikacja
 
