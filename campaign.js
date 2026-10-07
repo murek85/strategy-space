@@ -56,6 +56,29 @@
 			this.difficulty = level;
 			return this.store();
 		}
+		// For tests: every chapter completed at once; the earlier progress is kept aside and comes back with a
+		// second call. Returns true when the campaign is now unlocked, false when the earlier progress is back.
+		toggleUnlockAll() {
+			const BACKUP = "pogranicze-campaign-backup-v1";
+			let saved = null;
+			try {
+				saved = this.storage?.getItem(BACKUP);
+			} catch {}
+			if (saved) {
+				try {
+					this.storage.setItem("pogranicze-campaign-v1", saved);
+					this.storage.removeItem(BACKUP);
+				} catch {}
+				Object.assign(this, new CampaignProgress(this.storage));
+				return false;
+			}
+			try {
+				this.storage?.setItem(BACKUP, this.storage.getItem("pogranicze-campaign-v1") || "{}");
+			} catch {}
+			for (const id of CHAPTERS) this.completed[id] = true;
+			this.store();
+			return true;
+		}
 		store() {
 			try {
 				this.storage.setItem(

@@ -631,12 +631,22 @@
 			const kind = b.dataset.research,
 				availability = game.researchStatus(kind),
 				status = availability.reason;
+			const working = game.research?.kind === kind,
+				done = working ? 1 - game.research.left / game.research.total : 0;
 			b.disabled = !started || !availability.allowed;
-			b.querySelector("small").textContent = status;
+			b.querySelector("small").textContent = working ? `${Math.floor(done * 100)}% · zostało ${Math.ceil(game.research.left)} s${game.power.factor < 1 ? " · tempo " + Math.round(game.power.factor * 100) + "%" : ""}` : status;
 			b.title = b.dataset.description + " · " + status;
+			b.dataset.state = availability.state;
 			b.classList.toggle("is-complete", !!game.upgrades[kind]);
-			b.classList.toggle("is-working", game.research?.kind === kind);
+			b.classList.toggle("is-working", working);
+			const bar = b.querySelector(".research-progress");
+			if (bar) bar.style.width = `${working ? done * 100 : availability.state === "done" ? 100 : 0}%`;
 		});
+		// With no research under way, the research tab counts what has been researched.
+		if (activeTab === "research" && !game.research) {
+			const all = [...document.querySelectorAll("[data-research]")];
+			$("queue-status").textContent = `ZBADANE ${all.filter((b) => b.dataset.state === "done").length} / ${all.length} · BRAK BADANIA`;
+		}
 		const workers = game.units((game.viewer ?? 0)).filter((e) => e.type === "worker");
 		$("workers-status").textContent =
 			`${workers.filter((e) => ["gather", "gas", "repair", "build", "salvage"].includes(e.order?.kind)).length} / ${workers.length}`;
@@ -1497,6 +1507,21 @@
 		}
 	}
 	const deckPages = { army: 0, build: 0, research: 0 };
+	// The field of each research, shown as a tag on its card.
+	const RESEARCH_FIELDS = {
+		colony: "KOLONIA",
+		meteorology: "POGODA",
+		guidance: "POGODA",
+		mobility: "POGODA",
+		weapons: "WALKA",
+		armor: "WALKA",
+		precision: "WALKA",
+		infantryTraining: "WALKA",
+		cargo: "GOSPODARKA",
+		efficiency: "GOSPODARKA",
+		extraction: "GOSPODARKA",
+		assembly: "GOSPODARKA",
+	};
 	function paginateDeck(delta = 0) {
 		const list = document.querySelector(".unit-cards"),
 			cards = [...list.children];
@@ -1747,12 +1772,20 @@
 			["drone", "Dron zwiadowczy", "Zwiad z powietrza · koszary", "✢", ""],
 			["saboteur", "Sabotażyści", "Wyłączają wrogie budynki · koszary", "☍", ""],
 		);
+		// Research: the one under way first, then what can be started, what is locked, and what is done.
+		if (tabName === "research") {
+			const rank = (kind) => ({ working: 0, paused: 0, ready: 1, poor: 1, locked: 2, done: 3 })[game.researchStatus(kind).state] ?? 2;
+			groups.research = groups.research.map((g, i) => [g, i]).sort((a, b) => rank(a[0][0]) - rank(b[0][0]) || a[1] - b[1]).map(([g]) => g);
+		}
 		document.querySelector(".unit-cards").innerHTML = groups[tabName]
 			.map(([type, name, desc, symbol, key]) => {
 				const stats = TYPES[type],
 					r = RESEARCH[type],
 					cost = stats ? game.cost(type) : r.metal,
 					duration = r ? r.time : stats.build || stats.construction;
+				// A research card: a short line, the full description in the tooltip, its field and a progress bar.
+				if (tabName === "research")
+					return `<button class="unit-card research-card" data-research="${type}" data-description="${r.description || desc}"><span class="unit-symbol">${symbol}</span><span class="unit-copy"><i class="research-tag" data-tag="${RESEARCH_FIELDS[type] || "GOSPODARKA"}">${RESEARCH_FIELDS[type] || "GOSPODARKA"}</i><strong>${name}</strong><span class="card-description">${desc === r.description ? desc.split(/[.;]/)[0] : desc}</span><small class="card-status"></small><b>◇ ${cost}${r.gas ? ` · ⬡ ${r.gas}` : ""}${r.crystals ? ` · ✦ ${r.crystals}` : ""} <em>· ${duration} s</em></b></span><i class="research-progress" aria-hidden="true"></i>${key ? `<kbd>${key}</kbd>` : ""}</button>`;
 				return `<button class="unit-card" data-${tabName === "army" ? "unit" : tabName === "build" ? "build" : "research"}="${type}" data-description="${desc}"><span class="unit-symbol">${symbol}</span><span class="unit-copy"><strong>${stats ? game.unitName(type) : name}</strong><span class="card-description">${r?.description || desc}</span><small class="card-status"></small><b>◇ ${cost}${r?.gas ? " + " + r.gas + " gazu" : ""}${r?.crystals ? " + " + r.crystals + " krysz." : ""} <em>· ${duration} s</em></b></span>${key ? `<kbd>${key}</kbd>` : ""}</button>`;
 			})
 			.join("");
@@ -2301,6 +2334,15 @@
 			}
 			return;
 		}
+		// Tests: Ctrl+Shift+L in the menu unlocks the whole campaign, pressed again brings back the earlier progress.
+		if (menu?.active && e.ctrlKey && e.shiftKey && e.code === "KeyL") {
+			e.preventDefault();
+			if (e.repeat) return;
+			const unlocked = campaign.toggleUnlockAll();
+			if (["home", "single", "campaign"].includes(menu.screen)) menu.show(menu.screen);
+			menu.notice?.(unlocked ? "Tryb testowy: cała kampania odblokowana (Ctrl+Shift+L przywraca postęp)." : "Przywrócono wcześniejszy postęp kampanii.");
+			return;
+		}
 		if (e.key === "F2" && !menu?.active && started && !finished) {
 			e.preventDefault();
 			if (!e.repeat) development?.open();
@@ -2573,7 +2615,7 @@
 			const me = game.viewer ?? 0,
 				m = MISSIONS[game.missionId] || {},
 				own = game.units(me),
-				objectives = game.act2Objectives?.() || [{ text: m.campaign ? m.objective : RTS.describeScenario?.(game.scenario)?.objective || m.objective || "Zniszcz wszystkie wrogie centra dowodzenia.", done: false }],
+				objectives = game.act2Objectives?.()?.length ? game.act2Objectives() : [{ text: m.campaign ? m.objective : RTS.describeScenario?.(game.scenario)?.objective || m.objective || "Zniszcz wszystkie wrogie centra dowodzenia.", done: false }],
 				nextAttack = Number.isFinite(game.nextWave) && game.enemyBases?.().length ? game.nextWave - game.time : null,
 				weather = game.weather;
 			return {

@@ -57,6 +57,9 @@
 		monolith: "Monolit rezonansowy Roju: wrogie jednostki naziemne w promieniu 260 poruszają się o 35% wolniej; odsłania sabotażystów. 20 mocy.",
 	};
 	const icons = { building: "▤", unit: "➤", research: "⌬" };
+	// The badge of a node's state and the names of the tabs.
+	const STATES = { done: "◉ Gotowe", ready: "● Dostępne", poor: "◐ Brak zasobów", working: "◷ W toku", paused: "◷ Wstrzymane", locked: "⊘ Zablokowane" };
+	const TAB_NAMES = { economy: "Gospodarka", infrastructure: "Infrastruktura", army: "Armia" };
 	function groups(game, tab) {
 		const b = (id) => "building:" + id,
 			u = (id) => "unit:" + id,
@@ -269,7 +272,7 @@
 			this.dialog = document.createElement("dialog");
 			this.dialog.className = "development-dialog";
 			this.dialog.setAttribute("aria-labelledby", "development-title");
-			this.dialog.innerHTML = `<header><div><span class="eyebrow">ROZWÓJ KOLONII · PAUZA TAKTYCZNA</span><h2 id="development-title">Drzewo rozwoju</h2></div><button id="development-close" aria-label="Zamknij drzewo rozwoju">Zamknij</button></header><p class="development-intro">Wybierz obiekt, aby sprawdzić wymagania. Strzałki pokazują, co produkuje budynek lub co pozwala wykonać robot.</p><div class="development-tabs" role="tablist" aria-label="Gałęzie rozwoju">${[
+			this.dialog.innerHTML = `<header><div><span class="eyebrow">ROZWÓJ KOLONII · SYMULACJA WSTRZYMANA</span><h2 id="development-title">Drzewo rozwoju</h2></div><button id="development-close" aria-label="Zamknij drzewo rozwoju">Zamknij</button></header><p class="development-intro">Wybierz obiekt, aby sprawdzić wymagania. Strzałki pokazują, co produkuje budynek lub co pozwala wykonać robot.</p><div class="development-tabs" role="tablist" aria-label="Gałęzie rozwoju">${[
 				["economy", "Gospodarka"],
 				["infrastructure", "Infrastruktura"],
 				["army", "Armia"],
@@ -280,7 +283,7 @@
 				)
 				.join(
 					"",
-				)}</div><div class="development-layout"><section id="development-branches" role="tabpanel" aria-labelledby="dev-tab-economy" tabindex="0"></section><aside id="development-detail" aria-label="Szczegóły wybranego obiektu"></aside></div><footer><span id="development-resources"></span><span id="development-message" role="status"></span></footer>`;
+				)}</div><div class="development-layout"><section id="development-branches" role="tabpanel" aria-labelledby="dev-tab-economy" tabindex="0"></section><aside id="development-detail" aria-label="Szczegóły wybranego obiektu"></aside></div><footer><span id="development-resources"></span><span class="dev-legend" aria-hidden="true"><i class="done">◉ gotowe</i><i class="ready">● dostępne</i><i class="poor">◐ brak zasobów</i><i class="locked">⊘ zablokowane</i><i class="req">wymagane</i><i class="unl">odblokowuje</i></span><span id="development-message" role="status"></span></footer>`;
 			document.body.append(this.dialog);
 			this.dialog.querySelector("#development-close").onclick = () =>
 				this.close();
@@ -434,16 +437,26 @@
 			panel.setAttribute("aria-labelledby", "dev-tab-" + this.tab);
 			const scroll = panel.scrollTop,
 				focus = document.activeElement?.dataset.devNode;
+			// The selected node's requirement and what it opens are marked in the tree.
+			const chosen = node(game, this.selected, RTS);
 			const card = (key) => {
-				const d = node(game, key, RTS);
-				return `<button class="development-node ${d.state} ${key === this.selected ? "selected" : ""}" data-dev-node="${key}" aria-pressed="${key === this.selected}"><span class="dev-kind">${icons[d.kind]} ${{ building: "Budynek", unit: "Jednostka", research: "Badanie" }[d.kind]}</span><strong>${d.name}</strong><small>${d.reason}</small>${d.kind === "research" && ["working", "paused"].includes(d.state) ? `<progress value="${d.progress}" max="1" aria-label="Postęp: ${d.name}"></progress>` : ""}</button>`;
+				const d = node(game, key, RTS),
+					link = key === chosen?.requires ? "is-required" : d.requires === this.selected ? "is-unlocked" : "",
+					cost = d.id === "hq" || (d.kind === "research" && d.state === "done") ? "" : `<span class="dev-cost">◇ ${fmt(d.metal)}${d.gas ? ` · ⬡ ${d.gas}` : ""}${d.crystals ? ` · ✦ ${d.crystals}` : ""}${d.time ? ` · ${d.time} s` : ""}</span>`;
+				return `<button class="development-node ${d.state} ${key === this.selected ? "selected" : ""} ${link}" data-dev-node="${key}" aria-pressed="${key === this.selected}"><span class="dev-kind">${icons[d.kind]} ${{ building: "Budynek", unit: "Jednostka", research: "Badanie" }[d.kind]}<i class="dev-badge">${STATES[d.state] || ""}</i></span><strong>${d.name}</strong><small>${d.reason}</small>${cost}${d.kind === "research" && ["working", "paused"].includes(d.state) ? `<progress value="${d.progress}" max="1" aria-label="Postęp: ${d.name}"></progress>` : ""}${link ? `<em class="dev-link">${link === "is-required" ? "Wymagane" : "Odblokowuje"}</em>` : ""}</button>`;
 			};
 			panel.innerHTML = branches
 				.map(
 					(g) =>
-						`<div class="development-branch"><div class="dev-source">${card(g.root)}</div>${g.leaves.length ? `<span class="dev-arrow" aria-hidden="true">→</span><div class="dev-leaves">${g.leaves.map(card).join("")}</div>` : '<p class="dev-leaf-note">Wsparcie gospodarki. Szczegóły i wymagania po prawej.</p>'}</div>`,
+						`<div class="development-branch"><div class="dev-source">${card(g.root)}</div>${g.leaves.length ? `<span class="dev-arrow" aria-hidden="true"></span><div class="dev-leaves">${g.leaves.map(card).join("")}</div>` : '<p class="dev-leaf-note">Wsparcie gospodarki. Szczegóły i wymagania po prawej.</p>'}</div>`,
 				)
 				.join("");
+			// Each tab counts what is already open (built, researched or ready to order) out of all its nodes.
+			for (const b of this.dialog.querySelectorAll("[data-dev-tab]")) {
+				const keys = groups(game, b.dataset.devTab).flatMap((g) => [g.root, ...g.leaves]),
+					open = keys.filter((k) => ["done", "ready", "working", "paused", "poor"].includes(node(game, k, RTS)?.state)).length;
+				b.innerHTML = `${TAB_NAMES[b.dataset.devTab]}<small>${open}/${keys.length}</small>`;
+			}
 			panel.scrollTop = scroll;
 			if (focus)
 				[...panel.querySelectorAll("button")]
@@ -460,8 +473,14 @@
 					: 0;
 			this.dialog.querySelector("#development-detail").innerHTML =
 				`<span class="eyebrow">${{ building: "INFRASTRUKTURA", unit: "ARMIA", research: "TECHNOLOGIA" }[d.kind]}</span><h3>${d.name}</h3><canvas id="development-preview" width="360" height="200" role="img" aria-label="${research ? "Budynek badawczy: " + RTS.TYPES[d.required].name : "Podgląd: " + d.name}"></canvas><p>${d.description}</p><dl><div><dt>Koszt</dt><dd>${d.id === "hq" ? "Budynek startowy" : fmt(d.metal) + " metalu" + (d.gas ? " · " + d.gas + " gazu" : "") + (d.crystals ? " · " + d.crystals + " kryształów" : "")}</dd></div>${d.time ? `<div><dt>Czas bazowy</dt><dd>${d.time} s</dd></div>` : ""}${baseStats ? `<div><dt>Wytrzymałość</dt><dd>${hp} PW</dd></div><div><dt>Zasięg / obrażenia bazowe</dt><dd>${baseStats.range || 0} / ${baseStats.damage || 0}</dd></div><div><dt>Ruch bazowy</dt><dd>${baseStats.speed || 0}</dd></div><div><dt>${d.kind === "unit" ? "W armii / w kolejce" : "Ukończone / w budowie"}</dt><dd>${d.count || 0} / ${d.queued || d.constructing || 0}</dd></div>` : ""}</dl>${required ? `<div class="dev-requires"><small>WYMAGANIE</small><button data-dev-requirement="${d.requires}">${required.name} ↗</button></div>` : ""}${d.kind === "building" && d.id !== "hq" ? '<p class="dev-hint">Wybierz wolne, widoczne miejsce przy centrum lub własnym przekaźniku. Ekstraktor wymaga złoża gazu. Robot musi dotrzeć do fundamentu.</p>' : ""}<p class="dev-state ${d.state}">${d.reason}</p>${activeResearch ? `<progress value="${d.progress}" max="1" aria-label="Postęp badania"></progress><p class="dev-hint">Pozostała praca: ${Math.ceil(game.research.left)} s przy pełnej mocy. Tempo: ${Math.round(game.power.factor * 100)}%. Badanie ruszy po wznowieniu symulacji.</p><button class="dev-main-action" data-dev-action="cancel">Anuluj badanie — zwrot zasobów</button>` : `<button class="dev-main-action" data-dev-action="start" ${d.allowed ? "" : "disabled"}>${research ? "Rozpocznij badanie" : d.kind === "unit" ? "Zleć produkcję" : "Wybierz miejsce budowy"}</button>`}<p class="dev-hint">Okno wstrzymuje bitwę. Koszty budowy i jednostek uwzględniają frakcję.</p>`;
-			this.dialog.querySelector("#development-resources").textContent =
-				`Metal ${fmt(game.credits)} · Gaz ${fmt(game.gas)} · Kryształy ${fmt(game.crystals)} · Moc ${game.power.demand}/${game.power.supply}`;
+			this.dialog.querySelector("#development-resources").innerHTML = [
+				["◇", fmt(game.credits), "metal"],
+				["⬡", fmt(game.gas), "gaz"],
+				["✦", fmt(game.crystals), "kryształy"],
+				["ϟ", `${game.power.demand}/${game.power.supply}`, "moc"],
+			]
+				.map(([icon, value, label]) => `<span><b>${icon} ${value}</b>${label}</span>`)
+				.join("");
 			const detail = this.dialog.querySelector("#development-detail"),
 				body = document.createElement("div"),
 				actions = document.createElement("div");

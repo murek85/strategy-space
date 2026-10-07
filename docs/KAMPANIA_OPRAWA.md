@@ -1,5 +1,57 @@
 # Kampania — portrety, sceny łączności i wybory (wersje 0.99–0.101, 2026-10-07)
 
+## Wybór rozdziału z podglądem (wersja 0.122, 2026-10-07)
+
+Mapa galaktyki na ekranie kampanii jest wyłączona (wersje 0.118–0.121); klasa `GalaxyMap.Map` zostaje w `galaxy-map.js`, ale menu jej nie używa.
+
+- `menu.js`: ekran `campaign` to `.campaign-select` — lista `.campaign-list` i podgląd `#mission-preview`; `mountGalaxy()` podpina podgląd do najechania i fokusu na rozdziałach, `showMission(id)` rysuje kartę (numer w kolorze stanu, planeta, dane świata, wymaganie, opis, cel, przycisk odprawy działający jak kliknięcie rozdziału); ostatnio pokazany rozdział zapamiętany w `previewMission`.
+- `galaxy-map.js`: `GalaxyMap.portrait(canvas, { reduced })` — sam obracający się podgląd świata pod celownikiem (`show(name)`, `destroy()`), na rysowaniu z `Map.prototype.drawPortrait`.
+- `menu.css`: usunięte style mapy i układu pełnoekranowego; dwie kolumny (lista, podgląd), poniżej 980 px podgląd nad listą.
+
+## Mapa galaktyki na pełnym ekranie (wersja 0.121, 2026-10-07)
+
+- `menu.js`: klasa `map-screen` na `#command-menu` dla ekranu `campaign`; `fitGalaxy` nie ustala wysokości mapy w tym układzie; wcięcia mapy od 981 px.
+- `menu.css` (od 981 px): okno kampanii `position: fixed` na całym ekranie, ukryte logo, stopka i tło menu; tytuł i kanał w lewym górnym rogu, lista od 104 px, przycisk powrotu w lewym dolnym rogu, karta planety po prawej (16 px od krawędzi), legenda na dole.
+- `galaxy-map.js`: przybliżenie przy wybranej planecie od 1 do 1,14 zależnie od szerokości wolnego pasa (520–1220 px).
+
+## Filmy na pełnym ekranie (wersja 0.120, 2026-10-07)
+
+- `menu.js`: klasa `film-screen` na `#command-menu` dla ekranów `intro`, `intro2`, `intro3` i `interlude`.
+- `menu.css`: dawne reguły pełnoekranowego intro (`[data-screen="intro"]`) przeniesione na `.film-screen`; przycisk pominięcia każdego filmu to `.menu-content > .menu-action`.
+
+## Odblokowanie kampanii do testów (wersja 0.119, 2026-10-07)
+
+- `CampaignProgress.toggleUnlockAll()` (`campaign.js`): zapisuje dotychczasowy stan w `pogranicze-campaign-backup-v1` i oznacza wszystkie rozdziały jako ukończone; ponowne wywołanie przywraca kopię i ją usuwa. Test: `tests/campaign-unlock.test.js`.
+- `app.js`: Ctrl+Shift+L, gdy menu jest otwarte — przełącza odblokowanie, odświeża ekran główny, wyboru gry lub kampanii i pokazuje komunikat (`menu.notice`, styl `.menu-notice`).
+
+## Mapa galaktyki (wersja 0.118, 2026-10-07)
+
+- `galaxy-map.js`: kamera `cam`/`goal` (punkt skupienia i przybliżenie 1,14 przy wybranym świecie, ograniczone do mapy; `aim()`, `view()`), wygładzana w pętli; paralaksa za kursorem (`tilt`); warstwy: daleka galaktyka (`paintBackdrop`), bliższy pył i jasne gwiazdy (`paintDust`), oddychające mgławice, migoczące gwiazdy, układy z kamerą; winieta ciemniejsza pod kartami. `setInsets(l, r)` — wolny pas między kartami (światy w `place()` w tym pasie, większe: `0.026`). Regiony aktów (`drawActs`, kolory: turkus, bursztyn, fiolet; podpis, przygaszony zablokowany akt). Trasa: ukończona (ciągła z poświatą), następna (bursztynowa, biegnąca, sonda po krzywej), zablokowana (kropki). Numery rozdziałów (`ch.num`) w kółkach w kolorze stanu, następny z pulsującym pierścieniem; narożniki celownika przy wybranym świecie. `setPortrait(canvas)` — podgląd wybranego świata w karcie (siatka, obrót, pierścienie, księżyce, celownik, odczyt skanu).
+- `menu.js` (`mountGalaxy`, `showWorld`): rozdziały z aktem i numerem; zwijana lista (`galaxy-toggle`, `list-folded`, pamiętane w `galaxyFolded`) i przeliczanie wcięć mapy przy zmianie układu; karta-dossier (dane świata, postęp rozdziałów, numery, wyróżniony przycisk odprawy następnego rozdziału); legenda trasy zamiast długiego opisu (opis w podpowiedzi).
+- `menu.css`: powyżej 1280 px mapa wypełnia okno, lista i karta absolutnie nad nią (szkło), legenda na dole; poniżej — dotychczasowy układ. Ograniczone animacje: kamera bez wygładzania, bez pulsowania.
+
+## Panel badań (wersja 0.117, 2026-10-07)
+
+- `app.js` (`deck("research")`): karty `research-card` z etykietą dziedziny (`RESEARCH_FIELDS`), krótkim opisem (pełny w `data-description`/podpowiedzi), kosztem (metal, gaz, kryształy, czas) i paskiem `research-progress`; kolejność: w toku, dostępne i brak zasobów, zablokowane, ukończone (stan z `researchStatus`). `updateHud`: `data-state` na karcie, w trwającym badaniu procent, pozostały czas i tempo przy niedoborze mocy, szerokość paska; bez badania `queue-status` = „ZBADANE x / n · BRAK BADANIA”.
+- `hud.css`: krawędź i odznaka w kolorze stanu (`--state`), przerywana ramka zablokowanych, turkusowe ukończone (bez kosztu), bursztynowe pulsujące badanie w toku, kolorowe etykiety dziedzin.
+
+## Drzewo rozwoju (wersja 0.116, 2026-10-07)
+
+- `development.js`: odznaka stanu (`STATES`) i koszt (`dev-cost`: metal, gaz, kryształy, czas) w każdym węźle; klasy `is-required` (wymaganie wybranego węzła) i `is-unlocked` (węzły, których wymaganiem jest wybrany) z etykietą `dev-link`; zakładki z licznikiem pozycji otwartych (gotowe, dostępne, w toku, brak zasobów) do wszystkich (`TAB_NAMES`); surowce w stopce jako kafelki; legenda (`dev-legend`).
+- `development.css`: szkło, narożniki (`::before`) i linia skanu (`::after`) okna, migająca dioda nad tytułem, zakładki jak w menu, krawędź węzła w kolorze stanu (`--state`), przerywana ramka zablokowanych, pulsowanie badań w toku (`dev-work`), świecące połączenia ze strzałką (`.dev-arrow`, `.dev-leaves`), panel szczegółów z siatką pod podglądem i głównym przyciskiem jak w menu. Ograniczone animacje wyłączają ruch.
+
+## Interfejs gry (wersja 0.115, 2026-10-07)
+
+Arkusz `hud.css` (ładowany ostatni w `index.html`) zmienia tylko wygląd interfejsu bitwy — rozmiary i układ zostają z `style.css` i `expansion.css`:
+
+- Górny pasek: szkło, świecąca dolna krawędź (`::after`), pas skanowania (`::before`, `hud-sweep`), migająca dioda misji, cyfry surowców w kroju konsoli z poświatą; przyciski ikon i narzędzia mapy jako szkło z podświetleniem.
+- Panel boczny: szkło, etykiety sekcji ze świecącą kreską, zakładki jak w menu (`intel-tabs`, także `deck-tabs` talii), kwadratowe znaczniki celów (wykonane świecą), wywiad taktyczny jako bursztynowa karta.
+- Pole bitwy: narożniki celownika (`.battlefield::after`), minimapa w szklanej ramce z narożnikami, dok grup.
+- Komunikaty (`toast`): szklane karty z podświetloną lewą krawędzią (łączność w bursztynie).
+- Pasek dowodzenia: szkło, świecąca górna krawędź, karty jednostek z zapalaną krawędzią i błyskiem (jak przyciski menu), świecące paski kolejki.
+- Odprawa i raport nad planszą (`.briefing`): szkło z narożnikami. Ograniczone animacje wyłączają ruch.
+- `api.situation()` (pauza): gdy `act2Objectives()` zwraca pustą listę, cele biorą się z rozdziału lub scenariusza.
+
 ## Ekrany menu jako panele taktyczne (wersja 0.114, 2026-10-07)
 
 - Okna (`menu-window` z `windowed()` oraz baza wiedzy, `menu.css`): szklane tło z rozmyciem, narożniki (gradienty w `::before`), linia skanu przy otwarciu (`::after`, `win-scan`), wejście `win-open`; nad tytułem kanał ekranu z `EYEBROWS` w `menu.js` i migająca dioda, pod tytułem świecąca kreska; nagłówki `h2` w oknach jako etykiety HUD (▸ i linia).

@@ -163,6 +163,13 @@ const GalaxyMap = (() => {
 			this.focused = null;
 			this.selected = null;
 			this.time = 0;
+			// The camera (focus point as a fraction of the map, zoom) eases towards the chosen world; the pointer
+			// shifts the deeper layers a little (parallax). Insets keep the worlds clear of the cards over the map.
+			this.cam = { x: 0.5, y: 0.5, z: 1 };
+			this.goal = { x: 0.5, y: 0.5, z: 1 };
+			this.tilt = { x: 0, y: 0, tx: 0, ty: 0 };
+			this.insets = { l: 0, r: 0 };
+			this.portrait = null;
 			this.worlds = Object.entries(WORLDS).map(([name, w]) => {
 				const r = seeded(hash(name) + 3);
 				return { name, ...w, phase: r() * TAU, orbit: 0.05 + r() * 0.012, speed: 0.02 + r() * 0.03, spin: 6 + r() * 6, tilt: -0.35 + r() * 0.7, tex: surface(name, w), sky: clouds(name, w) };
@@ -179,8 +186,13 @@ const GalaxyMap = (() => {
 			canvas.addEventListener("click", (this.onClick = (e) => this.pointer(e, true)));
 			this.last = performance.now();
 			const loop = (now) => {
-				this.time += Math.min(0.05, (now - this.last) / 1000);
+				const dt = Math.min(0.05, (now - this.last) / 1000);
+				this.time += dt;
 				this.last = now;
+				const k = 1 - Math.exp(-dt * 3);
+				for (const a of ["x", "y", "z"]) this.cam[a] += (this.goal[a] - this.cam[a]) * k;
+				this.tilt.x += (this.tilt.tx - this.tilt.x) * k;
+				this.tilt.y += (this.tilt.ty - this.tilt.y) * k;
 				this.draw();
 				this.frame = requestAnimationFrame(loop);
 			};
@@ -206,7 +218,156 @@ const GalaxyMap = (() => {
 			this.h = h;
 			this.dpr = dpr;
 			this.backdrop = this.paintBackdrop();
+			this.dust = this.paintDust();
+			this.aim();
 			this.draw();
+		}
+		// The nearer layer: dark dust lanes, bright wisps and the brightest stars (moves more with the camera).
+		paintDust() {
+			const c = document.createElement("canvas");
+			c.width = this.canvas.width;
+			c.height = this.canvas.height;
+			const g = c.getContext("2d"),
+				W = c.width,
+				H = c.height,
+				rand = seeded(20261007);
+			g.filter = `blur(${Math.round(14 * this.dpr)}px)`;
+			for (let i = 0; i < 90; i++) {
+				const t = i / 90,
+					a = Math.PI * 0.5 + t * 4.2,
+					r = t * W * 0.6,
+					x = W * 0.5 + Math.cos(a) * r + (rand() - 0.5) * W * 0.05,
+					y = H * 0.5 + Math.sin(a) * r * 0.55 + (rand() - 0.5) * H * 0.06,
+					s = (14 + rand() * 30) * (W / 1500);
+				g.fillStyle = i % 3 ? "rgba(2,4,10,0.35)" : "rgba(120,180,255,0.07)";
+				g.beginPath();
+				g.ellipse(x, y, s * 2.2, s, a, 0, TAU);
+				g.fill();
+			}
+			g.filter = "none";
+			for (let i = 0; i < 120; i++) {
+				const x = rand() * W,
+					y = rand() * H,
+					s = (0.8 + rand() * 1.4) * this.dpr,
+					glow = g.createRadialGradient(x, y, 0, x, y, s * 4);
+				glow.addColorStop(0, "rgba(255,255,255,0.9)");
+				glow.addColorStop(0.3, `rgba(${180 + rand() * 75},${200 + rand() * 55},255,0.35)`);
+				glow.addColorStop(1, "rgba(0,0,0,0)");
+				g.fillStyle = glow;
+				g.fillRect(x - s * 4, y - s * 4, s * 8, s * 8);
+			}
+			return c;
+		}
+		// The worlds stay clear of the cards laid over the map (CSS pixels on the left and right).
+		setInsets(l, r) {
+			if (Math.abs(l - this.insets.l) + Math.abs(r - this.insets.r) < 1) return;
+			this.insets = { l, r };
+			this.aim();
+			this.draw();
+		}
+		// The camera's target: the middle of the free band, or a step towards the chosen world, zoomed in.
+		aim() {
+			const W = this.canvas.width,
+				l = this.insets.l * this.dpr,
+				r = this.insets.r * this.dpr,
+				mid = (l + (W - r)) / 2 / W,
+				w = this.worlds.find((x) => x.name === this.selected);
+			if (!w) this.goal = { x: mid, y: 0.5, z: 1 };
+			else {
+				// A step towards the world, but never so far that the camera leaves the map.
+				const p = this.place(w),
+					H = this.canvas.height,
+					// A narrow free band (cards over the map) zooms in less, so the outer worlds stay in view.
+					z = 1 + 0.14 * Math.min(1, Math.max(0, ((W - l - r) / this.dpr - 520) / 700)),
+					half = (W - l - r) / 2 / z,
+					fx = Math.min(W - r - half, Math.max(l + half, mid * W + (p.sx - mid * W) * 0.5)),
+					fy = Math.min(H - H / 2 / z, Math.max(H / 2 / z, H / 2 + (p.sy - H / 2) * 0.5));
+				this.goal = { x: fx / W, y: fy / H, z };
+			}
+			if (this.reduced) Object.assign(this.cam, this.goal);
+		}
+		// Screen offset of the camera (canvas pixels): world point → screen = (p − focus) · z + centre of the band.
+		view() {
+			const W = this.canvas.width,
+				H = this.canvas.height,
+				cx = (this.insets.l * this.dpr + (W - this.insets.r * this.dpr)) / 2,
+				z = this.cam.z;
+			return { z, ox: cx - this.cam.x * W * z, oy: H / 2 - this.cam.y * H * z };
+		}
+		// The chosen world, turning slowly in the dossier card, under a sight.
+		setPortrait(canvas) {
+			this.portrait = canvas;
+			this.draw();
+		}
+		drawPortrait() {
+			const cv = this.portrait,
+				w = this.worlds.find((x) => x.name === this.selected);
+			if (!cv || !cv.isConnected || !w) return;
+			const dpr = this.dpr,
+				W = Math.round((cv.clientWidth || 240) * dpr),
+				H = Math.round((cv.clientHeight || 150) * dpr);
+			if (cv.width !== W || cv.height !== H) {
+				cv.width = W;
+				cv.height = H;
+			}
+			const c = cv.getContext("2d"),
+				t = this.time,
+				r = Math.min(W, H) * 0.3,
+				p = { px: W / 2, py: H / 2, r, sx: W / 2 - r * 3, sy: H / 2 - r * 1.6 };
+			const bg = c.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, W * 0.6);
+			bg.addColorStop(0, "#0c1c2c");
+			bg.addColorStop(1, "#02050b");
+			c.fillStyle = bg;
+			c.fillRect(0, 0, W, H);
+			c.strokeStyle = "rgba(160,220,210,0.06)";
+			c.lineWidth = 1;
+			for (let x = (t * 6 * dpr) % (16 * dpr); x < W; x += 16 * dpr) {
+				c.beginPath();
+				c.moveTo(x, 0);
+				c.lineTo(x, H);
+				c.stroke();
+			}
+			for (let y = 0; y < H; y += 16 * dpr) {
+				c.beginPath();
+				c.moveTo(0, y);
+				c.lineTo(W, y);
+				c.stroke();
+			}
+			if (w.rings) this.ring(w, p, true, c);
+			this.world(w, p, c);
+			if (w.rings) this.ring(w, p, false, c);
+			for (let i = 0; i < (w.moons || 0); i++) {
+				const a = t * (0.5 + i * 0.3) + i * 2.4;
+				if (Math.sin(a) < 0 && !w.rings) continue;
+				c.fillStyle = "#b8bcc4";
+				c.beginPath();
+				c.arc(p.px + Math.cos(a) * r * (1.7 + i * 0.4), p.py + Math.sin(a) * r * 0.45, r * (0.12 - i * 0.02), 0, TAU);
+				c.fill();
+			}
+			// The sight: a turning dashed ring and corner brackets.
+			c.strokeStyle = "rgba(240,207,138,0.75)";
+			c.lineWidth = 1.2 * dpr;
+			c.setLineDash([4 * dpr, 5 * dpr]);
+			c.lineDashOffset = -t * 10 * dpr;
+			c.beginPath();
+			c.arc(p.px, p.py, r * 1.32, 0, TAU);
+			c.stroke();
+			c.setLineDash([]);
+			const s = r * 1.55,
+				arm = r * 0.3;
+			for (const [dx, dy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+				c.beginPath();
+				c.moveTo(p.px + dx * s, p.py + dy * (s - arm));
+				c.lineTo(p.px + dx * s, p.py + dy * s);
+				c.lineTo(p.px + dx * (s - arm), p.py + dy * s);
+				c.stroke();
+			}
+			c.fillStyle = "rgba(240,207,138,0.85)";
+			c.font = `600 ${Math.round(9 * dpr)}px Consolas, monospace`;
+			c.textAlign = "left";
+			c.fillText(`SKAN ${Math.floor((t * 9) % 100)}%`, 8 * dpr, H - 8 * dpr);
+			c.textAlign = "right";
+			c.fillText(`${(Math.abs(Math.sin(hash(w.name))) * 9 + 1).toFixed(2)} AU`, W - 8 * dpr, H - 8 * dpr);
 		}
 		// The galaxy: deep space, a spiral arm of nebulae, a glowing core and a star field.
 		paintBackdrop() {
@@ -260,24 +421,28 @@ const GalaxyMap = (() => {
 		}
 		// Where the sun and the world are now (canvas pixels).
 		place(w) {
-			const W = this.canvas.width,
+			const L = this.insets.l * this.dpr,
+				W = this.canvas.width - L - this.insets.r * this.dpr,
 				H = this.canvas.height,
 				S = Math.min(W, H * 2),
 				R = w.orbit * S,
-				r = w.size * S * 0.022,
+				r = w.size * S * 0.026,
 				// The whole system stays on the map: orbit, the world with its rings, the name above and the dots below.
 				mx = R + r * (w.rings ? 2.1 : 1.4),
 				top = R * 0.42 + r * 1.5 + 18 * this.dpr,
 				bottom = R * 0.42 + r + 30 * this.dpr,
-				sx = Math.min(W - mx, Math.max(mx, w.x * W)),
+				sx = L + Math.min(W - mx, Math.max(mx, w.x * W)),
 				sy = Math.min(H - bottom, Math.max(top, w.y * H)),
 				a = w.phase + this.time * w.speed;
 			return { sx, sy, R, px: sx + Math.cos(a) * R, py: sy + Math.sin(a) * R * 0.42, r, a };
 		}
 		pointer(e, click) {
 			const rect = this.canvas.getBoundingClientRect(),
-				x = ((e.clientX - rect.left) / rect.width) * this.canvas.width,
-				y = ((e.clientY - rect.top) / rect.height) * this.canvas.height;
+				v = this.view(),
+				x = (((e.clientX - rect.left) / rect.width) * this.canvas.width - v.ox) / v.z,
+				y = (((e.clientY - rect.top) / rect.height) * this.canvas.height - v.oy) / v.z;
+			this.tilt.tx = (e.clientX - rect.left) / rect.width - 0.5;
+			this.tilt.ty = (e.clientY - rect.top) / rect.height - 0.5;
 			const hit = this.worlds.find((w) => {
 				const p = this.place(w);
 				return Math.hypot(p.px - x, p.py - y) < p.r + 14 * this.dpr || Math.hypot(p.sx - x, p.sy - y) < p.R * 0.6;
@@ -293,6 +458,7 @@ const GalaxyMap = (() => {
 		}
 		select(name, fromMap = false) {
 			this.selected = name;
+			this.aim();
 			this.onSelect(name, fromMap);
 			this.draw();
 		}
@@ -304,21 +470,100 @@ const GalaxyMap = (() => {
 				dpr = this.dpr,
 				t = this.time;
 			if (!this.backdrop) return;
+			const W = this.canvas.width,
+				H = this.canvas.height,
+				v = this.view();
+			// Layers at three depths: the far galaxy, the near dust and stars, the systems (with the camera).
+			const layer = (img, depth, grow) => {
+				const z = 1 + (v.z - 1) * depth,
+					m = grow * W,
+					dx = (0.5 - this.cam.x) * W * depth * 0.6 - this.tilt.x * 14 * dpr * depth,
+					dy = (0.5 - this.cam.y) * H * depth * 0.6 - this.tilt.y * 9 * dpr * depth;
+				c.drawImage(img, W / 2 - (W / 2 + m) * z + dx, H / 2 - (H / 2 + m * 0.5) * z + dy, (W + 2 * m) * z, (H + m) * z);
+			};
 			c.setTransform(1, 0, 0, 1, 0, 0);
-			c.drawImage(this.backdrop, 0, 0);
+			c.fillStyle = "#03060e";
+			c.fillRect(0, 0, W, H);
+			layer(this.backdrop, 0.25, 0.04);
+			// Slowly breathing nebulae.
+			c.save();
+			c.globalCompositeOperation = "lighter";
+			for (const [fx, fy, fr, col, ph] of [[0.3, 0.35, 0.22, "90,140,255", 0], [0.7, 0.62, 0.2, "190,110,230", 2], [0.52, 0.2, 0.16, "90,220,200", 4]]) {
+				const a = 0.05 + 0.035 * Math.sin(t * 0.25 + ph),
+					x = fx * W - this.tilt.x * 8 * dpr,
+					y = fy * H - this.tilt.y * 6 * dpr,
+					g = c.createRadialGradient(x, y, 0, x, y, fr * W);
+				g.addColorStop(0, `rgba(${col},${a.toFixed(3)})`);
+				g.addColorStop(1, `rgba(${col},0)`);
+				c.fillStyle = g;
+				c.fillRect(0, 0, W, H);
+			}
+			c.restore();
+			layer(this.dust, 0.6, 0.06);
 			// Twinkling brighter stars.
 			const rand = seeded(77);
 			for (let i = 0; i < 40; i++) {
-				const x = rand() * this.canvas.width,
-					y = rand() * this.canvas.height,
+				const x = rand() * W - this.tilt.x * 10 * dpr,
+					y = rand() * H - this.tilt.y * 7 * dpr,
 					a = 0.35 + 0.35 * Math.sin(t * (1 + rand() * 2) + i);
 				c.fillStyle = `rgba(255,255,255,${a.toFixed(3)})`;
 				c.beginPath();
 				c.arc(x, y, 1.2 * dpr, 0, TAU);
 				c.fill();
 			}
+			c.setTransform(v.z, 0, 0, v.z, v.ox, v.oy);
+			this.drawActs();
 			this.drawRoute();
 			for (const w of this.worlds) this.drawSystem(w);
+			c.setTransform(1, 0, 0, 1, 0, 0);
+			// A vignette, darker under the cards at the sides.
+			const vg = c.createLinearGradient(0, 0, W, 0),
+				l = Math.min(0.45, (this.insets.l * dpr) / W),
+				r = Math.min(0.45, (this.insets.r * dpr) / W);
+			vg.addColorStop(0, "rgba(2,5,10,0.55)");
+			vg.addColorStop(l, "rgba(2,5,10,0)");
+			vg.addColorStop(1 - r, "rgba(2,5,10,0)");
+			vg.addColorStop(1, "rgba(2,5,10,0.55)");
+			c.fillStyle = vg;
+			c.fillRect(0, 0, W, H);
+			this.drawPortrait();
+		}
+		// The acts as faint regions around their worlds, each with its name.
+		drawActs() {
+			const c = this.c,
+				dpr = this.dpr,
+				NAMES = { 1: "AKT I · ODZYSKANY ŚWIT", 2: "AKT II · CENA ŚWITU", 3: "AKT III · PRZEBUDZENIE ROJU" },
+				COLORS = { 1: "127,231,200", 2: "240,207,138", 3: "201,140,255" };
+			for (const act of [1, 2, 3]) {
+				const worlds = [...new Set(this.chapters.filter((ch) => (ch.act || 1) === act).map((ch) => ch.planet))]
+					.map((name) => this.worlds.find((w) => w.name === name))
+					.filter(Boolean)
+					.map((w) => this.place(w));
+				if (!worlds.length) continue;
+				const pad = 46 * dpr,
+					x0 = Math.min(...worlds.map((p) => p.sx - p.R)) - pad,
+					x1 = Math.max(...worlds.map((p) => p.sx + p.R)) + pad,
+					y0 = Math.min(...worlds.map((p) => p.sy - p.R * 0.42)) - pad,
+					y1 = Math.max(...worlds.map((p) => p.sy + p.R * 0.42)) + pad,
+					open = this.chapters.some((ch) => (ch.act || 1) === act && ch.status !== "locked"),
+					col = COLORS[act];
+				const g = c.createRadialGradient((x0 + x1) / 2, (y0 + y1) / 2, 0, (x0 + x1) / 2, (y0 + y1) / 2, Math.max(x1 - x0, y1 - y0) * 0.6);
+				g.addColorStop(0, `rgba(${col},${open ? 0.07 : 0.03})`);
+				g.addColorStop(1, `rgba(${col},0)`);
+				c.fillStyle = g;
+				c.beginPath();
+				c.ellipse((x0 + x1) / 2, (y0 + y1) / 2, (x1 - x0) / 2, (y1 - y0) / 2, 0, 0, TAU);
+				c.fill();
+				c.strokeStyle = `rgba(${col},${open ? 0.3 : 0.14})`;
+				c.lineWidth = 1 * dpr;
+				c.setLineDash([2 * dpr, 6 * dpr]);
+				c.stroke();
+				c.setLineDash([]);
+				c.font = `600 ${Math.round(9 * dpr)}px Consolas, monospace`;
+				c.textAlign = "center";
+				c.fillStyle = `rgba(${col},${open ? 0.75 : 0.35})`;
+				c.fillText(NAMES[act] + (open ? "" : " · ZABLOKOWANY"), (x0 + x1) / 2, y0 + 4 * dpr);
+			}
 		}
 		// The campaign route through the chapters' worlds.
 		drawRoute() {
@@ -331,17 +576,44 @@ const GalaxyMap = (() => {
 				if (!a || !b || a === b) continue;
 				const p = this.place(a),
 					q = this.place(b),
-					st = order[i].status;
-				c.strokeStyle = st === "done" ? "rgba(143,220,192,0.75)" : st === "open" ? "rgba(240,203,112,0.9)" : "rgba(120,140,160,0.25)";
-				c.lineWidth = (st === "locked" ? 1.2 : 2.2) * dpr;
-				c.setLineDash(st === "done" ? [] : [8 * dpr, 7 * dpr]);
+					st = order[i].status,
+					mx = (p.sx + q.sx) / 2,
+					my = Math.min(p.sy, q.sy) - 40 * dpr,
+					curve = () => {
+						c.beginPath();
+						c.moveTo(p.sx, p.sy);
+						c.quadraticCurveTo(mx, my, q.sx, q.sy);
+					};
+				// Done: a solid teal line with a glow; next: amber, dashed and running, with a probe flying along;
+				// locked: dark and dotted.
+				c.save();
+				if (st !== "locked") {
+					c.strokeStyle = st === "done" ? "rgba(127,231,200,0.18)" : "rgba(240,207,138,0.2)";
+					c.lineWidth = 7 * dpr;
+					curve();
+					c.stroke();
+				}
+				c.strokeStyle = st === "done" ? "rgba(127,231,200,0.85)" : st === "open" ? "rgba(240,207,138,0.95)" : "rgba(120,140,160,0.28)";
+				c.lineWidth = (st === "locked" ? 1.1 : 2) * dpr;
+				c.setLineDash(st === "done" ? [] : st === "open" ? [10 * dpr, 6 * dpr] : [2 * dpr, 6 * dpr]);
 				c.lineDashOffset = st === "open" ? -this.time * 30 * dpr : 0;
-				c.beginPath();
-				c.moveTo(p.sx, p.sy);
-				c.quadraticCurveTo((p.sx + q.sx) / 2, Math.min(p.sy, q.sy) - 40 * dpr, q.sx, q.sy);
+				curve();
 				c.stroke();
+				c.restore();
+				if (st === "open") {
+					const k = (this.time * 0.22) % 1,
+						x = (1 - k) * (1 - k) * p.sx + 2 * (1 - k) * k * mx + k * k * q.sx,
+						y = (1 - k) * (1 - k) * p.sy + 2 * (1 - k) * k * my + k * k * q.sy,
+						g = c.createRadialGradient(x, y, 0, x, y, 10 * dpr);
+					g.addColorStop(0, "rgba(255,240,200,1)");
+					g.addColorStop(0.3, "rgba(240,207,138,0.6)");
+					g.addColorStop(1, "rgba(240,207,138,0)");
+					c.fillStyle = g;
+					c.beginPath();
+					c.arc(x, y, 10 * dpr, 0, TAU);
+					c.fill();
+				}
 			}
-			c.setLineDash([]);
 		}
 		drawSystem(w) {
 			const c = this.c,
@@ -418,6 +690,20 @@ const GalaxyMap = (() => {
 				c.arc(p.px, p.py, p.r + 9 * dpr, 0, TAU);
 				c.stroke();
 				c.setLineDash([]);
+				// The chosen world: corner brackets of a sight closing on it.
+				if (this.selected === w.name) {
+					const s = p.r + 20 * dpr + Math.sin(this.time * 2) * 2 * dpr,
+						arm = 7 * dpr;
+					c.strokeStyle = "#f0cf8a";
+					c.lineWidth = 1.5 * dpr;
+					for (const [dx, dy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+						c.beginPath();
+						c.moveTo(p.px + dx * s, p.py + dy * (s - arm));
+						c.lineTo(p.px + dx * s, p.py + dy * s);
+						c.lineTo(p.px + dx * (s - arm), p.py + dy * s);
+						c.stroke();
+					}
+				}
 			}
 			// Name, chapter dots and badges.
 			c.font = `600 ${Math.round(11 * dpr)}px Segoe UI, sans-serif`;
@@ -429,24 +715,40 @@ const GalaxyMap = (() => {
 				c.fillStyle = "#6f82a0";
 				c.fillText("świat scenariuszy", p.px, p.py + p.r + 14 * dpr);
 			}
+			// Chapter numbers under the world: teal when done, amber and pulsing for the next one, dark when locked.
 			chapters.forEach((ch, i) => {
-				const x = p.px - (chapters.length - 1) * 7 * dpr + i * 14 * dpr,
-					y = p.py + p.r + 12 * dpr,
-					pulse = ch.status === "open" ? 1 + 0.25 * Math.sin(this.time * 4) : 1;
-				c.fillStyle = ch.status === "done" ? "#8fdcc0" : ch.status === "open" ? "#f0cb70" : "#44525c";
+				const x = p.px - (chapters.length - 1) * 11 * dpr + i * 22 * dpr,
+					y = p.py + p.r + 15 * dpr,
+					s = 9 * dpr,
+					color = ch.status === "done" ? "#7fe7c8" : ch.status === "open" ? "#f0cf8a" : "#44525c";
+				if (ch.status === "open") {
+					c.strokeStyle = `rgba(240,207,138,${(0.6 - ((this.time * 0.8) % 1) * 0.6).toFixed(3)})`;
+					c.lineWidth = 1.5 * dpr;
+					c.beginPath();
+					c.arc(x, y, s * (1 + ((this.time * 0.8) % 1) * 0.9), 0, TAU);
+					c.stroke();
+				}
+				c.fillStyle = ch.status === "locked" ? "rgba(10,16,22,0.9)" : color;
+				c.strokeStyle = color;
+				c.lineWidth = 1.2 * dpr;
 				c.beginPath();
-				c.arc(x, y, 4 * dpr * pulse, 0, TAU);
+				c.arc(x, y, s, 0, TAU);
 				c.fill();
+				c.stroke();
+				c.fillStyle = ch.status === "locked" ? "#6c7c86" : "#06121a";
+				c.font = `700 ${Math.round((ch.num?.length > 2 ? 7 : 8.5) * dpr)}px Consolas, monospace`;
+				c.textBaseline = "middle";
+				c.fillText(ch.num || String(i + 1), x, y + 0.5 * dpr);
+				c.textBaseline = "alphabetic";
 				if (ch.badge) {
 					c.fillStyle = "#f5e27a";
 					c.font = `${Math.round(9 * dpr)}px Segoe UI, sans-serif`;
-					c.fillText("◆", x, y + 13 * dpr);
+					c.fillText("◆", x, y + 19 * dpr);
 				}
 			});
 		}
-		world(w, p) {
-			const c = this.c,
-				r = p.r,
+		world(w, p, c = this.c) {
+			const r = p.r,
 				spin = (this.time * w.spin) % 256,
 				atmo = CLIMATE[w.climate].atmo;
 			// Atmosphere.
@@ -484,8 +786,7 @@ const GalaxyMap = (() => {
 			c.fillRect(p.px - r, p.py - r, r * 2, r * 2);
 			c.restore();
 		}
-		ring(w, p, back) {
-			const c = this.c;
+		ring(w, p, back, c = this.c) {
 			c.save();
 			c.translate(p.px, p.py);
 			c.rotate(w.tilt);
@@ -499,6 +800,32 @@ const GalaxyMap = (() => {
 			c.restore();
 		}
 	}
-	return { Map, WORLDS, CLIMATE };
+	// Only the turning view of one world under a sight, without the map (the campaign's chapter preview).
+	// Returns { show(name), destroy() }.
+	function portrait(canvas, options = {}) {
+		const view = Object.create(Map.prototype),
+			textures = {};
+		Object.assign(view, { portrait: canvas, time: 0, dpr: Math.min(window.devicePixelRatio || 1, 2), selected: null, worlds: [] });
+		view.show = (name) => {
+			const w = WORLDS[name];
+			if (!w) return;
+			textures[name] ||= { name, ...w, phase: 0, spin: 6 + (hash(name) % 6), tilt: -0.35 + ((hash(name) % 70) / 100), tex: surface(name, w), sky: clouds(name, w) };
+			view.worlds = [textures[name]];
+			view.selected = name;
+			view.drawPortrait();
+		};
+		let last = performance.now(),
+			frame = 0;
+		const loop = (now) => {
+			view.time += Math.min(0.05, (now - last) / 1000);
+			last = now;
+			view.drawPortrait();
+			frame = requestAnimationFrame(loop);
+		};
+		if (!options.reduced) frame = requestAnimationFrame(loop);
+		view.destroy = () => cancelAnimationFrame(frame);
+		return view;
+	}
+	return { Map, WORLDS, CLIMATE, portrait };
 })();
 if (typeof window !== "undefined") window.GalaxyMap = GalaxyMap;

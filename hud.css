@@ -1,0 +1,497 @@
+/* The game's interface in the style of the menu and the campaign films: glass panels over a deep space-black, lit
+   edges and corner brackets, a scan band over the top bar, HUD labels, tabs like the menu's, cards with a lit edge
+   and a sweep of light, a framed battlefield. Only the look — sizes and layout stay as in style.css/expansion.css. */
+:root {
+	--hud-glass: linear-gradient(160deg, rgba(10, 22, 32, 0.94), rgba(4, 10, 18, 0.97));
+	--hud-edge: rgba(160, 220, 210, 0.2);
+	--hud-lit: #7fe7c8;
+	--hud-amber: #f0cf8a;
+}
+body {
+	background: #03070d;
+}
+
+/* The top bar: glass, a glowing lower edge, a slow scan band. */
+.topbar {
+	position: relative;
+	overflow: hidden;
+	background: linear-gradient(180deg, rgba(10, 24, 34, 0.98), rgba(4, 10, 18, 0.98));
+	border-bottom: 1px solid var(--hud-edge);
+}
+.topbar::after {
+	content: "";
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: -1px;
+	height: 1px;
+	pointer-events: none;
+	background: linear-gradient(90deg, transparent, var(--hud-lit) 30%, var(--hud-lit) 70%, transparent);
+	opacity: 0.55;
+	box-shadow: 0 0 12px var(--hud-lit);
+}
+.topbar::before {
+	content: "";
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	left: -20%;
+	width: 18%;
+	pointer-events: none;
+	background: linear-gradient(90deg, transparent, rgba(160, 230, 255, 0.045), transparent);
+	animation: hud-sweep 11s linear infinite;
+}
+.brand-icon {
+	color: var(--hud-lit);
+	text-shadow: 0 0 16px #7fe7c8aa;
+}
+.live-dot {
+	background: var(--hud-lit);
+	box-shadow: 0 0 10px var(--hud-lit);
+	animation: pause-blink 1.6s steps(2) infinite;
+}
+.resource strong {
+	font-family: Consolas, "Cascadia Mono", monospace;
+	font-weight: 600;
+	letter-spacing: 0.5px;
+	text-shadow: 0 0 14px rgba(190, 255, 235, 0.25);
+}
+.resource-icon {
+	text-shadow: 0 0 12px currentColor;
+}
+.resource small {
+	letter-spacing: 1.6px;
+}
+.icon-button,
+.map-tools button {
+	background: rgba(12, 26, 34, 0.75);
+	border: 1px solid var(--hud-edge);
+	border-radius: 0;
+	transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+.icon-button:hover,
+.map-tools button:hover {
+	background: rgba(30, 60, 70, 0.85);
+	border-color: var(--hud-lit);
+	box-shadow: 0 0 14px rgba(127, 231, 200, 0.25);
+}
+.audio-controls input {
+	accent-color: var(--hud-lit);
+}
+
+/* The side panel: glass with a lit right edge, tabs like the menu's, HUD labels. */
+.sidebar {
+	position: relative;
+	background: var(--hud-glass);
+	border-right: 1px solid var(--hud-edge);
+	box-shadow: inset -1px 0 0 rgba(127, 231, 200, 0.08);
+}
+.section-label {
+	color: #8fb8b0;
+	letter-spacing: 2px;
+}
+.section-label {
+	padding-left: 7px;
+	box-shadow: inset 2px 0 0 var(--hud-lit);
+}
+.eyebrow {
+	letter-spacing: 2.4px;
+}
+.intel-tabs {
+	gap: 3px;
+	border-bottom: 1px solid var(--hud-edge);
+}
+.intel-tabs button,
+.deck-tabs button {
+	background: rgba(12, 26, 34, 0.5);
+	border: 1px solid rgba(160, 220, 210, 0.14);
+	border-bottom: 0;
+	border-radius: 0;
+	color: #9fb9bb;
+	letter-spacing: 1px;
+	text-transform: uppercase;
+	transition: background 0.2s, color 0.2s;
+}
+.intel-tabs button:hover,
+.deck-tabs button:hover {
+	color: #eef6f4;
+	background: rgba(30, 60, 70, 0.55);
+}
+.intel-tabs button[aria-pressed="true"],
+.deck-tabs button.active {
+	background: rgba(30, 60, 70, 0.85);
+	border-color: rgba(160, 220, 210, 0.14);
+	color: #eef6f4;
+	box-shadow: inset 0 2px 0 var(--hud-lit);
+}
+.objective-check {
+	border-radius: 0;
+	border-color: rgba(160, 220, 210, 0.3);
+	font-family: Consolas, monospace;
+}
+.objective.done .objective-check {
+	border-color: var(--hud-lit);
+	background: rgba(127, 231, 200, 0.14);
+	box-shadow: 0 0 10px rgba(127, 231, 200, 0.4);
+}
+.intel {
+	position: relative;
+	padding-left: 12px;
+	border-left: 2px solid var(--hud-amber);
+	background: linear-gradient(90deg, rgba(240, 207, 138, 0.07), transparent 70%);
+}
+.wave-row strong {
+	font-family: Consolas, monospace;
+	color: var(--hud-amber);
+	text-shadow: 0 0 10px rgba(240, 207, 138, 0.5);
+}
+.thin-track {
+	background: rgba(160, 220, 210, 0.12);
+}
+.thin-track i {
+	background: var(--hud-amber);
+	box-shadow: 0 0 8px var(--hud-amber);
+}
+.sidebar-bottom {
+	border-top-color: var(--hud-edge);
+}
+.signal-bars {
+	color: var(--hud-lit);
+	text-shadow: 0 0 8px var(--hud-lit);
+}
+.sidebar-bottom #clock {
+	font-family: Consolas, monospace;
+	color: #dff3ee;
+}
+
+/* The battlefield: corner brackets of a sight, glass tools, a framed minimap and group dock. */
+.battlefield {
+	background: #03070d;
+}
+.battlefield::after {
+	content: "";
+	position: absolute;
+	inset: 8px;
+	pointer-events: none;
+	z-index: 2;
+	--c: rgba(160, 230, 220, 0.5);
+	background:
+		linear-gradient(var(--c), var(--c)) top left / 22px 1.5px,
+		linear-gradient(var(--c), var(--c)) top left / 1.5px 22px,
+		linear-gradient(var(--c), var(--c)) top right / 22px 1.5px,
+		linear-gradient(var(--c), var(--c)) top right / 1.5px 22px,
+		linear-gradient(var(--c), var(--c)) bottom left / 22px 1.5px,
+		linear-gradient(var(--c), var(--c)) bottom left / 1.5px 22px,
+		linear-gradient(var(--c), var(--c)) bottom right / 22px 1.5px,
+		linear-gradient(var(--c), var(--c)) bottom right / 1.5px 22px;
+	background-repeat: no-repeat;
+}
+.map-heading .eyebrow::before {
+	content: "●";
+	margin-right: 7px;
+	color: var(--hud-lit);
+	animation: pause-blink 1.6s steps(2) infinite;
+}
+.map-heading > span:last-child,
+.map-heading .eyebrow {
+	text-shadow: 0 1px 4px #000;
+}
+.minimap-wrap {
+	background: linear-gradient(160deg, rgba(10, 22, 32, 0.88), rgba(4, 10, 18, 0.92));
+	backdrop-filter: blur(6px);
+	border: 1px solid var(--hud-edge);
+	box-shadow: 0 10px 40px #0009;
+}
+.minimap-wrap::before {
+	content: "";
+	position: absolute;
+	inset: -1px;
+	pointer-events: none;
+	--c: var(--hud-lit);
+	background:
+		linear-gradient(var(--c), var(--c)) top left / 12px 2px,
+		linear-gradient(var(--c), var(--c)) top left / 2px 12px,
+		linear-gradient(var(--c), var(--c)) top right / 12px 2px,
+		linear-gradient(var(--c), var(--c)) top right / 2px 12px,
+		linear-gradient(var(--c), var(--c)) bottom left / 12px 2px,
+		linear-gradient(var(--c), var(--c)) bottom left / 2px 12px,
+		linear-gradient(var(--c), var(--c)) bottom right / 12px 2px,
+		linear-gradient(var(--c), var(--c)) bottom right / 2px 12px;
+	background-repeat: no-repeat;
+}
+.minimap-wrap > div span {
+	color: var(--hud-lit);
+	text-shadow: 0 0 8px var(--hud-lit);
+}
+.group-dock button {
+	background: rgba(8, 18, 26, 0.85);
+	border-color: var(--hud-edge);
+	backdrop-filter: blur(4px);
+	font-family: Consolas, monospace;
+}
+.group-dock button:hover {
+	border-color: var(--hud-lit);
+	box-shadow: 0 0 10px rgba(127, 231, 200, 0.3);
+}
+
+/* Messages and radio lines: glass cards with a lit left edge. */
+.toast {
+	background: linear-gradient(160deg, rgba(10, 24, 32, 0.92), rgba(4, 12, 18, 0.95));
+	backdrop-filter: blur(6px);
+	border: 1px solid var(--hud-edge);
+	border-left: 3px solid var(--hud-lit);
+	box-shadow: 0 12px 40px #000a, 0 0 18px rgba(127, 231, 200, 0.12);
+}
+.toast.comms {
+	border-left-color: var(--hud-amber);
+}
+
+/* The command deck: glass, a glowing upper edge, cards like the menu's buttons. */
+.command-bar {
+	background: var(--hud-glass);
+	border-top: 1px solid var(--hud-edge);
+}
+.command-bar::before {
+	content: "";
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: -1px;
+	height: 1px;
+	pointer-events: none;
+	background: linear-gradient(90deg, transparent, var(--hud-lit) 30%, var(--hud-lit) 70%, transparent);
+	opacity: 0.55;
+	box-shadow: 0 0 12px var(--hud-lit);
+}
+.selection-icon {
+	background: radial-gradient(circle, rgba(127, 231, 200, 0.16), rgba(127, 231, 200, 0.03));
+	border-color: rgba(127, 231, 200, 0.45);
+	text-shadow: 0 0 12px var(--hud-lit);
+	box-shadow: inset 0 0 12px rgba(127, 231, 200, 0.12);
+}
+.selection-actions button,
+.queue-controls button,
+.formation-options button,
+#hold-position {
+	background: rgba(12, 26, 34, 0.6);
+	border-color: rgba(160, 220, 210, 0.18);
+	border-radius: 0;
+	transition: background 0.2s, border-color 0.2s;
+}
+.selection-actions button:hover,
+.formation-options button:hover,
+#hold-position:hover {
+	background: rgba(30, 60, 70, 0.8);
+	border-color: var(--hud-lit);
+	color: #eef6f4;
+}
+kbd {
+	border-radius: 0;
+	border-color: rgba(160, 220, 210, 0.25);
+	font-family: Consolas, monospace;
+	color: #9fd8c8;
+}
+.unit-card {
+	overflow: hidden;
+	background: linear-gradient(160deg, rgba(16, 32, 42, 0.85), rgba(8, 16, 24, 0.9));
+	border: 1px solid rgba(160, 220, 210, 0.16);
+	border-radius: 0;
+	transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+.unit-card::before {
+	content: "";
+	position: absolute;
+	left: 0;
+	top: 0;
+	bottom: 0;
+	width: 3px;
+	background: var(--hud-lit);
+	transform: scaleY(0);
+	transition: transform 0.2s;
+	pointer-events: none;
+}
+.unit-card::after {
+	content: "";
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	left: -40%;
+	width: 30%;
+	pointer-events: none;
+	background: linear-gradient(90deg, transparent, rgba(190, 255, 235, 0.1), transparent);
+	transform: skewX(-20deg);
+	opacity: 0;
+}
+.unit-card:hover:enabled {
+	background: linear-gradient(160deg, rgba(30, 60, 70, 0.9), rgba(14, 30, 38, 0.92));
+	border-color: rgba(127, 231, 200, 0.7);
+	box-shadow: 0 0 18px rgba(127, 231, 200, 0.16);
+}
+.unit-card:hover:enabled::before,
+.unit-card:focus-visible::before {
+	transform: scaleY(1);
+}
+.unit-card:hover:enabled::after {
+	opacity: 1;
+	animation: menu-sweep 0.7s ease-out;
+}
+.unit-card.locked {
+	border-color: rgba(240, 207, 138, 0.25);
+}
+.unit-symbol {
+	text-shadow: 0 0 10px currentColor;
+}
+.production .queue-track,
+.queue-track {
+	background: rgba(160, 220, 210, 0.12);
+	border-radius: 0;
+}
+.queue-track i {
+	background: var(--hud-lit);
+	box-shadow: 0 0 10px var(--hud-lit);
+}
+.controls-note b {
+	color: #dff3ee;
+}
+
+/* The briefing and report over the battlefield: glass with corner brackets. */
+.overlay {
+	background: rgba(3, 7, 13, 0.6);
+}
+.briefing {
+	position: relative;
+	background: linear-gradient(160deg, rgba(10, 22, 32, 0.92), rgba(4, 10, 18, 0.95));
+	border: 1px solid rgba(160, 220, 210, 0.22);
+	box-shadow: 0 30px 90px #000a;
+}
+.briefing::before {
+	content: "";
+	position: absolute;
+	inset: -1px;
+	pointer-events: none;
+	--c: var(--hud-lit);
+	background:
+		linear-gradient(var(--c), var(--c)) top left / 20px 2px,
+		linear-gradient(var(--c), var(--c)) top left / 2px 20px,
+		linear-gradient(var(--c), var(--c)) top right / 20px 2px,
+		linear-gradient(var(--c), var(--c)) top right / 2px 20px,
+		linear-gradient(var(--c), var(--c)) bottom left / 20px 2px,
+		linear-gradient(var(--c), var(--c)) bottom left / 2px 20px,
+		linear-gradient(var(--c), var(--c)) bottom right / 20px 2px,
+		linear-gradient(var(--c), var(--c)) bottom right / 2px 20px;
+	background-repeat: no-repeat;
+}
+
+@keyframes hud-sweep {
+	from {
+		left: -20%;
+	}
+	to {
+		left: 120%;
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.topbar::before,
+	.live-dot,
+	.map-heading .eyebrow::before,
+	.unit-card:hover:enabled::after {
+		animation: none;
+	}
+}
+
+/* The research panel: each card shows its field, its state as a lit edge and a badge, and a progress bar along its
+   lower edge; the research under way glows amber, finished ones turn teal, locked ones are dashed and dimmed. */
+.production .research-card {
+	--state: #5d7480;
+}
+.production .research-card::before {
+	transform: none;
+	background: var(--state);
+	box-shadow: 0 0 10px var(--state);
+}
+.production .research-card[data-state="ready"] {
+	--state: #a9e28c;
+	border-color: rgba(169, 226, 140, 0.35);
+}
+.production .research-card[data-state="poor"] {
+	--state: #f0cf8a;
+}
+.production .research-card[data-state="locked"] {
+	border-style: dashed;
+}
+.production .research-card[data-state="locked"] .unit-copy {
+	opacity: 0.7;
+}
+.production .research-card[data-state="done"] {
+	--state: #7fe7c8;
+	background: linear-gradient(160deg, rgba(20, 52, 50, 0.85), rgba(8, 22, 24, 0.9));
+	border-color: rgba(127, 231, 200, 0.35);
+}
+.production .research-card[data-state="working"],
+.production .research-card[data-state="paused"] {
+	--state: #f0cf8a;
+	background: linear-gradient(160deg, rgba(48, 40, 20, 0.9), rgba(20, 16, 8, 0.92));
+	border-color: rgba(240, 207, 138, 0.6);
+	animation: dev-work 1.8s ease-in-out infinite;
+}
+.production .research-card .card-status {
+	color: var(--state) !important;
+	font-weight: 600;
+}
+.production .research-card[data-state="done"] .card-status::before {
+	content: "◉ ";
+}
+.production .research-card[data-state="working"] .card-status::before {
+	content: "◷ ";
+}
+.production .research-card[data-state="locked"] .card-status::before {
+	content: "⊘ ";
+}
+.production .research-card[data-state="ready"] .card-status::before {
+	content: "● ";
+}
+.production .research-card[data-state="poor"] .card-status::before {
+	content: "◐ ";
+}
+.production .research-card[data-state="done"] .unit-copy b {
+	display: none;
+}
+.research-tag {
+	align-self: flex-start;
+	padding: 1px 6px;
+	font: normal 600 8px Consolas, monospace;
+	letter-spacing: 1.5px;
+	color: #9fd8c8;
+	border: 1px solid rgba(160, 220, 210, 0.3);
+}
+.research-tag[data-tag="WALKA"] {
+	color: #ff9a8a;
+	border-color: rgba(255, 140, 120, 0.35);
+}
+.research-tag[data-tag="POGODA"] {
+	color: #9cc6f2;
+	border-color: rgba(156, 198, 242, 0.35);
+}
+.research-tag[data-tag="KOLONIA"] {
+	color: #f0cf8a;
+	border-color: rgba(240, 207, 138, 0.4);
+}
+.research-progress {
+	position: absolute;
+	left: 0;
+	bottom: 0;
+	width: 0;
+	height: 3px;
+	background: var(--state);
+	box-shadow: 0 0 8px var(--state);
+	transition: width 0.3s linear;
+	pointer-events: none;
+}
+.production .research-card .unit-copy b {
+	font-family: Consolas, monospace;
+}
+@media (prefers-reduced-motion: reduce) {
+	.production .research-card {
+		animation: none !important;
+	}
+}

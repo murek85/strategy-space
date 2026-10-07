@@ -191,7 +191,7 @@ class CommandMenu {
 				missions = Object.entries(RTS.MISSIONS)
 					.filter(([, m]) => !!m.campaign === isCampaign)
 					.sort(([a], [b]) => a.localeCompare(b));
-			body = `<div class="campaign-galaxy"><nav class="mission-list galaxy-list" aria-label="Akty i rozdziały kampanii"><h2 class="act-heading">Akt I · Odzyskany Świt</h2>${missions
+			body = `<div class="campaign-select"><nav class="mission-list campaign-list" aria-label="Akty i rozdziały kampanii"><h2 class="act-heading">Akt I · Odzyskany Świt</h2>${missions
 				.filter(([, m]) => !m.act)
 				.map(card)
 				.join(
@@ -204,7 +204,7 @@ class CommandMenu {
 				)}${missions.some(([, m]) => m.act === 3) ? `<h2 class="act-heading">Akt III · Przebudzenie Roju</h2>${progress.colony6 && typeof Act3Film !== "undefined" ? this.button("intro3", "Prolog aktu III") : ""}${missions
 				.filter(([, m]) => m.act === 3)
 				.map(card)
-				.join("")}` : ""}</nav><div class="galaxy-view"><canvas id="campaign-map" role="img" aria-label="Mapa galaktyki: układy planetarne pogranicza i trasa kampanii"></canvas><p class="galaxy-caption">Akt I: szkolenie i trzy rozdziały. Akt II — Cena świtu i akt III — Przebudzenie Roju: rozdziały z celami dodatkowymi (◆), które dają niewielką premię na start następnego rozdziału. Zwycięstwo odblokowuje kolejny rozdział. Kliknij świat na mapie galaktyki albo rozdział z listy.</p></div><aside id="galaxy-info" class="galaxy-info" aria-live="polite" aria-label="Wybrana planeta"></aside></div>${this.button("campaign-back", "Wróć do wyboru gry")}`;
+				.join("")}` : ""}</nav><aside id="mission-preview" class="galaxy-info mission-preview" aria-live="polite" aria-label="Podgląd wybranego rozdziału"></aside></div>${this.button("campaign-back", "Wróć do wyboru gry")}`;
 		} else if (screen === "slots") {
 			title =
 				this.slotMode === "save" ? "Zapisz w slocie" : "Wczytaj grę";
@@ -291,6 +291,14 @@ class CommandMenu {
 				body;
 		if (screen === "news")
 			body =
+				"<h2>0.122 / Wybór rozdziału z podglądem</h2><p>Zamiast mapy galaktyki: lista rozdziałów i podgląd wskazanego — obracająca się planeta, stan, dane, opis, cel i przycisk odprawy.</p>" +
+				"<h2>0.121 / Mapa galaktyki na pełnym ekranie</h2><p>Ekran kampanii to sama mapa galaktyki na całym ekranie; lista rozdziałów, karta planety i powrót leżą na niej jak w grze.</p>" +
+				"<h2>0.120 / Prologi i sceny na pełnym ekranie</h2><p>Prologi aktów II i III oraz sceny łączności przed rozdziałami wyświetlają się na całym ekranie, tak jak intro kampanii.</p>" +
+				"<h2>0.119 / Odblokowanie kampanii do testów</h2><p>W menu Ctrl+Shift+L odblokowuje wszystkie rozdziały kampanii; ponowne naciśnięcie przywraca wcześniejszy postęp.</p>" +
+				"<h2>0.118 / Nowa mapa galaktyki</h2><p>Mapa kampanii na całe okno ze zwijaną listą, kamera najeżdżająca na planetę, głębia i paralaksa, żywa trasa z sondą, numery rozdziałów, regiony aktów i karta planety z obracającym się podglądem.</p>" +
+				"<h2>0.117 / Nowy panel badań</h2><p>Karty badań z dziedziną, stanem w kolorze, krótkim opisem i kosztem; trwające badanie na początku z procentem, czasem i paskiem postępu, licznik zbadanych.</p>" +
+				"<h2>0.116 / Nowe drzewo rozwoju</h2><p>Drzewo F2 w stylu pokładu: stany węzłów w kolorach i odznakach, koszty, świecące połączenia, podświetlone wymagania i to, co węzeł odblokowuje, liczniki w zakładkach i legenda.</p>" +
+				"<h2>0.115 / Interfejs gry jak pokład dowodzenia</h2><p>Szklane panele ze świecącymi krawędziami, pas skanowania, cyfry jak na konsoli, zakładki i karty jednostek jak w menu, narożniki celownika na polu bitwy.</p>" +
 				"<h2>0.114 / Ekrany menu jak panele taktyczne</h2><p>Okna z narożnikami i linią skanu, planeta misji z celownikiem w tle odprawy, ustawienia w zakładkach, karty zapisów z miniaturą planety, oś czasu zmian i bursztynowe ostrzeżenia.</p>" +
 				"<h2>0.113 / Pauza taktyczna</h2><p>Pauza nad zamrożoną bitwą z raportem sytuacyjnym: surowce, siły, przekaźniki, cele, planowany atak wroga, pogoda i ostatnia łączność.</p>" +
 				"<h2>0.112 / Nowe menu główne</h2><p>Za pokładem dowodzenia żyje układ planetarny — planeta z księżycem, latarnie, przelatujący konwój — a przyciski i karty mają filmowy, taktyczny wygląd.</p>" +
@@ -436,6 +444,8 @@ class CommandMenu {
 			);
 		}
 		this.root.classList.toggle("reduced-motion", this.reduced);
+		// Films (the intro, the prologues, the radio scenes) take the whole screen.
+		this.root.classList.toggle("film-screen", ["intro", "intro2", "intro3", "interlude"].includes(screen));
 		this.root.innerHTML = `<div class="menu-stars" aria-hidden="true"></div><div class="menu-orbit" aria-hidden="true"><div class="menu-planet"><div class="planet-surface"></div><div class="planet-clouds"></div><div class="planet-shade"></div></div></div><header class="menu-brand"><span>◈</span> POGRANICZE <small>GALAKTYKI / POKŁAD DOWODZENIA</small></header><div class="menu-layout"><section class="menu-content ${["knowledge", "scenarios", "intro", "intro2", "intro3", "interlude", "campaign"].includes(screen) ? "wide" : ""}"><span class="eyebrow">${EYEBROWS[screen] || "WOLNE KOLONIE / SEKTOR 07"}</span><h1 tabindex="-1">${title}</h1>${body}</section>${screen === "pause" ? this.situationHtml() : ""}${screen === "home" ? `<aside class="menu-mission"><span class="eyebrow">${save.valid ? "OSTATNIA OPERACJA" : "SYGNAŁ Z POWIERZCHNI"}</span><h2>${save.valid ? RTS.MISSIONS[save.missionId]?.planet || "Khepri IV" : "Khepri IV"}</h2><p>${save.valid ? RTS.MISSIONS[save.missionId]?.name || "Cichy Horyzont" : "Ekspedycja Wolnych Kolonii"}</p><p>${save.valid ? `Czas bitwy: ${save.time}<br>Zapis: ${save.date}` : "Dominium zajęło północny kompleks.<br>Przywróć kontrolę nad sektorem."}</p><span class="menu-tag">${save.valid ? "ZAPIS GOTOWY DO WZNOWIENIA" : "OCZEKIWANIE NA ROZKAZY"}</span></aside>` : ""}</div><footer class="menu-footer"><span>PROTOTYP 0.16 · ZAPIS LOKALNY</span><button id="menu-news">Co nowego i plany</button><button id="menu-sound">Dźwięk</button></footer>`;
 		// The living backdrop (menu-backdrop.js), one canvas kept across the screens.
 		if (this.backdrop === undefined) this.backdrop = typeof MenuBackdrop !== "undefined" ? MenuBackdrop.create(this) : null;
@@ -456,7 +466,7 @@ class CommandMenu {
 		queueMicrotask(() => ranges.forEach(fill));
 		if (screen === "knowledge") KnowledgeBase.mount(this.root);
 		this.root.querySelector(".menu-footer span").textContent =
-			"PROTOTYP 0.114 · ZAPIS LOKALNY";
+			"PROTOTYP 0.122 · ZAPIS LOKALNY";
 		if (
 			screen === "scenarios" ||
 			(screen === "briefing" &&
@@ -998,77 +1008,60 @@ class CommandMenu {
 			RTS.MISSIONS[this.selectedMission].campaign ? null : this.scenario,
 		);
 	}
-	// Campaign galaxy: the map on the left, the chapter list on the right, the chosen world below the map.
+	// The campaign screen: the chapter list and a preview of the chapter under the pointer or focus (the next one
+	// at first) — its world turning under a sight, the data, the story and the way to its briefing.
 	mountGalaxy() {
-		const canvas = this.root.querySelector("#campaign-map");
-		if (!canvas || typeof GalaxyMap === "undefined") return;
-		// Map and list take the room left in the menu window, so the whole galaxy is in view.
-		const grid = this.root.querySelector(".campaign-galaxy"),
+		const preview = this.root.querySelector("#mission-preview");
+		if (!preview) return;
+		const grid = this.root.querySelector(".campaign-select"),
 			scroll = this.root.querySelector(".menu-scroll");
+		// The list and the preview take the room left in the menu window.
 		this.fitGalaxy = () => {
-			if (!grid || !scroll || window.innerWidth <= 1280) return grid && (grid.style.height = "");
+			if (!grid || !scroll || window.innerWidth <= 980) return grid && (grid.style.height = "");
 			const top = grid.getBoundingClientRect().top - scroll.getBoundingClientRect().top + scroll.scrollTop;
-			grid.style.height = Math.max(300, Math.min(760, scroll.clientHeight - top - 6)) + "px";
+			grid.style.height = Math.max(320, Math.min(780, scroll.clientHeight - top - 6)) + "px";
 		};
 		this.fitGalaxy();
 		window.addEventListener("resize", this.fitGalaxy);
 		const progress = this.api.campaign?.() || {},
-			badges = this.api.campaignDetails?.()?.badges || {},
-			planetOf = (id) => RTS.MISSIONS[id].planet.split(" — ")[0],
-			status = (id) => (progress[id] ? "done" : !RTS.MISSIONS[id].requires || progress[RTS.MISSIONS[id].requires] ? "open" : "locked"),
 			order = ["training", "colony1", "colony2", "colony3", "colony4", "colony5", "colony6", "colony7", "colony8", "colony9"].filter((id) => RTS.MISSIONS[id]),
-			chapters = order.map((id) => ({ id, planet: planetOf(id), name: RTS.MISSIONS[id].name, status: status(id), badge: !!badges[id] }));
-		this.galaxy = new GalaxyMap.Map(canvas, {
-			chapters,
-			reduced: this.reduced,
-			onSelect: (name, fromMap) => this.showWorld(name, chapters, fromMap),
-		});
-		// The list and the map point at each other.
+			status = (id) => (progress[id] ? "done" : !RTS.MISSIONS[id].requires || progress[RTS.MISSIONS[id].requires] ? "open" : "locked");
+		if (typeof GalaxyMap !== "undefined") this.galaxy = GalaxyMap.portrait(null, { reduced: this.reduced });
+		const show = (id) => this.showMission(id, order, status);
 		this.root.querySelectorAll("[data-mission]").forEach((b) => {
-			const planet = planetOf(b.dataset.mission);
-			b.addEventListener("mouseenter", () => this.galaxy?.focus(planet));
-			b.addEventListener("focus", () => this.galaxy?.focus(planet));
-			b.addEventListener("mouseleave", () => this.galaxy?.focus(null));
+			b.addEventListener("mouseenter", () => show(b.dataset.mission));
+			b.addEventListener("focus", () => show(b.dataset.mission));
 		});
-		const next = chapters.find((ch) => ch.status === "open") || chapters.at(-1);
-		this.galaxy.select(next.planet);
+		show(this.previewMission && RTS.MISSIONS[this.previewMission] ? this.previewMission : order.find((id) => status(id) === "open") || order.at(-1));
 	}
-	showWorld(name, chapters, fromMap) {
-		const info = this.root.querySelector("#galaxy-info"),
-			world = GalaxyMap.WORLDS[name];
-		if (!info || !world) return;
-		const own = chapters.filter((ch) => ch.planet === name),
-			scenarios = Object.entries(RTS.MISSIONS).filter(([, m]) => !m.campaign && m.planet.split(" / ")[0].split(" — ")[0] === name),
-			label = { done: "ukończony", open: "do rozegrania", locked: "zablokowany" };
-		info.innerHTML =
-			`<h3>${name}</h3><small>Klimat: ${GalaxyMap.CLIMATE[world.climate].name}</small><p>${world.text}</p>` +
-			(own.length
-				? own
-						.map(
-							(ch) =>
-								`<div class="world-chapter ${ch.status}"><span><b>${ch.name}${ch.badge ? ' <i class="act2-badge">◆</i>' : ""}</b><small>${label[ch.status]}</small></span>${ch.status === "locked" ? "" : `<button type="button" data-open="${ch.id}">Odprawa ↗</button>`}</div>`,
-						)
-						.join("")
-				: "<p><small>Świat scenariuszy — nie ma tu rozdziałów kampanii.</small></p>") +
-			scenarios.map(([id, m]) => `<div class="world-chapter"><span><b>${m.name}</b><small>scenariusz</small></span><button type="button" data-scenario="${id}">Zagraj ↗</button></div>`).join("");
-		info.querySelectorAll("[data-open]").forEach((b) => (b.onclick = () => this.root.querySelector(`[data-mission="${b.dataset.open}"]`)?.click()));
-		info.querySelectorAll("[data-scenario]").forEach(
-			(b) =>
-				(b.onclick = () => {
-					this.selectedMission = b.dataset.scenario;
-					this.show("scenarios");
-				}),
-		);
-		// Mark the world's chapters in the list; from the map, bring the first into view.
-		let first = null;
-		this.root.querySelectorAll("[data-mission]").forEach((b) => {
-			const on = own.some((ch) => ch.id === b.dataset.mission);
-			b.classList.toggle("on-world", on);
-			if (on && !first) first = b;
-		});
-		const list = this.root.querySelector(".galaxy-list");
-		if (fromMap && first && list && list.scrollHeight > list.clientHeight)
-			list.scrollTo({ top: Math.max(0, list.scrollTop + first.getBoundingClientRect().top - list.getBoundingClientRect().top - 36), behavior: this.reduced || document.hidden ? "auto" : "smooth" });
+	showMission(id, order, status) {
+		const preview = this.root.querySelector("#mission-preview"),
+			m = RTS.MISSIONS[id];
+		if (!preview || !m) return;
+		if (this.previewMission === id && preview.childElementCount) return;
+		this.previewMission = id;
+		const ROMAN = ["S", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX"],
+			num = ROMAN[order.indexOf(id)] || "",
+			state = status(id),
+			details = this.api.campaignDetails?.() || { badges: {}, choices: {} },
+			planet = m.planet.split(" — ")[0],
+			world = typeof GalaxyMap !== "undefined" ? GalaxyMap.WORLDS[planet] : null,
+			label = { done: "◉ Ukończony", open: "● Do rozegrania", locked: "⊘ Zablokowany" }[state],
+			act = ["", "I · Odzyskany Świt", "II · Cena świtu", "III · Przebudzenie Roju"][m.act || 1];
+		preview.innerHTML =
+			`<span class="eyebrow">AKT ${act}</span><h3><i class="world-num ${state}">${num}</i>${m.name.replace(/^[IVX]+ · /, "")}</h3>` +
+			(world ? `<canvas class="world-portrait" role="img" aria-label="Podgląd planety ${planet}"></canvas>` : "") +
+			`<dl class="world-data"><div><dt>Stan</dt><dd class="state-${state}">${label}${details.badges[id] ? " · ◆" : ""}</dd></div><div><dt>Planeta</dt><dd>${m.planet}</dd></div>${world ? `<div><dt>Klimat</dt><dd>${GalaxyMap.CLIMATE[world.climate].name}</dd></div><div><dt>Księżyce</dt><dd>${world.moons || 0}${world.rings ? " · pierścienie" : ""}${world.belt ? " · pas asteroid" : ""}</dd></div>` : ""}${state === "locked" && m.requires ? `<div><dt>Wymaga</dt><dd>${RTS.MISSIONS[m.requires].name}</dd></div>` : ""}</dl>` +
+			`<p>${m.description}</p>${m.objective ? `<p class="menu-objective">${m.objective}</p>` : ""}` +
+			(state === "locked" ? "" : `<button type="button" class="preview-open">Odprawa ↗</button>`);
+		const canvas = preview.querySelector(".world-portrait");
+		if (canvas && this.galaxy) {
+			this.galaxy.portrait = canvas;
+			this.galaxy.show(planet);
+		}
+		const open = preview.querySelector(".preview-open");
+		if (open) open.onclick = () => this.root.querySelector(`[data-mission="${id}"]`)?.click();
+		this.root.querySelectorAll("[data-mission]").forEach((b) => b.classList.toggle("on-world", b.dataset.mission === id));
 	}
 	// Rule settings, map seed and the shareable operation code.
 	settingFields() {
@@ -1230,6 +1223,16 @@ class CommandMenu {
 		actions.append(...parts.slice(split));
 		content.append(scroll);
 		if (actions.children.length) content.append(actions);
+	}
+	// A short notice at the bottom of the menu (e.g. the test unlock of the campaign).
+	notice(text) {
+		document.querySelector(".menu-notice")?.remove();
+		const el = document.createElement("div");
+		el.className = "menu-notice";
+		el.setAttribute("role", "status");
+		el.textContent = text;
+		document.body.append(el);
+		setTimeout(() => el.remove(), 3500);
 	}
 	// Settings in tabs: each section (a heading in the scroll) becomes a panel; the first one is the sound.
 	tabbed() {

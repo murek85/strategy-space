@@ -352,3 +352,355 @@ html.software-cursor-active .development-dialog * {
 		padding-top: 0;
 	}
 }
+
+/* The tree in the style of the command deck: glass with corner brackets and a scan line, tabs like the menu's with
+   counters, nodes with a lit edge in the colour of their state, a badge and a cost, glowing connections, the chosen
+   node's requirement (amber) and what it opens (teal) marked, resources as tiles and a legend. */
+.development-dialog {
+	background: linear-gradient(160deg, rgba(10, 22, 32, 0.95), rgba(4, 10, 18, 0.97));
+	border: 1px solid rgba(160, 220, 210, 0.22);
+	border-radius: 0;
+	box-shadow: 0 30px 90px #000c;
+	animation: win-open 0.3s ease-out both;
+}
+.development-dialog[open]::before {
+	content: "";
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+	z-index: 3;
+	--c: #7fe7c8;
+	background:
+		linear-gradient(var(--c), var(--c)) top left / 22px 2px,
+		linear-gradient(var(--c), var(--c)) top left / 2px 22px,
+		linear-gradient(var(--c), var(--c)) top right / 22px 2px,
+		linear-gradient(var(--c), var(--c)) top right / 2px 22px,
+		linear-gradient(var(--c), var(--c)) bottom left / 22px 2px,
+		linear-gradient(var(--c), var(--c)) bottom left / 2px 22px,
+		linear-gradient(var(--c), var(--c)) bottom right / 22px 2px,
+		linear-gradient(var(--c), var(--c)) bottom right / 2px 22px;
+	background-repeat: no-repeat;
+}
+.development-dialog[open]::after {
+	content: "";
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 0;
+	height: 2px;
+	pointer-events: none;
+	background: linear-gradient(90deg, transparent, #bff8e6, transparent);
+	box-shadow: 0 0 18px #7fe7c8;
+	animation: win-scan 0.9s ease-out both;
+}
+.development-dialog::backdrop {
+	background: rgba(3, 7, 13, 0.7);
+}
+.development-dialog .eyebrow::before {
+	content: "●";
+	margin-right: 8px;
+	color: #7fe7c8;
+	animation: pause-blink 1.6s steps(2) infinite;
+}
+.development-dialog h2 {
+	text-shadow: 0 0 24px #7fe7c833;
+}
+.development-dialog h2::after {
+	content: "";
+	display: block;
+	width: 72px;
+	height: 2px;
+	margin-top: 8px;
+	background: linear-gradient(90deg, #7fe7c8, transparent);
+}
+.development-dialog button {
+	border-radius: 0;
+	background: rgba(12, 26, 34, 0.7);
+	border-color: rgba(160, 220, 210, 0.2);
+	transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+.development-dialog button:hover:enabled {
+	background: rgba(30, 60, 70, 0.85);
+	border-color: #7fe7c8;
+}
+/* Tabs with counters. */
+.development-tabs {
+	gap: 4px;
+	border-bottom: 1px solid rgba(160, 220, 210, 0.2);
+}
+.development-tabs button {
+	min-width: 150px;
+	border-bottom: 0;
+	color: #9fb9bb;
+	font-size: 13px;
+	letter-spacing: 1px;
+	text-transform: uppercase;
+}
+.development-tabs button small {
+	margin-left: 10px;
+	font: 600 11px Consolas, monospace;
+	color: #6f8f8f;
+}
+.development-tabs button[aria-selected="true"] {
+	background: rgba(30, 60, 70, 0.85);
+	border-color: rgba(160, 220, 210, 0.2);
+	color: #eef6f4;
+	box-shadow: inset 0 2px 0 #7fe7c8;
+}
+.development-tabs button[aria-selected="true"] small {
+	color: #7fe7c8;
+}
+/* Connections: a glowing line with an arrowhead from the source to its column of leaves. */
+.dev-arrow {
+	position: relative;
+	margin-top: 54px;
+	height: 2px;
+	background: linear-gradient(90deg, rgba(127, 231, 200, 0.3), #7fe7c8);
+	box-shadow: 0 0 8px rgba(127, 231, 200, 0.6);
+}
+.dev-arrow::after {
+	content: "";
+	position: absolute;
+	right: -2px;
+	top: -4px;
+	border: 5px solid transparent;
+	border-left: 7px solid #7fe7c8;
+	border-right: 0;
+}
+.dev-leaves {
+	border-left: 2px solid rgba(127, 231, 200, 0.45);
+	box-shadow: -6px 0 12px -8px #7fe7c8;
+}
+.development-branch {
+	border-bottom-color: rgba(160, 220, 210, 0.1);
+}
+/* Nodes: the state as a lit left edge, a badge and a cost line. */
+.development-dialog .development-node {
+	--state: #5d7480;
+	position: relative;
+	overflow: hidden;
+	background: linear-gradient(160deg, rgba(16, 32, 42, 0.88), rgba(8, 16, 24, 0.92));
+	border: 1px solid rgba(160, 220, 210, 0.16);
+}
+.development-dialog .development-node::before {
+	content: "";
+	position: absolute;
+	left: 0;
+	top: 0;
+	bottom: 0;
+	width: 3px;
+	background: var(--state);
+	box-shadow: 0 0 10px var(--state);
+}
+.development-dialog .development-node.done {
+	--state: #7fe7c8;
+	background: linear-gradient(160deg, rgba(20, 52, 50, 0.9), rgba(8, 22, 24, 0.92));
+	border-color: rgba(127, 231, 200, 0.4);
+}
+.development-dialog .development-node.ready {
+	--state: #a9e28c;
+	border-color: rgba(169, 226, 140, 0.4);
+}
+.development-dialog .development-node.poor {
+	--state: #f0cf8a;
+}
+.development-dialog .development-node.working,
+.development-dialog .development-node.paused {
+	--state: #f0cf8a;
+	border-color: rgba(240, 207, 138, 0.55);
+	animation: dev-work 1.8s ease-in-out infinite;
+}
+.development-dialog .development-node.locked {
+	border-style: dashed;
+	opacity: 0.72;
+}
+.development-dialog .development-node.locked strong {
+	color: #9fb0b5;
+}
+.development-dialog .development-node:hover:enabled {
+	border-color: #7fe7c8;
+	box-shadow: 0 0 16px rgba(127, 231, 200, 0.2);
+	opacity: 1;
+}
+.development-dialog .development-node.selected {
+	outline: 1px solid #bff8e6;
+	outline-offset: 2px;
+	background: linear-gradient(160deg, rgba(36, 70, 76, 0.95), rgba(14, 30, 38, 0.95));
+	box-shadow: 0 0 22px rgba(127, 231, 200, 0.3);
+	opacity: 1;
+}
+.development-dialog .development-node.is-required {
+	outline: 1px dashed #f0cf8a;
+	outline-offset: 2px;
+	opacity: 1;
+}
+.development-dialog .development-node.is-unlocked {
+	outline: 1px dashed #7fe7c8;
+	outline-offset: 2px;
+	opacity: 1;
+}
+.development-node .dev-kind {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+.dev-badge {
+	margin-left: auto;
+	font-style: normal;
+	letter-spacing: 0.5px;
+	color: var(--state);
+	white-space: nowrap;
+}
+.dev-cost {
+	margin-top: auto;
+	font: 600 11px Consolas, monospace;
+	color: #e6d3a8;
+}
+.development-node.poor .dev-cost {
+	color: #ffb4a0;
+}
+.dev-link {
+	position: absolute;
+	right: 0;
+	bottom: 0;
+	padding: 2px 7px;
+	font: normal 600 9px Consolas, monospace;
+	letter-spacing: 1.5px;
+	text-transform: uppercase;
+	color: #03070d;
+	background: #7fe7c8;
+}
+.is-required .dev-link {
+	background: #f0cf8a;
+}
+.development-dialog progress {
+	-webkit-appearance: none;
+	appearance: none;
+	height: 5px;
+	border: 0;
+	background: rgba(160, 220, 210, 0.14);
+}
+.development-dialog progress::-webkit-progress-bar {
+	background: rgba(160, 220, 210, 0.14);
+}
+.development-dialog progress::-webkit-progress-value {
+	background: #f0cf8a;
+	box-shadow: 0 0 8px #f0cf8a;
+}
+.development-dialog progress::-moz-progress-bar {
+	background: #f0cf8a;
+}
+/* The detail panel: glass, a lit edge, the main action like the menu's main button. */
+#development-detail {
+	background: linear-gradient(160deg, rgba(10, 24, 32, 0.8), rgba(4, 12, 18, 0.9));
+	border: 1px solid rgba(160, 220, 210, 0.2);
+	border-left: 3px solid #7fe7c8;
+	border-radius: 0;
+}
+#development-detail h3 {
+	text-shadow: 0 0 18px #7fe7c844;
+}
+#development-preview {
+	background:
+		radial-gradient(ellipse, rgba(127, 231, 200, 0.16), transparent 65%),
+		repeating-linear-gradient(0deg, rgba(160, 220, 210, 0.05) 0 1px, transparent 1px 12px),
+		repeating-linear-gradient(90deg, rgba(160, 220, 210, 0.05) 0 1px, transparent 1px 12px);
+	border: 1px solid rgba(160, 220, 210, 0.14);
+}
+#development-detail dl > div {
+	padding-bottom: 6px;
+	border-bottom: 1px solid rgba(160, 220, 210, 0.08);
+}
+#development-detail dd {
+	font-family: Consolas, monospace;
+	color: #f0cf8a;
+}
+.development-dialog .dev-main-action:enabled {
+	background: linear-gradient(90deg, #b4e9ce, #9fe0c4);
+	color: #102d2b;
+	border-color: #b4e9ce;
+	font-weight: 600;
+	box-shadow: 0 0 22px rgba(127, 231, 200, 0.3);
+}
+.development-dialog .dev-main-action:hover:enabled {
+	background: linear-gradient(90deg, #c9f5de, #b4e9ce);
+	color: #102d2b;
+}
+.dev-detail-actions {
+	border-top-color: rgba(160, 220, 210, 0.18);
+}
+/* Footer: resources as tiles, a legend. */
+.development-dialog footer {
+	align-items: center;
+	border-top-color: rgba(160, 220, 210, 0.18);
+}
+#development-resources {
+	display: flex;
+	gap: 6px;
+}
+#development-resources span {
+	padding: 4px 10px;
+	background: rgba(255, 255, 255, 0.04);
+	border: 1px solid rgba(160, 220, 210, 0.14);
+	font-size: 9px;
+	letter-spacing: 1px;
+	text-transform: uppercase;
+	color: #8fa6a8;
+}
+#development-resources b {
+	display: block;
+	font: 600 13px Consolas, monospace;
+	color: #eef6f4;
+	letter-spacing: 0;
+}
+.dev-legend {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px 12px;
+	font-size: 10px;
+}
+.dev-legend i {
+	font-style: normal;
+	color: #8fa6a8;
+}
+.dev-legend .done {
+	color: #7fe7c8;
+}
+.dev-legend .ready {
+	color: #a9e28c;
+}
+.dev-legend .poor {
+	color: #f0cf8a;
+}
+.dev-legend .req,
+.dev-legend .unl {
+	padding: 0 5px;
+	border: 1px dashed #f0cf8a;
+	color: #f0cf8a;
+}
+.dev-legend .unl {
+	border-color: #7fe7c8;
+	color: #7fe7c8;
+}
+@keyframes dev-work {
+	0%,
+	100% {
+		box-shadow: 0 0 0 rgba(240, 207, 138, 0);
+	}
+	50% {
+		box-shadow: 0 0 16px rgba(240, 207, 138, 0.35);
+	}
+}
+@media (max-width: 950px) {
+	.dev-legend {
+		display: none;
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.development-dialog,
+	.development-dialog[open]::after,
+	.development-dialog .eyebrow::before,
+	.development-dialog .development-node {
+		animation: none !important;
+	}
+}
