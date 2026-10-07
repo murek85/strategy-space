@@ -200,6 +200,12 @@ const Act2Art = (() => {
 	}
 
 	function label(c, x, y, text, color, sub) {
+		// The 3D board draws these on the screen, sharp, over the map point (webgl3d/three-game-renderer.js):
+		// painted on the ground they came out blurred and slanted.
+		if (typeof Act2Art !== "undefined" && Act2Art.onLabel) {
+			Act2Art.onLabel({ x, y, text, color, sub });
+			return;
+		}
 		c.font = "bold 12px Segoe UI";
 		c.textAlign = "center";
 		const w =

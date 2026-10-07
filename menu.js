@@ -261,6 +261,12 @@ class CommandMenu {
 								["scars", "Ślady zniszczeń i pożarów"],
 								["relief", "Wysokość terenu: rzeźba i cienie gór"],
 								["tilt", "Perspektywa 2,5D (lekko pochylona kamera)"],
+								["cinema", "Kinowy obraz 3D: tony filmowe, gradacja, odbicia nieba"],
+								["ao", "Okluzja otoczenia 3D (cień w zakamarkach)"],
+								["pbr", "Teren PBR 3D: skała na zboczach, faktura i rzeźba gruntu"],
+								["reflect", "Odbicia w wodzie 3D (brzegi, budynki, niebo)"],
+								["atmo", "Atmosfera 3D: mgła w dolinach, smugi słońca"],
+								["surface", "Detale modeli 3D: płyty pancerza, starte krawędzie, kurz"],
 							]
 								.map(([key, label]) => `<label class="menu-setting"><input type="checkbox" id="visual-${key}" class="webgl-effect"> ${label}</label>`)
 								.join("")}`
@@ -271,7 +277,7 @@ class CommandMenu {
 			body = KnowledgeBase.template() + this.button("back", "Wróć");
 		} else {
 			title = "Co nowego";
-			body = `<h2>0.11 / Pogoda i doba</h2><p>Śnieżyce, burze piaskowe i ulewy spowalniają ruch i obniżają celność. Cykl dnia i nocy, badania pogodowe w laboratorium, ptaki i ryby oraz pięć aranżacji muzycznych.</p><h2>0.10 / Budowa przez roboty</h2><p>Robot musi dotrzeć na plac budowy. Osłona piechoty przy skałach i murach, rozkaz utrzymania pozycji, opady osiadające na planszy, pożary uszkodzonych maszyn i proceduralna muzyka.</p><h2>0.9 / Rozległe pogranicze</h2><p>Pięć ręcznych slotów, osobne scenariusze i trzy rozdziały kampanii. Ciężka maszyna [Y], artyleria [O], mur [K] i brama [P]. Mapy 3360 × 2160, cztery przekaźniki, nowe złoża, jeziora i drapieżniki. Pogoda i ślady ruchu. Dolny pasek postępu i lewy panel z zakładkami.</p><h2>0.8 / Nowe światy</h2><p>Reaktory, moc, laboratoria i kryształy. Trzy mapy operacji, kampania Wolnych Kolonii z pierwszą misją, różne biomy i rozbudowana oprawa 2D.</p><h2>0.6 / Gospodarka</h2><p>Magazyny polowe, gaz i ekstraktory, bezczynne roboty oraz badanie większych ładowni. Starsze zapisy otrzymują złoża gazu, a zapas gazu zaczyna od zera.</p><h2>0.5 / Pokład dowodzenia</h2><p>Menu główne, gra jednoosobowa z odprawą, kontynuowanie zapisu, baza wiedzy, ustawienia i menu pauzy.</p><h2>0.4 / Dźwięk</h2><p>Broń, eksplozje, rozkazy, powiadomienia i regulacja głośności.</p><h2>Rozważane kierunki</h2><p>Trzeci poziom centrum (Twierdza) i doktryny frakcji, mgła wojny i budynki wsparcia dla dowódcy AI, skały blokujące ostrzał, patrol i eskorta, bohaterowie, edytor map i tabele wyników, nagrane głosy, balans frakcji na podstawie rozgrywek, a później bitwy kosmiczne. To propozycje bez ustalonego terminu.</p>${this.button("back", "Wróć")}`;
+			body = `<h2>0.11 / Pogoda i doba</h2><p>Śnieżyce, burze piaskowe i ulewy spowalniają ruch i obniżają celność. Cykl dnia i nocy, badania pogodowe w laboratorium, ptaki i ryby oraz pięć aranżacji muzycznych.</p><h2>0.10 / Budowa przez roboty</h2><p>Robot musi dotrzeć na plac budowy. Osłona piechoty przy skałach i murach, rozkaz utrzymania pozycji, opady osiadające na planszy, pożary uszkodzonych maszyn i proceduralna muzyka.</p><h2>0.9 / Rozległe pogranicze</h2><p>Pięć ręcznych slotów, osobne scenariusze i trzy rozdziały kampanii. Ciężka maszyna [Y], artyleria [O], mur [K] i brama [P]. Mapy 3360 × 2160, cztery przekaźniki, nowe złoża, jeziora i drapieżniki. Pogoda i ślady ruchu. Dolny pasek postępu i lewy panel z zakładkami.</p><h2>0.8 / Nowe światy</h2><p>Reaktory, moc, laboratoria i kryształy. Trzy mapy operacji, kampania Wolnych Kolonii z pierwszą misją, różne biomy i rozbudowana oprawa 2D.</p><h2>0.6 / Gospodarka</h2><p>Magazyny polowe, gaz i ekstraktory, bezczynne roboty oraz badanie większych ładowni. Starsze zapisy otrzymują złoża gazu, a zapas gazu zaczyna od zera.</p><h2>0.5 / Pokład dowodzenia</h2><p>Menu główne, gra jednoosobowa z odprawą, kontynuowanie zapisu, baza wiedzy, ustawienia i menu pauzy.</p><h2>0.4 / Dźwięk</h2><p>Broń, eksplozje, rozkazy, powiadomienia i regulacja głośności.</p><h2>Rozważane kierunki</h2><p>Trzeci poziom centrum (Twierdza) i doktryny frakcji, budynki wsparcia i moduły dla dowódcy AI, skały blokujące ostrzał, patrol i eskorta, bohaterowie, edytor map i tabele wyników, nagrane głosy, balans frakcji na podstawie rozgrywek, a później bitwy kosmiczne. To propozycje bez ustalonego terminu.</p>${this.button("back", "Wróć")}`;
 		}
 		if (screen === "news")
 			body =
@@ -291,6 +297,17 @@ class CommandMenu {
 				body;
 		if (screen === "news")
 			body =
+				"<h2>0.129.5 / Karty dowodzenia</h2><p>Efekt najechania na kartę jednostki, budynku i badania nie wychodzi poza kartę, a jej podświetlona krawędź idzie po zaokrągleniach.</p>" +
+				"<h2>0.129.4 / Ostre napisy planszy</h2><p>Artefakt, Szczyt, odliczanie uderzenia orbitalnego i koszt muru w 3D — ostre karty nad miejscem zamiast rozmytych napisów na ziemi.</p>" +
+				"<h2>0.129.3 / Flaga zbiórki w 3D</h2><p>Punkt zbiórki na planszy 3D to stojący maszt z falującą flagą zamiast płaskiego rysunku na ziemi.</p>" +
+				"<h2>0.129.2 / Ostre napisy celów</h2><p>Etykiety celów misji kampanii w 3D są ostre i poziome, na karcie nad celem, zamiast rozmytych napisów na terenie.</p>" +
+				"<h2>0.129.1 / Czysty zmierzch</h2><p>O świcie i zmierzchu nad planszą 3D nie pojawiają się już białe kreski — smugi słońca widać pod słońce, przy widoku ku horyzontowi.</p>" +
+				"<h2>0.129 / Mgła wojny dla AI</h2><p>Przeciwnik widzi tylko to, co jego jednostki: pamięta zobaczone budynki i armię, wysyła zwiadowców, a ukryta rozbudowa może go zaskoczyć.</p>" +
+				"<h2>0.128 / Modele z życiem</h2><p>Jednostki i budynki w 3D z płytami pancerza, startymi krawędziami, kurzem planety u dołu i na dachach oraz zaciekami brudu.</p>" +
+				"<h2>0.127.1 / Czystsze burze</h2><p>Burza piaskowa i śnieżyca w 3D bez mlecznego zamglenia i białych kresek: właściwe kolory pyłu i śniegu, delikatniejsze ziarna piasku.</p>" +
+				"<h2>0.127 / Atmosfera i woda w 3D</h2><p>Jeziora odbijają brzegi, budynki i niebo, mgła leży w dolinach i świeci pod słońce, dal blednie, a od słońca rozchodzą się smugi światła.</p>" +
+				"<h2>0.126 / Teren PBR w 3D</h2><p>Grunt z prawdziwymi materiałami: kamień na zboczach bez rozciągania, zmarszczki piasku, pęknięcia lodu, żwir na popiele, rzeźba w świetle i płaty, przez które mapa się nie powtarza.</p>" +
+				"<h2>0.125 / Kinowy obraz 3D</h2><p>Plansza 3D w jakości filmowej: okluzja otoczenia, poświata świateł i ognia, tony jak w kinie, gradacja kolorów według planety i pory dnia, odbicia nieba i ostrzejsze cienie. Przełączniki w Ustawieniach → Renderer.</p>" +
 				"<h2>0.124 / Wieczna noc</h2><p>Nowa długość doby w scenariuszach i grze sieciowej: cała bitwa toczy się nocą, przy księżycu i reflektorach.</p>" +
 				"<h2>0.123 / Płynna gra sieciowa</h2><p>Gospodarz bitwy wieloosobowej nie ma już przycięć: czekanie na ruchy drugiego gracza nie jest potem nadrabiane skokami.</p>" +
 				"<h2>0.122 / Wybór rozdziału z podglądem</h2><p>Zamiast mapy galaktyki: lista rozdziałów i podgląd wskazanego — obracająca się planeta, stan, dane, opis, cel i przycisk odprawy.</p>" +
@@ -468,7 +485,7 @@ class CommandMenu {
 		queueMicrotask(() => ranges.forEach(fill));
 		if (screen === "knowledge") KnowledgeBase.mount(this.root);
 		this.root.querySelector(".menu-footer span").textContent =
-			"PROTOTYP 0.124 · ZAPIS LOKALNY";
+			"PROTOTYP 0.129.5 · ZAPIS LOKALNY";
 		if (
 			screen === "scenarios" ||
 			(screen === "briefing" &&
@@ -810,7 +827,7 @@ class CommandMenu {
 					el.value = SceneFX.options[key];
 					el.onchange = () => SceneFX.set(key, el.value);
 				}
-				for (const key of ["flashes", "metrics", "lights", "shadows", "bloom", "water", "volume", "scars", "relief", "tilt"]) {
+				for (const key of ["flashes", "metrics", "lights", "shadows", "bloom", "water", "volume", "scars", "relief", "tilt", "cinema", "ao", "pbr", "reflect", "atmo", "surface"]) {
 					const el = this.root.querySelector("#visual-" + key);
 					el.checked = SceneFX.options[key];
 					el.onchange = () => SceneFX.set(key, el.checked);
@@ -823,9 +840,11 @@ class CommandMenu {
 							name = { webgl: "WebGL (PixiJS)", webgpu: "WebGPU (PixiJS)", three: "3D (Three.js)" };
 						// The effects stay available when WebGPU fell back to WebGL, not when the board fell back to Canvas 2D.
 						// The 3D board uses lights, shadows, water, scars and relief (webgl3d/three-renderer.js applyQuality);
-						// bloom, volume light and the 2.5D tilt belong to the PixiJS renderer only.
-						const only2d = ["visual-bloom", "visual-volume", "visual-tilt"];
-						for (const box of this.root.querySelectorAll(".webgl-effect")) box.disabled = !gpu || (s.mode === "three" && only2d.includes(box.id)) || (s.mode === "canvas" && !!s.note);
+						// volume light and the 2.5D tilt belong to the PixiJS renderer only, the cinematic image and the ambient
+						// occlusion to the 3D board; bloom serves both.
+						const only2d = ["visual-volume", "visual-tilt"],
+							only3d = ["visual-cinema", "visual-ao", "visual-pbr", "visual-reflect", "visual-atmo", "visual-surface"];
+						for (const box of this.root.querySelectorAll(".webgl-effect")) box.disabled = !gpu || (s.mode === "three" && only2d.includes(box.id)) || (SceneFX.options.renderer !== "three" && only3d.includes(box.id)) || (s.mode === "canvas" && !!s.note);
 						status.textContent = s.note || (name[s.mode] ? `Aktywny: ${name[s.mode]}.` : gpu ? `${name[SceneFX.options.renderer]} uruchomi się razem z planszą.` : "Aktywny: Canvas 2D.");
 					};
 				rendererSelect.value = SceneFX.options.renderer;

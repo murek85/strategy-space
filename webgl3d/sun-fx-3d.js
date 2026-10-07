@@ -128,14 +128,23 @@ export function createSunFx3D(THREE, { scene, heightAt }) {
 		at = new THREE.Vector3(),
 		probe = new THREE.Vector3();
 	let seen = 0;
+	const lookDir = new THREE.Vector3();
 
 	return {
 		// Every frame: sun direction (true, may be below the horizon), its colour, e (its height), haze and
 		// mist 0…1, the camera and the focus of the view (map point) with the span of the view.
-		update({ camera, sunDir, sunColor, e, haze = 0, mist = 0, focus, span }) {
+		update({ camera, imageRays = false, sunDir, sunColor, e, haze = 0, mist = 0, focus, span }) {
 			// Shafts: in the golden hour, and in dusty or misty air; never at night.
 			const golden = Math.max(0, Math.min(1, (e - 0.02) / 0.1)) * (1 - Math.max(0, Math.min(1, (e - 0.3) / 0.25)));
-			shaftUniforms.strength.value = e > 0 ? Math.min(0.1, golden * 0.06 + haze * 0.05 + mist * 0.05) : 0;
+			// A thick storm (sand, snow) hides the sun: light dust and mist show the shafts, a dense one does not —
+			// seen from above they would stand as hard parallel lines over the board.
+			const thick = Math.max(0, Math.min(1, (haze - 0.2) / 0.3));
+			// Only looking out towards the horizon: seen from above (the usual view of the board) the beams stand
+			// as thin parallel white lines over the ground.
+			const down = -camera.getWorldDirection(lookDir).y,
+				side = 1 - Math.max(0, Math.min(1, (down - 0.45) / 0.3));
+			// With the cinematic atmosphere the shafts are drawn in the image itself (webgl3d/post-3d.js): none here.
+			shaftUniforms.strength.value = e > 0 && !imageRays ? Math.min(0.1, golden * 0.06 + haze * 0.05 + mist * 0.05) * (1 - thick) * side : 0;
 			shafts.visible = shaftUniforms.strength.value > 0.002;
 			shaftUniforms.sunDir.value.copy(sunDir);
 			shaftUniforms.sunColor.value.copy(sunColor);

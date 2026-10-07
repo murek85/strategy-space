@@ -14,6 +14,16 @@
 			scars: true,
 			relief: true,
 			tilt: false,
+			// The 3D board's cinematic image (tone mapping, grade, sky reflections) and its ambient occlusion.
+			cinema: true,
+			ao: true,
+			// The 3D board's terrain materials (stone on slopes, the planet's fine ground, its relief).
+			pbr: true,
+			// Reflections in the water and the atmosphere (height fog, light shafts) of the 3D board.
+			reflect: true,
+			atmo: true,
+			// Surface detail of the 3D models (armour plates, worn edges, dust).
+			surface: true,
 		},
 		RENDERERS = ["three", "webgpu", "webgl", "canvas"],
 		options = { ...defaults };
@@ -24,7 +34,7 @@
 		for (const key of ["terrain", "particles"])
 			if (["low", "medium", "high"].includes(saved[key]))
 				options[key] = saved[key];
-		for (const key of ["flashes", "metrics", "lights", "shadows", "bloom", "water", "volume", "scars", "relief", "tilt"])
+		for (const key of ["flashes", "metrics", "lights", "shadows", "bloom", "water", "volume", "scars", "relief", "tilt", "cinema", "ao", "pbr", "reflect", "atmo", "surface"])
 			if (typeof saved[key] === "boolean") options[key] = saved[key];
 		if (RENDERERS.includes(saved.renderer)) options.renderer = saved.renderer;
 	} catch {}

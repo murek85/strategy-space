@@ -110,12 +110,20 @@ export function createThreeGameRenderer({ gameCanvas, canvasRenderer, onContextL
 		size(overlayCanvas, Math.round(ow * OVERLAY_RES), Math.round(oh * OVERLAY_RES));
 		overlayInk = false;
 		// Mission markers of act II become light pillars: collect where the overlay draws them.
-		const beacons = [];
-		if (typeof Act2Art !== "undefined") Act2Art.onBeacon = (p, color, radius) => beacons.push({ x: p.x, y: p.y, color, radius });
+		const beacons = [],
+			labels = [];
+		if (typeof Act2Art !== "undefined") {
+			Act2Art.onBeacon = (p, color, radius) => beacons.push({ x: p.x, y: p.y, color, radius });
+			// Their captions go on the screen layer instead (sharp, upright).
+			Act2Art.onLabel = (l) => labels.push(l);
+		}
+		// So do the other captions of the overlay (artifact, hill, orbital strike, wall cost).
+		globalThis.BoardLabels = labels;
 		try {
 			canvasRenderer.drawLayer(overlayCtx, { ...v, width: ow, height: oh, dpr: OVERLAY_RES, mouse: shift(v.mouse), drag: null, objects3D: true }, ["overlay"]);
 		} finally {
-			if (typeof Act2Art !== "undefined") Act2Art.onBeacon = null;
+			if (typeof Act2Art !== "undefined") Act2Art.onBeacon = Act2Art.onLabel = null;
+			globalThis.BoardLabels = null;
 		}
 		base.setBeacons(beacons);
 		base.setPlacements(placementsOf(v));
@@ -134,8 +142,48 @@ export function createThreeGameRenderer({ gameCanvas, canvasRenderer, onContextL
 
 		// Screen layer: the selection box corners go to where their map points are on the 3D board.
 		size(screenCanvas, Math.round(v.width * v.dpr), Math.round(v.height * v.dpr));
-		canvasRenderer.drawLayer(screenCanvas.getContext("2d"), { ...v, mouse: v.mouse && fromFlat(v.mouse), drag: v.drag && { ...v.drag, ...fromFlat(v.drag) }, weather3D: true, nativeGrains: true }, ["screen"]);
+		const screenCtx = screenCanvas.getContext("2d");
+		canvasRenderer.drawLayer(screenCtx, { ...v, mouse: v.mouse && fromFlat(v.mouse), drag: v.drag && { ...v.drag, ...fromFlat(v.drag) }, weather3D: true, nativeGrains: true }, ["screen"]);
+		drawLabels(screenCtx, labels, v);
 		canvasRenderer.drawMinimap({ ...v, viewOutline: corners });
+	}
+
+	// Captions of the campaign's mission markers on the screen: a small glass card with a lit edge in the
+	// marker's colour, over the map point (a little above the ground), skipped off screen or behind the camera.
+	function drawLabels(c, labels, v) {
+		if (!labels.length) return;
+		c.save();
+		c.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
+		c.textAlign = "center";
+		c.textBaseline = "alphabetic";
+		for (const l of labels) {
+			const p = base.mapToScreen({ x: l.x, y: l.y }, 30);
+			if (p.behind || p.x < -100 || p.y < -40 || p.x > v.width + 100 || p.y > v.height + 40) continue;
+			c.font = "600 12px Segoe UI, sans-serif";
+			const title = l.text,
+				tw = c.measureText(title).width;
+			c.font = "11px Segoe UI, sans-serif";
+			const sw = l.sub ? c.measureText(l.sub).width : 0,
+				w = Math.max(tw, sw) + 22,
+				h = l.sub ? 36 : 22,
+				x = Math.round(p.x - w / 2),
+				y = Math.round(p.y - h);
+			c.fillStyle = "rgba(6, 14, 20, 0.82)";
+			c.fillRect(x, y, w, h);
+			c.strokeStyle = "rgba(160, 220, 210, 0.22)";
+			c.lineWidth = 1;
+			c.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+			c.fillStyle = l.color;
+			c.fillRect(x, y, 3, h);
+			c.font = "600 12px Segoe UI, sans-serif";
+			c.fillText(title, p.x + 1, y + 15);
+			if (l.sub) {
+				c.font = "11px Segoe UI, sans-serif";
+				c.fillStyle = "#c9d8db";
+				c.fillText(l.sub, p.x + 1, y + 29);
+			}
+		}
+		c.restore();
 	}
 
 	return {

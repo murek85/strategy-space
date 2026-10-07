@@ -180,7 +180,8 @@ const MenuBackdrop = (() => {
 			px += (tx - px) * 0.05;
 			py += (ty - py) * 0.05;
 			ease(0.06);
-			scene(c, k, (now - start) / 1000, px, py, world);
+			// The first frame may be stamped a moment before the backdrop was made: the time never goes below zero.
+			scene(c, k, Math.max(0, (now - start) / 1000), px, py, world);
 		};
 		requestAnimationFrame(frame);
 		return wrap;

@@ -2,6 +2,16 @@
 
 Aktualizacja: 2026-09-27. Realizuje pomysły [AI-01–AI-05](POMYSLY.md): gospodarkę, płatną produkcję, obronę, przejmowanie przekaźników, odbudowę i poziomy trudności. Reguły są w `enemy-ai.js` (ładowany jako ostatni moduł reguł); wszystkie liczby w `RTS.AI_LEVELS` i `RTS.AI`.
 
+## Mgła wojny dla dowódcy (wersja 0.129, 2026-10-07)
+
+Ustawienia: `RTS.AI_FOG = { on, refresh: 0.5, armyDecay: 0.985, workerMemory: 90, scoutEvery: [160, 100, 70], scoutTime: 40 }`.
+
+- Widzenie (`aiVision(team)`): siatka komórek mapy (`RTS.CELL`) widocznych dla jednostek i budynków strony i jej sojuszników (zasięg wzroku jak w silniku) oraz jej przekaźników, odświeżana co 0,5 s, z czasem ostatniego zobaczenia każdej komórki (nie zapisywana — po wczytaniu liczona od nowa). `aiSees(team, x, y)`.
+- Pamięć (`T.intel`, w zapisie): `structures` — budynki wroga widziane kiedykolwiek, z ostatnim miejscem, usuwane dopiero, gdy jego miejsce jest widoczne, a budynku nie ma; `army` — liczba jednostek każdego typu (większa z widzianej teraz i zapamiętanej, zanikająca o 1,5% przy każdym odświeżeniu); `workers` — robotnicy widziani w ostatnich 90 s. Na starcie: budynki bazy startowej wroga (pozycje startowe są znane); stare zapisy dostają centra dowodzenia wroga.
+- Decyzje: zagrożenia bazy i ucieczka robotów — tylko widoczni wrogowie; dobór jednostek (`aiPlayerArmy`) — zapamiętana armia; cel ataku (`aiTarget`, `aiKnown`) — znane budynki, obrona celu na trudnym = znane wieżyczki w promieniu 450; bez wiedzy — widoczne oddziały albo „rozpoznanie” złoża lub przekaźnika najdawniej oglądanego; zniszczenie celu zauważone dopiero, gdy jego miejsce jest widoczne; uderzenie orbitalne — widoczne skupiska albo znane budynki; najazdy — zapamiętani robotnicy.
+- Zwiad (`aiScout`): co 160 / 100 / 70 s (łatwy / średni / trudny) najszybsza wolna jednostka (najpierw latająca) jedzie do najdawniej oglądanego z: znanych budynków wroga, złóż, przekaźników (dalej niż 700 od bazy), na 40 s, potem wraca do obrony.
+- Testy: `tests/ai-fog.test.js` (4); `tests/factions.test.js` — uderzenie orbitalne tylko w widzianą grupę. Symulacja 15 min przeciw biernemu graczowi (Cichy Horyzont, Biały Przesmyk): armia podobna, ataki tak samo lub nieco rzadsze, przeciwnik nadal wygrywa na średnim i trudnym.
+
 ## Zakres
 
 - **Scenariusze** mają domyślnie dowódcę AI. W ustawieniach („Przeciwnik”) można wybrać **klasyczne desanty** — dawnego przeciwnika bez gospodarki, z darmowymi falami co 35–65 s. Wybór trafia do kodu operacji (przyrostek `-W` dla klasycznych desantów).

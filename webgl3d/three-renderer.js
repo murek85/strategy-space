@@ -30,6 +30,7 @@ import { createSky3D, cloudShade } from "./sky-3d.js";
 import { nightLightShade } from "./night-lights-3d.js";
 import { createRelief3D } from "./relief-3d.js";
 import { createSunFx3D } from "./sun-fx-3d.js";
+import { createPost3D } from "./post-3d.js";
 
 export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 	const { TYPES } = RTS;
@@ -52,6 +53,11 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 	renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 	renderer.outputColorSpace = THREE.SRGBColorSpace;
 	host.appendChild(renderer.domElement);
+	// The cinematic image (webgl3d/post-3d.js): a high-range frame finished with ambient occlusion, bloom,
+	// filmic tone mapping and a colour grade; sky reflections on the materials.
+	const post = createPost3D(THREE, renderer);
+	// Multisampling of the high-range frame (set with the quality).
+	let postSamples = 4;
 
 	const scene = new THREE.Scene();
 	scene.background = new THREE.Color("#0b141c");
@@ -104,6 +110,51 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		ghostBad = new THREE.MeshBasicMaterial({ color: "#ef8178", transparent: true, opacity: 0.42, depthWrite: false }),
 		ghosts = [];
 	let placements = [];
+	// Rally points of the selected producers: a gilded pole with a knob and a cloth waving in the wind
+	// (its vertices moved every frame), casting a shadow — instead of a flat flag painted on the ground.
+	const RALLY = "#e4c587",
+		rallyPole = new THREE.CylinderGeometry(1.2, 1.5, 56, 6).translate(0, 28, 0),
+		rallyKnob = new THREE.SphereGeometry(2.6, 8, 6).translate(0, 57, 0),
+		rallyPoleMat = new THREE.MeshStandardMaterial({ color: "#c9b27a", roughness: 0.35, metalness: 0.8 }),
+		rallyClothMat = new THREE.MeshStandardMaterial({ color: RALLY, emissive: RALLY, emissiveIntensity: 0.25, roughness: 0.8, side: THREE.DoubleSide }),
+		rallies = [];
+	function rallyFlag() {
+		const g = new THREE.Group(),
+			cloth = new THREE.PlaneGeometry(32, 18, 8, 3).translate(16, 45, 0);
+		const pole = new THREE.Mesh(rallyPole, rallyPoleMat),
+			knob = new THREE.Mesh(rallyKnob, rallyPoleMat),
+			flag = new THREE.Mesh(cloth, rallyClothMat);
+		for (const m of [pole, knob, flag]) m.castShadow = true;
+		g.add(pole, knob, flag);
+		g.userData.cloth = cloth;
+		g.userData.rest = Float32Array.from(cloth.attributes.position.array);
+		world.add(g);
+		return g;
+	}
+	function syncRallies() {
+		let n = 0;
+		for (const id of selected) {
+			const b = game.get(id);
+			if (!b || !game.isProducer?.(b) || !b.rally) continue;
+			const f = rallies[n] || (rallies[n] = rallyFlag());
+			n++;
+			f.visible = true;
+			f.position.set(b.rally.x, heightAt(b.rally.x, b.rally.y), b.rally.y);
+			// The cloth streams away from the building and ripples, more at the free end.
+			f.rotation.y = -Math.atan2(b.rally.y - b.y, b.rally.x - b.x);
+			const pos = f.userData.cloth.attributes.position,
+				rest = f.userData.rest;
+			for (let i = 0; i < pos.count; i++) {
+				const x = rest[i * 3],
+					k = x / 32;
+				pos.setZ(i, Math.sin(clock * 6 - x * 0.35 + rest[i * 3 + 1] * 0.08) * 3.4 * k);
+				pos.setY(i, rest[i * 3 + 1] - k * k * 2);
+			}
+			pos.needsUpdate = true;
+			f.userData.cloth.computeVertexNormals();
+		}
+		for (let i = n; i < rallies.length; i++) rallies[i].visible = false;
+	}
 	function syncGhosts() {
 		const viewer = game.viewer ?? 0,
 			faction = game.entities.find((e) => e.team === viewer && e.faction)?.faction;
@@ -232,6 +283,7 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			}
 		const biome = RTS.MISSIONS[game.missionId]?.biome || "dust",
 			detail = detailNormals(biome);
+		groundWeather.pbrBiome.value = biome === "ice" ? 1 : biome === "ash" ? 2 : 0;
 
 		for (const t of tiles) {
 			terrain.remove(t.mesh);
@@ -329,7 +381,7 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 	// Fog of war on the ground: visible 255, explored 110, unknown 25, smoothed (see refreshFog); the
 	// terrain shader darkens and desaturates by it.
 	const fogUniforms = { fogMap: { value: null }, fogSize: { value: new THREE.Vector2(1, 1) }, fogOn: { value: 1 }, fogTime: { value: 0 } },
-		groundWeather = { wetness: { value: 0 }, snowCover: { value: 0 }, rainLevel: { value: 0 }, weatherTime: { value: 0 }, skyTint: { value: new THREE.Color() }, rockTint: { value: new THREE.Color("#7a6a58") }, sandLevel: { value: 0 }, mistLevel: { value: 0 }, mistBand: { value: new THREE.Vector2(0, 40) } };
+		groundWeather = { wetness: { value: 0 }, snowCover: { value: 0 }, rainLevel: { value: 0 }, weatherTime: { value: 0 }, skyTint: { value: new THREE.Color() }, rockTint: { value: new THREE.Color("#7a6a58") }, sandLevel: { value: 0 }, mistLevel: { value: 0 }, mistBand: { value: new THREE.Vector2(0, 40) }, pbrOn: { value: 1 }, pbrBiome: { value: 0 } };
 	// The vision grid is upsampled FOG_UP times and box-blurred twice, so the edge of sight is a soft
 	// curve instead of 40-unit steps.
 	const FOG_UP = 3;
@@ -383,6 +435,8 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 	// over the terrain after the fog, so it stays readable.
 	const overlayUniforms = {
 		overlayMap: { value: null },
+		// 1 while the board is drawn into the high-range frame: the interface's sRGB colours are made linear.
+		overlayLinear: { value: 0 },
 		overlayOn: { value: 0 },
 		overlayFrame: { value: new THREE.Vector4() },
 		overlaySize: { value: new THREE.Vector2(1, 1) },
@@ -418,6 +472,17 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		float snowMask = 0.0;
 		#ifdef TERRAIN
 		varying float vRock; varying float vWorldY;
+		// Terrain materials (stage 2): the world normal, the switch and the planet's kind of ground
+		// (0 sand, 1 ice and snow, 2 ash, soil and lava fields).
+		varying vec3 vTerrN; uniform float pbrOn; uniform float pbrBiome;
+		float pbrH = 0.0, pbrRough = -1.0, pbrRockK = 0.0;
+		float tFbm(vec2 p) { return wNoise(p) * 0.5 + wNoise(p * 2.03 + 1.7) * 0.25 + wNoise(p * 4.01 + 3.1) * 0.125 + wNoise(p * 8.05 + 5.3) * 0.0625; }
+		// A pattern laid on the three planes and blended by the normal: no stretching on steep faces.
+		float tTri(vec3 p, vec3 n, float s) {
+			vec3 w = pow(abs(n), vec3(4.0));
+			w /= w.x + w.y + w.z;
+			return tFbm(p.yz * s) * w.x + tFbm(p.xz * s) * w.y + tFbm(p.xy * s) * w.z;
+		}
 		#endif`;
 	const GROUND_COLOR = `
 		#ifdef TERRAIN
@@ -432,6 +497,38 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			float r = smoothstep(0.1, 0.6, vRock);
 			vec3 stone = rockTint * mix(0.68, 1.05, band) * (0.78 + 0.44 * grain);
 			diffuseColor.rgb = mix(diffuseColor.rgb, stone, r);
+		}
+		// Terrain materials: broad patches that break the painting's repetition, paler high ground and darker
+		// hollows, stone on every steep face (on three planes, in strata), and the planet's own fine ground —
+		// wind ripples in sand, drifts and cracks in ice, grit and clods in ash and soil. pbrH is a small
+		// height field for the lighting (normal_fragment_maps), flat far away so it never shimmers.
+		if (pbrOn > 0.5) {
+			vec3 wp = vec3(vMapXY.x, vWorldY, vMapXY.y), n = normalize(vTerrN);
+			float slope = 1.0 - n.y, near = 1.0 - smoothstep(2200.0, 4800.0, length(vViewPosition));
+			diffuseColor.rgb *= mix(0.74, 1.2, smoothstep(0.2, 0.8, tFbm(vMapXY * 0.0022)));
+			diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.06, 1.0, 0.92), smoothstep(0.55, 0.8, tFbm(vMapXY * 0.0007 + 9.0)) * 0.5);
+			diffuseColor.rgb *= mix(0.9, 1.06, smoothstep(mistBand.x, mistBand.y + 40.0, vWorldY));
+			float rockK = max(smoothstep(0.1, 0.6, vRock), smoothstep(0.3, 0.55, slope)), tri = tTri(wp, n, 0.045);
+			vec3 stone = rockTint * (0.62 + 0.55 * tri) * mix(0.75, 1.05, sin(vWorldY * 0.55 + tri * 5.0) * 0.5 + 0.5);
+			diffuseColor.rgb = mix(diffuseColor.rgb, stone, rockK * 0.85);
+			float fine;
+			if (pbrBiome < 0.5) {
+				vec2 q = vMapXY + vec2(tFbm(vMapXY * 0.02) * 30.0, tFbm(vMapXY * 0.02 + 4.0) * 12.0);
+				fine = (sin(dot(q, vec2(0.15, 0.055))) * 0.5 + 0.5) * 0.7 + tFbm(vMapXY * 0.12) * 0.3;
+				pbrRough = 0.93;
+			} else if (pbrBiome < 1.5) {
+				float crack = 1.0 - smoothstep(0.0, 0.05, abs(tFbm(vMapXY * 0.03) - 0.5));
+				fine = tFbm(vMapXY * 0.05) * 0.7 + 0.3 * (1.0 - crack);
+				diffuseColor.rgb *= 1.0 - crack * 0.18 * near;
+				pbrRough = mix(0.5, 0.28, crack);
+			} else {
+				fine = tFbm(vMapXY * 0.09) * 0.6 + smoothstep(0.7, 0.9, wNoise(vMapXY * 0.25)) * 0.4;
+				pbrRough = 0.97;
+			}
+			diffuseColor.rgb *= mix(1.0, mix(0.82, 1.1, fine), near * (1.0 - rockK));
+			pbrH = mix(fine, tri, rockK) * near;
+			pbrRough = mix(pbrRough, 0.82, rockK);
+			pbrRockK = rockK;
 		}
 		float wn = wNoise(vMapXY * 0.011) * 0.65 + wNoise(vMapXY * 0.043) * 0.35;
 		puddleMask = smoothstep(0.86, 0.97, vUpward) * smoothstep(0.86 - wetness * 0.18, 0.9 - wetness * 0.18, wn) * smoothstep(0.12, 0.45, wetness) * (1.0 - smoothstep(0.1, 0.4, vRock));
@@ -458,9 +555,25 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		snowColor = mix(diffuseColor.rgb * 0.65 + vec3(0.28, 0.3, 0.33), snowColor, smoothstep(0.0, 0.65, snowMask));
 		diffuseColor.rgb = mix(diffuseColor.rgb, snowColor, smoothstep(0.0, 0.35, snowMask));`;
 	const GROUND_ROUGH = `
+		#ifdef TERRAIN
+		if (pbrRough >= 0.0) roughnessFactor = pbrRough;
+		#endif
 		roughnessFactor = mix(roughnessFactor, 0.5, wetness * 0.8);
 		roughnessFactor = mix(roughnessFactor, 0.04, puddleMask);
 		roughnessFactor = mix(roughnessFactor, 0.55, snowMask);`;
+	// Stage 2: the small height field of the terrain materials bends the normal (bump mapping from the
+	// screen-space derivatives of the height), stronger on stone.
+	const GROUND_BUMP = `
+		#ifdef TERRAIN
+		if (pbrOn > 0.5) {
+			float amp = mix(6.0, 9.0, pbrRockK);
+			vec3 sp = -vViewPosition, sx = dFdx(sp), sy = dFdy(sp);
+			vec3 r1 = cross(sy, normal), r2 = cross(normal, sx);
+			float det = dot(sx, r1);
+			vec3 grad = sign(det) * (dFdx(pbrH) * amp * r1 + dFdy(pbrH) * amp * r2);
+			normal = normalize(abs(det) * normal - grad);
+		}
+		#endif`;
 	const GROUND_GLOW = `
 		totalEmissiveRadiance += skyTint * puddleMask * 0.1;
 		#ifdef TERRAIN
@@ -497,12 +610,13 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 					.replace("#include <defaultnormal_vertex>", "#include <defaultnormal_vertex>\nvUpward = normalize((vec4(transformedNormal, 0.0) * viewMatrix).xyz).y;"); // normalised: instancing scales the normal
 				if (terrain)
 					shader.vertexShader = shader.vertexShader
-						.replace("#include <common>", "#include <common>\nattribute float rock;\nvarying float vRock;\nvarying float vWorldY;")
-						.replace("#include <worldpos_vertex>", "#include <worldpos_vertex>\nvRock = rock;\nvWorldY = (modelMatrix * vec4(transformed, 1.0)).y;");
+						.replace("#include <common>", "#include <common>\nattribute float rock;\nvarying float vRock;\nvarying float vWorldY;\nvarying vec3 vTerrN;")
+						.replace("#include <worldpos_vertex>", "#include <worldpos_vertex>\nvRock = rock;\nvWorldY = (modelMatrix * vec4(transformed, 1.0)).y;\nvTerrN = normalize(mat3(modelMatrix) * objectNormal);");
 				shader.fragmentShader = shader.fragmentShader
 					.replace("#include <common>", "#include <common>\n" + GROUND_COMMON)
 					.replace("#include <map_fragment>", "#include <map_fragment>\n" + GROUND_COLOR)
 					.replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\n" + GROUND_ROUGH)
+					.replace("#include <normal_fragment_maps>", "#include <normal_fragment_maps>\n" + GROUND_BUMP)
 					.replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\n" + GROUND_GLOW);
 			}
 			shader.vertexShader = shader.vertexShader
@@ -512,7 +626,7 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			shader.fragmentShader = shader.fragmentShader
 				.replace(
 					"#include <common>",
-					"#include <common>\nvarying vec2 vMapXY;\nuniform sampler2D fogMap;\nuniform float fogOn;\nuniform float fogTime;\nuniform vec2 fogSize;\nuniform sampler2D overlayMap;\nuniform float overlayOn;\nuniform vec4 overlayFrame;\nuniform vec2 overlaySize;\n" + FOG_NOISE,
+					"#include <common>\nvarying vec2 vMapXY;\nuniform sampler2D fogMap;\nuniform float fogOn;\nuniform float fogTime;\nuniform vec2 fogSize;\nuniform sampler2D overlayMap;\nuniform float overlayLinear;\nuniform float overlayOn;\nuniform vec4 overlayFrame;\nuniform vec2 overlaySize;\n" + FOG_NOISE,
 				)
 				.replace(
 					"#include <dithering_fragment>",
@@ -530,7 +644,7 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 						vec2 f = ((vMapXY - overlayFrame.xy) * overlayFrame.z + overlaySize * 0.5) / overlaySize;
 						if (f.x > 0.0 && f.x < 1.0 && f.y > 0.0 && f.y < 1.0) {
 							vec4 ui = texture2D(overlayMap, vec2(f.x, 1.0 - f.y));
-							gl_FragColor.rgb = mix(gl_FragColor.rgb, ui.rgb, ui.a);
+							gl_FragColor.rgb = mix(gl_FragColor.rgb, overlayLinear > 0.5 ? pow(ui.rgb, vec3(2.2)) * 1.25 : ui.rgb, ui.a);
 						}
 					}`,
 				);
@@ -1291,7 +1405,9 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		scene.background.copy(colors.horizon).lerp(colors.zenith, 0.2);
 		scene.fog.color.copy(scene.background);
 		// The sun and its shadow box follow the camera.
-		sun.target.position.set(rig.x, 0, rig.y);
+		// The shadow box sits a little ahead of the view centre (more of the board lies beyond it than in front).
+		const ahead = rig.distance * 0.22 * Math.cos(rig.pitch);
+		sun.target.position.set(rig.x - Math.sin(rig.yaw) * ahead, 0, rig.y - Math.cos(rig.yaw) * ahead);
 		sun.position.copy(sun.target.position).addScaledVector(dir, 2500);
 		return day;
 	}
@@ -1330,7 +1446,7 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			sun2.position.copy(sun2.target.position).addScaledVector(twin, 2500);
 		}
 		sky.update({ camera, time: clock, ...skyState, aurora, haze, hazeColor: HAZE[state.kind] || HAZE.rain, cover, flash: state.flash || 0, flashColor: FLASH });
-		sunFx.update({ camera, sunDir: skyState.sunDir, sunColor: skyState.sunlight, e: skyState.e, haze, mist: groundWeather.mistLevel.value, focus: rig, span: Math.max(1600, Math.min(4200, rig.distance * 2.2)) });
+		sunFx.update({ camera, imageRays: quality.cinema && quality.atmo, sunDir: skyState.sunDir, sunColor: skyState.sunlight, e: skyState.e, haze, mist: groundWeather.mistLevel.value, focus: rig, span: Math.max(1600, Math.min(4200, rig.distance * 2.2)) });
 		sky.clouds(clock, options.cloudShadows === false ? 0 : 0.4 * (1 - haze * 0.6));
 	}
 
@@ -1346,7 +1462,7 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			camera.far = rig.distance * 5;
 			camera.updateProjectionMatrix();
 		}
-		const extent = Math.max(700, Math.min(3000, rig.distance * 1.1)),
+		const extent = Math.max(460, Math.min(3000, rig.distance * 0.9)),
 			box = sun.shadow.camera;
 		if (box.right !== extent) {
 			Object.assign(box, { left: -extent, right: extent, top: extent, bottom: -extent, far: 2500 + extent * 2 });
@@ -1358,6 +1474,7 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		const w = host.clientWidth,
 			h = host.clientHeight;
 		renderer.setSize(w, h, false);
+		post.setSize(w * renderer.getPixelRatio(), h * renderer.getPixelRatio(), postSamples);
 		renderer.domElement.style.width = w + "px";
 		renderer.domElement.style.height = h + "px";
 		camera.aspect = w / Math.max(1, h);
@@ -1399,13 +1516,13 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 	// terrain detail → scattered props, shadow-map size and render resolution; particles → weather and
 	// smoke density; switches for shadows, night lights, water, damage smoke and fire, terrain relief and
 	// lightning flashes.
-	const quality = { scatter: 1, particles: 1, lights: true, water: true, scars: true, relief: true, flashes: true };
+	const quality = { scatter: 1, particles: 1, lights: true, water: true, scars: true, relief: true, flashes: true, cinema: true, ao: true, bloom: true, samples: 4 };
 	let qualityKey = null;
 	function applyQuality(api, building = false) {
 		const o = typeof SceneFX !== "undefined" ? SceneFX.options : {},
 			level = { high: 0, medium: 1, low: 2 },
 			terrainLevel = level[o.terrain] ?? 0,
-			key = [o.terrain, o.particles, o.shadows, o.lights, o.water, o.scars, o.relief, o.flashes].join("|");
+			key = [o.terrain, o.particles, o.shadows, o.lights, o.water, o.scars, o.relief, o.flashes, o.cinema, o.ao, o.bloom, o.pbr, o.reflect, o.atmo, o.surface].join("|");
 		if (key === qualityKey) return;
 		const first = qualityKey === null,
 			reliefChanged = !first && quality.relief !== (o.relief !== false),
@@ -1419,7 +1536,20 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			scars: o.scars !== false,
 			relief: o.relief !== false,
 			flashes: o.flashes !== false,
+			// The cinematic image and its parts (the bloom switch is shared with the WebGL board).
+			cinema: o.cinema !== false,
+			ao: o.cinema !== false && o.ao !== false,
+			bloom: o.cinema !== false && o.bloom !== false,
+			samples: [4, 2, 0][terrainLevel],
+			// Water reflections (a second, half-size picture of the scene): not on the lowest terrain detail.
+			reflect: o.water !== false && o.reflect !== false && terrainLevel < 2,
+			atmo: o.cinema !== false && o.atmo !== false,
+			surface: o.surface !== false,
 		});
+		models3d.setSurface(quality.surface);
+		groundWeather.pbrOn.value = o.pbr !== false ? 1 : 0;
+		postSamples = quality.samples;
+		post.setSize(host.clientWidth * renderer.getPixelRatio(), host.clientHeight * renderer.getPixelRatio(), postSamples);
 		sun.castShadow = o.shadows !== false;
 		const size = [4096, 2048, 1024][terrainLevel];
 		if (sun.shadow.mapSize.x !== size) {
@@ -1434,6 +1564,102 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		}
 		// Relief and scatter density are built with the map: rebuild it.
 		if (game && !building && (reliefChanged || scatterChanged)) api.setGame(game);
+	}
+
+	// The cinematic frame: sky reflections (renewed twice a second at most), the ambient light lowered by what
+	// the reflections and the occlusion now give, and the grade of the planet and the hour.
+	const GRADES = {
+		dust: { light: [1.05, 1.0, 0.9], shadow: [0.94, 0.97, 1.06], saturation: 1.1 },
+		ice: { light: [0.99, 1.01, 1.05], shadow: [0.92, 0.98, 1.08], saturation: 1.02 },
+		ash: { light: [1.06, 0.97, 0.9], shadow: [0.97, 0.95, 0.99], saturation: 0.96 },
+		lumen: { light: [0.98, 1.04, 1.0], shadow: [0.9, 1.02, 1.04], saturation: 1.14 },
+		magma: { light: [1.08, 0.97, 0.88], shadow: [1.0, 0.94, 0.95], saturation: 1.08 },
+		frozenhive: { light: [1.0, 1.0, 1.05], shadow: [0.96, 0.95, 1.08], saturation: 1.0 },
+		derelict: { light: [1.04, 0.99, 0.94], shadow: [0.95, 0.97, 1.03], saturation: 0.98 },
+	};
+	const NIGHT_SHADOW = new THREE.Color(0.86, 0.94, 1.14),
+		NIGHT_LIGHT = new THREE.Color(0.97, 1.0, 1.06),
+		grade = { shadowTint: new THREE.Color(), lightTint: new THREE.Color(), exposure: 1, saturation: 1.08, contrast: 1.06, vignette: 0.28 },
+		envSky = { zenith: new THREE.Color(), horizon: new THREE.Color(), ground: new THREE.Color(), sunDir: new THREE.Vector3(), sunColor: new THREE.Color() };
+	let envClock = 0;
+	const atmo = { sunColor: new THREE.Color() };
+	function cinematic(dt, day, night) {
+		if ((envClock -= dt) <= 0 || !scene.environment) {
+			envClock = 0.5;
+			envSky.zenith.copy(skyState.zenith);
+			envSky.horizon.copy(scene.background);
+			envSky.ground.copy(hemi.groundColor).multiplyScalar(0.8);
+			envSky.sunDir.copy(sun.position).sub(sun.target.position).normalize();
+			envSky.sunColor.copy(sun.color).multiplyScalar(sun.intensity * 0.35);
+			scene.environment = post.environment(envSky);
+		}
+		scene.environmentIntensity = 0.3 + 0.5 * day;
+		hemi.intensity *= 0.72;
+		const m = RTS.MISSIONS[game?.missionId] || {},
+			g = GRADES[m.theme] || GRADES[m.biome] || GRADES.dust;
+		grade.lightTint.setRGB(...g.light).lerp(NIGHT_LIGHT, night);
+		grade.shadowTint.setRGB(...g.shadow).lerp(NIGHT_SHADOW, night);
+		grade.saturation = g.saturation * (1 - 0.18 * night);
+		grade.exposure = 1.22 + 0.35 * night;
+		overlayUniforms.overlayLinear.value = 1;
+		const haze = weatherState.haze || 0;
+		atmo.sunColor.copy(skyState.sunlight).multiplyScalar(smooth(-0.05, 0.2, skyState.e) * 1.2);
+		Object.assign(atmo, {
+			sunDir: skyState.sunDir,
+			haze: scene.fog.color,
+			base: groundWeather.mistBand.value.x,
+			// The weather has its own haze (scene fog, dust and mist layers): not added here again.
+			density: 0.0005 + groundWeather.mistLevel.value * 0.0025 * (1 - haze),
+			falloff: 1 / 80,
+			rays: 0.55 * smooth(-0.02, 0.12, skyState.e) * (1 - haze),
+		});
+		post.render(scene, camera, { ...grade, atmosphere: quality.atmo ? atmo : null, ao: quality.ao, bloom: quality.bloom, aoRadius: Math.max(18, Math.min(40, rig.distance * 0.03)), aoStrength: 1.3, aoFade: rig.distance * 2, bloomStrength: 0.3 + 0.15 * night, view: globalThis.post3dView || 0 });
+	}
+
+	// Reflections in the water (0.127): the scene seen from under the surface of the flat water nearest the
+	// view (a mirrored camera; everything below the surface clipped away), at half resolution, without the
+	// water itself and the interface; the water shader projects its points onto this picture.
+	const reflectTarget = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType }),
+		mirror = new THREE.PerspectiveCamera(),
+		reflectPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),
+		BIAS = new THREE.Matrix4().set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1),
+		drawSize = new THREE.Vector2();
+	function drawReflection() {
+		const u = fx.water.uniforms,
+			level = quality.reflect && fx.water.group.visible ? fx.water.levelNear(rig, rig.distance * 1.6) : null;
+		if (level == null) {
+			u.reflectOn.value = 0;
+			return;
+		}
+		renderer.getDrawingBufferSize(drawSize);
+		const w = Math.max(1, Math.round(drawSize.x / 2)),
+			h = Math.max(1, Math.round(drawSize.y / 2));
+		if (reflectTarget.width !== w || reflectTarget.height !== h) reflectTarget.setSize(w, h);
+		const ground = heightAt(rig.x, rig.y);
+		mirror.copy(camera);
+		mirror.position.set(camera.position.x, 2 * level - camera.position.y, camera.position.z);
+		mirror.up.set(0, 1, 0);
+		mirror.lookAt(rig.x, 2 * level - ground, rig.y);
+		mirror.updateMatrixWorld();
+		u.reflectMatrix.value.copy(BIAS).multiply(mirror.projectionMatrix).multiply(mirror.matrixWorldInverse);
+		reflectPlane.constant = -(level - 0.5);
+		const overlay = overlayUniforms.overlayOn.value,
+			shadows = renderer.shadowMap.autoUpdate;
+		overlayUniforms.overlayOn.value = 0;
+		fx.water.group.visible = false;
+		renderer.shadowMap.autoUpdate = false;
+		renderer.clippingPlanes = [reflectPlane];
+		renderer.setRenderTarget(reflectTarget);
+		renderer.clear();
+		renderer.render(scene, mirror);
+		renderer.setRenderTarget(null);
+		renderer.clippingPlanes = [];
+		renderer.shadowMap.autoUpdate = shadows;
+		fx.water.group.visible = true;
+		overlayUniforms.overlayOn.value = overlay;
+		u.reflectMap.value = reflectTarget.texture;
+		u.reflectLevel.value = level;
+		u.reflectOn.value = 1;
 	}
 
 	const raycaster = new THREE.Raycaster(),
@@ -1493,6 +1719,12 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		setGame(next) {
 			game = next;
 			models3d.setMission(game.missionId);
+			// The dust on the models in the colour of the planet's ground.
+			{
+				const m = RTS.MISSIONS[game.missionId] || {},
+					SOILS = { dust: "#9a7d58", ash: "#5a5450", ice: "#c9d3dc" };
+				models3d.setSurface(quality.surface !== false, new THREE.Color(SOILS[m.biome] || SOILS.dust));
+			}
 			sky.setTheme(RTS.MISSIONS[game.missionId]?.theme);
 			applyQuality(this, true);
 			canvasRenderer.setGame(game);
@@ -1546,6 +1778,7 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			life.update(game.time, { fog: options.fog, colors: COLORS });
 			marks.update(game, { hidden, sun: sun.position.clone().sub(sun.target.position).normalize() });
 			syncGhosts();
+			syncRallies();
 			objectives.update(game, clock, { beacons, colorOf: (team) => game.colorFor?.(team) || COLORS[team] || "#f5e27a" });
 			drawBatches();
 			let day;
@@ -1592,7 +1825,13 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			models3d.setWeather(weatherState.snowCover || 0, weatherState.wetness || 0);
 			watchList();
 			life.fadeTall(covers, dt);
-			renderer.render(scene, camera);
+			drawReflection();
+			if (quality.cinema) cinematic(dt, day, night);
+			else {
+				scene.environment = null;
+				overlayUniforms.overlayLinear.value = 0;
+				renderer.render(scene, camera);
+			}
 			lastFrame = performance.now() - started;
 		},
 		// Screen point (CSS px in the host) → map point, through the terrain.
@@ -1618,6 +1857,8 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			canvasRenderer.setBareGround?.(false);
 			resizeObserver.disconnect();
 			for (const b of batches.values()) b.mesh?.dispose();
+			post.dispose();
+			reflectTarget.dispose();
 			renderer.dispose();
 			renderer.forceContextLoss();
 			renderer.domElement.remove();

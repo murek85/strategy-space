@@ -2615,7 +2615,7 @@
 			const me = game.viewer ?? 0,
 				m = MISSIONS[game.missionId] || {},
 				own = game.units(me),
-				objectives = game.act2Objectives?.()?.length ? game.act2Objectives() : [{ text: m.campaign ? m.objective : RTS.describeScenario?.(game.scenario)?.objective || m.objective || "Zniszcz wszystkie wrogie centra dowodzenia.", done: false }],
+				objectives = game.act2Objectives?.()?.length ? game.act2Objectives() : [{ text: m.campaign ? m.objective : (game.scenario && RTS.describeScenario?.(game.scenario)?.objective) || m.objective || "Zniszcz wszystkie wrogie centra dowodzenia.", done: false }],
 				nextAttack = Number.isFinite(game.nextWave) && game.enemyBases?.().length ? game.nextWave - game.time : null,
 				weather = game.weather;
 			return {

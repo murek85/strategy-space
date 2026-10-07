@@ -298,6 +298,12 @@ kbd {
 	border-radius: 0;
 	transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
 }
+/* The cards of the command deck keep their rounded corners (expansion.css) and clip what lies inside them:
+   the sweep of light and the lit edge stay within the card and follow its rounding. */
+.production .unit-card {
+	overflow: hidden;
+	isolation: isolate;
+}
 .unit-card::before {
 	content: "";
 	position: absolute;
@@ -305,6 +311,9 @@ kbd {
 	top: 0;
 	bottom: 0;
 	width: 3px;
+	border-radius: inherit;
+	border-top-right-radius: 0;
+	border-bottom-right-radius: 0;
 	background: var(--hud-lit);
 	transform: scaleY(0);
 	transition: transform 0.2s;

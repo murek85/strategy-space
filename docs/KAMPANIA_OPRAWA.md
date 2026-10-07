@@ -42,6 +42,10 @@ Mapa galaktyki na ekranie kampanii jest wyłączona (wersje 0.118–0.121); klas
 - `development.js`: odznaka stanu (`STATES`) i koszt (`dev-cost`: metal, gaz, kryształy, czas) w każdym węźle; klasy `is-required` (wymaganie wybranego węzła) i `is-unlocked` (węzły, których wymaganiem jest wybrany) z etykietą `dev-link`; zakładki z licznikiem pozycji otwartych (gotowe, dostępne, w toku, brak zasobów) do wszystkich (`TAB_NAMES`); surowce w stopce jako kafelki; legenda (`dev-legend`).
 - `development.css`: szkło, narożniki (`::before`) i linia skanu (`::after`) okna, migająca dioda nad tytułem, zakładki jak w menu, krawędź węzła w kolorze stanu (`--state`), przerywana ramka zablokowanych, pulsowanie badań w toku (`dev-work`), świecące połączenia ze strzałką (`.dev-arrow`, `.dev-leaves`), panel szczegółów z siatką pod podglądem i głównym przyciskiem jak w menu. Ograniczone animacje wyłączają ruch.
 
+## Karty paska dowodzenia (wersja 0.129.5, 2026-10-07)
+
+- `hud.css`: `.production .unit-card` przycina zawartość (`overflow: hidden`, `isolation: isolate`) — reguła z `expansion.css` (`overflow: visible`, zaokrąglenie 7 px) miała wyższą wagę niż `.unit-card` i błysk (`::after`) wychodził poza kartę; świecąca krawędź (`::before`) dziedziczy zaokrąglenie z lewej strony.
+
 ## Interfejs gry (wersja 0.115, 2026-10-07)
 
 Arkusz `hud.css` (ładowany ostatni w `index.html`) zmienia tylko wygląd interfejsu bitwy — rozmiary i układ zostają z `style.css` i `expansion.css`:

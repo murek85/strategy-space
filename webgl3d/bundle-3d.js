@@ -54992,6 +54992,450 @@ function createSky3D(THREE) {
 	};
 }
 
+// ---- webgl3d/post-3d.js ----
+/* The cinematic image of the 3D board: the scene is drawn into a high-range (half-float) frame with
+   multisampling, then finished on the screen in a few full-screen passes:
+   - ambient occlusion: the darkening of creases, feet of walls and the ground under units, from the
+     depth buffer at half resolution (a ring of samples round each point, softened by a depth-aware blur);
+   - bloom: what is brighter than white (lights, lava, fire, explosions, the sun on wet ground) glows,
+     a chain of ever smaller blurred copies added back from the smallest;
+   - the finish: exposure, filmic tone mapping (ACES fit: no clipped whites, deep shadows), a colour grade
+     (saturation, contrast, a tint for the shadows and the lights — per planet and time of day), a soft
+     vignette and a little noise against banding in the gradients, then sRGB.
+   - The atmosphere (0.127): height fog lying in the valleys and thinning upwards (integrated along each
+     ray of sight), lit warmer and brighter looking towards the sun, and shafts of light from the sun
+     (a radial blur of the bright sky round it, where the ground does not hide it).
+   - Sky reflections: an environment map (prefiltered for rough and smooth surfaces) painted from the sky's
+     current colours and the sun, renewed when they change — metal, glass and wet ground reflect the sky.
+   Everything is made in code (no textures, no add-on files). Usage: const post = createPost3D(THREE,
+   renderer); post.setSize(w, h); post.render(scene, camera, settings); post.environment(...) → texture. */
+function createPost3D(THREE, renderer) {
+	const VS = "varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }";
+	// One triangle covering the screen.
+	const tri = new THREE.BufferGeometry();
+	tri.setAttribute("position", new THREE.Float32BufferAttribute([-1, -1, 0, 3, -1, 0, -1, 3, 0], 3));
+	tri.setAttribute("uv", new THREE.Float32BufferAttribute([0, 0, 2, 0, 0, 2], 2));
+	const quad = new THREE.Mesh(tri),
+		quadCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+	quad.frustumCulled = false;
+	const shader = (fragmentShader, uniforms, extra = {}) =>
+		new THREE.ShaderMaterial({ vertexShader: VS, fragmentShader, uniforms, depthTest: false, depthWrite: false, ...extra });
+	function pass(material, target, clear = true) {
+		quad.material = material;
+		renderer.setRenderTarget(target);
+		if (clear) renderer.clear(true, false, false);
+		renderer.render(quad, quadCamera);
+	}
+
+	// ---------- targets ----------
+	const half = { type: THREE.HalfFloatType, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false };
+	let sceneTarget = null,
+		aoTarget = null,
+		aoBlurTarget = null,
+		raysA = null,
+		raysB = null,
+		samples = 4;
+	const mips = [];
+	const LEVELS = 5;
+	let width = 1,
+		height = 1;
+	function build() {
+		sceneTarget?.dispose();
+		sceneTarget?.depthTexture?.dispose();
+		const depth = new THREE.DepthTexture(width, height);
+		depth.type = THREE.UnsignedIntType;
+		sceneTarget = new THREE.WebGLRenderTarget(width, height, { type: THREE.HalfFloatType, samples, depthTexture: depth, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
+		const hw = Math.max(1, width >> 1),
+			hh = Math.max(1, height >> 1);
+		aoTarget?.dispose();
+		aoBlurTarget?.dispose();
+		aoTarget = new THREE.WebGLRenderTarget(hw, hh, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false });
+		aoBlurTarget = aoTarget.clone();
+		for (const m of mips) m.dispose();
+		mips.length = 0;
+		for (let i = 0; i < LEVELS; i++) mips.push(new THREE.WebGLRenderTarget(Math.max(1, width >> (i + 1)), Math.max(1, height >> (i + 1)), half));
+		raysA?.dispose();
+		raysB?.dispose();
+		raysA = new THREE.WebGLRenderTarget(hw, hh, half);
+		raysB = raysA.clone();
+	}
+
+	// ---------- ambient occlusion ----------
+	const aoMaterial = shader(
+		`uniform sampler2D tDepth; uniform mat4 projInv; uniform mat4 proj; uniform float radius; uniform float strength; uniform float fade;
+		varying vec2 vUv;
+		vec3 viewPos(vec2 uv) {
+			float d = texture2D(tDepth, uv).x;
+			vec4 p = projInv * vec4(vec3(uv, d) * 2.0 - 1.0, 1.0);
+			return p.xyz / p.w;
+		}
+		float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+		void main() {
+			float d = texture2D(tDepth, vUv).x;
+			if (d >= 0.99999) { gl_FragColor = vec4(1.0); return; }
+			vec3 P = viewPos(vUv);
+			vec3 N = normalize(cross(dFdx(P), dFdy(P)));
+			if (N.z < 0.0) N = -N;
+			// Samples in the half-sphere over the surface (turned by a per-pixel angle), nearer ones more often;
+			// a sample is hidden when the visible surface at its place on the screen lies in front of it.
+			float a0 = hash(gl_FragCoord.xy) * 6.2831853, occ = 0.0;
+			for (int i = 0; i < 16; i++) {
+				float t = (float(i) + 0.5) / 16.0;
+				float z = 1.0 - t, rr = sqrt(1.0 - z * z), ang = a0 + float(i) * 2.3999632;
+				vec3 h = vec3(rr * cos(ang), rr * sin(ang), z);
+				// Into the frame of the normal.
+				vec3 up = abs(N.y) < 0.99 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+				vec3 tx = normalize(cross(up, N)), ty = cross(N, tx);
+				vec3 dir = tx * h.x + ty * h.y + N * h.z;
+				float scale = mix(0.15, 1.0, t * t);
+				vec3 Q = P + dir * radius * scale;
+				vec4 c = proj * vec4(Q, 1.0);
+				vec2 uv = c.xy / c.w * 0.5 + 0.5;
+				float sz = viewPos(uv).z;
+				float range = smoothstep(0.0, 1.0, radius / max(abs(P.z - sz), 1e-3));
+				occ += step(Q.z + radius * 0.04, sz) * range;
+			}
+			// Far away the depth is too coarse: the occlusion fades out.
+			occ *= 1.0 - smoothstep(fade * 0.6, fade, -P.z);
+			gl_FragColor = vec4(vec3(pow(clamp(1.0 - strength * occ / 16.0, 0.0, 1.0), 1.5)), 1.0);
+		}`,
+		{ tDepth: { value: null }, projInv: { value: new THREE.Matrix4() }, proj: { value: new THREE.Matrix4() }, radius: { value: 26 }, strength: { value: 1.6 }, fade: { value: 3000 } },
+	);
+	// A 3×3 blur that keeps the edges of objects (samples far in depth do not count).
+	const aoBlur = shader(
+		`uniform sampler2D tAo; uniform sampler2D tDepth; uniform vec2 texel; varying vec2 vUv;
+		void main() {
+			float d0 = texture2D(tDepth, vUv).x, sum = 0.0, w = 0.0;
+			for (int x = -1; x <= 1; x++) for (int y = -1; y <= 1; y++) {
+				vec2 o = vec2(float(x), float(y)) * texel * 1.5;
+				float k = 1.0 / (1.0 + 4000.0 * abs(texture2D(tDepth, vUv + o).x - d0));
+				sum += texture2D(tAo, vUv + o).r * k;
+				w += k;
+			}
+			gl_FragColor = vec4(vec3(sum / w), 1.0);
+		}`,
+		{ tAo: { value: null }, tDepth: { value: null }, texel: { value: new THREE.Vector2() } },
+	);
+
+	// ---------- bloom ----------
+	const bright = shader(
+		`uniform sampler2D tColor; uniform float threshold; uniform float knee; uniform vec2 texel; varying vec2 vUv;
+		void main() {
+			vec3 c = (texture2D(tColor, vUv + texel * vec2(-0.5, -0.5)).rgb + texture2D(tColor, vUv + texel * vec2(0.5, -0.5)).rgb
+				+ texture2D(tColor, vUv + texel * vec2(-0.5, 0.5)).rgb + texture2D(tColor, vUv + texel * vec2(0.5, 0.5)).rgb) * 0.25;
+			// A pixel that is not a number (or endless) from any shader would spread through the blur: dropped.
+			if (any(isnan(c)) || any(isinf(c))) c = vec3(0.0);
+			float l = max(c.r, max(c.g, c.b));
+			gl_FragColor = vec4(min(c * smoothstep(threshold, threshold + knee, l), vec3(16.0)), 1.0);
+		}`,
+		{ tColor: { value: null }, threshold: { value: 1.2 }, knee: { value: 0.8 }, texel: { value: new THREE.Vector2() } },
+	);
+	const down = shader(
+		`uniform sampler2D tColor; uniform vec2 texel; varying vec2 vUv;
+		void main() {
+			vec3 c = texture2D(tColor, vUv).rgb * 0.5;
+			c += (texture2D(tColor, vUv + texel * vec2(-1.0, -1.0)).rgb + texture2D(tColor, vUv + texel * vec2(1.0, -1.0)).rgb
+				+ texture2D(tColor, vUv + texel * vec2(-1.0, 1.0)).rgb + texture2D(tColor, vUv + texel * vec2(1.0, 1.0)).rgb) * 0.125;
+			gl_FragColor = vec4(c, 1.0);
+		}`,
+		{ tColor: { value: null }, texel: { value: new THREE.Vector2() } },
+	);
+	const up = shader(
+		`uniform sampler2D tColor; uniform vec2 texel; uniform float weight; varying vec2 vUv;
+		void main() {
+			vec3 c = texture2D(tColor, vUv).rgb * 4.0;
+			c += (texture2D(tColor, vUv + vec2(texel.x, 0.0)).rgb + texture2D(tColor, vUv - vec2(texel.x, 0.0)).rgb
+				+ texture2D(tColor, vUv + vec2(0.0, texel.y)).rgb + texture2D(tColor, vUv - vec2(0.0, texel.y)).rgb) * 2.0;
+			c += texture2D(tColor, vUv + texel).rgb + texture2D(tColor, vUv - texel).rgb
+				+ texture2D(tColor, vUv + vec2(texel.x, -texel.y)).rgb + texture2D(tColor, vUv + vec2(-texel.x, texel.y)).rgb;
+			gl_FragColor = vec4(c / 16.0 * weight, 1.0);
+		}`,
+		{ tColor: { value: null }, texel: { value: new THREE.Vector2() }, weight: { value: 1 } },
+		{ blending: THREE.AdditiveBlending, transparent: true },
+	);
+
+	// ---------- light shafts ----------
+	// The sky round the sun, where nothing stands in front of it, then smeared towards the sun's place on the
+	// screen (each pixel gathers the light along the line to the sun, fading with the distance).
+	const raysMask = shader(
+		`uniform sampler2D tDepth; uniform mat4 projInv; uniform mat4 camWorld; uniform vec3 sunDir; uniform vec3 sunColor; varying vec2 vUv;
+		void main() {
+			float d = texture2D(tDepth, vUv).x;
+			if (d < 0.99999) { gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0); return; }
+			vec4 v = projInv * vec4(vUv * 2.0 - 1.0, 1.0, 1.0);
+			vec3 rd = normalize((camWorld * vec4(v.xyz / v.w, 0.0)).xyz);
+			float s = max(dot(rd, sunDir), 0.0);
+			gl_FragColor = vec4(sunColor * (pow(s, 24.0) * 2.0 + pow(s, 6.0) * 0.25) * smoothstep(-0.02, 0.06, rd.y), 1.0);
+		}`,
+		{ tDepth: { value: null }, projInv: { value: new THREE.Matrix4() }, camWorld: { value: new THREE.Matrix4() }, sunDir: { value: new THREE.Vector3() }, sunColor: { value: new THREE.Color() } },
+	);
+	const raysBlur = shader(
+		`uniform sampler2D tColor; uniform vec2 sunUv; uniform float spread; varying vec2 vUv;
+		void main() {
+			vec2 step = (sunUv - vUv) * spread / 40.0;
+			vec2 uv = vUv;
+			vec3 sum = vec3(0.0);
+			float w = 1.0;
+			for (int i = 0; i < 40; i++) {
+				sum += texture2D(tColor, uv).rgb * w;
+				w *= 0.965;
+				uv += step;
+			}
+			gl_FragColor = vec4(sum / 16.0, 1.0);
+		}`,
+		{ tColor: { value: null }, sunUv: { value: new THREE.Vector2() }, spread: { value: 1 } },
+	);
+
+	// ---------- the finish ----------
+	const finish = shader(
+		`uniform sampler2D tColor; uniform sampler2D tAo; uniform sampler2D tBloom;
+		uniform float aoOn; uniform float bloomOn; uniform float bloomStrength; uniform float exposure;
+		uniform float saturation; uniform float contrast; uniform vec3 shadowTint; uniform vec3 lightTint;
+		uniform float vignette; uniform float aspect; uniform float grade; uniform float view;
+		uniform sampler2D tDepth; uniform sampler2D tRays; uniform mat4 projInv; uniform mat4 camWorld; uniform vec3 camPos;
+		uniform float atmoOn; uniform vec3 sunDir; uniform vec3 sunColor; uniform vec3 hazeColor; uniform float fogBase; uniform float fogDensity; uniform float fogFalloff; uniform float raysOn;
+		varying vec2 vUv;
+		// ACES filmic, the fit by Stephen Hill (input and output in linear sRGB primaries).
+		vec3 aces(vec3 c) {
+			const mat3 i = mat3(0.59719, 0.07600, 0.02840, 0.35458, 0.90834, 0.13383, 0.04823, 0.01566, 0.83777);
+			const mat3 o = mat3(1.60475, -0.10208, -0.00327, -0.53108, 1.10813, -0.07276, -0.07367, -0.00605, 1.07602);
+			c = i * c;
+			c = (c * (c + 0.0245786) - 0.000090537) / (c * (0.983729 * c + 0.4329510) + 0.238081);
+			return clamp(o * c, 0.0, 1.0);
+		}
+		vec3 srgb(vec3 c) { return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c)); }
+		float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+		void main() {
+			// Diagnostics (window.post3dView): 1 = the occlusion alone, 2 = the bloom alone.
+			if (view > 2.5) { vec4 r = texture2D(tColor, vUv); bool bad = any(isnan(r)) || any(isinf(r)); float l = max(r.r, max(r.g, r.b)); gl_FragColor = vec4(bad ? vec3(0.0, 0.0, 1.0) : l > 8.0 ? vec3(1.0, 0.0, 0.0) : l < 0.0 ? vec3(0.0, 1.0, 0.0) : vec3(min(l, 1.0) * 0.3), 1.0); return; }
+			if (view > 0.5) { gl_FragColor = vec4(view < 1.5 ? vec3(texture2D(tAo, vUv).r) : srgb(min(texture2D(tBloom, vUv).rgb, 1.0)), 1.0); return; }
+			vec3 c = texture2D(tColor, vUv).rgb;
+			if (any(isnan(c)) || any(isinf(c))) c = vec3(0.0);
+			c = min(c, vec3(64.0));
+			if (aoOn > 0.5) c *= texture2D(tAo, vUv).r;
+			// The atmosphere: height fog along the ray from the camera to the ground (analytic integral of a
+			// density falling off with height), its colour the haze, warmed and brightened towards the sun.
+			if (atmoOn > 0.5) {
+				float d = texture2D(tDepth, vUv).x;
+				if (d < 0.99999) {
+					vec4 v = projInv * vec4(vec3(vUv, d) * 2.0 - 1.0, 1.0);
+					vec3 world = (camWorld * vec4(v.xyz / v.w, 1.0)).xyz, ray = world - camPos;
+					float t = length(ray);
+					vec3 rd = ray / t;
+					float b = fogFalloff, h0 = camPos.y - fogBase;
+					float k = abs(rd.y * b) > 1e-4 ? (1.0 - exp(-t * rd.y * b)) / (rd.y * b) : t;
+					float amount = 1.0 - exp(-fogDensity * exp(-h0 * b) * k);
+					float toSun = pow(max(dot(rd, sunDir), 0.0), 6.0);
+					vec3 haze = hazeColor * (1.0 + toSun * 0.6) + sunColor * toSun * 0.35;
+					c = mix(c, haze, clamp(amount, 0.0, 0.55));
+				}
+			}
+			if (raysOn > 0.5) c += texture2D(tRays, vUv).rgb;
+			if (bloomOn > 0.5) c += texture2D(tBloom, vUv).rgb * bloomStrength;
+			c = aces(c * exposure);
+			// The grade: saturation, then a tint for the shadows and for the lights.
+			float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+			c = mix(vec3(l), c, mix(1.0, saturation, grade));
+			c *= mix(vec3(1.0), mix(shadowTint, lightTint, smoothstep(0.05, 0.7, l)), grade);
+			c = srgb(clamp(c, 0.0, 1.0));
+			c = mix(c, (c - 0.5) * contrast + 0.5, grade);
+			float v = length((vUv - 0.5) * vec2(aspect, 1.0));
+			c *= 1.0 - vignette * smoothstep(0.45, 1.1, v);
+			c += (hash(gl_FragCoord.xy) - 0.5) / 255.0;
+			gl_FragColor = vec4(c, 1.0);
+		}`,
+		{
+			tColor: { value: null },
+			tAo: { value: null },
+			tBloom: { value: null },
+			aoOn: { value: 1 },
+			bloomOn: { value: 1 },
+			bloomStrength: { value: 0.35 },
+			exposure: { value: 1 },
+			saturation: { value: 1.08 },
+			contrast: { value: 1.06 },
+			shadowTint: { value: new THREE.Color(0.97, 0.99, 1.04) },
+			lightTint: { value: new THREE.Color(1.03, 1.0, 0.96) },
+			vignette: { value: 0.28 },
+			aspect: { value: 1 },
+			grade: { value: 1 },
+			view: { value: 0 },
+			tDepth: { value: null },
+			tRays: { value: null },
+			projInv: { value: new THREE.Matrix4() },
+			camWorld: { value: new THREE.Matrix4() },
+			camPos: { value: new THREE.Vector3() },
+			atmoOn: { value: 0 },
+			sunDir: { value: new THREE.Vector3(0, 1, 0) },
+			sunColor: { value: new THREE.Color() },
+			hazeColor: { value: new THREE.Color() },
+			fogBase: { value: 0 },
+			fogDensity: { value: 0 },
+			fogFalloff: { value: 0.01 },
+			raysOn: { value: 0 },
+		},
+	);
+
+	// ---------- sky reflections ----------
+	const envScene = new THREE.Scene(),
+		envUniforms = {
+			zenith: { value: new THREE.Color() },
+			horizon: { value: new THREE.Color() },
+			ground: { value: new THREE.Color() },
+			sunDir: { value: new THREE.Vector3(0, 1, 0) },
+			sunColor: { value: new THREE.Color() },
+		};
+	envScene.add(
+		new THREE.Mesh(
+			new THREE.SphereGeometry(1, 32, 16),
+			new THREE.ShaderMaterial({
+				uniforms: envUniforms,
+				vertexShader: "varying vec3 vDir; void main() { vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
+				fragmentShader: `uniform vec3 zenith; uniform vec3 horizon; uniform vec3 ground; uniform vec3 sunDir; uniform vec3 sunColor; varying vec3 vDir;
+				void main() {
+					vec3 d = normalize(vDir);
+					vec3 c = d.y > 0.0 ? mix(horizon, zenith, pow(d.y, 0.6)) : mix(horizon, ground, smoothstep(0.0, 0.25, -d.y));
+					float s = max(0.0, dot(d, normalize(sunDir)));
+					c += sunColor * (pow(s, 400.0) * 18.0 + pow(s, 12.0) * 0.6) * step(-0.02, d.y);
+					gl_FragColor = vec4(c, 1.0);
+				}`,
+				side: THREE.BackSide,
+				depthWrite: false,
+			}),
+		),
+	);
+	const pmrem = new THREE.PMREMGenerator(renderer);
+	let envTarget = null,
+		envKey = "";
+
+	return {
+		get samples() {
+			return samples;
+		},
+		setSize(w, h, msaa = samples) {
+			w = Math.max(1, Math.round(w));
+			h = Math.max(1, Math.round(h));
+			if (w === width && h === height && msaa === samples && sceneTarget) return;
+			width = w;
+			height = h;
+			samples = msaa;
+			build();
+		},
+		// The environment from the sky's colours (linear) and the sun; renewed only when they change visibly.
+		environment(sky) {
+			const key = [sky.zenith, sky.horizon, sky.ground, sky.sunColor].map((c) => c.getHexString()).join("") + sky.sunDir.toArray().map((v) => v.toFixed(1)).join();
+			if (key === envKey && envTarget) return envTarget.texture;
+			envKey = key;
+			envUniforms.zenith.value.copy(sky.zenith);
+			envUniforms.horizon.value.copy(sky.horizon);
+			envUniforms.ground.value.copy(sky.ground);
+			envUniforms.sunDir.value.copy(sky.sunDir);
+			envUniforms.sunColor.value.copy(sky.sunColor);
+			const next = pmrem.fromScene(envScene, 0, 0.1, 10);
+			envTarget?.dispose();
+			envTarget = next;
+			return envTarget.texture;
+		},
+		// settings: { ao, bloom, grade (0…1), exposure, saturation, contrast, shadowTint, lightTint, vignette, aoRadius, bloomStrength }
+		render(scene, camera, s = {}) {
+			if (!sceneTarget) build();
+			const autoClear = renderer.autoClear;
+			renderer.setRenderTarget(sceneTarget);
+			renderer.render(scene, camera);
+			renderer.autoClear = false;
+			if (s.ao) {
+				aoMaterial.uniforms.tDepth.value = sceneTarget.depthTexture;
+				aoMaterial.uniforms.projInv.value.copy(camera.projectionMatrixInverse);
+				aoMaterial.uniforms.proj.value.copy(camera.projectionMatrix);
+				aoMaterial.uniforms.radius.value = s.aoRadius ?? 26;
+				aoMaterial.uniforms.strength.value = s.aoStrength ?? 1.6;
+				aoMaterial.uniforms.fade.value = s.aoFade ?? 3000;
+				pass(aoMaterial, aoTarget);
+				aoBlur.uniforms.tAo.value = aoTarget.texture;
+				aoBlur.uniforms.tDepth.value = sceneTarget.depthTexture;
+				aoBlur.uniforms.texel.value.set(1 / aoTarget.width, 1 / aoTarget.height);
+				pass(aoBlur, aoBlurTarget);
+			}
+			if (s.bloom) {
+				bright.uniforms.tColor.value = sceneTarget.texture;
+				bright.uniforms.texel.value.set(1 / width, 1 / height);
+				pass(bright, mips[0]);
+				for (let i = 1; i < LEVELS; i++) {
+					down.uniforms.tColor.value = mips[i - 1].texture;
+					down.uniforms.texel.value.set(1 / mips[i - 1].width, 1 / mips[i - 1].height);
+					pass(down, mips[i]);
+				}
+				for (let i = LEVELS - 1; i > 0; i--) {
+					up.uniforms.tColor.value = mips[i].texture;
+					up.uniforms.texel.value.set(1 / mips[i].width, 1 / mips[i].height);
+					up.uniforms.weight.value = 0.9;
+					pass(up, mips[i - 1], false);
+				}
+			}
+			// Light shafts: only with the sun above the horizon and in front of the camera.
+			const a = s.atmosphere;
+			let rays = false;
+			if (a?.rays > 0.01) {
+				const sunPoint = new THREE.Vector3().copy(camera.position).addScaledVector(a.sunDir, 1000).project(camera),
+					ahead = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).dot(a.sunDir);
+				if (ahead > 0.05 && a.sunDir.y > -0.02) {
+					rays = true;
+					raysMask.uniforms.tDepth.value = sceneTarget.depthTexture;
+					raysMask.uniforms.projInv.value.copy(camera.projectionMatrixInverse);
+					raysMask.uniforms.camWorld.value.copy(camera.matrixWorld);
+					raysMask.uniforms.sunDir.value.copy(a.sunDir);
+					raysMask.uniforms.sunColor.value.copy(a.sunColor).multiplyScalar(a.rays);
+					pass(raysMask, raysA);
+					raysBlur.uniforms.tColor.value = raysA.texture;
+					raysBlur.uniforms.sunUv.value.set(sunPoint.x * 0.5 + 0.5, sunPoint.y * 0.5 + 0.5);
+					raysBlur.uniforms.spread.value = 0.9;
+					pass(raysBlur, raysB);
+				}
+			}
+			const u = finish.uniforms;
+			u.tDepth.value = sceneTarget.depthTexture;
+			u.tRays.value = raysB.texture;
+			u.raysOn.value = rays ? 1 : 0;
+			u.atmoOn.value = a ? 1 : 0;
+			if (a) {
+				u.projInv.value.copy(camera.projectionMatrixInverse);
+				u.camWorld.value.copy(camera.matrixWorld);
+				u.camPos.value.copy(camera.position);
+				u.sunDir.value.copy(a.sunDir);
+				u.sunColor.value.copy(a.sunColor);
+				u.hazeColor.value.copy(a.haze);
+				u.fogBase.value = a.base;
+				u.fogDensity.value = a.density;
+				u.fogFalloff.value = a.falloff;
+			}
+			u.tColor.value = sceneTarget.texture;
+			u.tAo.value = aoBlurTarget.texture;
+			u.tBloom.value = mips[0].texture;
+			u.aoOn.value = s.ao ? 1 : 0;
+			u.bloomOn.value = s.bloom ? 1 : 0;
+			u.bloomStrength.value = s.bloomStrength ?? 0.35;
+			u.exposure.value = s.exposure ?? 1;
+			u.saturation.value = s.saturation ?? 1.08;
+			u.contrast.value = s.contrast ?? 1.06;
+			if (s.shadowTint) u.shadowTint.value.copy(s.shadowTint);
+			if (s.lightTint) u.lightTint.value.copy(s.lightTint);
+			u.vignette.value = s.vignette ?? 0.28;
+			u.grade.value = s.grade ?? 1;
+			u.view.value = s.view || 0;
+			u.aspect.value = width / height;
+			pass(finish, null);
+			renderer.autoClear = autoClear;
+		},
+		dispose() {
+			sceneTarget?.depthTexture?.dispose();
+			for (const t of [sceneTarget, aoTarget, aoBlurTarget, envTarget, raysA, raysB, ...mips]) t?.dispose();
+			pmrem.dispose();
+			for (const m of [aoMaterial, aoBlur, bright, down, up, finish, raysMask, raysBlur]) m.dispose();
+			tri.dispose();
+		},
+	};
+}
+
 // ---- webgl3d/night-lights-3d.js ----
 /* Night lights of the 3D board, all of them at once: headlights of vehicles, flashlights of infantry,
    searchlights of aircraft, floodlights and facade lights of buildings. Not Three.js lights (a fixed few,
@@ -57026,6 +57470,46 @@ function windowCurve(n) {
    a fresh model through a range of states (moving, aiming, firing, building, working, carrying, open)
    and comparing every part's transform, visibility and material; the merged geometries are cached per
    look, so every entity of one look shares them (and the renderer's batches). */
+// Noise for the surface detail of the paint (hash, 3D value noise).
+const SURFACE_COMMON = `
+float mdHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float mdHash3(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+float mdNoise3(vec3 p) {
+	vec3 i = floor(p), f = fract(p);
+	f = f * f * (3.0 - 2.0 * f);
+	return mix(mix(mix(mdHash3(i), mdHash3(i + vec3(1, 0, 0)), f.x), mix(mdHash3(i + vec3(0, 1, 0)), mdHash3(i + vec3(1, 1, 0)), f.x), f.y),
+		mix(mix(mdHash3(i + vec3(0, 0, 1)), mdHash3(i + vec3(1, 0, 1)), f.x), mix(mdHash3(i + vec3(0, 1, 1)), mdHash3(i + vec3(1, 1, 1)), f.x), f.y), f.z);
+}`;
+const SURFACE = `
+float mdWear = 0.0, mdLine = 0.0, mdGrime = 0.0;
+// Surface detail (0.128): armour plates with seams and slightly different shades, paint chipped off the
+// bevelled edges down to bare metal, dust and dirt of the planet low on the model and streaks running down
+// the walls. In the model's own frame (it does not slide when the model moves), faded with the distance.
+if (surfaceOn > 0.5 && vFinish.z < 0.5 && dot(vGlow, vec3(1.0)) < 0.02) {
+	vec3 n = normalize(vObjN), an = abs(n);
+	float near = 1.0 - smoothstep(1000.0, 2600.0, length(vViewPosition));
+	vec2 uv = an.x >= an.y && an.x >= an.z ? vObjPos.zy : an.y >= an.z ? vObjPos.xz : vObjPos.xy;
+	vec2 cell = uv / vec2(9.0, 6.0), f = 0.5 - abs(fract(cell) - 0.5), fw = fwidth(cell);
+	float seam = max(1.0 - smoothstep(fw.x, fw.x * 2.0 + 0.01, f.x), 1.0 - smoothstep(fw.y, fw.y * 2.0 + 0.01, f.y));
+	float metal = smoothstep(0.12, 0.3, vFinish.y);
+	mdLine = seam * metal * near * (1.0 - smoothstep(0.2, 0.45, max(fw.x, fw.y)));
+	// Plates of slightly different shades: they still read when the seams are too fine to see.
+	float shade = (mdHash(floor(cell) + floor(n.xy * 2.0 + n.z * 7.0)) - 0.5) * 0.2 * metal * near;
+	// Bevels (faces between the main ones) wear first; the paint chips in patches.
+	float edge = smoothstep(0.96, 0.8, max(an.x, max(an.y, an.z)));
+	float chips = smoothstep(0.3, 0.55, mdNoise3(vObjPos * 0.45));
+	mdWear = edge * chips * near;
+	// Dust low on the model, streaks of dirt down its walls.
+	float low = smoothstep(9.0, 0.0, vObjPos.y) * (0.6 + 0.4 * mdNoise3(vObjPos * 0.25));
+	float streak = smoothstep(0.55, 0.8, mdNoise3(vec3(uv.x * 0.9, vObjPos.y * 0.05, n.x + n.z))) * (1.0 - an.y) * smoothstep(1.0, 8.0, vObjPos.y) * 0.75;
+	// Dust settled on roofs and upper faces, in patches.
+	float settled = smoothstep(0.75, 0.95, n.y) * smoothstep(0.35, 0.7, mdNoise3(vObjPos * 0.12)) * 0.55;
+	mdGrime = clamp(low + streak + settled, 0.0, 1.0) * near;
+	diffuseColor.rgb *= (1.0 + shade) * (1.0 - 0.38 * mdLine);
+	diffuseColor.rgb = mix(diffuseColor.rgb, soilColor, mdGrime * 0.62);
+	diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.62, 0.62, 0.6), mdWear * 0.8);
+}
+`;
 function createBaker(THREE) {
 	const plans = new Map(),
 		merged = new Map();
@@ -57108,7 +57592,10 @@ function createBaker(THREE) {
 		PAINT = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true });
 	// Weather on the models: snow settling on upward faces (roofs, hulls, turrets), a sheen when wet.
 	const snowCover = { value: 0 },
-		wetness = { value: 0 };
+		wetness = { value: 0 },
+		// Surface detail of the models (stage 3 of the 3D graphics): on/off and the colour of the planet's dust.
+		surfaceOn = { value: 1 },
+		soilColor = { value: new THREE.Color(0.55, 0.45, 0.33) };
 	PAINT.onBeforeCompile = (shader) => {
 		cloudShade(THREE, shader); // drifting cloud shadows (webgl3d/sky-3d.js)
 		nightLightShade(shader); // headlights and floodlights (webgl3d/night-lights-3d.js)
@@ -57116,21 +57603,23 @@ function createBaker(THREE) {
 		shader.uniforms.windowScale = windowLight;
 		shader.uniforms.snowCover = snowCover;
 		shader.uniforms.wetness = wetness;
+		shader.uniforms.surfaceOn = surfaceOn;
+		shader.uniforms.soilColor = soilColor;
 		shader.vertexShader = shader.vertexShader
-			.replace("#include <common>", "#include <common>\nattribute vec3 finish;\nattribute vec3 glow;\nvarying vec3 vFinish;\nvarying vec3 vGlow;\nvarying float vUp;")
-			.replace("#include <begin_vertex>", "#include <begin_vertex>\nvFinish = finish;\nvGlow = glow;")
+			.replace("#include <common>", "#include <common>\nattribute vec3 finish;\nattribute vec3 glow;\nvarying vec3 vFinish;\nvarying vec3 vGlow;\nvarying float vUp;\nvarying vec3 vObjPos;\nvarying vec3 vObjN;")
+			.replace("#include <begin_vertex>", "#include <begin_vertex>\nvFinish = finish;\nvGlow = glow;\nvObjPos = position;\nvObjN = normal;")
 			.replace(
 				"#include <defaultnormal_vertex>",
 				"#include <defaultnormal_vertex>\n#ifdef USE_INSTANCING\nvUp = normalize(mat3(modelMatrix) * mat3(instanceMatrix) * objectNormal).y;\n#else\nvUp = normalize(mat3(modelMatrix) * objectNormal).y;\n#endif",
 			);
 		shader.fragmentShader = shader.fragmentShader
-			.replace("#include <common>", "#include <common>\nuniform float glowScale;\nuniform float windowScale;\nuniform float snowCover;\nuniform float wetness;\nvarying vec3 vFinish;\nvarying vec3 vGlow;\nvarying float vUp;")
-			.replace("#include <color_fragment>", "#include <color_fragment>\nfloat modelSnow = snowCover * smoothstep(0.6, 0.9, vUp) * step(0.5, 1.0 - vFinish.z);\ndiffuseColor.rgb = mix(diffuseColor.rgb * (1.0 - 0.25 * wetness), vec3(0.9, 0.94, 0.98), min(1.0, modelSnow * 1.3));")
-			.replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\nroughnessFactor = mix(vFinish.x, 0.6, min(1.0, modelSnow * 1.3)) * (1.0 - 0.45 * wetness);")
-			.replace("#include <metalnessmap_fragment>", "#include <metalnessmap_fragment>\nmetalnessFactor = vFinish.y;")
+			.replace("#include <common>", "#include <common>\nuniform float glowScale;\nuniform float windowScale;\nuniform float snowCover;\nuniform float wetness;\nuniform float surfaceOn;\nuniform vec3 soilColor;\nvarying vec3 vFinish;\nvarying vec3 vGlow;\nvarying float vUp;\nvarying vec3 vObjPos;\nvarying vec3 vObjN;\n" + SURFACE_COMMON)
+			.replace("#include <color_fragment>", "#include <color_fragment>\n" + SURFACE + "\nfloat modelSnow = snowCover * smoothstep(0.6, 0.9, vUp) * step(0.5, 1.0 - vFinish.z);\ndiffuseColor.rgb = mix(diffuseColor.rgb * (1.0 - 0.25 * wetness), vec3(0.9, 0.94, 0.98), min(1.0, modelSnow * 1.3));")
+			.replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\nroughnessFactor = mix(clamp(vFinish.x + mdGrime * 0.25 + mdLine * 0.1 - mdWear * 0.3, 0.05, 1.0), 0.6, min(1.0, modelSnow * 1.3)) * (1.0 - 0.45 * wetness);")
+			.replace("#include <metalnessmap_fragment>", "#include <metalnessmap_fragment>\nmetalnessFactor = clamp(vFinish.y + mdWear * 0.45 - mdGrime * 0.2, 0.0, 1.0);")
 			.replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\ntotalEmissiveRadiance += vGlow * mix(glowScale, windowScale, step(0.5, vFinish.z));");
 	};
-	PAINT.customProgramCacheKey = () => "paint";
+	PAINT.customProgramCacheKey = () => "paint|surface";
 	const paintable = (m) => m.isMeshStandardMaterial && !m.transparent && !m.map;
 	const signature = (parts) => parts.map((m) => m.geometry.id + ":" + m.material.id + "@" + m.matrix.elements.map((v) => Math.round(v * 1000)).join(",")).join(";");
 	function bakeModel(model, key, e) {
@@ -57166,6 +57655,11 @@ function createBaker(THREE) {
 	bakeModel.setNight = (n) => {
 		night.value = 0.6 + 1.6 * n;
 		windowLight.value = windowCurve(n);
+	};
+	// Surface detail on or off, and the planet's dust colour (a THREE.Color).
+	bakeModel.setSurface = (on, soil) => {
+		surfaceOn.value = on ? 1 : 0;
+		if (soil) soilColor.value.copy(soil);
 	};
 	bakeModel.setWeather = (snow, wet) => {
 		snowCover.value = snow;
@@ -59552,6 +60046,8 @@ function createModels3D(THREE) {
 		setMission: (id) => (mission = id),
 		// Weather on the models: snow cover and wetness, 0…1 (the renderer, from weather-3d.js).
 		setWeather: (snow, wet) => bake.setWeather(snow, wet),
+		// Surface detail (plates, worn edges, dust) on or off, and the planet's dust colour (THREE.Color).
+		setSurface: (on, soil) => bake.setSurface(on, soil),
 		setNight,
 		// Scenery models: scenery("animal", kind, biome), ("bird"), ("fish"), ("island", theme, size, seed),
 		// ("wreck", size, seed); same { root, update(e, info) } shape as the entity models.
@@ -59614,7 +60110,11 @@ function createWeather3D(THREE, { world, heightAt }) {
 		const material = new THREE.ShaderMaterial({
 			uniforms: { ...shared, ...uniforms },
 			vertexShader: COMMON + vertex,
-			fragmentShader: fragment,
+			// The colours written in these shaders are sRGB: made linear and passed through the output
+			// conversion, so they look the same on the plain screen and in the high-range frame of the
+			// cinematic image (where raw values came out pale and the grains as white lines). The mist takes
+			// its colour from the sky (already linear).
+			fragmentShader: fragment.includes("mistColor") ? fragment : fragment.replace(/\}\s*$/, "\ngl_FragColor.rgb = pow(max(gl_FragColor.rgb, 0.0), vec3(2.2));\n#include <colorspace_fragment>\n}"),
 			transparent: true,
 			depthWrite: false,
 			blending,
@@ -59783,13 +60283,16 @@ function createWeather3D(THREE, { world, heightAt }) {
 			vec3 c = vec3(p.x, groundAt(p) + 1.5 + seed.z * seed.z * 34.0 + sin(hop * 3.14159) * 6.0, p.y);
 			vec3 along = normalize(vec3(dir.x, 0.0, dir.y));
 			vec3 side = normalize(cross(along, normalize(cameraPosition - c)));
-			vec3 pos = c + along * (position.y - 0.5) * (10.0 + 10.0 * s) + side * position.x * 0.55;
+			vec3 pos = c + along * (position.y - 0.5) * (7.0 + 6.0 * s) + side * position.x * 1.1;
 			vUv = uv;
-			vAlpha = intensity * edgeFade(p) * smoothstep(60.0, 200.0, distance(cameraPosition, c));
+			// Only near the camera: further away the grains are thinner than a pixel and flicker as dashed
+			// white lines; there the dust curtains and the haze carry the storm.
+			float dist = distance(cameraPosition, c);
+			vAlpha = intensity * edgeFade(p) * smoothstep(60.0, 200.0, dist) * (1.0 - smoothstep(500.0, 950.0, dist));
 			gl_Position = projectionMatrix * viewMatrix * vec4(pos, 1.0);
 		}`,
 		`varying float vAlpha; varying vec2 vUv;
-		void main() { float a = vAlpha * (1.0 - abs(vUv.x - 0.5) * 2.0) * sin(vUv.y * 3.14159); gl_FragColor = vec4(0.86, 0.72, 0.5, a * 0.38); }`,
+		void main() { float a = vAlpha * (1.0 - abs(vUv.x - 0.5) * 2.0) * sin(vUv.y * 3.14159); gl_FragColor = vec4(0.86, 0.72, 0.5, a * 0.2); }`,
 	);
 	// Dust: rolling billows of fine sand along the ground — wide sheets of churning noise drifting with
 	// the wind, denser and darker low down, lighter on top, thinning at their edges.
@@ -60100,9 +60603,12 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 	// small waves, a second ripple layer against tiling, the sky reflected at grazing angles (fresnel),
 	// lighter shallows towards the shore (the shore fade is the depth), foam along the shore line, and
 	// rings from the drops while it rains.
-	const waterUniforms = { glowPool: { value: 1 }, waterTime: { value: 0 }, waterRain: { value: 0 }, waterSky: { value: new THREE.Color("#8fa6b4") }, waterSunDir: { value: new THREE.Vector3(0, 1, 0) }, waterSun: { value: new THREE.Color("#ffffff") } };
+	// Reflections (0.127): the renderer draws the scene seen from under the surface of the water nearest the
+	// camera into reflectMap; reflectMatrix projects a point of the surface onto it.
+	const waterUniforms = { glowPool: { value: 1 }, waterTime: { value: 0 }, waterRain: { value: 0 }, waterSky: { value: new THREE.Color("#8fa6b4") }, waterSunDir: { value: new THREE.Vector3(0, 1, 0) }, waterSun: { value: new THREE.Color("#ffffff") }, reflectMap: { value: null }, reflectMatrix: { value: new THREE.Matrix4() }, reflectOn: { value: 0 }, reflectLevel: { value: 0 } };
 	const WATER_COMMON = `
 		uniform float waterTime; uniform float waterRain; uniform vec3 waterSky; uniform vec3 waterSunDir; uniform vec3 waterSun; uniform float glowPool;
+		uniform sampler2D reflectMap; uniform float reflectOn; uniform float reflectLevel; varying vec4 vReflect; varying float vWaterY;
 		float wvHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 		float wvNoise(vec2 p) {
 			vec2 i = floor(p), f = fract(p);
@@ -60180,7 +60686,8 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 			before?.call(material, shader, renderer);
 			Object.assign(shader.uniforms, waterUniforms);
 			shader.vertexShader = shader.vertexShader
-				.replace("#include <common>", "#include <common>\nuniform float waterTime;")
+				.replace("#include <common>", "#include <common>\nuniform float waterTime;\nuniform mat4 reflectMatrix;\nvarying vec4 vReflect;\nvarying float vWaterY;")
+				.replace("#include <worldpos_vertex>", "#include <worldpos_vertex>\nvec4 waterWorld = modelMatrix * vec4(transformed, 1.0);\nvReflect = reflectMatrix * waterWorld;\nvWaterY = waterWorld.y;")
 				.replace(
 					"#include <begin_vertex>",
 					"#include <begin_vertex>\n#ifdef USE_COLOR_ALPHA\ntransformed.y += (sin(position.x * 0.045 + waterTime * 1.3) + sin(position.z * 0.06 - waterTime * 1.05)) * 0.35 * color.a;\n#endif",
@@ -60205,7 +60712,17 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 					float fres = pow(1.0 - clamp(abs(dot(normalize(vViewPosition), normal)), 0.0, 1.0), 3.0);
 					// Deep water darker and bluer towards the middle, turquoise shallows at the shore.
 					outgoingLight *= mix(1.0, 0.72, smoothstep(0.45, 1.0, depthK));
-					outgoingLight = mix(outgoingLight, waterSky * 1.1, fres * 0.55);
+					// What the water mirrors: the scene above it (shores, buildings, units, the sky) when this is the
+					// surface being reflected, else the sky's colour; wavering with the ripples, stronger at grazing
+					// angles, a little even looking straight down.
+					vec3 mirrored = waterSky * 1.1;
+					float mirrorK = fres * 0.55;
+					if (reflectOn > 0.5 && abs(vWaterY - reflectLevel) < 3.0) {
+						vec2 ruv = vReflect.xy / vReflect.w + normal.xy * 0.03;
+						mirrored = texture2D(reflectMap, clamp(ruv, 0.001, 0.999)).rgb;
+						mirrorK = mix(0.28, 0.85, fres);
+					}
+					outgoingLight = mix(outgoingLight, mirrored, mirrorK);
 					outgoingLight = mix(outgoingLight * vec3(1.12, 1.25, 1.12) + vec3(0.04, 0.07, 0.06), outgoingLight, smoothstep(0.0, 0.8, depthK));
 					// Light shimmering on the bed of the shallows.
 					float shimmer = pow(abs(sin(wvNoise(vMapXY * 0.08 + waterTime * 0.12) * 9.0 + waterTime * 1.1)), 8.0);
@@ -60218,7 +60735,9 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 					float lap = 0.06 * sin(waterTime * 1.4 + wvNoise(vMapXY * 0.02) * 6.0);
 					float foamNoise = wvNoise(vMapXY * 0.21 + vec2(waterTime * 0.35, -waterTime * 0.25)) * 0.6 + wvNoise(vMapXY * 0.53 - vec2(waterTime * 0.2, 0.0)) * 0.4;
 					float foam = smoothstep(0.04 + lap, 0.14 + lap, depthK) * (1.0 - smoothstep(0.2 + lap, 0.4 + lap, depthK)) * smoothstep(0.42, 0.8, foamNoise);
-					outgoingLight += vec3(0.85, 0.9, 0.92) * foam * 0.35;
+					// Foam: brighter, in streaks drifting with the water, and a fine lace further out.
+					float lace = smoothstep(0.62, 0.9, wvNoise(vMapXY * 0.9 + vec2(waterTime * 0.5, waterTime * 0.2))) * (1.0 - smoothstep(0.2, 0.55, depthK)) * smoothstep(0.08, 0.2, depthK);
+					outgoingLight += vec3(0.85, 0.9, 0.92) * (foam * 0.55 + lace * 0.18);
 					diffuseColor.a = max(diffuseColor.a, foam * 0.55);
 					outgoingLight += vec3(0.8, 0.86, 0.92) * waterRain * wvRings(vMapXY, waterTime) * 0.2;
 					#ifdef GLOW_POOL
@@ -60324,10 +60843,14 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 			// Per-vertex opacity fades the shore.
 			Object.assign(material, { vertexColors: true, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
 			const mesh = new THREE.Mesh(waterMesh(cells, kind), material);
+			// Extent and (for flat water) the level of the surface, for the reflections.
+			mesh.geometry.computeBoundingBox();
+			const bb = mesh.geometry.boundingBox,
+				box = { x0: bb.min.x, x1: bb.max.x, y0: bb.min.z, y1: bb.max.z, level: bb.max.y };
 			mesh.receiveShadow = kind !== "lava";
 			mesh.renderOrder = 1;
 			waterGroup.add(mesh);
-			waters.push({ mesh, kind });
+			waters.push({ mesh, kind, box });
 		}
 	}
 
@@ -60968,7 +61491,24 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 	const SOIL = { dust: [0.62, 0.52, 0.4], ash: [0.33, 0.3, 0.28], ice: [0.86, 0.9, 0.95] };
 	let biomeNow = "dust";
 
+	// The flat water (lakes, crevasses) nearest the point: its level, or null.
+	function waterLevelNear(point, span) {
+		let best = null,
+			bestD = Infinity;
+		for (const w of waters) {
+			if (w.kind !== "lake" && w.kind !== "crevasse") continue;
+			const box = w.box;
+			if (!box) continue;
+			const d = Math.hypot(Math.max(box.x0 - point.x, 0, point.x - box.x1), Math.max(box.y0 - point.y, 0, point.y - box.y1));
+			if (d < span && d < bestD) {
+				bestD = d;
+				best = box.level;
+			}
+		}
+		return best;
+	}
 	return {
+		water: { group: waterGroup, uniforms: waterUniforms, levelNear: waterLevelNear },
 		setGame(game, heights) {
 			if (heights) weather3d.setTerrain(heights);
 			weather3d.reset();
@@ -62900,14 +63440,23 @@ function createSunFx3D(THREE, { scene, heightAt }) {
 		at = new THREE.Vector3(),
 		probe = new THREE.Vector3();
 	let seen = 0;
+	const lookDir = new THREE.Vector3();
 
 	return {
 		// Every frame: sun direction (true, may be below the horizon), its colour, e (its height), haze and
 		// mist 0…1, the camera and the focus of the view (map point) with the span of the view.
-		update({ camera, sunDir, sunColor, e, haze = 0, mist = 0, focus, span }) {
+		update({ camera, imageRays = false, sunDir, sunColor, e, haze = 0, mist = 0, focus, span }) {
 			// Shafts: in the golden hour, and in dusty or misty air; never at night.
 			const golden = Math.max(0, Math.min(1, (e - 0.02) / 0.1)) * (1 - Math.max(0, Math.min(1, (e - 0.3) / 0.25)));
-			shaftUniforms.strength.value = e > 0 ? Math.min(0.1, golden * 0.06 + haze * 0.05 + mist * 0.05) : 0;
+			// A thick storm (sand, snow) hides the sun: light dust and mist show the shafts, a dense one does not —
+			// seen from above they would stand as hard parallel lines over the board.
+			const thick = Math.max(0, Math.min(1, (haze - 0.2) / 0.3));
+			// Only looking out towards the horizon: seen from above (the usual view of the board) the beams stand
+			// as thin parallel white lines over the ground.
+			const down = -camera.getWorldDirection(lookDir).y,
+				side = 1 - Math.max(0, Math.min(1, (down - 0.45) / 0.3));
+			// With the cinematic atmosphere the shafts are drawn in the image itself (webgl3d/post-3d.js): none here.
+			shaftUniforms.strength.value = e > 0 && !imageRays ? Math.min(0.1, golden * 0.06 + haze * 0.05 + mist * 0.05) * (1 - thick) * side : 0;
 			shafts.visible = shaftUniforms.strength.value > 0.002;
 			shaftUniforms.sunDir.value.copy(sunDir);
 			shaftUniforms.sunColor.value.copy(sunColor);
@@ -62989,6 +63538,11 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 	renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 	renderer.outputColorSpace = THREE.SRGBColorSpace;
 	host.appendChild(renderer.domElement);
+	// The cinematic image (webgl3d/post-3d.js): a high-range frame finished with ambient occlusion, bloom,
+	// filmic tone mapping and a colour grade; sky reflections on the materials.
+	const post = createPost3D(THREE, renderer);
+	// Multisampling of the high-range frame (set with the quality).
+	let postSamples = 4;
 
 	const scene = new THREE.Scene();
 	scene.background = new THREE.Color("#0b141c");
@@ -63041,6 +63595,51 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		ghostBad = new THREE.MeshBasicMaterial({ color: "#ef8178", transparent: true, opacity: 0.42, depthWrite: false }),
 		ghosts = [];
 	let placements = [];
+	// Rally points of the selected producers: a gilded pole with a knob and a cloth waving in the wind
+	// (its vertices moved every frame), casting a shadow — instead of a flat flag painted on the ground.
+	const RALLY = "#e4c587",
+		rallyPole = new THREE.CylinderGeometry(1.2, 1.5, 56, 6).translate(0, 28, 0),
+		rallyKnob = new THREE.SphereGeometry(2.6, 8, 6).translate(0, 57, 0),
+		rallyPoleMat = new THREE.MeshStandardMaterial({ color: "#c9b27a", roughness: 0.35, metalness: 0.8 }),
+		rallyClothMat = new THREE.MeshStandardMaterial({ color: RALLY, emissive: RALLY, emissiveIntensity: 0.25, roughness: 0.8, side: THREE.DoubleSide }),
+		rallies = [];
+	function rallyFlag() {
+		const g = new THREE.Group(),
+			cloth = new THREE.PlaneGeometry(32, 18, 8, 3).translate(16, 45, 0);
+		const pole = new THREE.Mesh(rallyPole, rallyPoleMat),
+			knob = new THREE.Mesh(rallyKnob, rallyPoleMat),
+			flag = new THREE.Mesh(cloth, rallyClothMat);
+		for (const m of [pole, knob, flag]) m.castShadow = true;
+		g.add(pole, knob, flag);
+		g.userData.cloth = cloth;
+		g.userData.rest = Float32Array.from(cloth.attributes.position.array);
+		world.add(g);
+		return g;
+	}
+	function syncRallies() {
+		let n = 0;
+		for (const id of selected) {
+			const b = game.get(id);
+			if (!b || !game.isProducer?.(b) || !b.rally) continue;
+			const f = rallies[n] || (rallies[n] = rallyFlag());
+			n++;
+			f.visible = true;
+			f.position.set(b.rally.x, heightAt(b.rally.x, b.rally.y), b.rally.y);
+			// The cloth streams away from the building and ripples, more at the free end.
+			f.rotation.y = -Math.atan2(b.rally.y - b.y, b.rally.x - b.x);
+			const pos = f.userData.cloth.attributes.position,
+				rest = f.userData.rest;
+			for (let i = 0; i < pos.count; i++) {
+				const x = rest[i * 3],
+					k = x / 32;
+				pos.setZ(i, Math.sin(clock * 6 - x * 0.35 + rest[i * 3 + 1] * 0.08) * 3.4 * k);
+				pos.setY(i, rest[i * 3 + 1] - k * k * 2);
+			}
+			pos.needsUpdate = true;
+			f.userData.cloth.computeVertexNormals();
+		}
+		for (let i = n; i < rallies.length; i++) rallies[i].visible = false;
+	}
 	function syncGhosts() {
 		const viewer = game.viewer ?? 0,
 			faction = game.entities.find((e) => e.team === viewer && e.faction)?.faction;
@@ -63169,6 +63768,7 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			}
 		const biome = RTS.MISSIONS[game.missionId]?.biome || "dust",
 			detail = detailNormals(biome);
+		groundWeather.pbrBiome.value = biome === "ice" ? 1 : biome === "ash" ? 2 : 0;
 
 		for (const t of tiles) {
 			terrain.remove(t.mesh);
@@ -63266,7 +63866,7 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 	// Fog of war on the ground: visible 255, explored 110, unknown 25, smoothed (see refreshFog); the
 	// terrain shader darkens and desaturates by it.
 	const fogUniforms = { fogMap: { value: null }, fogSize: { value: new THREE.Vector2(1, 1) }, fogOn: { value: 1 }, fogTime: { value: 0 } },
-		groundWeather = { wetness: { value: 0 }, snowCover: { value: 0 }, rainLevel: { value: 0 }, weatherTime: { value: 0 }, skyTint: { value: new THREE.Color() }, rockTint: { value: new THREE.Color("#7a6a58") }, sandLevel: { value: 0 }, mistLevel: { value: 0 }, mistBand: { value: new THREE.Vector2(0, 40) } };
+		groundWeather = { wetness: { value: 0 }, snowCover: { value: 0 }, rainLevel: { value: 0 }, weatherTime: { value: 0 }, skyTint: { value: new THREE.Color() }, rockTint: { value: new THREE.Color("#7a6a58") }, sandLevel: { value: 0 }, mistLevel: { value: 0 }, mistBand: { value: new THREE.Vector2(0, 40) }, pbrOn: { value: 1 }, pbrBiome: { value: 0 } };
 	// The vision grid is upsampled FOG_UP times and box-blurred twice, so the edge of sight is a soft
 	// curve instead of 40-unit steps.
 	const FOG_UP = 3;
@@ -63320,6 +63920,8 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 	// over the terrain after the fog, so it stays readable.
 	const overlayUniforms = {
 		overlayMap: { value: null },
+		// 1 while the board is drawn into the high-range frame: the interface's sRGB colours are made linear.
+		overlayLinear: { value: 0 },
 		overlayOn: { value: 0 },
 		overlayFrame: { value: new THREE.Vector4() },
 		overlaySize: { value: new THREE.Vector2(1, 1) },
@@ -63355,6 +63957,17 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		float snowMask = 0.0;
 		#ifdef TERRAIN
 		varying float vRock; varying float vWorldY;
+		// Terrain materials (stage 2): the world normal, the switch and the planet's kind of ground
+		// (0 sand, 1 ice and snow, 2 ash, soil and lava fields).
+		varying vec3 vTerrN; uniform float pbrOn; uniform float pbrBiome;
+		float pbrH = 0.0, pbrRough = -1.0, pbrRockK = 0.0;
+		float tFbm(vec2 p) { return wNoise(p) * 0.5 + wNoise(p * 2.03 + 1.7) * 0.25 + wNoise(p * 4.01 + 3.1) * 0.125 + wNoise(p * 8.05 + 5.3) * 0.0625; }
+		// A pattern laid on the three planes and blended by the normal: no stretching on steep faces.
+		float tTri(vec3 p, vec3 n, float s) {
+			vec3 w = pow(abs(n), vec3(4.0));
+			w /= w.x + w.y + w.z;
+			return tFbm(p.yz * s) * w.x + tFbm(p.xz * s) * w.y + tFbm(p.xy * s) * w.z;
+		}
 		#endif`;
 	const GROUND_COLOR = `
 		#ifdef TERRAIN
@@ -63369,6 +63982,38 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			float r = smoothstep(0.1, 0.6, vRock);
 			vec3 stone = rockTint * mix(0.68, 1.05, band) * (0.78 + 0.44 * grain);
 			diffuseColor.rgb = mix(diffuseColor.rgb, stone, r);
+		}
+		// Terrain materials: broad patches that break the painting's repetition, paler high ground and darker
+		// hollows, stone on every steep face (on three planes, in strata), and the planet's own fine ground —
+		// wind ripples in sand, drifts and cracks in ice, grit and clods in ash and soil. pbrH is a small
+		// height field for the lighting (normal_fragment_maps), flat far away so it never shimmers.
+		if (pbrOn > 0.5) {
+			vec3 wp = vec3(vMapXY.x, vWorldY, vMapXY.y), n = normalize(vTerrN);
+			float slope = 1.0 - n.y, near = 1.0 - smoothstep(2200.0, 4800.0, length(vViewPosition));
+			diffuseColor.rgb *= mix(0.74, 1.2, smoothstep(0.2, 0.8, tFbm(vMapXY * 0.0022)));
+			diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.06, 1.0, 0.92), smoothstep(0.55, 0.8, tFbm(vMapXY * 0.0007 + 9.0)) * 0.5);
+			diffuseColor.rgb *= mix(0.9, 1.06, smoothstep(mistBand.x, mistBand.y + 40.0, vWorldY));
+			float rockK = max(smoothstep(0.1, 0.6, vRock), smoothstep(0.3, 0.55, slope)), tri = tTri(wp, n, 0.045);
+			vec3 stone = rockTint * (0.62 + 0.55 * tri) * mix(0.75, 1.05, sin(vWorldY * 0.55 + tri * 5.0) * 0.5 + 0.5);
+			diffuseColor.rgb = mix(diffuseColor.rgb, stone, rockK * 0.85);
+			float fine;
+			if (pbrBiome < 0.5) {
+				vec2 q = vMapXY + vec2(tFbm(vMapXY * 0.02) * 30.0, tFbm(vMapXY * 0.02 + 4.0) * 12.0);
+				fine = (sin(dot(q, vec2(0.15, 0.055))) * 0.5 + 0.5) * 0.7 + tFbm(vMapXY * 0.12) * 0.3;
+				pbrRough = 0.93;
+			} else if (pbrBiome < 1.5) {
+				float crack = 1.0 - smoothstep(0.0, 0.05, abs(tFbm(vMapXY * 0.03) - 0.5));
+				fine = tFbm(vMapXY * 0.05) * 0.7 + 0.3 * (1.0 - crack);
+				diffuseColor.rgb *= 1.0 - crack * 0.18 * near;
+				pbrRough = mix(0.5, 0.28, crack);
+			} else {
+				fine = tFbm(vMapXY * 0.09) * 0.6 + smoothstep(0.7, 0.9, wNoise(vMapXY * 0.25)) * 0.4;
+				pbrRough = 0.97;
+			}
+			diffuseColor.rgb *= mix(1.0, mix(0.82, 1.1, fine), near * (1.0 - rockK));
+			pbrH = mix(fine, tri, rockK) * near;
+			pbrRough = mix(pbrRough, 0.82, rockK);
+			pbrRockK = rockK;
 		}
 		float wn = wNoise(vMapXY * 0.011) * 0.65 + wNoise(vMapXY * 0.043) * 0.35;
 		puddleMask = smoothstep(0.86, 0.97, vUpward) * smoothstep(0.86 - wetness * 0.18, 0.9 - wetness * 0.18, wn) * smoothstep(0.12, 0.45, wetness) * (1.0 - smoothstep(0.1, 0.4, vRock));
@@ -63395,9 +64040,25 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		snowColor = mix(diffuseColor.rgb * 0.65 + vec3(0.28, 0.3, 0.33), snowColor, smoothstep(0.0, 0.65, snowMask));
 		diffuseColor.rgb = mix(diffuseColor.rgb, snowColor, smoothstep(0.0, 0.35, snowMask));`;
 	const GROUND_ROUGH = `
+		#ifdef TERRAIN
+		if (pbrRough >= 0.0) roughnessFactor = pbrRough;
+		#endif
 		roughnessFactor = mix(roughnessFactor, 0.5, wetness * 0.8);
 		roughnessFactor = mix(roughnessFactor, 0.04, puddleMask);
 		roughnessFactor = mix(roughnessFactor, 0.55, snowMask);`;
+	// Stage 2: the small height field of the terrain materials bends the normal (bump mapping from the
+	// screen-space derivatives of the height), stronger on stone.
+	const GROUND_BUMP = `
+		#ifdef TERRAIN
+		if (pbrOn > 0.5) {
+			float amp = mix(6.0, 9.0, pbrRockK);
+			vec3 sp = -vViewPosition, sx = dFdx(sp), sy = dFdy(sp);
+			vec3 r1 = cross(sy, normal), r2 = cross(normal, sx);
+			float det = dot(sx, r1);
+			vec3 grad = sign(det) * (dFdx(pbrH) * amp * r1 + dFdy(pbrH) * amp * r2);
+			normal = normalize(abs(det) * normal - grad);
+		}
+		#endif`;
 	const GROUND_GLOW = `
 		totalEmissiveRadiance += skyTint * puddleMask * 0.1;
 		#ifdef TERRAIN
@@ -63434,12 +64095,13 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 					.replace("#include <defaultnormal_vertex>", "#include <defaultnormal_vertex>\nvUpward = normalize((vec4(transformedNormal, 0.0) * viewMatrix).xyz).y;"); // normalised: instancing scales the normal
 				if (terrain)
 					shader.vertexShader = shader.vertexShader
-						.replace("#include <common>", "#include <common>\nattribute float rock;\nvarying float vRock;\nvarying float vWorldY;")
-						.replace("#include <worldpos_vertex>", "#include <worldpos_vertex>\nvRock = rock;\nvWorldY = (modelMatrix * vec4(transformed, 1.0)).y;");
+						.replace("#include <common>", "#include <common>\nattribute float rock;\nvarying float vRock;\nvarying float vWorldY;\nvarying vec3 vTerrN;")
+						.replace("#include <worldpos_vertex>", "#include <worldpos_vertex>\nvRock = rock;\nvWorldY = (modelMatrix * vec4(transformed, 1.0)).y;\nvTerrN = normalize(mat3(modelMatrix) * objectNormal);");
 				shader.fragmentShader = shader.fragmentShader
 					.replace("#include <common>", "#include <common>\n" + GROUND_COMMON)
 					.replace("#include <map_fragment>", "#include <map_fragment>\n" + GROUND_COLOR)
 					.replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\n" + GROUND_ROUGH)
+					.replace("#include <normal_fragment_maps>", "#include <normal_fragment_maps>\n" + GROUND_BUMP)
 					.replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\n" + GROUND_GLOW);
 			}
 			shader.vertexShader = shader.vertexShader
@@ -63449,7 +64111,7 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			shader.fragmentShader = shader.fragmentShader
 				.replace(
 					"#include <common>",
-					"#include <common>\nvarying vec2 vMapXY;\nuniform sampler2D fogMap;\nuniform float fogOn;\nuniform float fogTime;\nuniform vec2 fogSize;\nuniform sampler2D overlayMap;\nuniform float overlayOn;\nuniform vec4 overlayFrame;\nuniform vec2 overlaySize;\n" + FOG_NOISE,
+					"#include <common>\nvarying vec2 vMapXY;\nuniform sampler2D fogMap;\nuniform float fogOn;\nuniform float fogTime;\nuniform vec2 fogSize;\nuniform sampler2D overlayMap;\nuniform float overlayLinear;\nuniform float overlayOn;\nuniform vec4 overlayFrame;\nuniform vec2 overlaySize;\n" + FOG_NOISE,
 				)
 				.replace(
 					"#include <dithering_fragment>",
@@ -63467,7 +64129,7 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 						vec2 f = ((vMapXY - overlayFrame.xy) * overlayFrame.z + overlaySize * 0.5) / overlaySize;
 						if (f.x > 0.0 && f.x < 1.0 && f.y > 0.0 && f.y < 1.0) {
 							vec4 ui = texture2D(overlayMap, vec2(f.x, 1.0 - f.y));
-							gl_FragColor.rgb = mix(gl_FragColor.rgb, ui.rgb, ui.a);
+							gl_FragColor.rgb = mix(gl_FragColor.rgb, overlayLinear > 0.5 ? pow(ui.rgb, vec3(2.2)) * 1.25 : ui.rgb, ui.a);
 						}
 					}`,
 				);
@@ -64228,7 +64890,9 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		scene.background.copy(colors.horizon).lerp(colors.zenith, 0.2);
 		scene.fog.color.copy(scene.background);
 		// The sun and its shadow box follow the camera.
-		sun.target.position.set(rig.x, 0, rig.y);
+		// The shadow box sits a little ahead of the view centre (more of the board lies beyond it than in front).
+		const ahead = rig.distance * 0.22 * Math.cos(rig.pitch);
+		sun.target.position.set(rig.x - Math.sin(rig.yaw) * ahead, 0, rig.y - Math.cos(rig.yaw) * ahead);
 		sun.position.copy(sun.target.position).addScaledVector(dir, 2500);
 		return day;
 	}
@@ -64267,7 +64931,7 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			sun2.position.copy(sun2.target.position).addScaledVector(twin, 2500);
 		}
 		sky.update({ camera, time: clock, ...skyState, aurora, haze, hazeColor: HAZE[state.kind] || HAZE.rain, cover, flash: state.flash || 0, flashColor: FLASH });
-		sunFx.update({ camera, sunDir: skyState.sunDir, sunColor: skyState.sunlight, e: skyState.e, haze, mist: groundWeather.mistLevel.value, focus: rig, span: Math.max(1600, Math.min(4200, rig.distance * 2.2)) });
+		sunFx.update({ camera, imageRays: quality.cinema && quality.atmo, sunDir: skyState.sunDir, sunColor: skyState.sunlight, e: skyState.e, haze, mist: groundWeather.mistLevel.value, focus: rig, span: Math.max(1600, Math.min(4200, rig.distance * 2.2)) });
 		sky.clouds(clock, options.cloudShadows === false ? 0 : 0.4 * (1 - haze * 0.6));
 	}
 
@@ -64283,7 +64947,7 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			camera.far = rig.distance * 5;
 			camera.updateProjectionMatrix();
 		}
-		const extent = Math.max(700, Math.min(3000, rig.distance * 1.1)),
+		const extent = Math.max(460, Math.min(3000, rig.distance * 0.9)),
 			box = sun.shadow.camera;
 		if (box.right !== extent) {
 			Object.assign(box, { left: -extent, right: extent, top: extent, bottom: -extent, far: 2500 + extent * 2 });
@@ -64295,6 +64959,7 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		const w = host.clientWidth,
 			h = host.clientHeight;
 		renderer.setSize(w, h, false);
+		post.setSize(w * renderer.getPixelRatio(), h * renderer.getPixelRatio(), postSamples);
 		renderer.domElement.style.width = w + "px";
 		renderer.domElement.style.height = h + "px";
 		camera.aspect = w / Math.max(1, h);
@@ -64336,13 +65001,13 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 	// terrain detail → scattered props, shadow-map size and render resolution; particles → weather and
 	// smoke density; switches for shadows, night lights, water, damage smoke and fire, terrain relief and
 	// lightning flashes.
-	const quality = { scatter: 1, particles: 1, lights: true, water: true, scars: true, relief: true, flashes: true };
+	const quality = { scatter: 1, particles: 1, lights: true, water: true, scars: true, relief: true, flashes: true, cinema: true, ao: true, bloom: true, samples: 4 };
 	let qualityKey = null;
 	function applyQuality(api, building = false) {
 		const o = typeof SceneFX !== "undefined" ? SceneFX.options : {},
 			level = { high: 0, medium: 1, low: 2 },
 			terrainLevel = level[o.terrain] ?? 0,
-			key = [o.terrain, o.particles, o.shadows, o.lights, o.water, o.scars, o.relief, o.flashes].join("|");
+			key = [o.terrain, o.particles, o.shadows, o.lights, o.water, o.scars, o.relief, o.flashes, o.cinema, o.ao, o.bloom, o.pbr, o.reflect, o.atmo, o.surface].join("|");
 		if (key === qualityKey) return;
 		const first = qualityKey === null,
 			reliefChanged = !first && quality.relief !== (o.relief !== false),
@@ -64356,7 +65021,20 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			scars: o.scars !== false,
 			relief: o.relief !== false,
 			flashes: o.flashes !== false,
+			// The cinematic image and its parts (the bloom switch is shared with the WebGL board).
+			cinema: o.cinema !== false,
+			ao: o.cinema !== false && o.ao !== false,
+			bloom: o.cinema !== false && o.bloom !== false,
+			samples: [4, 2, 0][terrainLevel],
+			// Water reflections (a second, half-size picture of the scene): not on the lowest terrain detail.
+			reflect: o.water !== false && o.reflect !== false && terrainLevel < 2,
+			atmo: o.cinema !== false && o.atmo !== false,
+			surface: o.surface !== false,
 		});
+		models3d.setSurface(quality.surface);
+		groundWeather.pbrOn.value = o.pbr !== false ? 1 : 0;
+		postSamples = quality.samples;
+		post.setSize(host.clientWidth * renderer.getPixelRatio(), host.clientHeight * renderer.getPixelRatio(), postSamples);
 		sun.castShadow = o.shadows !== false;
 		const size = [4096, 2048, 1024][terrainLevel];
 		if (sun.shadow.mapSize.x !== size) {
@@ -64371,6 +65049,102 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		}
 		// Relief and scatter density are built with the map: rebuild it.
 		if (game && !building && (reliefChanged || scatterChanged)) api.setGame(game);
+	}
+
+	// The cinematic frame: sky reflections (renewed twice a second at most), the ambient light lowered by what
+	// the reflections and the occlusion now give, and the grade of the planet and the hour.
+	const GRADES = {
+		dust: { light: [1.05, 1.0, 0.9], shadow: [0.94, 0.97, 1.06], saturation: 1.1 },
+		ice: { light: [0.99, 1.01, 1.05], shadow: [0.92, 0.98, 1.08], saturation: 1.02 },
+		ash: { light: [1.06, 0.97, 0.9], shadow: [0.97, 0.95, 0.99], saturation: 0.96 },
+		lumen: { light: [0.98, 1.04, 1.0], shadow: [0.9, 1.02, 1.04], saturation: 1.14 },
+		magma: { light: [1.08, 0.97, 0.88], shadow: [1.0, 0.94, 0.95], saturation: 1.08 },
+		frozenhive: { light: [1.0, 1.0, 1.05], shadow: [0.96, 0.95, 1.08], saturation: 1.0 },
+		derelict: { light: [1.04, 0.99, 0.94], shadow: [0.95, 0.97, 1.03], saturation: 0.98 },
+	};
+	const NIGHT_SHADOW = new THREE.Color(0.86, 0.94, 1.14),
+		NIGHT_LIGHT = new THREE.Color(0.97, 1.0, 1.06),
+		grade = { shadowTint: new THREE.Color(), lightTint: new THREE.Color(), exposure: 1, saturation: 1.08, contrast: 1.06, vignette: 0.28 },
+		envSky = { zenith: new THREE.Color(), horizon: new THREE.Color(), ground: new THREE.Color(), sunDir: new THREE.Vector3(), sunColor: new THREE.Color() };
+	let envClock = 0;
+	const atmo = { sunColor: new THREE.Color() };
+	function cinematic(dt, day, night) {
+		if ((envClock -= dt) <= 0 || !scene.environment) {
+			envClock = 0.5;
+			envSky.zenith.copy(skyState.zenith);
+			envSky.horizon.copy(scene.background);
+			envSky.ground.copy(hemi.groundColor).multiplyScalar(0.8);
+			envSky.sunDir.copy(sun.position).sub(sun.target.position).normalize();
+			envSky.sunColor.copy(sun.color).multiplyScalar(sun.intensity * 0.35);
+			scene.environment = post.environment(envSky);
+		}
+		scene.environmentIntensity = 0.3 + 0.5 * day;
+		hemi.intensity *= 0.72;
+		const m = RTS.MISSIONS[game?.missionId] || {},
+			g = GRADES[m.theme] || GRADES[m.biome] || GRADES.dust;
+		grade.lightTint.setRGB(...g.light).lerp(NIGHT_LIGHT, night);
+		grade.shadowTint.setRGB(...g.shadow).lerp(NIGHT_SHADOW, night);
+		grade.saturation = g.saturation * (1 - 0.18 * night);
+		grade.exposure = 1.22 + 0.35 * night;
+		overlayUniforms.overlayLinear.value = 1;
+		const haze = weatherState.haze || 0;
+		atmo.sunColor.copy(skyState.sunlight).multiplyScalar(smooth(-0.05, 0.2, skyState.e) * 1.2);
+		Object.assign(atmo, {
+			sunDir: skyState.sunDir,
+			haze: scene.fog.color,
+			base: groundWeather.mistBand.value.x,
+			// The weather has its own haze (scene fog, dust and mist layers): not added here again.
+			density: 0.0005 + groundWeather.mistLevel.value * 0.0025 * (1 - haze),
+			falloff: 1 / 80,
+			rays: 0.55 * smooth(-0.02, 0.12, skyState.e) * (1 - haze),
+		});
+		post.render(scene, camera, { ...grade, atmosphere: quality.atmo ? atmo : null, ao: quality.ao, bloom: quality.bloom, aoRadius: Math.max(18, Math.min(40, rig.distance * 0.03)), aoStrength: 1.3, aoFade: rig.distance * 2, bloomStrength: 0.3 + 0.15 * night, view: globalThis.post3dView || 0 });
+	}
+
+	// Reflections in the water (0.127): the scene seen from under the surface of the flat water nearest the
+	// view (a mirrored camera; everything below the surface clipped away), at half resolution, without the
+	// water itself and the interface; the water shader projects its points onto this picture.
+	const reflectTarget = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType }),
+		mirror = new THREE.PerspectiveCamera(),
+		reflectPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),
+		BIAS = new THREE.Matrix4().set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1),
+		drawSize = new THREE.Vector2();
+	function drawReflection() {
+		const u = fx.water.uniforms,
+			level = quality.reflect && fx.water.group.visible ? fx.water.levelNear(rig, rig.distance * 1.6) : null;
+		if (level == null) {
+			u.reflectOn.value = 0;
+			return;
+		}
+		renderer.getDrawingBufferSize(drawSize);
+		const w = Math.max(1, Math.round(drawSize.x / 2)),
+			h = Math.max(1, Math.round(drawSize.y / 2));
+		if (reflectTarget.width !== w || reflectTarget.height !== h) reflectTarget.setSize(w, h);
+		const ground = heightAt(rig.x, rig.y);
+		mirror.copy(camera);
+		mirror.position.set(camera.position.x, 2 * level - camera.position.y, camera.position.z);
+		mirror.up.set(0, 1, 0);
+		mirror.lookAt(rig.x, 2 * level - ground, rig.y);
+		mirror.updateMatrixWorld();
+		u.reflectMatrix.value.copy(BIAS).multiply(mirror.projectionMatrix).multiply(mirror.matrixWorldInverse);
+		reflectPlane.constant = -(level - 0.5);
+		const overlay = overlayUniforms.overlayOn.value,
+			shadows = renderer.shadowMap.autoUpdate;
+		overlayUniforms.overlayOn.value = 0;
+		fx.water.group.visible = false;
+		renderer.shadowMap.autoUpdate = false;
+		renderer.clippingPlanes = [reflectPlane];
+		renderer.setRenderTarget(reflectTarget);
+		renderer.clear();
+		renderer.render(scene, mirror);
+		renderer.setRenderTarget(null);
+		renderer.clippingPlanes = [];
+		renderer.shadowMap.autoUpdate = shadows;
+		fx.water.group.visible = true;
+		overlayUniforms.overlayOn.value = overlay;
+		u.reflectMap.value = reflectTarget.texture;
+		u.reflectLevel.value = level;
+		u.reflectOn.value = 1;
 	}
 
 	const raycaster = new THREE.Raycaster(),
@@ -64430,6 +65204,12 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		setGame(next) {
 			game = next;
 			models3d.setMission(game.missionId);
+			// The dust on the models in the colour of the planet's ground.
+			{
+				const m = RTS.MISSIONS[game.missionId] || {},
+					SOILS = { dust: "#9a7d58", ash: "#5a5450", ice: "#c9d3dc" };
+				models3d.setSurface(quality.surface !== false, new THREE.Color(SOILS[m.biome] || SOILS.dust));
+			}
 			sky.setTheme(RTS.MISSIONS[game.missionId]?.theme);
 			applyQuality(this, true);
 			canvasRenderer.setGame(game);
@@ -64483,6 +65263,7 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			life.update(game.time, { fog: options.fog, colors: COLORS });
 			marks.update(game, { hidden, sun: sun.position.clone().sub(sun.target.position).normalize() });
 			syncGhosts();
+			syncRallies();
 			objectives.update(game, clock, { beacons, colorOf: (team) => game.colorFor?.(team) || COLORS[team] || "#f5e27a" });
 			drawBatches();
 			let day;
@@ -64529,7 +65310,13 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			models3d.setWeather(weatherState.snowCover || 0, weatherState.wetness || 0);
 			watchList();
 			life.fadeTall(covers, dt);
-			renderer.render(scene, camera);
+			drawReflection();
+			if (quality.cinema) cinematic(dt, day, night);
+			else {
+				scene.environment = null;
+				overlayUniforms.overlayLinear.value = 0;
+				renderer.render(scene, camera);
+			}
 			lastFrame = performance.now() - started;
 		},
 		// Screen point (CSS px in the host) → map point, through the terrain.
@@ -64555,6 +65342,8 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			canvasRenderer.setBareGround?.(false);
 			resizeObserver.disconnect();
 			for (const b of batches.values()) b.mesh?.dispose();
+			post.dispose();
+			reflectTarget.dispose();
 			renderer.dispose();
 			renderer.forceContextLoss();
 			renderer.domElement.remove();
@@ -64688,12 +65477,20 @@ function createThreeGameRenderer({ gameCanvas, canvasRenderer, onContextLost }) 
 		size(overlayCanvas, Math.round(ow * OVERLAY_RES), Math.round(oh * OVERLAY_RES));
 		overlayInk = false;
 		// Mission markers of act II become light pillars: collect where the overlay draws them.
-		const beacons = [];
-		if (typeof Act2Art !== "undefined") Act2Art.onBeacon = (p, color, radius) => beacons.push({ x: p.x, y: p.y, color, radius });
+		const beacons = [],
+			labels = [];
+		if (typeof Act2Art !== "undefined") {
+			Act2Art.onBeacon = (p, color, radius) => beacons.push({ x: p.x, y: p.y, color, radius });
+			// Their captions go on the screen layer instead (sharp, upright).
+			Act2Art.onLabel = (l) => labels.push(l);
+		}
+		// So do the other captions of the overlay (artifact, hill, orbital strike, wall cost).
+		globalThis.BoardLabels = labels;
 		try {
 			canvasRenderer.drawLayer(overlayCtx, { ...v, width: ow, height: oh, dpr: OVERLAY_RES, mouse: shift(v.mouse), drag: null, objects3D: true }, ["overlay"]);
 		} finally {
-			if (typeof Act2Art !== "undefined") Act2Art.onBeacon = null;
+			if (typeof Act2Art !== "undefined") Act2Art.onBeacon = Act2Art.onLabel = null;
+			globalThis.BoardLabels = null;
 		}
 		base.setBeacons(beacons);
 		base.setPlacements(placementsOf(v));
@@ -64712,8 +65509,48 @@ function createThreeGameRenderer({ gameCanvas, canvasRenderer, onContextLost }) 
 
 		// Screen layer: the selection box corners go to where their map points are on the 3D board.
 		size(screenCanvas, Math.round(v.width * v.dpr), Math.round(v.height * v.dpr));
-		canvasRenderer.drawLayer(screenCanvas.getContext("2d"), { ...v, mouse: v.mouse && fromFlat(v.mouse), drag: v.drag && { ...v.drag, ...fromFlat(v.drag) }, weather3D: true, nativeGrains: true }, ["screen"]);
+		const screenCtx = screenCanvas.getContext("2d");
+		canvasRenderer.drawLayer(screenCtx, { ...v, mouse: v.mouse && fromFlat(v.mouse), drag: v.drag && { ...v.drag, ...fromFlat(v.drag) }, weather3D: true, nativeGrains: true }, ["screen"]);
+		drawLabels(screenCtx, labels, v);
 		canvasRenderer.drawMinimap({ ...v, viewOutline: corners });
+	}
+
+	// Captions of the campaign's mission markers on the screen: a small glass card with a lit edge in the
+	// marker's colour, over the map point (a little above the ground), skipped off screen or behind the camera.
+	function drawLabels(c, labels, v) {
+		if (!labels.length) return;
+		c.save();
+		c.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
+		c.textAlign = "center";
+		c.textBaseline = "alphabetic";
+		for (const l of labels) {
+			const p = base.mapToScreen({ x: l.x, y: l.y }, 30);
+			if (p.behind || p.x < -100 || p.y < -40 || p.x > v.width + 100 || p.y > v.height + 40) continue;
+			c.font = "600 12px Segoe UI, sans-serif";
+			const title = l.text,
+				tw = c.measureText(title).width;
+			c.font = "11px Segoe UI, sans-serif";
+			const sw = l.sub ? c.measureText(l.sub).width : 0,
+				w = Math.max(tw, sw) + 22,
+				h = l.sub ? 36 : 22,
+				x = Math.round(p.x - w / 2),
+				y = Math.round(p.y - h);
+			c.fillStyle = "rgba(6, 14, 20, 0.82)";
+			c.fillRect(x, y, w, h);
+			c.strokeStyle = "rgba(160, 220, 210, 0.22)";
+			c.lineWidth = 1;
+			c.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+			c.fillStyle = l.color;
+			c.fillRect(x, y, 3, h);
+			c.font = "600 12px Segoe UI, sans-serif";
+			c.fillText(title, p.x + 1, y + 15);
+			if (l.sub) {
+				c.font = "11px Segoe UI, sans-serif";
+				c.fillStyle = "#c9d8db";
+				c.fillText(l.sub, p.x + 1, y + 29);
+			}
+		}
+		c.restore();
 	}
 
 	return {

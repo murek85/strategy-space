@@ -1,6 +1,6 @@
 # Plan rozwoju prototypu
 
-Aktualizacja: 2026-10-07. Aktualna wersja: 0.124.
+Aktualizacja: 2026-10-07. Aktualna wersja: 0.129.5.
 
 Ten plik jest punktem wejścia do dokumentacji: opisuje bieżący stan, otwarte kierunki i historię wersji. Instrukcja gry i sterowanie: [README](../README.md).
 
@@ -23,11 +23,11 @@ Gra zawiera trzy frakcje (Wolne Kolonie, Dominium, Rój Kryształowy), osiem map
 | [Etap C — Tryby i rozmiary map](ETAP_C_TRYBY_I_MAPY.md) | Opis wdrożenia | Ukończony, wersja 0.18 |
 | [Etap E — Wsparcie i moduły](ETAP_E_WSPARCIE_I_MODULY.md) | Opis wdrożenia | Ukończony, wersja 0.32 |
 | [Scenariusze: Ekspedycja, ziarno, ustawienia](SCENARIUSZE_USTAWIENIA_I_EKSPEDYCJA.md) | Opis wdrożenia | Ukończone, wersja 0.33 |
-| [AI przeciwnika](AI_PRZECIWNIKA.md) | Opis wdrożenia i symulacje | Wdrożone w 0.34; styl frakcji 0.51; kampania 0.97–0.98, 0.102 |
+| [AI przeciwnika](AI_PRZECIWNIKA.md) | Opis wdrożenia i symulacje | Wdrożone w 0.34; styl frakcji 0.51; kampania 0.97–0.98, 0.102; mgła wojny 0.129 |
 | [Etap F](ETAP_F.md) | Opis wdrożenia (grafika, scenariusze, frakcje, kampania) | Ukończony w 0.35–0.42; wybory 0.50; wieczna noc 0.124 |
 | [Mapy tematyczne](MAPY_TEMATYCZNE.md) | Opis wdrożenia | Wdrożone, wersje 0.19–0.20 |
 | [Renderer WebGL](RENDERER_WEBGL.md) | Propozycja, prototyp, etapy 2–5, cała plansza natywnie, pomiary | Wdrożone w 0.21–0.44 (WebGL/WebGPU z trybem awaryjnym Canvas 2D) |
-| [Renderer 3D](RENDERER_3D.md) | Opis wdrożenia | Wdrożone w 0.52–0.96 (Three.js: teren, modele, światło, pogoda, niebo, przyroda, kamera) |
+| [Renderer 3D](RENDERER_3D.md) | Opis wdrożenia | Wdrożone w 0.52–0.96 (Three.js: teren, modele, światło, pogoda, niebo, przyroda, kamera); kinowy obraz 0.125, teren PBR 0.126, atmosfera i woda 0.127, detale modeli 0.128 — cztery etapy „rewolucji 3D” zrealizowane |
 | [Dźwięk i muzyka](AUDIO.md) | Opis wdrożenia | Próbki i Tone.js od 0.45; muzyka filmowa 0.103–0.105 |
 | [Gra wieloosobowa](MULTIPLAYER.md) | Opis wdrożenia | Wdrożone w 0.46–0.49; płynność gospodarza 0.123 |
 | [Kampania — oprawa](KAMPANIA_OPRAWA.md) | Opis wdrożenia | Sceny łączności, wybory, głosy, filmy, menu, pauza, interfejs gry, drzewo i panel badań, wybór rozdziału (0.99–0.122) |
@@ -44,7 +44,7 @@ Wpis nie oznacza zlecenia realizacji ani terminu.
 | Kierunek | Źródło | Status |
 |---|---|---|
 | Poziom III centrum (Twierdza) i doktryny frakcji | [Kierunki §1](KIERUNKI_ROZWOJU.md) | Propozycja, po ocenie tempa rozgrywki |
-| AI dalej: mgła wojny dla AI, budynki wsparcia, moduły i jednostki specjalne w rękach AI; strojenie dowódcy w kampanii z rozgrywek | [AI przeciwnika](AI_PRZECIWNIKA.md), [Etap E](ETAP_E_WSPARCIE_I_MODULY.md) | Propozycja |
+| AI dalej: budynki wsparcia, moduły i jednostki specjalne w rękach AI; strojenie dowódcy w kampanii z rozgrywek (mgła wojny dla AI — wdrożona w 0.129) | [AI przeciwnika](AI_PRZECIWNIKA.md), [Etap E](ETAP_E_WSPARCIE_I_MODULY.md) | Propozycja |
 | WAL-01: skały blokujące ostrzał | Archiwum poniżej | Propozycja |
 | DOW-01 dalej: patrol i rozkaz eskorty | [Pomysły](POMYSLY.md) | Propozycja |
 | Bohaterowie | [Pomysły](POMYSLY.md) | Propozycja |
@@ -209,6 +209,17 @@ Przy każdym kolejnym etapie należy uruchomić pełny zestaw, nie tylko testy u
 | 0.122 | Wybór rozdziału z podglądem zamiast mapy galaktyki — [opis](KAMPANIA_OPRAWA.md) |
 | 0.123 | Płynna gra sieciowa u gospodarza — [opis](MULTIPLAYER.md) |
 | 0.124 | Wieczna noc — [opis](ETAP_F.md) |
+| 0.125 | Kinowy obraz planszy 3D: okluzja otoczenia, poświata, tony ACES, gradacja, odbicia nieba, ostrzejsze cienie — [opis](RENDERER_3D.md) |
+| 0.126 | Teren PBR w 3D: materiały gruntu według nachylenia, wysokości i planety, skała w trzech płaszczyznach, rzeźba w świetle — [opis](RENDERER_3D.md) |
+| 0.127 | Atmosfera i woda w 3D: odbicia w jeziorach, mgła wysokościowa i perspektywa powietrzna, smugi światła słońca, jaśniejsza piana — [opis](RENDERER_3D.md) |
+| 0.127.1 | Czystsze burze w 3D: kolory pogody w obrazie HDR, delikatniejsze ziarna piasku, bez snopów słońca w gęstej burzy — [opis](RENDERER_3D.md) |
+| 0.128 | Detale modeli 3D: płyty pancerza, starte krawędzie, kurz planety, zacieki — [opis](RENDERER_3D.md) |
+| 0.129 | Mgła wojny dla dowódcy AI: własne widzenie, pamięć wywiadu, zwiad — [opis](AI_PRZECIWNIKA.md) |
+| 0.129.1 | Bez białych kresek o świcie i zmierzchu: snopy słońca zastąpione smugami w obrazie, z góry niewidoczne — [opis](RENDERER_3D.md) |
+| 0.129.2 | Ostre napisy celów kampanii w 3D: etykiety znaczników na ekranie nad celem zamiast na terenie — [opis](RENDERER_3D.md) |
+| 0.129.3 | Flaga punktu zbiórki w 3D: maszt z falującą płachtą zamiast płaskiej flagi na ziemi — [opis](RENDERER_3D.md) |
+| 0.129.4 | Wszystkie napisy nakładki w 3D na ekranie: artefakt, szczyt, uderzenie orbitalne, koszt muru — [opis](RENDERER_3D.md) |
+| 0.129.5 | Karty paska dowodzenia: efekt najechania w obrysie karty, krawędź po zaokrągleniach — [opis](KAMPANIA_OPRAWA.md) |
 
 Wersja 0.7 nie ma osobnych notatek w dokumentacji.
 

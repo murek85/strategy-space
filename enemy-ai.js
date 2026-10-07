@@ -3,7 +3,12 @@
    Three levels (easy, normal, hard) differ in income, reaction time, build order, army composition and tactics.
    Campaign missions keep their scripted waves, except the chapters of campaign-ai.js; a scenario can still choose the classic free waves. All values are tunable below.
    On top of the level, each faction has its own style (AI_STYLES): the Dominium builds towers and attacks rarely but hard,
-   the Colonies harass workers and take relays; the Swarm keeps the level's plan. */
+   the Colonies harass workers and take relays; the Swarm keeps the level's plan.
+   Fog of war for the commanders (0.129, RTS.AI_FOG): each one sees only what its units, buildings and relays see,
+   and decides by what it has learnt (aiVision, aiLearn): enemy buildings once seen are remembered until it sees
+   them gone, the composition of the enemy army as last seen (slowly forgotten), workers for a while. At the start
+   it knows only where the enemy's starting base stands (as start positions are known in classic RTS games);
+   expansions, towers and armies have to be found — a fast unit scouts the places it has not seen for longest. */
 (function (root) {
 	function install(RTS) {
 		if (RTS.enemyAiInstalled) return;
@@ -168,6 +173,14 @@
 			surplusTurrets: 2,
 		});
 
+		// Fog of war for the commanders: on; vision refreshed every `refresh` s; the remembered enemy army fades by
+		// `armyDecay` at each refresh; workers remembered `workerMemory` s; a scout every `scoutEvery` s (easy,
+		// normal, hard).
+		const FOG = (RTS.AI_FOG = { on: true, refresh: 0.5, armyDecay: 0.985, workerMemory: 90, scoutEvery: [160, 100, 70], scoutTime: 40 });
+		const CELL = RTS.CELL || 40,
+			sightOf = (e) => TYPES[e.type].sight || (e.type === "hq" ? 370 : e.type === "worker" ? 210 : 300),
+			building = (e) => !TYPES[e.type].speed && !["wall", "gate"].includes(e.type);
+
 		const old = {};
 		for (const k of ["configureSkirmish", "tick", "serialize", "damage"]) old[k] = Game.prototype[k];
 		const baseFromSave = Game.fromSave;
@@ -188,8 +201,114 @@
 				return [...teams].filter((t) => !this.allied(team, t));
 			},
 			aiFoeHq(team, from) {
-				const foes = this.aiFoes(team);
+				const foes = this.aiFoes(team),
+					I = this.aiIntel(team);
+				// Under fog: the enemy command centres it knows of.
+				if (I) return this.aiKnown(team).filter((s) => s.type === "hq").sort((a, b) => dist(a, from) - dist(b, from))[0] || null;
 				return this.entities.filter((e) => e.type === "hq" && e.hp > 0 && foes.includes(e.team)).sort((a, b) => dist(a, from) - dist(b, from))[0] || null;
+			},
+			// What a commander has learnt (null without fog or before it starts).
+			aiIntel(team) {
+				return FOG.on && this.enemyAi?.teams?.[team]?.intel ? this.enemyAi.teams[team].intel : null;
+			},
+			// Enemy buildings it knows of: { id, x, y, type, team } (last seen place).
+			aiKnown(team) {
+				const I = this.aiIntel(team),
+					foes = this.aiFoes(team);
+				if (!I) return this.entities.filter((e) => e.hp > 0 && foes.includes(e.team) && building(e)).map((e) => ({ id: e.id, x: e.x, y: e.y, type: e.type, team: e.team }));
+				return Object.entries(I.structures)
+					.filter(([, s]) => foes.includes(s.team))
+					.map(([id, s]) => ({ id: Number(id), ...s }));
+			},
+			// The side's sight: a grid of the cells its units, buildings and relays see now, and when each cell
+			// was last seen. Not saved (rebuilt after loading).
+			aiVision(team, force = false) {
+				const cols = Math.ceil(this.W / CELL),
+					rows = Math.ceil(this.H / CELL),
+					cache = (this._aiVision ||= {});
+				let V = cache[team];
+				if (!V || V.cols !== cols || V.rows !== rows) V = cache[team] = { cols, rows, grid: new Uint8Array(cols * rows), seen: new Float32Array(cols * rows).fill(-1e9), at: -1e9 };
+				if (!force && this.time - V.at < FOG.refresh) return V;
+				V.at = this.time;
+				V.grid.fill(0);
+				const mark = (x, y, r) => {
+					const x0 = Math.max(0, Math.floor((x - r) / CELL)),
+						x1 = Math.min(cols - 1, Math.floor((x + r) / CELL)),
+						y0 = Math.max(0, Math.floor((y - r) / CELL)),
+						y1 = Math.min(rows - 1, Math.floor((y + r) / CELL));
+					for (let j = y0; j <= y1; j++)
+						for (let i = x0; i <= x1; i++)
+							if (Math.hypot((i + 0.5) * CELL - x, (j + 0.5) * CELL - y) < r) {
+								V.grid[j * cols + i] = 1;
+								V.seen[j * cols + i] = this.time;
+							}
+				};
+				for (const e of this.entities) if (e.hp > 0 && this.allied(team, e.team)) mark(e.x, e.y, sightOf(e));
+				const side = this.sideLeader ? this.sideLeader(team) : team;
+				for (const n of this.nodes) if (n.owner === side) mark(n.x, n.y, 240);
+				this.aiLearn(team, V);
+				return V;
+			},
+			aiCell(V, x, y) {
+				return Math.max(0, Math.min(V.rows - 1, Math.floor(y / CELL))) * V.cols + Math.max(0, Math.min(V.cols - 1, Math.floor(x / CELL)));
+			},
+			// Whether the commander of a team sees a point now (always without fog).
+			aiSees(team, x, y) {
+				if (!FOG.on || !this.enemyAi?.teams?.[team]) return true;
+				const V = this.aiVision(team);
+				return !!V.grid[this.aiCell(V, x, y)];
+			},
+			// What it sees goes into its memory: buildings (and which of the remembered ones are gone), the enemy
+			// army by type (the larger of what it sees now and what it remembers, fading), workers.
+			aiLearn(team, V) {
+				const T = this.enemyAi?.teams?.[team];
+				if (!T) return;
+				const I = (T.intel ||= { structures: {}, army: {}, workers: [] }),
+					foes = this.aiFoes(team),
+					now = {},
+					sees = (x, y) => V.grid[this.aiCell(V, x, y)];
+				for (const e of this.entities) {
+					if (e.hp <= 0 || !foes.includes(e.team) || !sees(e.x, e.y)) continue;
+					if (building(e)) I.structures[e.id] = { x: Math.round(e.x), y: Math.round(e.y), type: e.type, team: e.team };
+					else if (e.type === "worker") I.workers.push({ x: Math.round(e.x), y: Math.round(e.y), t: this.time });
+					else if (armed(e)) now[e.type] = (now[e.type] || 0) + 1;
+				}
+				for (const [id, s] of Object.entries(I.structures))
+					if (sees(s.x, s.y)) {
+						const e = this.get(Number(id));
+						if (!e || e.hp <= 0) delete I.structures[id];
+					}
+				for (const type of new Set([...Object.keys(I.army), ...Object.keys(now)])) {
+					const n = Math.max((I.army[type] || 0) * FOG.armyDecay, now[type] || 0);
+					if (n < 0.3) delete I.army[type];
+					else I.army[type] = Math.round(n * 100) / 100;
+				}
+				I.workers = I.workers.filter((w) => this.time - w.t < FOG.workerMemory).slice(-40);
+			},
+			// Scouting: now and then the fastest free unit goes to look at the place it has not seen for longest
+			// (the enemy's known buildings, deposits, relays), and comes back after a while.
+			aiScout(T, L, army) {
+				if (!FOG.on) return;
+				const every = FOG.scoutEvery[L.counter >= 1 ? 2 : L.counter > 0 ? 1 : 0],
+					hq = this.hq(T.team);
+				T.scoutAt ??= this.time + every * 0.5;
+				for (const e of army)
+					if (e.aiRole === "scout" && (this.time > (e.scoutUntil || 0) || (!e.order && !e.target))) {
+						e.aiRole = "defend";
+						this.aiGoTo(e, this.aiRallySpot(T, e), "move");
+					}
+				if (this.time < T.scoutAt || !hq) return;
+				T.scoutAt = this.time + every;
+				const V = this.aiVision(T.team),
+					places = [...this.aiKnown(T.team), ...this.ores, ...this.nodes].filter((p) => dist(p, hq) > 700);
+				const spot = places.sort((a, b) => V.seen[this.aiCell(V, a.x, a.y)] - V.seen[this.aiCell(V, b.x, b.y)])[0];
+				const scout = army
+					.filter((e) => (e.aiRole === "defend" || !e.aiRole) && !e.target)
+					.sort((a, b) => (TYPES[b.type].flying ? 1 : 0) - (TYPES[a.type].flying ? 1 : 0) || TYPES[b.type].speed - TYPES[a.type].speed)[0];
+				if (!spot || !scout) return;
+				scout.aiRole = "scout";
+				scout.scoutUntil = this.time + FOG.scoutTime;
+				this.aiGoTo(scout, { x: spot.x, y: spot.y }, "move");
 			},
 			aiActive() {
 				return !!this.enemyAi && !!this.scenario && this.scenario.enemy !== "waves" && (!MISSIONS[this.missionId]?.campaign || MISSIONS[this.missionId].act === 3);
@@ -287,6 +406,13 @@
 						w.modeTagged = true;
 					}
 				}
+				// Under fog it knows the enemy's starting base (start positions are known), nothing else.
+				if (FOG.on)
+					for (const T of Object.values(this.enemyAi.teams)) {
+						const foes = this.aiFoes(T.team);
+						T.intel = { structures: {}, army: {}, workers: [] };
+						for (const e of this.entities) if (e.hp > 0 && foes.includes(e.team) && building(e)) T.intel.structures[e.id] = { x: Math.round(e.x), y: Math.round(e.y), type: e.type, team: e.team };
+					}
 				this.nextWave = this.aiNextAttack();
 			},
 			aiNextAttack() {
@@ -570,20 +696,26 @@
 				if (!uplink || this.strikeRequirement(uplink.id)) return;
 				const foes = this.aiFoes(T.team),
 					R = RTS.FACTION_FX.strike.radius * 0.8,
-					units = this.entities.filter((e) => foes.includes(e.team) && armed(e));
+					units = this.entities.filter((e) => foes.includes(e.team) && armed(e) && this.aiSees(T.team, e.x, e.y));
 				let best = null;
 				for (const u of units) {
 					const group = units.filter((o) => dist(o, u) < R);
 					if (group.length >= 4 && (!best || group.length > best.n)) best = { ...centre(group), n: group.length };
 				}
 				if (!best && L.counter >= 1) {
-					const b = this.entities.filter((e) => foes.includes(e.team) && e.hp > 0 && !TYPES[e.type].speed && e.type !== "wall").sort((a, b) => (b.type === "turret") - (a.type === "turret") || b.hp - a.hp)[0];
+					const b = this.aiKnown(T.team).sort((a, b) => (b.type === "turret") - (a.type === "turret") || (TYPES[b.type].hp || 0) - (TYPES[a.type].hp || 0))[0];
 					if (b) best = { x: b.x, y: b.y };
 				}
 				if (best) this.orbitalStrike(uplink.id, best.x, best.y);
 			},
 			aiPlayerArmy(team = 1) {
-				const foes = this.aiFoes(team);
+				const foes = this.aiFoes(team),
+					I = this.aiIntel(team);
+				// Under fog: the army as it last saw it (types × remembered counts).
+				if (I) {
+					this.aiVision(team);
+					return Object.entries(I.army).flatMap(([type, n]) => Array.from({ length: Math.round(n) }, () => ({ type })));
+				}
 				return this.entities.filter((e) => foes.includes(e.team) && armed(e) && e.type !== "worker");
 			},
 			// Weighted choice; normal and hard shift the mix against the player's army.
@@ -624,7 +756,7 @@
 			},
 			aiMilitary(T, L, hq, army, workers) {
 				const own = this.entities.filter((e) => e.team === T.team && e.hp > 0 && !TYPES[e.type].speed),
-					hostile = this.entities.filter((e) => armed(e) && !this.allied(T.team, e.team) && e.team !== 2);
+					hostile = this.entities.filter((e) => armed(e) && !this.allied(T.team, e.team) && e.team !== 2 && this.aiSees(T.team, e.x, e.y));
 				// Threats to the base and its buildings.
 				const threats = hostile.filter((e) => dist(e, hq) < L.defendRadius || own.some((b) => dist(b, e) < TYPES[b.type].radius + 280));
 				const threat = total(threats);
@@ -659,6 +791,7 @@
 						if (!e.target && dist(e, spot) > 120) this.aiGoTo(e, spot, "attackMove");
 					}
 				this.aiRelays(T, L, army);
+				this.aiScout(T, L, army);
 				this.aiAttack(T, L, hq, army, attack);
 			},
 			// Relay squads: a share of the army takes and holds the nearest relays not owned by the side.
@@ -702,14 +835,23 @@
 					const n = this.nodes.filter((n) => n.owner !== side).sort((a, b) => (held(a) ? 0 : 1) - (held(b) ? 0 : 1) || dist(a, from) - dist(b, from))[0];
 					if (n) return { x: n.x, y: n.y, name: "przekaźnik " + n.name };
 				}
-				const structures = this.entities.filter((e) => foes.includes(e.team) && e.hp > 0 && !TYPES[e.type].speed && !["wall", "gate"].includes(e.type));
+				const fog = !!this.aiIntel(T.team),
+					structures = this.aiKnown(T.team);
 				if (!structures.length) {
-					const u = this.entities.filter((e) => foes.includes(e.team) && mobile(e)).sort((a, b) => dist(a, from) - dist(b, from))[0];
-					return u ? { x: u.x, y: u.y, name: "oddziały wroga" } : null;
+					const u = this.entities.filter((e) => foes.includes(e.team) && mobile(e) && this.aiSees(T.team, e.x, e.y)).sort((a, b) => dist(a, from) - dist(b, from))[0];
+					if (u) return { x: u.x, y: u.y, name: "oddziały wroga" };
+					if (!fog) return null;
+					// Nothing known: the deposit or relay it has not seen for longest — a search.
+					const V = this.aiVision(T.team),
+						spot = [...this.ores, ...this.nodes].sort((a, b) => V.seen[this.aiCell(V, a.x, a.y)] - V.seen[this.aiCell(V, b.x, b.y)])[0];
+					return spot ? { x: spot.x, y: spot.y, name: "rozpoznanie" } : null;
 				}
 				let target = this.aiFoeHq(T.team, hq || from) || structures[0];
 				if (L.counter >= 1) {
-					const defence = (b) => total(this.entities.filter((e) => e.team === b.team && e.hp > 0 && TYPES[e.type].damage > 0 && e.type !== "worker" && dist(e, b) < 450));
+					// Under fog the defence of a building is the towers it knows of around it.
+					const defence = fog
+						? (b) => structures.filter((s) => s.type === "turret" && dist(s, b) < 450).length * 250
+						: (b) => total(this.entities.filter((e) => e.team === b.team && e.hp > 0 && TYPES[e.type].damage > 0 && e.type !== "worker" && dist(e, b) < 450));
 					target = structures.map((b) => ({ b, score: defence(b) / 250 + dist(b, hq) / 900 + (b.type === "hq" ? 0.8 : 0) })).sort((a, b) => a.score - b.score)[0].b;
 				} else if (L.counter > 0) target = structures.sort((a, b) => dist(a, hq) - dist(b, hq))[0];
 				return { x: target.x, y: target.y, id: target.id, name: TYPES[target.type].name };
@@ -776,7 +918,8 @@
 							return;
 						}
 					}
-					const gone = A.target.id != null ? !this.get(A.target.id) : attack.every((e) => dist(e, A.target) < 160 && !e.target);
+					const alive = (id) => (this.get(id)?.hp || 0) > 0,
+						gone = A.target.id != null ? (this.aiIntel(T.team) ? this.aiSees(T.team, A.target.x, A.target.y) && !alive(A.target.id) : !this.get(A.target.id)) : attack.every((e) => dist(e, A.target) < 160 && !e.target);
 					if (gone) A.target = this.aiTarget(T, L, centre(attack)) || A.target;
 					for (const e of attack) if (!e.target) this.aiGoTo(e, A.target, "attackMove");
 				}
@@ -784,7 +927,8 @@
 				if (L.raids && this.time >= T.raidAt) {
 					T.raidAt = this.time + (L.raidEvery ?? AI.raidEvery);
 					const foes = this.aiFoes(T.team),
-						miners = this.entities.filter((e) => foes.includes(e.team) && e.type === "worker" && e.hp > 0 && (e.order?.kind === "gather" || e.aiTask?.kind === "mine"));
+						I = this.aiIntel(T.team),
+						miners = I ? [...I.workers] : this.entities.filter((e) => foes.includes(e.team) && e.type === "worker" && e.hp > 0 && (e.order?.kind === "gather" || e.aiTask?.kind === "mine"));
 					const home = this.aiFoeHq(T.team, hq);
 					const spot = miners.sort((a, b) => (home ? dist(b, home) - dist(a, home) : 0))[0];
 					const raiders = army
@@ -846,6 +990,12 @@
 				throw Error("Uszkodzony zapis przeciwnika");
 			g.enemyAi = JSON.parse(JSON.stringify(s));
 			for (const T of Object.values(g.enemyAi.teams)) {
+				if (FOG.on && (!T.intel || typeof T.intel !== "object" || !T.intel.structures)) {
+					const foes = g.aiFoes(T.team);
+					T.intel = { structures: {}, army: {}, workers: [] };
+					for (const e of g.entities) if (e.hp > 0 && e.type === "hq" && foes.includes(e.team)) T.intel.structures[e.id] = { x: Math.round(e.x), y: Math.round(e.y), type: e.type, team: e.team };
+				}
+				T.intel && ((T.intel.army ||= {}), (T.intel.workers ||= []));
 				T.upgrades ||= {};
 				T.lastThreat ??= -99;
 				T.raidAt ??= AI.raidFrom;

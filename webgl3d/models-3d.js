@@ -552,6 +552,8 @@ export function createModels3D(THREE) {
 		setMission: (id) => (mission = id),
 		// Weather on the models: snow cover and wetness, 0…1 (the renderer, from weather-3d.js).
 		setWeather: (snow, wet) => bake.setWeather(snow, wet),
+		// Surface detail (plates, worn edges, dust) on or off, and the planet's dust colour (THREE.Color).
+		setSurface: (on, soil) => bake.setSurface(on, soil),
 		setNight,
 		// Scenery models: scenery("animal", kind, biome), ("bird"), ("fish"), ("island", theme, size, seed),
 		// ("wreck", size, seed); same { root, update(e, info) } shape as the entity models.

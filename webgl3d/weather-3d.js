@@ -52,7 +52,11 @@ export function createWeather3D(THREE, { world, heightAt }) {
 		const material = new THREE.ShaderMaterial({
 			uniforms: { ...shared, ...uniforms },
 			vertexShader: COMMON + vertex,
-			fragmentShader: fragment,
+			// The colours written in these shaders are sRGB: made linear and passed through the output
+			// conversion, so they look the same on the plain screen and in the high-range frame of the
+			// cinematic image (where raw values came out pale and the grains as white lines). The mist takes
+			// its colour from the sky (already linear).
+			fragmentShader: fragment.includes("mistColor") ? fragment : fragment.replace(/\}\s*$/, "\ngl_FragColor.rgb = pow(max(gl_FragColor.rgb, 0.0), vec3(2.2));\n#include <colorspace_fragment>\n}"),
 			transparent: true,
 			depthWrite: false,
 			blending,
@@ -221,13 +225,16 @@ export function createWeather3D(THREE, { world, heightAt }) {
 			vec3 c = vec3(p.x, groundAt(p) + 1.5 + seed.z * seed.z * 34.0 + sin(hop * 3.14159) * 6.0, p.y);
 			vec3 along = normalize(vec3(dir.x, 0.0, dir.y));
 			vec3 side = normalize(cross(along, normalize(cameraPosition - c)));
-			vec3 pos = c + along * (position.y - 0.5) * (10.0 + 10.0 * s) + side * position.x * 0.55;
+			vec3 pos = c + along * (position.y - 0.5) * (7.0 + 6.0 * s) + side * position.x * 1.1;
 			vUv = uv;
-			vAlpha = intensity * edgeFade(p) * smoothstep(60.0, 200.0, distance(cameraPosition, c));
+			// Only near the camera: further away the grains are thinner than a pixel and flicker as dashed
+			// white lines; there the dust curtains and the haze carry the storm.
+			float dist = distance(cameraPosition, c);
+			vAlpha = intensity * edgeFade(p) * smoothstep(60.0, 200.0, dist) * (1.0 - smoothstep(500.0, 950.0, dist));
 			gl_Position = projectionMatrix * viewMatrix * vec4(pos, 1.0);
 		}`,
 		`varying float vAlpha; varying vec2 vUv;
-		void main() { float a = vAlpha * (1.0 - abs(vUv.x - 0.5) * 2.0) * sin(vUv.y * 3.14159); gl_FragColor = vec4(0.86, 0.72, 0.5, a * 0.38); }`,
+		void main() { float a = vAlpha * (1.0 - abs(vUv.x - 0.5) * 2.0) * sin(vUv.y * 3.14159); gl_FragColor = vec4(0.86, 0.72, 0.5, a * 0.2); }`,
 	);
 	// Dust: rolling billows of fine sand along the ground — wide sheets of churning noise drifting with
 	// the wind, denser and darker low down, lighter on top, thinning at their edges.

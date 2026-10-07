@@ -11,7 +11,7 @@ const fs = require("fs"),
 const ROOT = path.join(__dirname, ".."),
 	OUT = path.join(ROOT, "webgl3d", "bundle-3d.js"),
 	// Dependency order: each module only uses the ones before it.
-	MODULES = ["sky-3d.js", "night-lights-3d.js", "models-detail-3d.js", "nature-detail-3d.js", "props-detail-3d.js", "swarm-detail-3d.js", "act3-detail-3d.js", "act2-detail-3d.js", "act1-detail-3d.js", "models-3d.js", "weather-3d.js", "scene-fx-3d.js", "scene-life-3d.js", "scatter-3d.js", "objectives-3d.js", "marks-3d.js", "relief-3d.js", "sun-fx-3d.js", "three-renderer.js", "three-game-renderer.js"];
+	MODULES = ["sky-3d.js", "post-3d.js", "night-lights-3d.js", "models-detail-3d.js", "nature-detail-3d.js", "props-detail-3d.js", "swarm-detail-3d.js", "act3-detail-3d.js", "act2-detail-3d.js", "act1-detail-3d.js", "models-3d.js", "weather-3d.js", "scene-fx-3d.js", "scene-life-3d.js", "scatter-3d.js", "objectives-3d.js", "marks-3d.js", "relief-3d.js", "sun-fx-3d.js", "three-renderer.js", "three-game-renderer.js"];
 
 function threeAsObject(source) {
 	const at = source.lastIndexOf("\nexport {") + 1,

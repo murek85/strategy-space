@@ -926,10 +926,14 @@ function createCanvasRenderer(canvas, mini) {
 			ctx.arc(a.x, a.y - 6, 40, -Math.PI / 2, -Math.PI / 2 + (Math.PI * 2 * a.progress) / RTS.EXPEDITION.pickup);
 			ctx.stroke();
 		}
-		ctx.fillStyle = "#f5e27a";
-		ctx.font = "600 11px Segoe UI, sans-serif";
-		ctx.textAlign = "center";
-		ctx.fillText(carried ? "ARTEFAKT" : "ARTEFAKT OBCYCH", a.x, y - 30);
+		// The 3D board draws captions on the screen, sharp (globalThis.BoardLabels, webgl3d/three-game-renderer.js).
+		if (globalThis.BoardLabels) globalThis.BoardLabels.push({ x: a.x, y: y - 30, text: carried ? "ARTEFAKT" : "ARTEFAKT OBCYCH", color: "#f5e27a" });
+		else {
+			ctx.fillStyle = "#f5e27a";
+			ctx.font = "600 11px Segoe UI, sans-serif";
+			ctx.textAlign = "center";
+			ctx.fillText(carried ? "ARTEFAKT" : "ARTEFAKT OBCYCH", a.x, y - 30);
+		}
 		ctx.restore();
 	}
 	// King of the hill: the central relay is marked through the fog, with the holder's colour and score.
@@ -957,10 +961,13 @@ function createCanvasRenderer(canvas, mini) {
 			ctx.stroke();
 			ctx.globalAlpha = 1;
 		}
-		ctx.fillStyle = color;
-		ctx.font = "700 13px Segoe UI, sans-serif";
-		ctx.textAlign = "center";
-		ctx.fillText("♛ SZCZYT", hill.x, hill.y - 92);
+		if (globalThis.BoardLabels) globalThis.BoardLabels.push({ x: hill.x, y: hill.y - 92, text: "♛ SZCZYT", color });
+		else {
+			ctx.fillStyle = color;
+			ctx.font = "700 13px Segoe UI, sans-serif";
+			ctx.textAlign = "center";
+			ctx.fillText("♛ SZCZYT", hill.x, hill.y - 92);
+		}
 		ctx.restore();
 	}
 	function drawOverlay() {
@@ -983,21 +990,24 @@ function createCanvasRenderer(canvas, mini) {
 				ctx.stroke();
 				ctx.setLineDash([]);
 				ctx.translate(b.rally.x, b.rally.y);
+				// The 3D board stands a real flag there (webgl3d/three-renderer.js); only the ring is painted.
+				if (!objects3D) {
+					ctx.beginPath();
+					ctx.moveTo(0, 8);
+					ctx.lineTo(0, -34);
+					ctx.stroke();
+					polygon(
+						ctx,
+						[
+							[0, -34],
+							[26, -27],
+							[0, -18],
+						],
+						"#e4c587",
+					);
+				}
 				ctx.beginPath();
-				ctx.moveTo(0, 8);
-				ctx.lineTo(0, -34);
-				ctx.stroke();
-				polygon(
-					ctx,
-					[
-						[0, -34],
-						[26, -27],
-						[0, -18],
-					],
-					"#e4c587",
-				);
-				ctx.beginPath();
-				ctx.ellipse(0, 8, 16, 8, 0, 0, Math.PI * 2);
+				ctx.ellipse(0, objects3D ? 0 : 8, 16, objects3D ? 16 : 8, 0, 0, Math.PI * 2);
 				ctx.stroke();
 				ctx.restore();
 			}
@@ -1045,16 +1055,13 @@ function createCanvasRenderer(canvas, mini) {
 						: "#ee847888";
 					ctx.fillRect(point.x - 22, point.y - 22, 44, 44);
 				}
-				ctx.fillStyle = "#f1e0b1";
-				ctx.font = "15px Segoe UI";
-				ctx.fillText(
-					points.length +
-						" segmentów · " +
-						points.length * game.cost("wall") +
-						" metalu",
-					p.x + 28,
-					p.y,
-				);
+				const wallText = points.length + " segmentów · " + points.length * game.cost("wall") + " metalu";
+				if (globalThis.BoardLabels) globalThis.BoardLabels.push({ x: p.x + 110, y: p.y, text: wallText, color: "#f1e0b1" });
+				else {
+					ctx.fillStyle = "#f1e0b1";
+					ctx.font = "15px Segoe UI";
+					ctx.fillText(wallText, p.x + 28, p.y);
+				}
 			}
 			const valid = game.canBuild(p.x, p.y, building);
 			ctx.fillStyle = valid ? "#aee5c755" : "#ef817855";

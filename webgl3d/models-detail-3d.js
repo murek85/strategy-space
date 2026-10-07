@@ -1807,6 +1807,46 @@ export function windowCurve(n) {
    a fresh model through a range of states (moving, aiming, firing, building, working, carrying, open)
    and comparing every part's transform, visibility and material; the merged geometries are cached per
    look, so every entity of one look shares them (and the renderer's batches). */
+// Noise for the surface detail of the paint (hash, 3D value noise).
+const SURFACE_COMMON = `
+float mdHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float mdHash3(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+float mdNoise3(vec3 p) {
+	vec3 i = floor(p), f = fract(p);
+	f = f * f * (3.0 - 2.0 * f);
+	return mix(mix(mix(mdHash3(i), mdHash3(i + vec3(1, 0, 0)), f.x), mix(mdHash3(i + vec3(0, 1, 0)), mdHash3(i + vec3(1, 1, 0)), f.x), f.y),
+		mix(mix(mdHash3(i + vec3(0, 0, 1)), mdHash3(i + vec3(1, 0, 1)), f.x), mix(mdHash3(i + vec3(0, 1, 1)), mdHash3(i + vec3(1, 1, 1)), f.x), f.y), f.z);
+}`;
+const SURFACE = `
+float mdWear = 0.0, mdLine = 0.0, mdGrime = 0.0;
+// Surface detail (0.128): armour plates with seams and slightly different shades, paint chipped off the
+// bevelled edges down to bare metal, dust and dirt of the planet low on the model and streaks running down
+// the walls. In the model's own frame (it does not slide when the model moves), faded with the distance.
+if (surfaceOn > 0.5 && vFinish.z < 0.5 && dot(vGlow, vec3(1.0)) < 0.02) {
+	vec3 n = normalize(vObjN), an = abs(n);
+	float near = 1.0 - smoothstep(1000.0, 2600.0, length(vViewPosition));
+	vec2 uv = an.x >= an.y && an.x >= an.z ? vObjPos.zy : an.y >= an.z ? vObjPos.xz : vObjPos.xy;
+	vec2 cell = uv / vec2(9.0, 6.0), f = 0.5 - abs(fract(cell) - 0.5), fw = fwidth(cell);
+	float seam = max(1.0 - smoothstep(fw.x, fw.x * 2.0 + 0.01, f.x), 1.0 - smoothstep(fw.y, fw.y * 2.0 + 0.01, f.y));
+	float metal = smoothstep(0.12, 0.3, vFinish.y);
+	mdLine = seam * metal * near * (1.0 - smoothstep(0.2, 0.45, max(fw.x, fw.y)));
+	// Plates of slightly different shades: they still read when the seams are too fine to see.
+	float shade = (mdHash(floor(cell) + floor(n.xy * 2.0 + n.z * 7.0)) - 0.5) * 0.2 * metal * near;
+	// Bevels (faces between the main ones) wear first; the paint chips in patches.
+	float edge = smoothstep(0.96, 0.8, max(an.x, max(an.y, an.z)));
+	float chips = smoothstep(0.3, 0.55, mdNoise3(vObjPos * 0.45));
+	mdWear = edge * chips * near;
+	// Dust low on the model, streaks of dirt down its walls.
+	float low = smoothstep(9.0, 0.0, vObjPos.y) * (0.6 + 0.4 * mdNoise3(vObjPos * 0.25));
+	float streak = smoothstep(0.55, 0.8, mdNoise3(vec3(uv.x * 0.9, vObjPos.y * 0.05, n.x + n.z))) * (1.0 - an.y) * smoothstep(1.0, 8.0, vObjPos.y) * 0.75;
+	// Dust settled on roofs and upper faces, in patches.
+	float settled = smoothstep(0.75, 0.95, n.y) * smoothstep(0.35, 0.7, mdNoise3(vObjPos * 0.12)) * 0.55;
+	mdGrime = clamp(low + streak + settled, 0.0, 1.0) * near;
+	diffuseColor.rgb *= (1.0 + shade) * (1.0 - 0.38 * mdLine);
+	diffuseColor.rgb = mix(diffuseColor.rgb, soilColor, mdGrime * 0.62);
+	diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.62, 0.62, 0.6), mdWear * 0.8);
+}
+`;
 export function createBaker(THREE) {
 	const plans = new Map(),
 		merged = new Map();
@@ -1889,7 +1929,10 @@ export function createBaker(THREE) {
 		PAINT = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true });
 	// Weather on the models: snow settling on upward faces (roofs, hulls, turrets), a sheen when wet.
 	const snowCover = { value: 0 },
-		wetness = { value: 0 };
+		wetness = { value: 0 },
+		// Surface detail of the models (stage 3 of the 3D graphics): on/off and the colour of the planet's dust.
+		surfaceOn = { value: 1 },
+		soilColor = { value: new THREE.Color(0.55, 0.45, 0.33) };
 	PAINT.onBeforeCompile = (shader) => {
 		cloudShade(THREE, shader); // drifting cloud shadows (webgl3d/sky-3d.js)
 		nightLightShade(shader); // headlights and floodlights (webgl3d/night-lights-3d.js)
@@ -1897,21 +1940,23 @@ export function createBaker(THREE) {
 		shader.uniforms.windowScale = windowLight;
 		shader.uniforms.snowCover = snowCover;
 		shader.uniforms.wetness = wetness;
+		shader.uniforms.surfaceOn = surfaceOn;
+		shader.uniforms.soilColor = soilColor;
 		shader.vertexShader = shader.vertexShader
-			.replace("#include <common>", "#include <common>\nattribute vec3 finish;\nattribute vec3 glow;\nvarying vec3 vFinish;\nvarying vec3 vGlow;\nvarying float vUp;")
-			.replace("#include <begin_vertex>", "#include <begin_vertex>\nvFinish = finish;\nvGlow = glow;")
+			.replace("#include <common>", "#include <common>\nattribute vec3 finish;\nattribute vec3 glow;\nvarying vec3 vFinish;\nvarying vec3 vGlow;\nvarying float vUp;\nvarying vec3 vObjPos;\nvarying vec3 vObjN;")
+			.replace("#include <begin_vertex>", "#include <begin_vertex>\nvFinish = finish;\nvGlow = glow;\nvObjPos = position;\nvObjN = normal;")
 			.replace(
 				"#include <defaultnormal_vertex>",
 				"#include <defaultnormal_vertex>\n#ifdef USE_INSTANCING\nvUp = normalize(mat3(modelMatrix) * mat3(instanceMatrix) * objectNormal).y;\n#else\nvUp = normalize(mat3(modelMatrix) * objectNormal).y;\n#endif",
 			);
 		shader.fragmentShader = shader.fragmentShader
-			.replace("#include <common>", "#include <common>\nuniform float glowScale;\nuniform float windowScale;\nuniform float snowCover;\nuniform float wetness;\nvarying vec3 vFinish;\nvarying vec3 vGlow;\nvarying float vUp;")
-			.replace("#include <color_fragment>", "#include <color_fragment>\nfloat modelSnow = snowCover * smoothstep(0.6, 0.9, vUp) * step(0.5, 1.0 - vFinish.z);\ndiffuseColor.rgb = mix(diffuseColor.rgb * (1.0 - 0.25 * wetness), vec3(0.9, 0.94, 0.98), min(1.0, modelSnow * 1.3));")
-			.replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\nroughnessFactor = mix(vFinish.x, 0.6, min(1.0, modelSnow * 1.3)) * (1.0 - 0.45 * wetness);")
-			.replace("#include <metalnessmap_fragment>", "#include <metalnessmap_fragment>\nmetalnessFactor = vFinish.y;")
+			.replace("#include <common>", "#include <common>\nuniform float glowScale;\nuniform float windowScale;\nuniform float snowCover;\nuniform float wetness;\nuniform float surfaceOn;\nuniform vec3 soilColor;\nvarying vec3 vFinish;\nvarying vec3 vGlow;\nvarying float vUp;\nvarying vec3 vObjPos;\nvarying vec3 vObjN;\n" + SURFACE_COMMON)
+			.replace("#include <color_fragment>", "#include <color_fragment>\n" + SURFACE + "\nfloat modelSnow = snowCover * smoothstep(0.6, 0.9, vUp) * step(0.5, 1.0 - vFinish.z);\ndiffuseColor.rgb = mix(diffuseColor.rgb * (1.0 - 0.25 * wetness), vec3(0.9, 0.94, 0.98), min(1.0, modelSnow * 1.3));")
+			.replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\nroughnessFactor = mix(clamp(vFinish.x + mdGrime * 0.25 + mdLine * 0.1 - mdWear * 0.3, 0.05, 1.0), 0.6, min(1.0, modelSnow * 1.3)) * (1.0 - 0.45 * wetness);")
+			.replace("#include <metalnessmap_fragment>", "#include <metalnessmap_fragment>\nmetalnessFactor = clamp(vFinish.y + mdWear * 0.45 - mdGrime * 0.2, 0.0, 1.0);")
 			.replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\ntotalEmissiveRadiance += vGlow * mix(glowScale, windowScale, step(0.5, vFinish.z));");
 	};
-	PAINT.customProgramCacheKey = () => "paint";
+	PAINT.customProgramCacheKey = () => "paint|surface";
 	const paintable = (m) => m.isMeshStandardMaterial && !m.transparent && !m.map;
 	const signature = (parts) => parts.map((m) => m.geometry.id + ":" + m.material.id + "@" + m.matrix.elements.map((v) => Math.round(v * 1000)).join(",")).join(";");
 	function bakeModel(model, key, e) {
@@ -1947,6 +1992,11 @@ export function createBaker(THREE) {
 	bakeModel.setNight = (n) => {
 		night.value = 0.6 + 1.6 * n;
 		windowLight.value = windowCurve(n);
+	};
+	// Surface detail on or off, and the planet's dust colour (a THREE.Color).
+	bakeModel.setSurface = (on, soil) => {
+		surfaceOn.value = on ? 1 : 0;
+		if (soil) soilColor.value.copy(soil);
 	};
 	bakeModel.setWeather = (snow, wet) => {
 		snowCover.value = snow;

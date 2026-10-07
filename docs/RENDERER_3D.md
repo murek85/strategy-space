@@ -1,4 +1,78 @@
-# Renderer 3D (wersje 0.52–0.96)
+# Renderer 3D (wersje 0.52–0.96, 0.125–0.128)
+
+## Detale modeli (wersja 0.128, 2026-10-07)
+
+Etap 3 „rewolucji 3D”, proceduralnie, w materiale `PAINT` z `models-detail-3d.js` (wypiekane, nieruchome części wszystkich modeli — jedna łatka, bez nowych rysowań):
+
+- Dane: pozycja i normalna w układzie modelu (`vObjPos`, `vObjN`; przy instancjonowaniu stałe względem modelu), wykończenie z wierzchołka (`vFinish`: szorstkość, metaliczność, okno), świecenie (`vGlow` — świecące części i okna pomijane).
+- Płyty: siatka 9 × 6 jednostek na płaszczyźnie dominującej osi normalnej; spoiny z wygładzaniem (`fwidth`), wygaszane, gdy są cieńsze niż piksel; odcień płyty ±10% z hasza komórki (widoczny także z daleka); tylko na częściach metalowych.
+- Starte krawędzie: fazki (normalna niezgodna z żadną osią) × plamy szumu 3D → jasny goły metal (mniej szorstki, bardziej metaliczny).
+- Brud: pas kurzu u dołu (0–9 jednostek), pionowe zacieki na ścianach, pył osiadły na powierzchniach skierowanych w górę; kolor `soilColor` według biomu mapy (`three-renderer.js` `setGame`: piasek `#9a7d58`, popiół `#5a5450`, lód `#c9d3dc`).
+- Wygaszanie 1000–2600 jednostek od kamery; śnieg i mokra powierzchnia nadal na wierzchu.
+- Ustawienie `surface` w `scene-fx.js` (`models3d.setSurface(on, soil)` → `bakeModel.setSurface`).
+
+
+## Napisy nakładki na ekranie (wersja 0.129.4, 2026-10-07)
+
+- Wspólna lista `globalThis.BoardLabels` (ustawiana przez `three-game-renderer.js` na czas rysowania nakładki, potem `null`): napisy nakładki trafiają do niej zamiast na płótno — `render-canvas.js` (artefakt, szczyt, koszt muru), `faction-art.js` (odliczanie uderzenia orbitalnego) — i są rysowane razem z etykietami kampanii (`drawLabels`) na warstwie ekranu. Nazwy złóż, przekaźników i wraków to od dawna tabliczki 3D (`syncSigns`).
+
+## Flaga punktu zbiórki (wersja 0.129.3, 2026-10-07)
+
+- `three-renderer.js` (`syncRallies`): dla zaznaczonych budynków produkcyjnych z punktem zbiórki — maszt (walec 56 j., gałka), płachta 32 × 18 z siatką 8 × 3, której wierzchołki co klatkę falują (sinus wzdłuż płachty, mocniej na wolnym końcu, lekki opad), zwrócona od budynku; rzuca cień; pula modeli, zbędne ukryte.
+- `render-canvas.js`: przy `objects3D` nakładka rysuje tylko przerywaną linię i okrąg (koło zamiast elipsy — leży na terenie), bez płaskiego masztu i flagi.
+
+## Napisy celów kampanii (wersja 0.129.2, 2026-10-07)
+
+- `act2-art.js` (`label`): gdy renderer ustawi `Act2Art.onLabel`, etykieta znacznika (`{ x, y, text, color, sub }` w punktach mapy) trafia do niego zamiast na warstwę nakładki.
+- `three-game-renderer.js`: zbiera etykiety podczas rysowania nakładki (jak `onBeacon`) i rysuje je na warstwie ekranu (`drawLabels`) w miejscu `mapToScreen` punktu (30 j. nad gruntem): szklana karta, krawędź w kolorze znacznika, tytuł i podpis; pomija punkty poza ekranem i za kamerą. Wcześniej malowane na nakładce w rozdzielczości 0,4 i wtapiane w teren — rozmyte i pochylone.
+
+## Snopy słońca (wersja 0.129.1, 2026-10-07)
+
+- `sun-fx-3d.js`: snopy (wiązki z ziemi ku słońcu) wyłączone, gdy działa kinowy obraz z atmosferą (`imageRays` z `three-renderer.js`) — smugi daje wtedy `post-3d.js`; bez niego wygaszane według pochylenia kamery (kierunek patrzenia w dół 0,45–0,75 → do zera), bo z góry stały jako cienkie, równoległe białe kreski (zgłoszenie: zachód i wschód słońca, spokojna pogoda).
+
+## Poprawki burz (wersja 0.127.1, 2026-10-07)
+
+- `weather-3d.js` (`layer`): kolory wpisane w shaderach pogody są sRGB — przed zapisem zamieniane na liniowe (`pow 2.2`) i przepuszczane przez `colorspace_fragment`; na zwykłym ekranie wygląd bez zmian, w klatce HDR kinowego obrazu nie są już blade (mgła bierze kolor z nieba, już liniowy — bez zmiany).
+- Ziarna piasku: krótsze (7–13), szersze (1,1), słabsze (0,2), wygaszane w odległości 500–950 (dalej cieńsze niż piksel migotały jako przerywane kreski).
+- `sun-fx-3d.js`: snopy słońca znikają w gęstej burzy (zamglenie > 0,2–0,5) — z góry stały jako twarde, równoległe białe linie.
+- `three-renderer.js`: gęstość mgły wysokościowej bez składnika pogody (pogoda ma własne zamglenie); poranna mgła słabnie w burzy.
+
+## Atmosfera i woda (wersja 0.127, 2026-10-07)
+
+Etap 4 „rewolucji 3D”, proceduralnie:
+
+- Odbicia w wodzie (`three-renderer.js` `drawReflection`, `scene-fx-3d.js` `waterLook`): dla płaskiej wody (jeziora, szczeliny) najbliższej punktowi kamery (`water.levelNear`, zasięg 1,6 × odległość) lustrzana kamera pod powierzchnią rysuje scenę do `WebGLRenderTarget` HalfFloat w połowie rozdzielczości — z płaszczyzną odcinającą wszystko pod wodą (`renderer.clippingPlanes`), bez samej wody i nakładki interfejsu, bez odświeżania map cieni. Shader wody rzutuje swoje punkty macierzą `reflectMatrix` (przesunięcie o falowanie normalnej), miesza odbicie 0,28–0,85 według kąta (fresnel), tylko na tafli o poziomie `reflectLevel`; inne tafle — kolor nieba jak dotąd. Piana jaśniejsza, z „koronką” dalej od brzegu. Wyłączone przy niskiej jakości terenu i z „Połyskiem wody” wyłączonym.
+- Mgła wysokościowa i perspektywa powietrzna (`post-3d.js`, w wykończeniu, przed mapowaniem tonów): całka gęstości malejącej wykładniczo z wysokością (`fogFalloff` 1/80, podstawa = 15. percentyl wysokości mapy) wzdłuż promienia od kamery do punktu z głębi; gęstość 0,0005 + mgła poranna/wieczorna + zamglenie pogody, najwyżej 55%; kolor mgły z koloru oddali, rozjaśniony i ocieplony w stronę słońca.
+- Smugi światła: maska nieba wokół słońca (gdzie głębia = niebo) i rozmycie promieniste ku pozycji słońca na ekranie (40 próbek, zanik), w połowie rozdzielczości; tylko gdy słońce jest nad horyzontem i przed kamerą; słabsze w złej pogodzie.
+- Ustawienia: `reflect`, `atmo` w `scene-fx.js` (oba tylko 3D; atmosfera razem z `cinema`).
+- Nie zrobione: prawdziwe załamanie światła pod wodą (wymagałoby kopii sceny spod wody) i nowe, fizyczne niebo — zostaje dotychczasowe niebo z rozpraszaniem w mgle.
+
+
+## Teren PBR (wersja 0.126, 2026-10-07)
+
+Etap 2 „rewolucji 3D”, proceduralnie, w shaderze terenu (`fogged(..., terrain = true)` w `three-renderer.js`, blok `#ifdef TERRAIN` w `GROUND_COLOR`, nowe `GROUND_BUMP`):
+
+- Dane: normalna świata z wierzchołka (`vTerrN`), pozycja (`vMapXY`, `vWorldY`), maska skały z rzeźby (`vRock`); mundury `pbrOn` (ustawienie `pbr` w `scene-fx.js`) i `pbrBiome` (0 piasek, 1 lód i śnieg, 2 popiół i gleba — z `biome` mapy).
+- Barwa: płaty w dużej skali (fbm, ×0,74–1,2) i ciepło-chłodne odcienie; jaśniej wyżej, ciemniej nisko (według `mistBand`); skała tam, gdzie maska rzeźby albo nachylenie > ~0,3–0,55 — faktura `tTri` w trzech płaszczyznach ważonych normalną, warstwy wzdłuż wysokości, kolor z `rockTint`.
+- Drobna struktura według planety: piasek — zmarszczki od wiatru z zaburzeniem (okres ~50 jednostek) i ziarno; lód — zaspy i pęknięcia (ciemniejsze, gładsze); popiół i gleba — grudki i żwir. Wygaszana z odległością (2200–4800).
+- Rzeźba w świetle: `pbrH` jako mapa wysokości → normalna zaburzona z pochodnych ekranowych (bump mapping, siła 6–9, mocniej na skale), po `normal_fragment_maps`.
+- Szorstkość: piasek 0,93, skała 0,82, lód 0,5 (0,28 w pęknięciach), popiół 0,97; mokry grunt, kałuże i śnieg nadal nadpisują (`GROUND_ROUGH`).
+- Wyłączenie „Teren PBR 3D” przywraca dawny grunt.
+
+
+## Kinowy obraz (wersja 0.125, 2026-10-07)
+
+Etap 1 „rewolucji 3D” (wybór użytkownika; wszystko proceduralne, bez dodatków Three.js i plików). Moduł `webgl3d/post-3d.js` (`createPost3D`), podpięty w `three-renderer.js` (`cinematic()`):
+
+- Scena rysowana do `WebGLRenderTarget` HalfFloat z MSAA (4 / 2 / 0 próbek wg jakości terenu) i teksturą głębi.
+- Okluzja otoczenia: SSAO w połowie rozdzielczości — 16 próbek w półkuli wzdłuż normalnej (z pochodnych pozycji), test głębi, ograniczenie zasięgu, wygaszanie z odległością (`aoFade` = 2 × odległość kamery); rozmycie 3×3 z zachowaniem krawędzi głębi.
+- Poświata: wycięcie jasnych miejsc (próg 1,2, miękkie kolano) i łańcuch 5 poziomów pomniejszeń z rozmyciem w górę (dodawanie). Piksele NaN/nieskończone z dowolnego shadera są zerowane — wcześniej rozmycie rozlewało je w białe smugi (burza piaskowa o zmierzchu).
+- Wykończenie: ekspozycja (1,22 w dzień, do 1,57 w nocy), ACES (dopasowanie S. Hilla), gradacja (nasycenie, barwa cieni i świateł z `GRADES` według motywu/biomu, przejście do chłodnej nocy), sRGB, kontrast, winieta, dithering.
+- Odbicia nieba: `PMREMGenerator.fromScene` z kuli w kolorach nieba, gruntu i słońca, odnawiane najwyżej co 0,5 s; `scene.environmentIntensity` 0,3–0,8; światło półkuli obniżone do 72%.
+- Nakładka interfejsu (Canvas) mieszana w klatce HDR po zamianie sRGB → liniowe (`overlayLinear`).
+- Cienie: pudło cieni 460–3000 (0,9 × odległość) i przesunięte w głąb kadru.
+- Ustawienia (`scene-fx.js`): `cinema`, `ao` (tylko 3D), `bloom` (WebGL i 3D). Diagnostyka: `window.post3dView` = 1 (sama okluzja), 2 (sama poświata), 3 (piksele NaN/∞ na niebiesko, > 8 na czerwono).
+- Do zrobienia: pomiar kosztu na stronie `tests/benchmark-browser.html` w widocznej karcie (w osadzonym podglądzie klatki stały).
 
 Data: 2026-09-30. Status: w grze jako Ustawienia → Renderer → „3D (Three.js)”, obok samodzielnego prototypu `prototyp-3d.html`. Tylko grafika — symulacja, zasady, zapisy i gra sieciowa bez zmian.
 

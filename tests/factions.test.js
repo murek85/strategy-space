@@ -168,6 +168,14 @@ test("commanders use their faction: Dominion builds an uplink and strikes the de
 	const up = g.spawn("uplink", 1, g.hq(1).x + 150, g.hq(1).y + 150),
 		p = open(g);
 	for (let i = 0; i < 5; i++) g.spawn("trooper", 0, p.x + i * 15, p.y);
+	// Under the fog of war the commander strikes only a group it sees: unseen, the troopers are safe…
+	if (RTS.AI_FOG?.on) {
+		g.aiVision(1, true);
+		assert.ok(!g.aiSees(1, p.x, p.y), "the group stands where the commander does not see");
+		// …a scout of its own next to them shows them.
+		g.spawn("drone", 1, p.x + 30, p.y - 60);
+		g.aiVision(1, true);
+	}
 	g.aiOrbital(T, RTS.AI_LEVELS.hard);
 	assert.equal(g.strikes.length, 1);
 	assert.ok(dist(g.strikes[0], p) < 80);

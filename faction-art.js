@@ -243,10 +243,14 @@ const FactionArt = (() => {
 			c.arc(s.x, s.y, R, 0, TAU);
 			c.fill();
 			c.globalAlpha = 1;
-			c.fillStyle = "#ffd6c8";
-			c.font = "700 13px Segoe UI, sans-serif";
-			c.textAlign = "center";
-			c.fillText("UDERZENIE ORBITALNE · " + left.toFixed(1) + " s", s.x, s.y - R - 10);
+			// On the 3D board the caption goes on the screen (globalThis.BoardLabels), sharp.
+			if (globalThis.BoardLabels) globalThis.BoardLabels.push({ x: s.x, y: s.y - R - 10, text: "UDERZENIE ORBITALNE · " + left.toFixed(1) + " s", color: "#ff5a3c" });
+			else {
+				c.fillStyle = "#ffd6c8";
+				c.font = "700 13px Segoe UI, sans-serif";
+				c.textAlign = "center";
+				c.fillText("UDERZENIE ORBITALNE · " + left.toFixed(1) + " s", s.x, s.y - R - 10);
+			}
 			c.restore();
 		}
 	}

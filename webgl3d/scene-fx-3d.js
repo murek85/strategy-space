@@ -152,9 +152,12 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 	// small waves, a second ripple layer against tiling, the sky reflected at grazing angles (fresnel),
 	// lighter shallows towards the shore (the shore fade is the depth), foam along the shore line, and
 	// rings from the drops while it rains.
-	const waterUniforms = { glowPool: { value: 1 }, waterTime: { value: 0 }, waterRain: { value: 0 }, waterSky: { value: new THREE.Color("#8fa6b4") }, waterSunDir: { value: new THREE.Vector3(0, 1, 0) }, waterSun: { value: new THREE.Color("#ffffff") } };
+	// Reflections (0.127): the renderer draws the scene seen from under the surface of the water nearest the
+	// camera into reflectMap; reflectMatrix projects a point of the surface onto it.
+	const waterUniforms = { glowPool: { value: 1 }, waterTime: { value: 0 }, waterRain: { value: 0 }, waterSky: { value: new THREE.Color("#8fa6b4") }, waterSunDir: { value: new THREE.Vector3(0, 1, 0) }, waterSun: { value: new THREE.Color("#ffffff") }, reflectMap: { value: null }, reflectMatrix: { value: new THREE.Matrix4() }, reflectOn: { value: 0 }, reflectLevel: { value: 0 } };
 	const WATER_COMMON = `
 		uniform float waterTime; uniform float waterRain; uniform vec3 waterSky; uniform vec3 waterSunDir; uniform vec3 waterSun; uniform float glowPool;
+		uniform sampler2D reflectMap; uniform float reflectOn; uniform float reflectLevel; varying vec4 vReflect; varying float vWaterY;
 		float wvHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 		float wvNoise(vec2 p) {
 			vec2 i = floor(p), f = fract(p);
@@ -232,7 +235,8 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 			before?.call(material, shader, renderer);
 			Object.assign(shader.uniforms, waterUniforms);
 			shader.vertexShader = shader.vertexShader
-				.replace("#include <common>", "#include <common>\nuniform float waterTime;")
+				.replace("#include <common>", "#include <common>\nuniform float waterTime;\nuniform mat4 reflectMatrix;\nvarying vec4 vReflect;\nvarying float vWaterY;")
+				.replace("#include <worldpos_vertex>", "#include <worldpos_vertex>\nvec4 waterWorld = modelMatrix * vec4(transformed, 1.0);\nvReflect = reflectMatrix * waterWorld;\nvWaterY = waterWorld.y;")
 				.replace(
 					"#include <begin_vertex>",
 					"#include <begin_vertex>\n#ifdef USE_COLOR_ALPHA\ntransformed.y += (sin(position.x * 0.045 + waterTime * 1.3) + sin(position.z * 0.06 - waterTime * 1.05)) * 0.35 * color.a;\n#endif",
@@ -257,7 +261,17 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 					float fres = pow(1.0 - clamp(abs(dot(normalize(vViewPosition), normal)), 0.0, 1.0), 3.0);
 					// Deep water darker and bluer towards the middle, turquoise shallows at the shore.
 					outgoingLight *= mix(1.0, 0.72, smoothstep(0.45, 1.0, depthK));
-					outgoingLight = mix(outgoingLight, waterSky * 1.1, fres * 0.55);
+					// What the water mirrors: the scene above it (shores, buildings, units, the sky) when this is the
+					// surface being reflected, else the sky's colour; wavering with the ripples, stronger at grazing
+					// angles, a little even looking straight down.
+					vec3 mirrored = waterSky * 1.1;
+					float mirrorK = fres * 0.55;
+					if (reflectOn > 0.5 && abs(vWaterY - reflectLevel) < 3.0) {
+						vec2 ruv = vReflect.xy / vReflect.w + normal.xy * 0.03;
+						mirrored = texture2D(reflectMap, clamp(ruv, 0.001, 0.999)).rgb;
+						mirrorK = mix(0.28, 0.85, fres);
+					}
+					outgoingLight = mix(outgoingLight, mirrored, mirrorK);
 					outgoingLight = mix(outgoingLight * vec3(1.12, 1.25, 1.12) + vec3(0.04, 0.07, 0.06), outgoingLight, smoothstep(0.0, 0.8, depthK));
 					// Light shimmering on the bed of the shallows.
 					float shimmer = pow(abs(sin(wvNoise(vMapXY * 0.08 + waterTime * 0.12) * 9.0 + waterTime * 1.1)), 8.0);
@@ -270,7 +284,9 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 					float lap = 0.06 * sin(waterTime * 1.4 + wvNoise(vMapXY * 0.02) * 6.0);
 					float foamNoise = wvNoise(vMapXY * 0.21 + vec2(waterTime * 0.35, -waterTime * 0.25)) * 0.6 + wvNoise(vMapXY * 0.53 - vec2(waterTime * 0.2, 0.0)) * 0.4;
 					float foam = smoothstep(0.04 + lap, 0.14 + lap, depthK) * (1.0 - smoothstep(0.2 + lap, 0.4 + lap, depthK)) * smoothstep(0.42, 0.8, foamNoise);
-					outgoingLight += vec3(0.85, 0.9, 0.92) * foam * 0.35;
+					// Foam: brighter, in streaks drifting with the water, and a fine lace further out.
+					float lace = smoothstep(0.62, 0.9, wvNoise(vMapXY * 0.9 + vec2(waterTime * 0.5, waterTime * 0.2))) * (1.0 - smoothstep(0.2, 0.55, depthK)) * smoothstep(0.08, 0.2, depthK);
+					outgoingLight += vec3(0.85, 0.9, 0.92) * (foam * 0.55 + lace * 0.18);
 					diffuseColor.a = max(diffuseColor.a, foam * 0.55);
 					outgoingLight += vec3(0.8, 0.86, 0.92) * waterRain * wvRings(vMapXY, waterTime) * 0.2;
 					#ifdef GLOW_POOL
@@ -376,10 +392,14 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 			// Per-vertex opacity fades the shore.
 			Object.assign(material, { vertexColors: true, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
 			const mesh = new THREE.Mesh(waterMesh(cells, kind), material);
+			// Extent and (for flat water) the level of the surface, for the reflections.
+			mesh.geometry.computeBoundingBox();
+			const bb = mesh.geometry.boundingBox,
+				box = { x0: bb.min.x, x1: bb.max.x, y0: bb.min.z, y1: bb.max.z, level: bb.max.y };
 			mesh.receiveShadow = kind !== "lava";
 			mesh.renderOrder = 1;
 			waterGroup.add(mesh);
-			waters.push({ mesh, kind });
+			waters.push({ mesh, kind, box });
 		}
 	}
 
@@ -1020,7 +1040,24 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 	const SOIL = { dust: [0.62, 0.52, 0.4], ash: [0.33, 0.3, 0.28], ice: [0.86, 0.9, 0.95] };
 	let biomeNow = "dust";
 
+	// The flat water (lakes, crevasses) nearest the point: its level, or null.
+	function waterLevelNear(point, span) {
+		let best = null,
+			bestD = Infinity;
+		for (const w of waters) {
+			if (w.kind !== "lake" && w.kind !== "crevasse") continue;
+			const box = w.box;
+			if (!box) continue;
+			const d = Math.hypot(Math.max(box.x0 - point.x, 0, point.x - box.x1), Math.max(box.y0 - point.y, 0, point.y - box.y1));
+			if (d < span && d < bestD) {
+				bestD = d;
+				best = box.level;
+			}
+		}
+		return best;
+	}
 	return {
+		water: { group: waterGroup, uniforms: waterUniforms, levelNear: waterLevelNear },
 		setGame(game, heights) {
 			if (heights) weather3d.setTerrain(heights);
 			weather3d.reset();
