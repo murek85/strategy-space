@@ -92,7 +92,11 @@ export function createThreeGameRenderer({ gameCanvas, canvasRenderer, onContextL
 		rig.yaw = v.camera.yaw || 0;
 		// Far out the camera looks down steeply (overview); close in it lowers for a more cinematic view.
 		const zoom = Math.max(1, Math.min(5.5, v.camera.zoom || 1));
-		rig.pitch = 1.05 - ((zoom - 1) / 4.5) * 0.35;
+		const pitch = 1.05 - ((zoom - 1) / 4.5) * 0.35,
+			// The player's tilt (PageUp / PageDown, Alt + middle drag) lowers it to just over the ground:
+			// the horizon and the sky come into view.
+			tilt = Math.max(0, Math.min(1, v.camera.tilt || 0));
+		rig.pitch = pitch - tilt * (pitch - 0.1);
 		base.setSelection(v.selected);
 		// Tall things (floating islands, spires, giant mushrooms) fade in front of the pointer.
 		base.setPointer(v.mouse ? fromFlat(v.mouse) : null);

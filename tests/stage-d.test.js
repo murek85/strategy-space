@@ -60,7 +60,10 @@ test("hidden enemy does not reveal itself through music and state changes on phr
 	a.instrument = () => {};
 	a.musicStep(1, 0);
 	assert.equal(a.musicMood, "explore");
-	a.musicStep(12, 1);
+	// (A phrase is two bars of eight steps.)
+	a.musicStep(15, 1);
+	assert.equal(a.musicMood, "explore");
+	a.musicStep(16, 1);
 	assert.equal(a.musicMood, "battle");
 });
 test("category settings persist, clamp and selectively mute sounds", () => {

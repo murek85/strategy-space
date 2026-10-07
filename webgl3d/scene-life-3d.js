@@ -1,7 +1,11 @@
 /* Scenery of the 3D renderer that is not a game entity, with the same code-built models
    (webgl3d/models-3d.js scenery()) and the same instanced drawing as the units. Visual only; positions
    follow the same formulas as the Canvas and WebGL boards, so every renderer shows the same world.
-   - Land animals: game.wildlife() (deer, hares, foxes, lizards), walking, heading where they drift.
+   - Land animals: game.wildlife() (deer, hares, foxes, lizards) gives each one its home; from there it
+     lives on its own here (visual only): rests and grazes, wanders far round its home to places it can
+     reach (round water, walls, buildings, obstacles and steep slopes), deer in herds following a
+     leader, hares and lizards in dashes and freezes; units, shots and explosions nearby put it to flight
+     (the herd with it), then it stops, alert, and looks round.
    - Birds: 18 crossing the map (PlanetArt.fauna formula), flapping, high over the ground.
    - Fish: seven per plain lake, circling under the surface (webgl/fauna-native.js formula).
    - Floating islands: MapArt.islands() (Lumeria, Aerion), bobbing high over impassable ground; they
@@ -36,6 +40,195 @@ export function createSceneLife3D(THREE, { world, heightAt, models3d, hiddenLaye
 		return levels.get(key);
 	}
 	const TAU = Math.PI * 2;
+	// ---------- wildlife behaviour ----------
+	// Per kind: range round the home, walking and running speed, how near a unit scares it, turning rate
+	// (rad/s), rest between walks (s), herd size, how much it grazes, dashes (move and freeze), climbs.
+	const BEASTS = {
+		deer: { range: 560, walk: 22, run: 110, fear: 180, turn: 2.6, rest: [4, 12], herd: 5, graze: 0.8 },
+		fox: { range: 480, walk: 32, run: 100, fear: 140, turn: 3.6, rest: [2, 7], herd: 0, graze: 0.45 },
+		hare: { range: 320, walk: 26, run: 125, fear: 120, turn: 5, rest: [2, 8], herd: 0, graze: 0.5, dashes: true },
+		lizard: { range: 220, walk: 18, run: 75, fear: 85, turn: 7, rest: [1.5, 6], herd: 0, graze: 0, dashes: true, climbs: true },
+	};
+	const brains = new Map(),
+		rand = (a, b) => a + Math.random() * (b - a);
+	let lastTime = null,
+		wildlifeClock = 0;
+	// Animals of game.wildlife(): new ones start at their home; those gone (a building next to the
+	// home) leave.
+	function syncBrains() {
+		const seen = new Set();
+		for (const a of game.wildlife()) {
+			if (a.kind === "bird" || a.kind === "fish" || !BEASTS[a.kind]) continue;
+			seen.add(a.id);
+			if (brains.has(a.id)) continue;
+			const k = BEASTS[a.kind];
+			brains.set(a.id, {
+				id: a.id,
+				kind: a.kind,
+				home: { x: a.x, y: a.y },
+				x: a.x,
+				y: a.y,
+				h: Math.random() * TAU,
+				v: 0,
+				state: "rest",
+				timer: rand(0, k.rest[1]),
+				target: null,
+				herd: k.herd ? a.kind + Math.floor(a.id / (k.herd * 3)) : null,
+				stride: Math.random() * 10,
+				graze: 0,
+				alert: 0,
+				look: 0,
+				fearClock: Math.random() * 0.3,
+				probeClock: 0,
+				dash: 0,
+			});
+		}
+		for (const id of brains.keys()) if (!seen.has(id)) brains.delete(id);
+	}
+	// Somewhere an animal can stand: on the map, not in water, walls or obstacles, away from buildings,
+	// and (unless it climbs) not up a steep slope from where it is.
+	function walkable(b, x, y, statics) {
+		if (x < 60 || y < 60 || x > game.W - 60 || y > game.H - 60 || game.blocked(x, y, 14)) return false;
+		for (const e of statics) if (Math.abs(e.x - x) < 90 && Math.abs(e.y - y) < 90 && Math.hypot(e.x - x, e.y - y) < (RTS.TYPES[e.type]?.radius || 30) + 22) return false;
+		return BEASTS[b.kind].climbs || Math.abs(heightAt(x, y) - heightAt(b.x, b.y)) < Math.hypot(x - b.x, y - b.y) * 0.6 + 3;
+	}
+	// A new place to go: round the home (a herd round its leader's goal).
+	function pickTarget(b, statics) {
+		const k = BEASTS[b.kind],
+			leader = b.herd && [...brains.values()].find((o) => o.herd === b.herd);
+		for (let n = 0; n < 10; n++) {
+			let x, y;
+			if (leader && leader !== b && leader.target) {
+				const a = rand(0, TAU),
+					d = rand(25, 70);
+				x = leader.target.x + Math.cos(a) * d;
+				y = leader.target.y + Math.sin(a) * d;
+			} else {
+				const a = rand(0, TAU),
+					d = k.range * Math.sqrt(rand(0.05, 1));
+				x = b.home.x + Math.cos(a) * d;
+				y = b.home.y + Math.sin(a) * d;
+			}
+			if (walkable({ ...b, x, y }, x, y, statics)) return { x, y };
+		}
+		return null;
+	}
+	function scare(b, from, k) {
+		b.state = "flee";
+		b.timer = rand(1.6, 2.8);
+		b.from = { x: from.x, y: from.y };
+		b.swerve = rand(-0.5, 0.5);
+		b.graze = Math.min(b.graze, 0.3);
+		if (b.herd)
+			for (const o of brains.values())
+				if (o !== b && o.herd === b.herd && o.state !== "flee" && Math.hypot(o.x - b.x, o.y - b.y) < 260) {
+					o.state = "flee";
+					o.timer = rand(1.8, 3);
+					o.from = b.from;
+					o.swerve = rand(-0.6, 0.6);
+				}
+	}
+	function think(b, dt, time, movers, statics, booms) {
+		const k = BEASTS[b.kind];
+		// Danger: the nearest unit, a shot or an explosion close by.
+		b.fearClock -= dt;
+		if (b.fearClock <= 0) {
+			b.fearClock = rand(0.2, 0.35);
+			let threat = null,
+				best = k.fear;
+			for (const m of movers) {
+				const d = Math.abs(m.x - b.x) + Math.abs(m.y - b.y) < best * 1.5 ? Math.hypot(m.x - b.x, m.y - b.y) : Infinity;
+				if (d < best) {
+					best = d;
+					threat = m;
+				}
+			}
+			for (const f of booms) {
+				const fx = f.tx ?? f.x,
+					fy = f.ty ?? f.y;
+				if (Math.hypot(fx - b.x, fy - b.y) < k.fear * 1.8) threat = { x: fx, y: fy };
+			}
+			if (threat) scare(b, threat, k);
+		}
+		let want = 0,
+			goal = null;
+		if (b.state === "flee") {
+			want = k.run;
+			goal = Math.atan2(b.y - b.from.y, b.x - b.from.x) + b.swerve;
+			b.timer -= dt;
+			if (b.timer <= 0) {
+				// Safe for now: stop and look round.
+				b.state = "rest";
+				b.timer = rand(2, 4);
+				b.alert = 1;
+				b.target = null;
+			}
+		} else if (b.state === "walk") {
+			if (!b.target || Math.hypot(b.target.x - b.x, b.target.y - b.y) < 14) {
+				b.state = "rest";
+				b.timer = rand(...k.rest);
+				b.grazing = Math.random() < k.graze;
+			} else {
+				goal = Math.atan2(b.target.y - b.y, b.target.x - b.x);
+				want = k.walk;
+				// Dashes: run a little, freeze, run again.
+				if (k.dashes) {
+					b.dash -= dt;
+					if (b.dash <= 0) b.dash = b.dashOn ? ((b.dashOn = false), rand(0.4, 1.4)) : ((b.dashOn = true), rand(0.5, 1.6));
+					want = b.dashOn ? k.walk * 2 : 0;
+				}
+				// A herd keeps together: wait for those left behind.
+				if (b.herd) {
+					const lag = [...brains.values()].filter((o) => o.herd === b.herd && Math.hypot(o.x - b.x, o.y - b.y) > 160).length;
+					if (lag) want *= 0.55;
+				}
+			}
+		} else {
+			b.timer -= dt;
+			if (b.timer <= 0) {
+				b.target = pickTarget(b, statics);
+				if (b.target) b.state = "walk";
+				else b.timer = rand(1, 3);
+			}
+		}
+		// Steering: turn towards the goal, look ahead, swerve round what can't be crossed.
+		if (goal !== null) {
+			let dh = ((goal - b.h + Math.PI * 3) % TAU) - Math.PI;
+			b.h += Math.max(-1, Math.min(1, dh)) * Math.min(1, k.turn * (b.state === "flee" ? 1.8 : 1) * dt);
+			b.probeClock -= dt;
+			if (b.probeClock <= 0 && want > 0) {
+				b.probeClock = 0.15;
+				const look = 14 + b.v * 0.5;
+				if (!walkable(b, b.x + Math.cos(b.h) * look, b.y + Math.sin(b.h) * look, statics)) {
+					let free = null;
+					for (const turn of [0.5, -0.5, 1, -1, 1.6, -1.6, 2.4, -2.4])
+						if (walkable(b, b.x + Math.cos(b.h + turn) * look, b.y + Math.sin(b.h + turn) * look, statics)) {
+							free = turn;
+							break;
+						}
+					if (free === null) {
+						b.v = 0;
+						b.h += Math.PI;
+						if (b.state === "walk") b.target = pickTarget(b, statics);
+					} else {
+						b.h += free;
+						if (b.state === "flee") b.swerve += free;
+					}
+				}
+			}
+			// Too far from home: head back.
+			if (b.state !== "flee" && Math.hypot(b.x - b.home.x, b.y - b.home.y) > k.range * 1.4) b.target = { ...b.home };
+		}
+		b.v += Math.max(-1, Math.min(1, want - b.v)) * Math.min(Math.abs(want - b.v), (b.state === "flee" ? 220 : 60) * dt);
+		b.x += Math.cos(b.h) * b.v * dt;
+		b.y += Math.sin(b.h) * b.v * dt;
+		// The walk cycle follows the speed (longer strides when running).
+		b.stride += dt * Math.pow(b.v / k.walk, 0.65);
+		// Grazing while resting; alert after a scare, looking round.
+		b.graze += ((b.state === "rest" && b.grazing && b.alert < 0.3 ? 1 : 0) - b.graze) * Math.min(1, dt * 2);
+		b.alert = Math.max(0, b.alert - dt * 0.25);
+		b.look = b.state === "rest" ? Math.sin(time * 0.8 + b.id) * 0.5 * (0.3 + b.alert) : 0;
+	}
 	const group = new THREE.Group();
 	world.add(group);
 	const records = new Map();
@@ -124,16 +317,28 @@ export function createSceneLife3D(THREE, { world, heightAt, models3d, hiddenLaye
 			visible = (x, y) => !fog || game.isVisible(x, y);
 		for (const r of records.values()) r.seen = false;
 
-		// Land animals (advanced-rules.js wildlife()): heading from the drift of their position.
-		for (const a of game.wildlife()) {
-			if (a.kind === "bird" || a.kind === "fish" || !visible(a.x, a.y)) continue;
-			const r = make("animal|" + a.id + "|" + a.kind, () => models3d.scenery("animal", a.kind, biome)),
-				i = a.id,
-				dx = Math.cos(time * 0.18 + i) * 10 * 0.18,
-				dy = -Math.sin(time * 0.12 + i) * 8 * 0.12;
-			r.holder.position.set(a.x, heightAt(a.x, a.y), a.y);
-			r.holder.rotation.y = -Math.atan2(dy, dx);
-			r.model.update({ id: a.id }, { time, moving: true, aim: 0, recoil: 0 });
+		// Land animals: their own behaviour round the homes game.wildlife() gives them.
+		const dt = lastTime === null ? 0 : Math.max(0, Math.min(0.1, time - lastTime));
+		lastTime = time;
+		wildlifeClock -= dt;
+		if (wildlifeClock <= 0 || !brains.size) {
+			wildlifeClock = 2;
+			syncBrains();
+		}
+		const movers = [],
+			statics = [];
+		for (const e of game.entities) {
+			if (e.hp <= 0) continue;
+			(RTS.TYPES[e.type]?.speed ? movers : statics).push(e);
+		}
+		const booms = (game.effects || []).filter((f) => f.kind === "explosion" || f.kind === "shot");
+		for (const b of brains.values()) think(b, dt, time, movers, statics, booms);
+		for (const b of brains.values()) {
+			if (!visible(b.x, b.y)) continue;
+			const r = make("animal|" + b.id + "|" + b.kind, () => models3d.scenery("animal", b.kind, biome));
+			r.holder.position.set(b.x, heightAt(b.x, b.y), b.y);
+			r.holder.rotation.y = -b.h;
+			r.model.update({ id: b.id }, { time, stride: b.stride, moving: b.v > 3, graze: b.graze, alert: b.alert, aim: b.look, recoil: 0 });
 		}
 		// Birds (PlanetArt.fauna): eighteen crossing the map, flying along +x.
 		for (let i = 0; i < 18; i++) {
@@ -313,6 +518,8 @@ export function createSceneLife3D(THREE, { world, heightAt, models3d, hiddenLaye
 	return {
 		setGame(next) {
 			game = next;
+			brains.clear();
+			lastTime = null;
 			for (const r of records.values()) group.remove(r.holder);
 			records.clear();
 			islands = typeof MapArt !== "undefined" && MapArt.islands ? MapArt.islands(game) : [];

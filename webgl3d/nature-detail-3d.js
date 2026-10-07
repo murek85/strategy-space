@@ -157,12 +157,16 @@ export function createNature3D(THREE, { tools, group, materials }) {
 			neckBase = [L * 0.42, H * 0.3, 0],
 			neckMid = [L * 0.42 + nf * s * 0.45, H * 0.3 + nu * s * 0.55, 0],
 			neckTop = [L * 0.42 + nf * s, H * 0.3 + nu * s, 0];
-		limb(body, o.coat, neckBase, neckMid, W * 0.62, W * 0.46, 10);
-		ball(body, o.coat, W * 0.46, neckMid);
-		limb(body, o.coat, neckMid, neckTop, W * 0.46, W * 0.36, 10);
-		if (o.bib) limb(body, o.bib, [neckBase[0] + W * 0.25, neckBase[1] - W * 0.25, 0], [neckMid[0] + W * 0.22, neckMid[1] - W * 0.2, 0], W * 0.4, W * 0.28, 8);
+		// The neck is its own joint at the shoulders: it lowers the head to the ground (grazing) and
+		// raises it (alert).
+		const neck = group(body, neckBase),
+			rel = (q) => [q[0] - neckBase[0], q[1] - neckBase[1], q[2]];
+		limb(neck, o.coat, [0, 0, 0], rel(neckMid), W * 0.62, W * 0.46, 10);
+		ball(neck, o.coat, W * 0.46, rel(neckMid));
+		limb(neck, o.coat, rel(neckMid), rel(neckTop), W * 0.46, W * 0.36, 10);
+		if (o.bib) limb(neck, o.bib, [W * 0.25, -W * 0.25, 0], rel([neckMid[0] + W * 0.22, neckMid[1] - W * 0.2, 0]), W * 0.4, W * 0.28, 8);
 		// Head: skull, cheeks, a tapering muzzle, the nose; eyes with a glint; ears.
-		const head = group(body, neckTop),
+		const head = group(neck, rel(neckTop)),
 			hl = o.head * s,
 			ears = [];
 		mesh(head, loft("h" + key, [[-0.2, 0.36, 0.4, 0.06], [0.08, 0.42, 0.46, 0.08], [0.36, 0.32, 0.34, -0.02], [0.66, 0.2, 0.22, -0.12], [0.92, 0.13, 0.14, -0.17], [1, 0.06, 0.07, -0.18]].map(([x, w, h, y]) => [x * hl, w * hl, h * hl, y * hl]), 10), o.coat);
@@ -222,11 +226,17 @@ export function createNature3D(THREE, { tools, group, materials }) {
 		else if (tl > 0) limb(tail, o.coat, [0, 0, 0], [-tl * 0.85, -tl * 0.5, 0], W * 0.16, W * 0.06, 6);
 		if (o.tip) ball(tail, o.tip, tl * (o.bushy ? 0.15 : 0.3), [-tl * 0.92, o.bushy ? -tl * 0.35 : -tl * 0.45, 0], o.bushy ? [1.4, 1, 1] : [0.8, 1, 1]);
 		o.extra?.({ head, body, tail, hl, L, W, H }, s);
-		const speed = o.gait ?? 13;
+		const speed = o.gait ?? 13,
+			reach = o.graze ?? 1.5;
 		return {
 			root,
+			// i: time, moving; optionally stride (the walk cycle, advancing with the speed), graze 0…1 (head
+			// down to the ground), alert 0…1 (head up, ears pricked), aim (head turned).
 			update(e, i) {
-				const t = i.time * speed + e.id;
+				const t = (i.stride ?? i.time) * speed + e.id,
+					graze = i.graze || 0,
+					alert = i.alert || 0;
+				neck.rotation.z = -graze * reach + alert * 0.25 + (graze > 0.5 ? Math.sin(i.time * 2.3 + e.id) * 0.05 : 0);
 				if (o.hop) {
 					// Hops: the hind legs push together, the front legs reach together, the body arcs.
 					const ph = i.moving ? Math.sin(t) : 0;
@@ -246,9 +256,9 @@ export function createNature3D(THREE, { tools, group, materials }) {
 					body.position.y = lift + (i.moving ? Math.abs(Math.sin(t)) * s * 0.8 : Math.sin(i.time * 1.8 + e.id) * s * 0.06);
 				}
 				head.rotation.y = -Math.max(-0.6, Math.min(0.6, i.aim));
-				head.rotation.z = i.recoil * 0.4 + (i.moving ? Math.sin(t * 2) * 0.04 : Math.sin(i.time * 0.7 + e.id) * 0.08);
-				// Ears twitch now and then.
-				ears.forEach((ear, n) => (ear.rotation.y = Math.max(0, Math.sin(i.time * 0.9 + e.id * 3 + n * 2) - 0.93) * 4));
+				head.rotation.z = i.recoil * 0.4 - graze * 0.45 + (i.moving ? Math.sin(t * 2) * 0.04 : Math.sin(i.time * 0.7 + e.id) * 0.08);
+				// Ears twitch now and then; pricked up when alert.
+				ears.forEach((ear, n) => (ear.rotation.y = Math.max(0, Math.sin(i.time * 0.9 + e.id * 3 + n * 2) - 0.93) * 4 * (1 - alert) - alert * 0.25));
 				tail.rotation.y = Math.sin(i.time * (i.moving ? 9 : 2.5) + e.id) * 0.3;
 			},
 		};
@@ -328,8 +338,8 @@ export function createNature3D(THREE, { tools, group, materials }) {
 		return {
 			root,
 			update(e, i) {
-				const t = i.time * 10 + e.id,
-					run = i.moving ? 1 : 0.15;
+				const t = (i.stride ?? i.time) * 10 + e.id,
+					run = i.moving ? 1 : i.stride !== undefined ? 0 : 0.15;
 				legs.forEach((l, n) => (l.rotation.y = Math.sin(t + n * 1.6) * 0.5 * run));
 				body.rotation.y = Math.sin(t) * 0.1 * run;
 				tail.rotation.y = -Math.sin(t - 0.6) * 0.32 * run;

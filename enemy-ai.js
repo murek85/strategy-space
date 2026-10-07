@@ -1,7 +1,7 @@
 /* Enemy commander AI for scenarios. Each enemy side runs its own economy (workers mining ore, passive and relay income),
    builds and rebuilds its base, pays for every unit, defends its base and workers, takes relays and plans attacks.
    Three levels (easy, normal, hard) differ in income, reaction time, build order, army composition and tactics.
-   Campaign missions keep their scripted waves; a scenario can still choose the classic free waves. All values are tunable below.
+   Campaign missions keep their scripted waves, except the chapters of campaign-ai.js; a scenario can still choose the classic free waves. All values are tunable below.
    On top of the level, each faction has its own style (AI_STYLES): the Dominium builds towers and attacks rarely but hard,
    the Colonies harass workers and take relays; the Swarm keeps the level's plan. */
 (function (root) {
@@ -196,8 +196,8 @@
 			},
 			// The level, shaped by the faction's style when a team is given.
 			aiLevel(team = null) {
-				const L = LEVELS[this.scenario?.difficulty] || LEVELS.normal,
-					S = team == null ? null : STYLES[this.factionFor(team)?.key];
+				const L = LEVELS[this.scenario?.difficulty || this.campaignLevel] || LEVELS.normal,
+					S = team == null ? null : STYLES[this.aiStyleKey(team)];
 				if (!S || S.interval == null) return L;
 				const scale = (n, k) => (n == null ? n : Math.round(n * k));
 				return {
@@ -218,6 +218,11 @@
 					raidEvery: S.raidEvery ?? AI.raidEvery,
 					units: S.units || null,
 				};
+			},
+			// The faction whose style and units a commander follows (campaign-ai.js: the Dominium of the campaign,
+			// which has no scenario faction).
+			aiStyleKey(team) {
+				return this.factionFor(team)?.key || null;
 			},
 			aiCost(type, team) {
 				return Math.round((TYPES[type].cost || 0) * (this.factionFor(team)?.cost || 1));
@@ -490,7 +495,7 @@
 				const early = this.scenario?.startLevel === "colony" ? 90 : 0;
 				if (L.factoryAt != null && t >= Math.max(30, L.factoryAt - early) && have("factory") < 1) wants.push("factory");
 				// A drop-off at a further deposit: the Colonies' field outpost, otherwise a depot.
-				const faction = this.factionFor(T.team)?.key,
+				const faction = this.aiStyleKey(T.team),
 					dropoff = faction === "colonies" && TYPES.outpost ? "outpost" : "depot";
 				if (L.depotAt != null && t >= L.depotAt && have(dropoff) < 1) wants.push(dropoff);
 				if (faction === "dominion" && TYPES.uplink && L.uplinkAt != null && t >= L.uplinkAt && have("uplink") < 1) wants.push("uplink");
@@ -584,7 +589,7 @@
 			// Weighted choice; normal and hard shift the mix against the player's army.
 			aiPickUnit(T, L, producer) {
 				const t = this.time,
-					faction = this.factionFor(T.team)?.key,
+					faction = this.aiStyleKey(T.team),
 					player = this.aiPlayerArmy(T.team),
 					share = (test) => (player.length ? player.filter(test).length / player.length : 0),
 					air = share((e) => TYPES[e.type].flying),

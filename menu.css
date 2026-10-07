@@ -158,6 +158,20 @@ body.in-menu > .command-bar {
 .menu-footer > span {
 	margin-right: auto;
 }
+/* Campaign briefing: the campaign difficulty and the opponent. */
+.campaign-level {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin-top: 14px;
+}
+.campaign-level select {
+	min-width: 120px;
+}
+.campaign-level-info {
+	font-size: 0.92em;
+	opacity: 0.9;
+}
 .menu-facts {
 	display: flex;
 	gap: 35px;
@@ -1349,3 +1363,803 @@ body.in-menu > .command-bar {
 	line-height: 1.5;
 }
 
+/* The living backdrop of the menu (menu-backdrop.js) and the cinematic frame over it. */
+#command-menu.has-backdrop {
+	background: #03070d;
+}
+.has-backdrop .menu-stars,
+.has-backdrop .menu-orbit {
+	display: none;
+}
+.menu-backdrop {
+	position: fixed;
+	inset: 0;
+	z-index: -3;
+	pointer-events: none;
+}
+.menu-backdrop canvas {
+	display: block;
+	width: 100%;
+	height: 100%;
+}
+#command-menu[data-screen="intro"] .menu-backdrop,
+#command-menu[data-screen="intro2"] .menu-backdrop,
+#command-menu[data-screen="intro3"] .menu-backdrop,
+#command-menu[data-screen="interlude"] .menu-backdrop {
+	display: none;
+}
+.menu-hud i {
+	position: fixed;
+	width: 24px;
+	height: 24px;
+	border: 0 solid rgba(160, 220, 230, 0.45);
+}
+.menu-hud i:nth-child(1) { top: 16px; left: 16px; border-top-width: 1.5px; border-left-width: 1.5px; }
+.menu-hud i:nth-child(2) { top: 16px; right: 16px; border-top-width: 1.5px; border-right-width: 1.5px; }
+.menu-hud i:nth-child(3) { bottom: 16px; left: 16px; border-bottom-width: 1.5px; border-left-width: 1.5px; }
+.menu-hud i:nth-child(4) { bottom: 16px; right: 16px; border-bottom-width: 1.5px; border-right-width: 1.5px; }
+.menu-hud b {
+	position: fixed;
+	left: 0;
+	right: 0;
+	top: 0;
+	height: 90px;
+	background: linear-gradient(180deg, rgba(160, 230, 255, 0), rgba(160, 230, 255, 0.035), rgba(160, 230, 255, 0));
+	animation: menu-scan 9s linear infinite;
+}
+.has-backdrop .menu-brand > span {
+	text-shadow: 0 0 16px #7fe7c8aa;
+}
+.has-backdrop h1 {
+	text-shadow: 0 0 26px #7fe7c833;
+}
+.has-backdrop .eyebrow {
+	letter-spacing: 3px;
+}
+/* Buttons: a lit edge on the left, a glow and a sweep of light on hover. */
+.has-backdrop .menu-action {
+	position: relative;
+	overflow: hidden;
+	background: rgba(12, 26, 34, 0.72);
+	backdrop-filter: blur(4px);
+	transition: background 0.2s, border-color 0.2s, box-shadow 0.2s, transform 0.15s;
+}
+.has-backdrop .menu-action::before {
+	content: "";
+	position: absolute;
+	left: 0;
+	top: 0;
+	bottom: 0;
+	width: 3px;
+	background: #7fe7c8;
+	transform: scaleY(0);
+	transition: transform 0.2s;
+}
+.has-backdrop .menu-action::after {
+	content: "";
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	left: -40%;
+	width: 30%;
+	background: linear-gradient(90deg, transparent, rgba(190, 255, 235, 0.12), transparent);
+	transform: skewX(-20deg);
+	opacity: 0;
+}
+.has-backdrop .menu-action:hover,
+.has-backdrop .menu-action:focus-visible {
+	background: rgba(30, 60, 70, 0.82);
+	border-color: #aee5c7;
+	box-shadow: 0 0 22px rgba(127, 231, 200, 0.18);
+	transform: translateX(3px);
+}
+.has-backdrop .menu-action:hover::before,
+.has-backdrop .menu-action:focus-visible::before {
+	transform: scaleY(1);
+}
+.has-backdrop .menu-action:hover::after {
+	opacity: 1;
+	animation: menu-sweep 0.7s ease-out;
+}
+.has-backdrop .menu-action.prominent {
+	background: linear-gradient(90deg, #b4e9ce, #9fe0c4);
+	box-shadow: 0 0 26px rgba(127, 231, 200, 0.28);
+	animation: menu-glow 3.2s ease-in-out infinite;
+}
+.has-backdrop .menu-action.prominent::before {
+	background: #ffffff;
+}
+/* The card of the last operation, like the loading card. */
+.has-backdrop .menu-mission {
+	position: relative;
+	background: linear-gradient(160deg, rgba(10, 20, 28, 0.7), rgba(4, 10, 16, 0.8));
+	border: 1px solid rgba(160, 220, 210, 0.2);
+	border-left: 3px solid #7fe7c8;
+	box-shadow: 0 20px 70px #0008;
+}
+.has-backdrop .menu-mission h2 {
+	text-shadow: 0 0 20px #7fe7c844;
+}
+.has-backdrop .menu-content.wide {
+	background: rgba(8, 18, 28, 0.86);
+	backdrop-filter: blur(6px);
+	border-color: rgba(160, 220, 210, 0.25);
+	box-shadow: 0 30px 90px #000a;
+}
+@keyframes menu-scan {
+	from { transform: translateY(-100px); }
+	to { transform: translateY(100vh); }
+}
+@keyframes menu-sweep {
+	from { left: -40%; }
+	to { left: 120%; }
+}
+@keyframes menu-glow {
+	0%, 100% { box-shadow: 0 0 18px rgba(127, 231, 200, 0.2); }
+	50% { box-shadow: 0 0 34px rgba(127, 231, 200, 0.42); }
+}
+.reduced-motion .menu-hud b,
+.reduced-motion .has-backdrop .menu-action.prominent {
+	animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+	.menu-hud b,
+	.has-backdrop .menu-action.prominent,
+	.has-backdrop .menu-action:hover::after {
+		animation: none;
+	}
+}
+
+/* The pause screen over the frozen battlefield: the game shows through, darkened and blurred; a situation report. */
+body.menu-over-game > .topbar,
+body.menu-over-game > .workspace {
+	visibility: visible;
+}
+body.menu-over-game #command-menu {
+	background: linear-gradient(90deg, rgba(3, 7, 13, 0.84) 0%, rgba(3, 7, 13, 0.55) 55%, rgba(3, 7, 13, 0.72) 100%);
+	backdrop-filter: blur(5px) saturate(0.8);
+}
+body.menu-over-game .menu-backdrop canvas {
+	display: none;
+}
+body.menu-over-game .menu-hud b {
+	background: linear-gradient(180deg, rgba(255, 210, 140, 0), rgba(255, 210, 140, 0.05), rgba(255, 210, 140, 0));
+}
+#command-menu[data-screen="pause"] h1 {
+	text-shadow: 0 0 24px #f0cf8a44;
+}
+#command-menu[data-screen="pause"] h1::before {
+	content: "Ⅱ";
+	display: inline-block;
+	margin-right: 16px;
+	color: #f0cf8a;
+	animation: pause-blink 1.8s steps(2) infinite;
+}
+.pause-lead b {
+	color: #f0cf8a;
+	font-family: monospace;
+}
+.pause-report {
+	position: relative;
+	width: 400px;
+	max-width: 100%;
+	padding: 22px 24px;
+	background: linear-gradient(160deg, rgba(10, 20, 28, 0.78), rgba(4, 10, 16, 0.86));
+	backdrop-filter: blur(6px);
+	border: 1px solid rgba(160, 220, 210, 0.2);
+	border-left: 3px solid #f0cf8a;
+	box-shadow: 0 20px 70px #0008;
+	animation: pause-in 0.35s ease-out both;
+}
+.pause-report h3 {
+	margin: 16px 0 6px;
+	font-size: 11px;
+	letter-spacing: 2px;
+	text-transform: uppercase;
+	color: #8dabae;
+	font-weight: 600;
+}
+.pause-tiles {
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	gap: 6px;
+	margin-top: 12px;
+}
+.pause-tiles span {
+	padding: 8px 10px;
+	background: rgba(255, 255, 255, 0.04);
+	border: 1px solid rgba(160, 220, 210, 0.14);
+	font-size: 10px;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+	color: #9fb9bb;
+	line-height: 1.4;
+}
+.pause-tiles b {
+	display: block;
+	font-size: 18px;
+	font-weight: 600;
+	color: #eef6f4;
+	letter-spacing: 0;
+}
+.pause-objectives {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	font-size: 13px;
+}
+.pause-objectives li {
+	position: relative;
+	padding: 3px 0 3px 22px;
+	color: #d6e2e1;
+}
+.pause-objectives li::before {
+	content: "○";
+	position: absolute;
+	left: 0;
+	color: #7fe7c8;
+}
+.pause-objectives li.done {
+	color: #8fa6a8;
+	text-decoration: line-through;
+}
+.pause-objectives li.done::before {
+	content: "◉";
+}
+.pause-objectives li.failed::before {
+	content: "✕";
+	color: #ff6a5a;
+}
+.pause-objectives li.secondary::before {
+	content: "◇";
+	color: #f0cf8a;
+}
+.pause-intel {
+	margin-top: 14px;
+	font-size: 12px;
+}
+.pause-intel p {
+	margin: 4px 0 !important;
+}
+.pause-alert {
+	color: #ffb4a8 !important;
+}
+.pause-alert b {
+	font-family: monospace;
+	color: #ff8a7a;
+}
+.pause-radio {
+	padding-top: 8px;
+	border-top: 1px solid rgba(160, 220, 210, 0.15);
+	font-style: italic;
+}
+@keyframes pause-blink {
+	0% {
+		opacity: 1;
+	}
+	100% {
+		opacity: 0.35;
+	}
+}
+@keyframes pause-in {
+	from {
+		opacity: 0;
+		transform: translateX(16px);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+@media (max-width: 850px) {
+	.pause-report {
+		display: none;
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	#command-menu[data-screen="pause"] h1::before,
+	.pause-report {
+		animation: none;
+	}
+}
+
+/* The menu's windows as tactical panels: glass, corner brackets, a scan line when they open, a lit eyebrow and
+   title bar, HUD headings and controls; settings in tabs, saves as cards, the changelog as a timeline, warnings in amber. */
+.has-backdrop .menu-content.menu-window,
+#command-menu.has-backdrop[data-screen="knowledge"] .menu-content {
+	position: relative;
+	background: linear-gradient(160deg, rgba(10, 22, 32, 0.86), rgba(4, 10, 18, 0.92));
+	backdrop-filter: blur(8px);
+	border: 1px solid rgba(160, 220, 210, 0.22);
+	border-radius: 0;
+	box-shadow: 0 30px 90px #000a, inset 0 1px 0 rgba(190, 255, 235, 0.08);
+	animation: win-open 0.35s ease-out both;
+}
+.has-backdrop .menu-content.menu-window::before,
+#command-menu.has-backdrop[data-screen="knowledge"] .menu-content::before,
+.has-backdrop .menu-dialog::before {
+	content: "";
+	position: absolute;
+	inset: -1px;
+	pointer-events: none;
+	z-index: 2;
+	--c: #7fe7c8;
+	background:
+		linear-gradient(var(--c), var(--c)) top left / 20px 2px,
+		linear-gradient(var(--c), var(--c)) top left / 2px 20px,
+		linear-gradient(var(--c), var(--c)) top right / 20px 2px,
+		linear-gradient(var(--c), var(--c)) top right / 2px 20px,
+		linear-gradient(var(--c), var(--c)) bottom left / 20px 2px,
+		linear-gradient(var(--c), var(--c)) bottom left / 2px 20px,
+		linear-gradient(var(--c), var(--c)) bottom right / 20px 2px,
+		linear-gradient(var(--c), var(--c)) bottom right / 2px 20px;
+	background-repeat: no-repeat;
+}
+.has-backdrop .menu-content.menu-window::after,
+#command-menu.has-backdrop[data-screen="knowledge"] .menu-content::after,
+.has-backdrop .menu-dialog::after {
+	content: "";
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 0;
+	height: 2px;
+	pointer-events: none;
+	background: linear-gradient(90deg, transparent, #bff8e6, transparent);
+	box-shadow: 0 0 18px #7fe7c8;
+	animation: win-scan 0.9s ease-out both;
+}
+.has-backdrop .menu-window > .eyebrow::before,
+#command-menu.has-backdrop[data-screen="knowledge"] .menu-content > .eyebrow::before,
+.has-backdrop .menu-dialog > .eyebrow::before {
+	content: "●";
+	margin-right: 8px;
+	color: #7fe7c8;
+	animation: pause-blink 1.6s steps(2) infinite;
+}
+.has-backdrop .menu-window > h1::after,
+#command-menu.has-backdrop[data-screen="knowledge"] .menu-content > h1::after {
+	content: "";
+	display: block;
+	width: 72px;
+	height: 2px;
+	margin-top: 10px;
+	background: linear-gradient(90deg, #7fe7c8, transparent);
+}
+/* Headings inside a window: HUD labels with a rule. */
+#command-menu.has-backdrop .menu-scroll h2:not(.act-heading) {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin: 22px 0 10px;
+	font-size: 13px;
+	font-weight: 600;
+	letter-spacing: 2.5px;
+	text-transform: uppercase;
+	color: #9fd8c8;
+}
+#command-menu.has-backdrop .menu-scroll h2:not(.act-heading)::before {
+	content: "▸";
+	color: #7fe7c8;
+}
+#command-menu.has-backdrop .menu-scroll h2:not(.act-heading)::after {
+	content: "";
+	flex: 1;
+	height: 1px;
+	background: linear-gradient(90deg, rgba(160, 220, 210, 0.35), transparent);
+}
+.has-backdrop .menu-window-actions {
+	border-top-color: rgba(160, 220, 210, 0.18);
+}
+.has-backdrop .menu-scroll {
+	scrollbar-color: #4f8f80 transparent;
+}
+/* Controls: sliders filled up to their value, glass selects, square checkboxes. */
+.has-backdrop .menu-setting {
+	color: #d6e7e6;
+}
+.has-backdrop .menu-setting output {
+	font: 600 12px Consolas, "Cascadia Mono", monospace;
+	color: #f0cf8a;
+}
+.has-backdrop .menu-setting input[type="range"] {
+	-webkit-appearance: none;
+	appearance: none;
+	height: 16px;
+	background: transparent;
+	cursor: pointer;
+}
+.has-backdrop .menu-setting input[type="range"]::-webkit-slider-runnable-track {
+	height: 4px;
+	background: linear-gradient(90deg, #7fe7c8 var(--fill, 50%), rgba(160, 220, 210, 0.14) var(--fill, 50%));
+	box-shadow: 0 0 10px rgba(127, 231, 200, 0.15);
+}
+.has-backdrop .menu-setting input[type="range"]::-moz-range-track {
+	height: 4px;
+	background: rgba(160, 220, 210, 0.14);
+}
+.has-backdrop .menu-setting input[type="range"]::-moz-range-progress {
+	height: 4px;
+	background: #7fe7c8;
+}
+.has-backdrop .menu-setting input[type="range"]::-webkit-slider-thumb {
+	-webkit-appearance: none;
+	width: 10px;
+	height: 16px;
+	margin-top: -6px;
+	background: #e6fff6;
+	border: 0;
+	box-shadow: 0 0 12px #7fe7c8;
+}
+.has-backdrop .menu-setting input[type="range"]::-moz-range-thumb {
+	width: 10px;
+	height: 16px;
+	border: 0;
+	border-radius: 0;
+	background: #e6fff6;
+	box-shadow: 0 0 12px #7fe7c8;
+}
+#command-menu.has-backdrop .menu-setting select,
+#command-menu.has-backdrop .scenario-config select,
+#command-menu.has-backdrop .scenario-config input:not([type]),
+#command-menu.has-backdrop .scenario-config input[type="text"] {
+	background: rgba(12, 28, 36, 0.8);
+	border: 1px solid rgba(160, 220, 210, 0.28);
+	border-radius: 0;
+	color: #e1eee6;
+}
+#command-menu.has-backdrop .menu-setting select:focus-visible,
+#command-menu.has-backdrop .scenario-config select:focus-visible {
+	outline: none;
+	border-color: #7fe7c8;
+	box-shadow: 0 0 14px rgba(127, 231, 200, 0.3);
+}
+.has-backdrop .menu-setting input[type="checkbox"] {
+	-webkit-appearance: none;
+	appearance: none;
+	width: 14px;
+	height: 14px;
+	margin: 0 8px 0 0;
+	vertical-align: -2px;
+	border: 1px solid rgba(127, 231, 200, 0.7);
+	background: transparent;
+	cursor: pointer;
+}
+.has-backdrop .menu-setting input[type="checkbox"]:checked {
+	background: #7fe7c8;
+	box-shadow: inset 0 0 0 3px #08141c, 0 0 10px rgba(127, 231, 200, 0.6);
+}
+.has-backdrop .menu-setting input[type="checkbox"]:focus-visible {
+	outline: 1px solid #bff8e6;
+	outline-offset: 2px;
+}
+/* Settings: a tab bar over panels. */
+.menu-tabs {
+	display: flex;
+	gap: 4px;
+	flex-shrink: 0;
+	margin: 0 0 14px;
+	border-bottom: 1px solid rgba(160, 220, 210, 0.2);
+}
+.menu-tabs button {
+	flex: 1;
+	padding: 9px 14px;
+	background: rgba(12, 26, 34, 0.5);
+	border: 1px solid rgba(160, 220, 210, 0.14);
+	border-bottom: 0;
+	color: #9fb9bb;
+	font: inherit;
+	font-size: 13px;
+	letter-spacing: 1px;
+	text-transform: uppercase;
+	text-align: left;
+	cursor: pointer;
+	transition: background 0.2s, color 0.2s;
+}
+.menu-tabs small {
+	display: block;
+	font: 10px Consolas, monospace;
+	color: #6f8f8f;
+}
+.menu-tabs button:hover,
+.menu-tabs button:focus-visible {
+	color: #eef6f4;
+	background: rgba(30, 60, 70, 0.55);
+}
+.menu-tabs button[aria-selected="true"] {
+	background: rgba(30, 60, 70, 0.8);
+	color: #eef6f4;
+	box-shadow: inset 0 2px 0 #7fe7c8;
+}
+.menu-tabs button[aria-selected="true"] small {
+	color: #7fe7c8;
+}
+#command-menu[data-screen="settings"] .menu-scroll {
+	display: block;
+}
+#command-menu[data-screen="settings"] .menu-tab-panel {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 8px 28px;
+	align-content: start;
+	animation: pause-in 0.25s ease-out both;
+}
+#command-menu[data-screen="settings"] .menu-tab-panel[hidden] {
+	display: none;
+}
+#command-menu[data-screen="settings"] .menu-tab-panel > p,
+#command-menu[data-screen="settings"] .menu-tab-panel > .music-preview {
+	grid-column: 1/-1;
+	margin: 4px 0;
+}
+/* Saves: cards with the world of the mission, its name, planet and time. */
+.slot-card > span:nth-of-type(1) {
+	flex: 1;
+	opacity: 1;
+}
+.slot-card small {
+	display: block;
+	margin-top: 3px;
+	color: #9fb9bb;
+}
+.slot-card em {
+	font: normal 600 12px Consolas, monospace;
+	color: #f0cf8a;
+}
+.slot-world {
+	--land: #5f9690;
+	--night: #07121a;
+	--air: #8fe6d8;
+	flex: 0 0 52px;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 5px;
+	margin-right: 14px;
+	font: normal 600 10px/1 Consolas, monospace;
+	letter-spacing: 1px;
+	color: #7fe7c8;
+}
+.slot-world small {
+	font-size: 8px;
+	opacity: 0.6;
+}
+.slot-world::before {
+	content: "";
+	width: 30px;
+	height: 30px;
+	border-radius: 50%;
+	background: radial-gradient(circle at 35% 35%, var(--land), var(--night) 78%);
+	box-shadow: 0 0 12px var(--air);
+}
+.slot-world[data-world="dust"] { --land: #c69a5c; --night: #2a1c12; --air: #ffd29a88; }
+.slot-world[data-world="ice"] { --land: #d9e8f0; --night: #3a5060; --air: #bfe6ff88; }
+.slot-world[data-world="ash"] { --land: #7a5a50; --night: #1a100e; --air: #ff9a6a88; }
+.slot-world[data-world="lumen"] { --land: #4f8a7f; --night: #0e1a1a; --air: #9fffd888; }
+.slot-world[data-world="magma"] { --land: #8a3a24; --night: #1a0806; --air: #ff7a3a88; }
+.slot-world[data-world="frozenhive"] { --land: #b8d0e0; --night: #2a3a50; --air: #c9b8ff88; }
+.slot-world[data-world="derelict"] { --land: #6a6a66; --night: #141414; --air: #ffb08a88; }
+.slot-card.empty .slot-world::before {
+	background: none;
+	border: 1px dashed rgba(160, 220, 210, 0.4);
+	box-shadow: none;
+}
+.slot-card.broken .slot-world::before {
+	background: repeating-linear-gradient(45deg, #ff6a5a55 0 3px, transparent 3px 6px);
+	border: 1px solid #ff6a5a88;
+	box-shadow: none;
+}
+.slot-card.empty b {
+	color: #8fa6a8;
+	font-weight: 500;
+}
+/* What's new: a timeline, the newest entries lit. */
+#command-menu[data-screen="news"] .menu-scroll {
+	padding-left: 30px;
+	background: linear-gradient(rgba(160, 220, 210, 0.25), rgba(160, 220, 210, 0.25)) 8px 0 / 1px 100% no-repeat local;
+}
+#command-menu.has-backdrop[data-screen="news"] .menu-scroll h2 {
+	position: relative;
+	margin: 20px 0 6px;
+	font-size: 15px;
+	letter-spacing: 0.5px;
+	text-transform: none;
+	color: #eef6f4;
+}
+#command-menu.has-backdrop[data-screen="news"] .menu-scroll h2::before {
+	content: "";
+	position: absolute;
+	left: -28px;
+	top: 50%;
+	width: 9px;
+	height: 9px;
+	margin-top: -5px;
+	border-radius: 50%;
+	background: #03070d;
+	border: 2px solid #4f8f80;
+}
+#command-menu.has-backdrop[data-screen="news"] .menu-scroll h2:nth-of-type(-n + 3)::before {
+	border-color: #7fe7c8;
+	box-shadow: 0 0 10px #7fe7c8;
+}
+#command-menu.has-backdrop[data-screen="news"] .menu-scroll h2:first-child::after {
+	content: "NOWOŚĆ";
+	flex: none;
+	height: auto;
+	padding: 2px 6px;
+	background: none;
+	border: 1px solid #f0cf8a;
+	font: 600 9px Consolas, monospace;
+	letter-spacing: 2px;
+	color: #f0cf8a;
+}
+#command-menu[data-screen="news"] .menu-scroll p {
+	margin-top: 0;
+	font-size: 14px;
+	line-height: 1.55;
+}
+/* Briefing: the facts as tiles, the objective as a target. */
+.has-backdrop .menu-facts {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 8px;
+	padding: 4px 0;
+	border: 0;
+}
+.has-backdrop .menu-facts span {
+	padding: 10px 12px;
+	background: rgba(255, 255, 255, 0.04);
+	border: 1px solid rgba(160, 220, 210, 0.14);
+	border-left: 2px solid #f0cf8a;
+	color: #e6d3a8;
+	line-height: 1.5;
+}
+.has-backdrop .menu-objective {
+	position: relative;
+	padding: 10px 14px 10px 36px;
+	background: rgba(127, 231, 200, 0.06);
+	border: 1px solid rgba(127, 231, 200, 0.22);
+	color: #e2efec !important;
+}
+.has-backdrop .menu-objective::before {
+	content: "◎";
+	position: absolute;
+	left: 13px;
+	color: #7fe7c8;
+	text-shadow: 0 0 8px #7fe7c8;
+}
+.has-backdrop .menu-window .menu-tag {
+	display: inline-block;
+	padding: 3px 8px;
+	border: 1px solid rgba(214, 191, 138, 0.4);
+	background: rgba(214, 191, 138, 0.06);
+}
+/* Confirmations and the save error: amber (red) warning cards. */
+.has-backdrop .menu-dialog {
+	position: relative;
+	width: 560px;
+	padding: 26px 28px;
+	background: linear-gradient(160deg, rgba(30, 22, 10, 0.84), rgba(10, 8, 4, 0.92));
+	backdrop-filter: blur(8px);
+	border: 1px solid rgba(240, 207, 138, 0.3);
+	border-left: 3px solid #f0cf8a;
+	box-shadow: 0 30px 90px #000a;
+	animation: win-open 0.3s ease-out both;
+}
+.has-backdrop .menu-dialog::before {
+	--c: #f0cf8a;
+}
+.has-backdrop .menu-dialog::after {
+	background: linear-gradient(90deg, transparent, #ffe2a8, transparent);
+	box-shadow: 0 0 18px #f0cf8a;
+}
+.has-backdrop .menu-dialog > .eyebrow,
+.has-backdrop .menu-dialog > .eyebrow::before {
+	color: #f0cf8a;
+}
+.has-backdrop .menu-dialog > h1 {
+	font-size: 34px;
+}
+.has-backdrop .menu-dialog > h1::before {
+	content: "⚠";
+	margin-right: 14px;
+	color: #f0cf8a;
+	text-shadow: 0 0 18px #f0cf8a88;
+}
+#command-menu[data-screen="save-error"] .menu-dialog {
+	border-color: rgba(255, 106, 90, 0.35);
+	border-left-color: #ff6a5a;
+	background: linear-gradient(160deg, rgba(36, 12, 10, 0.86), rgba(12, 4, 4, 0.92));
+}
+#command-menu[data-screen="save-error"] .menu-dialog::before {
+	--c: #ff6a5a;
+}
+#command-menu[data-screen="save-error"] .menu-dialog > h1::before,
+#command-menu[data-screen="save-error"] .menu-dialog > .eyebrow,
+#command-menu[data-screen="save-error"] .menu-dialog > .eyebrow::before {
+	color: #ff8a7a;
+}
+@keyframes win-open {
+	from {
+		opacity: 0;
+		transform: translateY(10px) scale(0.985);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+@keyframes win-scan {
+	from {
+		top: 0;
+		opacity: 1;
+	}
+	to {
+		top: 100%;
+		opacity: 0;
+	}
+}
+@media (max-width: 650px) {
+	#command-menu[data-screen="settings"] .menu-tab-panel {
+		grid-template-columns: 1fr;
+	}
+	.menu-tabs button {
+		padding: 8px;
+		font-size: 11px;
+	}
+}
+.reduced-motion .menu-window,
+.reduced-motion .menu-window::after,
+.reduced-motion .menu-window > .eyebrow::before,
+.reduced-motion .menu-dialog,
+.reduced-motion .menu-dialog::after,
+.reduced-motion .menu-tab-panel,
+.reduced-motion[data-screen="knowledge"] .menu-content,
+.reduced-motion[data-screen="knowledge"] .menu-content::after {
+	animation: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+	.menu-window,
+	.menu-window::after,
+	.menu-window > .eyebrow::before,
+	.menu-dialog,
+	.menu-dialog::after,
+	.menu-tab-panel,
+	#command-menu[data-screen="knowledge"] .menu-content,
+	#command-menu[data-screen="knowledge"] .menu-content::after {
+		animation: none !important;
+	}
+}
+/* The knowledge base: tabs and cards like the other tactical panels. */
+#command-menu.has-backdrop .knowledge-tabs {
+	gap: 4px;
+	padding: 0;
+	margin-bottom: 14px;
+	border-bottom: 1px solid rgba(160, 220, 210, 0.2);
+}
+#command-menu.has-backdrop .knowledge-tabs button {
+	padding: 9px 18px;
+	border-radius: 0;
+	background: rgba(12, 26, 34, 0.5);
+	border: 1px solid rgba(160, 220, 210, 0.14);
+	border-bottom: 0;
+	color: #9fb9bb;
+	font-size: 13px;
+	letter-spacing: 1px;
+	text-transform: uppercase;
+	cursor: pointer;
+}
+#command-menu.has-backdrop .knowledge-tabs button:hover {
+	color: #eef6f4;
+	background: rgba(30, 60, 70, 0.55);
+}
+#command-menu.has-backdrop .knowledge-tabs button[aria-selected="true"] {
+	background: rgba(30, 60, 70, 0.8);
+	color: #eef6f4;
+	box-shadow: inset 0 2px 0 #7fe7c8;
+}
+#command-menu.has-backdrop .knowledge-card {
+	border-radius: 0;
+	background: rgba(255, 255, 255, 0.03);
+	border-color: rgba(160, 220, 210, 0.16);
+}

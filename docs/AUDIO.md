@@ -1,5 +1,52 @@
 # Dźwięk i muzyka
 
+## Wersja 0.105 — cztery niepokojące motywy (2026-10-07)
+
+Na życzenie użytkownika cztery nowe motywy w klimacie filmowym, z nutą „Obcego” (atmosfera, środki — bez cytowania melodii). Partytura w `audio.js` (`EERIE`, `eerieStep`), wybór motywu w grze — `musicModeFor(game)` w `app.js`.
+
+**Nowe instrumenty** (`cinematic()`): `flute` — flet z oddechem, vibrato i długim echem taśmowym; `metal` — smyczkowany metal (nieharmoniczne alikwoty 1 : 2,76 : 5,4 : 8,93, lekkie ślizgi); `heart` — bicie serca (dwa niskie uderzenia); `hum` — szum statku (ton z alikwotami i dudnienie szumu); `hiss` — narastający syk; `anvil` — metaliczne uderzenie kowadła.
+
+| Motyw (tryb) | Gdzie gra | Tempo, skala | Warstwy |
+|---|---|---|---|
+| Wrak (`game:wreck`) | motyw mapy „derelict”: Popielny Szlak, rozdział III | 54/min, skala z małą sekundą i trytonem | szum kadłuba, wołanie fletu (2 oktawy wyżej) co 4 takty, jęki metalu |
+| Ul (`game:hive`) | każda gra z Rojem jako wrogiem (akt III, scenariusze) | 72/min | niski klaster chorału (pryma, sekunda, tryton), nieregularne trzaski, syki, flet wysoko |
+| Gąszcz (`game:lumen`) | „lumen” i „skyfall”: Lumeria, Aerion | 60/min, skala całotonowa | oddychający chór, szklane dzwony, syki, jęki metalu |
+| Kuźnia (`game:forge`) | „magma” i rozdział VI (Hefajstos) | 84/min | dron pieca, kowadło na 1 i 6 ósemce, flet, metal |
+
+Nastroje (jak w pozostałych motywach): rozbudowa — powolny fortepian w skali motywu; napięcie — bicie serca, więcej metalu, częstsze trzaski i syki; bitwa — przyspieszone serce, bębny, kowadło, „braam” co 2 takty (w Ulu werbel); wytchnienie — niski flet. Kolejność wyboru motywu: Rój jako wróg → Ul; potem motyw mapy; inaczej świat (pustynia, świt, lód, popiół). W odsłuchu w Ustawieniach dodane cztery pozycje.
+
+Weryfikacja: test w `tests/audio.test.js` (każdy motyw co najmniej 3 instrumenty, różne zestawy i przebiegi, poprawne nuty, w bitwie serce, bębny i „braam”); `npm test` 285/285. Przeglądarka: wszystkie cztery motywy w eksploracji i bitwie na WebAudio bez błędów, szczyt głosów 13–33, po zatrzymaniu 0.
+
+## Wersja 0.104 — odsłuch muzyki w ustawieniach (2026-10-07)
+
+- Ekran Ustawień (`menu.js`): sekcja „Odsłuch muzyki” — motyw (`MUSIC_THEMES`: menu, intro, `game:dust`, `game:sun`, `game:ice`, `game:ash`), nastrój (`MUSIC_MOODS`; nieaktywny dla menu i intro, które nastrojów nie mają), przycisk „Odtwórz / Zatrzymaj”, status (co gra; ostrzeżenie przy wyciszeniu albo głośności muzyki 0). Zmiana motywu lub nastroju podczas odsłuchu przełącza od razu.
+- `GameAudio.previewMusic(motyw, nastrój)` ustawia motyw i nastrój, zaczyna od początku i blokuje nastrój (`updateMusicState` nic nie zmienia, dopóki trwa odsłuch); intro w odsłuchu zaczyna się od nowa co 64 kroki (30 s muzyki i 2 s ciszy). `stopPreview()` kończy odsłuch — wołane przy przejściu na inny ekran menu i przy powrocie do gry, po czym ekran ustawia swoją muzykę (menu lub motyw świata).
+- Test: `tests/audio.test.js` — trzymanie motywu i nastroju mimo stanu gry, pętla intro, koniec odsłuchu. Przeglądarka: odsłuch pustyni i lodu w bitwie (diagnostyka pokazuje motyw), wyjście z ustawień przywraca motyw menu; `tests/menu-browser.html` 37/37.
+
+## Wersja 0.103 — muzyka filmowa (2026-10-07)
+
+Na życzenie użytkownika muzyka przypomina partytury filmów „Diuna” i „Interstellar” — w brzmieniu i środkach (drony, bębny wojenne, dęte „braam”, zawodzący głos; organy, tykający zegar, fortepian), bez cytowania ich melodii. Kompozycja w `audio.js` (`musicStep`), nowe instrumenty w `cinematic()` — syntezowane natywnie (WebAudio), także przy włączonej wyższej jakości (zespół Tone.js z `audio-hq.js` gra dalej dawne instrumenty: smyczki, dzwony, szarpane, bas; nowe idą przez pogłos muzyki `audio-hq.js`, gdy jest).
+
+**Instrumenty** (`CINEMATIC`):
+- `organ` — organy: głosy 8′, 4′, 2′ (i 16′ w basie), lekko rozstrojone, łagodny atak powietrza;
+- `choir` / `chant` — chór bez słów: trzy rozstrojone piły przez dwa formanty samogłoski („aa” 760/1180 Hz; niski chorał „oo” 420/780 Hz), vibrato;
+- `braam` — niskie dęte: piły na prymie, kwincie i oktawie niżej, przester, filtr otwierający się w 0,4 s i zamykający, sub;
+- `taiko` — bęben: opadający ton membrany i głuche uderzenie szumu;
+- `tick` — zegar: krótkie, suche kliknięcie (tik wyżej, tak niżej);
+- `drone` — dron: dwie piły i sub, filtr oddychający 0,13 Hz;
+- `wail` — głos solowy: podjazd do nuty, rosnące vibrato, nosowy formant, echo;
+- `piano` — miękki fortepian (trzy alikwoty, wybrzmienie).
+
+**Motywy** (krok = ósemka; fraza = 2 takty po 8 kroków, na granicy frazy zmienia się nastrój):
+- **Menu** („Odległe światło”, 70/min): minorowa figura organów (pryma–kwinta–oktawa–kwinta–tercja…) nad 8-taktowym ciągiem akordów; co 8 taktów dochodzi warstwa — smyczki i zegar, mocniejszy chór i organy, wysoki rejestr organów i niski „braam” na końcu frazy.
+- **Lód** (60/min): pedał organowy, smyczki, tykanie zegara przez cały czas, fortepian; w napięciu rusza figura organów, w bitwie bębny i „braam”.
+- **Pustynia** (66/min) i **świt bliźniaczych słońc** (75/min): dron (na świcie jasny akord chóru), skala z obniżoną sekundą i podwyższoną tercją (na świcie durowa pentatonika), fraza zawodzącego głosu co 4 takty, rzadkie bębny, na świcie dzwony.
+- **Front popiołu** (100/min): marsz taiko, dron z chorałem, „braam” co 4 takty.
+- **Nastroje**: rozbudowa — szarpana figura w skali; napięcie — puls basu (na popiele zegar); bitwa — gęste bębny, „braam” co 2 takty, chorał, głos milknie; wytchnienie — chór.
+- **Intro** (30 s): budzący się dron, dwa uderzenia „braam”, zbierające się bębny, chór i głos, chorał, burza bębnów i dętych, na końcu akord organów i smyczków w durze.
+
+**Weryfikacja**: `npm test` 283/283 (testy motywów: różne instrumentarium i tempo każdego świata, bez perkusji „kick/snare/hat” na lodzie, intro 30 s i co najmniej 6 instrumentów; zmiana nastroju na granicy frazy — teraz po 16 krokach). Przeglądarka: wszystkie motywy i nastrój bitwy odtworzone na WebAudio bez błędów; szczyt jednoczesnych głosów muzyki 10–24 (bitwa do 43, limit 120), po zatrzymaniu 0.
+
 ## Wersja 0.45 — wyższa jakość (2026-09-28)
 
 Na życzenie użytkownika dźwięk przeszedł od razu na lepszą jakość: próbki i biblioteka Tone.js. Dotychczasowy silnik (`audio.js`, czyste Web Audio, wszystko syntezowane) został — jest podstawą i zapasem; nowy moduł `audio-hq.js` rozszerza go tylko w przeglądarce.

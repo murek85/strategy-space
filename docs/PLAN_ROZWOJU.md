@@ -40,10 +40,10 @@ Wpis nie oznacza zlecenia realizacji ani terminu.
 | Kierunek | Źródło | Status |
 |---|---|---|
 | Scenariusze dalej: edytor map, wyzwania z ziarnem i tabele wyników; balans Ekspedycji, Króla wzgórza i Przetrwania | [Kierunki §9](KIERUNKI_ROZWOJU.md), [Etap F](ETAP_F.md) | Propozycja |
-| Kampania: portrety rozmówców, nagrane głosy, balans aktów II–III na podstawie rozgrywek | [Etap C](ETAP_C_DRUGI_AKT.md), [Etap F](ETAP_F.md) | Propozycja |
+| Kampania: nagrane głosy, balans aktów II–III na podstawie rozgrywek (portrety i sceny łączności — 0.99, [opis](KAMPANIA_OPRAWA.md)) | [Etap C](ETAP_C_DRUGI_AKT.md), [Etap F](ETAP_F.md) | Propozycja |
 | Frakcje: balans trzech frakcji (koszty, cechy, jednostki unikalne) na podstawie rozgrywek | [Etap F](ETAP_F.md) | Wymaga rozgrywek |
 | Poziom III centrum (Twierdza) i doktryny frakcji | [Kierunki §1](KIERUNKI_ROZWOJU.md) | Propozycja, po ocenie tempa rozgrywki |
-| AI dalej: mgła wojny dla AI, budynki wsparcia i jednostki specjalne w rękach AI, AI w kampanii; balans z rozgrywek | [AI przeciwnika](AI_PRZECIWNIKA.md) | Propozycja |
+| AI dalej: mgła wojny dla AI, budynki wsparcia i jednostki specjalne w rękach AI; AI w kampanii wdrożone w 0.97 (rozdziały II, III, VI) — strojenie z rozgrywek | [AI przeciwnika](AI_PRZECIWNIKA.md) | Propozycja |
 | WAL-01: skały blokujące ostrzał | Archiwum poniżej | Propozycja |
 | Balans frakcji, kosztów i dochodu pasywnego (BAL-01, GOS-03) | [Pomysły](POMYSLY.md) | Wymaga rozgrywek porównawczych |
 | Etap E dalej: AI używające nowych budynków, jednostek i modułów; balans; dźwięki leczenia, osłony i sabotażu | [Etap E](ETAP_E_WSPARCIE_I_MODULY.md) | Propozycja |

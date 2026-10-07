@@ -1,4 +1,66 @@
-# Pogranicze Galaktyki — prototyp RTS 0.88
+# Pogranicze Galaktyki — prototyp RTS 0.114
+
+**Wersja 0.114 — ekrany menu jako panele taktyczne.** Wszystkie okna menu (kampania, scenariusze, odprawa, dziennik, sloty, ustawienia, baza wiedzy, Co nowego) są szkłem z narożnikami celownika, otwierają się z przebiegającą linią skanu, mają własny kanał nad tytułem (np. „ODPRAWA / KANAŁ SZYFROWANY”) z migającą diodą, świecącą kreskę pod tytułem i nagłówki sekcji jak etykiety interfejsu. Przy odprawie i wyborze mapy scenariusza planeta w tle płynnie przybiera barwy świata misji, a celownik zamyka się na niej z nazwą planety i odczytem skanu. Ustawienia są w zakładkach (Dźwięk, Odsłuch muzyki, Grafika planszy, Renderer) z suwakami wypełnionymi do wartości, kwadratowymi przełącznikami i szklanymi listami; sloty zapisu to karty z miniaturą planety, nazwą misji, czasem operacji i datą (wolne i uszkodzone wyróżnione); „Co nowego” to oś czasu ze świecącymi najnowszymi wpisami; potwierdzenia nadpisania i błąd zapisu to bursztynowe (czerwone) karty ostrzeżenia. Baza wiedzy ma te same zakładki i karty.
+
+**Wersja 0.113 — pauza taktyczna.** Menu pauzy leży teraz nad zamrożoną bitwą: plansza prześwituje przyciemniona i rozmyta, tytuł „Ⅱ Pauza taktyczna” mruga bursztynem, pod nim misja, planeta i czas operacji. Po prawej **raport sytuacyjny**: metal, gaz, kryształy, jednostki bojowe, roboty i przekaźniki w kafelkach, cele misji z zaznaczeniem wykonanych, nieudanych i dodatkowych, ostrzeżenie o planowanym ataku wroga z odliczaniem, pora dnia, pogoda i liczba budynków oraz ostatnia linia łączności.
+
+**Wersja 0.112 — menu główne w stylu filmów.** Za pokładem dowodzenia żyje układ planetarny: wielka planeta z atmosferą, wolno płynącymi chmurami i światłami miast po nocnej stronie, orbity i krążący po nich księżyc, mgławice i gwiazdy na trzech planach przesuwające się lekko za kursorem, łańcuch latarni z wędrującym impulsem, rozbłysk słońca, co pół minuty przelatujący konwój i krążownik w oddali. Ekran ma narożniki taktycznego interfejsu i przesuwający się pas skanowania; przyciski przy najechaniu zapalają lewą krawędź, świecą i przebiega po nich błysk, główny przycisk delikatnie pulsuje; karta ostatniej operacji i okna menu są półprzezroczystym szkłem jak karta ekranu ładowania. Tło trwa przez wszystkie ekrany menu (nie zaczyna się od nowa), odpoczywa podczas filmów i gry, a przy ograniczonych animacjach stoi.
+
+**Wersja 0.111 — ekran ładowania.** Start misji, wczytanie zapisu i uruchomienie gry mają ekran ładowania w stylu filmów kampanii: wyjście z nadprzestrzeni — smugi gwiazd skracają się, gdy statek zwalnia — i rosnąca przed nim planeta misji w barwach jej świata, narożniki taktycznego interfejsu, a w rogu karta z rodzajem operacji (kampania, scenariusz, szkolenie, wczytany zapis), jej nazwą i planetą, paskiem postępu z etapami („Wyjście z nadprzestrzeni…”, „Generowanie terenu…”, „Rozmieszczanie jednostek…”, „Synchronizacja łączności…”) i losową wskazówką. Ekran pojawia się od razu po „Rozpocznij operację” i przykrywa budowę mapy i planszy 3D, aż plansza się narysuje; potem płynnie znika (kliknięcie zamyka go po zakończeniu pracy).
+
+**Wersja 0.110 — ekrany zwycięstwa i porażki.** Koniec bitwy (scenariusz, kampania, gra sieciowa) ma animowane tło na całą planszę w stylu filmów kampanii: zwycięstwo — świt nad planetą w barwach mapy, przelatujące transportowce i krążownik, zapalone latarnie, unoszące się iskry światła, rozbłysk słońca; porażka — płonąca baza na horyzoncie pod ciemnoczerwonym niebem, słupy dymu, żar, pulsujący alarm na krawędziach i rwący się sygnał „SYGNAŁ UTRACONY”. Raport to półprzezroczysta karta z banerem „ZWYCIĘSTWO” (złoty) albo „PORAŻKA” (czerwony, pulsujący) pisanym jak w terminalu, świecącym tytułem i statystykami w kafelkach, których liczby narastają od zera; raport scenariusza pokazuje teraz też czas operacji, wydobyty metal i liczbę jednostek na koniec. Przy ograniczonych animacjach tło stoi, a liczby nie narastają.
+
+**Wersja 0.109 — filmowe zakończenia aktów.** Po zwycięstwie w ostatnim rozdziale aktu raport otwiera 20-sekundowy epilog w stylu prologów (kadr kinowy, ruch kamery, taktyczny interfejs, tytuły, ziarno), który zatrzymuje się na kadrze tytułowym; przycisk „Odtwórz epilog ponownie” puszcza go od nowa. **Akt I** — cytadela Nadiru pada w ogniu, latarnie zapalają się jedna po drugiej, na Khepri IV wracają światła miast, transporty pomocy lecą w stronę świtu („Odzyskany Świt · Koniec aktu I”). **Akt II** zależy od decyzji o Hefajstosie: przeciążenie, błysk i fala uderzeniowa, potem krater i popiół — albo gasnący rdzeń, transporter wywożący techników i ciemny, cichy kompleks; dalej pierwszy puls artefaktu w laboratorium Liry i odpowiedź z Lumerii („Cena świtu · Koniec aktu II”). **Akt III** — Serce Roju pęka i gaśnie, Rój rozsypuje się w pył, artefakty milkną, floty Kolonii i Dominium lecą razem (zaufanie wobec Varna) albo rozchodzą się w przeciwne strony (dystans), a nad obiema wstaje wspólny świt („Koniec kampanii”).
+
+**Wersja 0.108 — sceny łączności i prolog aktu III.** Sceny łączności przed rozdziałami mają teraz kadr filmów kampanii: pasy kinowe, korekcję barwną, ziarno, mgławice i planetę rozdziału zbliżającą się w tle. Rozmówca mówi w holograficznym panelu po swojej stronie — Kolonie w turkusie, Dominium na czerwono z zakłóceniami, Varn w bursztynie, Rój w fiolecie z rwącym się sygnałem — a po drugiej stronie panel danych pokazuje kanał, kwestię pisaną na żywo i falę głosu; między kwestiami przeskakuje szum. Nowy **prolog aktu III „Przebudzenie Roju”** (20 s, w stylu intro): artefakty pogranicza biją jednym rytmem na holograficznej mapie; świecący gąszcz Lumerii V i pełzacze Roju wychodzące z kryształowych grot; floty Kolonii i Dominium ramię w ramię nad Nivalis, a z boku nadciąga chmura Roju; Serce Roju pulsujące pod magmą Pyrrhosa i uderzenie orbitalne. Odtwarza się raz przed rozdziałem VII; na liście kampanii (po ukończeniu VI) jest przycisk „Prolog aktu III”.
+
+**Wersja 0.107 — nowy prolog aktu II.** Prolog „Cena świtu” w tym samym stylu co intro kampanii (kinowy kadr, ruch kamery, taktyczny interfejs, tytuły z zakłóceniem, korekcja barwna i ziarno): latarnie znów zapalają się w całym sektorze, a z pustynnej planety pulsuje powtarzany sygnał; zmierzch nad wydmami Khepri IV, wiertnie Dominium wyrzucają pył, a spod piasku wynurzają się grzbiety paszczaków; trzy konwojowce z reflektorami pną się górską drogą w śnieżycy na przełęczy Vesperu; kompleks Hefajstos na Vulkanie IX wysysa energię planety wiązkami ognia, płyną rzeki lawy, sypie popiół, krążą okręty Dominium, a na końcu pojawia się tytuł „Cena świtu”. Te same podpisy i 20 sekund.
+
+**Wersja 0.106 — nowe intro kampanii.** Prolog kampanii wygląda jak przerywnik z gry sci-fi: kinowe pasy, powolny najazd kamery, mgławice i gwiazdy na kilku planach, planety z poświatą atmosfery, kontynentami, chmurami i światłami miast, szczegółowe krążowniki i transportowce ze światłami pozycyjnymi i smugami silników, lasery, rozbłyski obiektywu, taktyczny interfejs (kod czasu, miejsce, znacznik nagrywania), tytuły pisane „maszynowo” z zakłóceniem, korekcja barwna, winieta i ziarno filmu. Ujęcia: łańcuch latarni i konwój; krążownik Dominium wsuwa się w kadr i laserami gasi latarnie (wstrząs kamery, czerwony błysk); nocna strona Khepri IV, gdzie gasną miasta, a wskaźnik sieci spada do zera; holograficzna transmisja z mówiącym portretem Liry i trasą Eos → Vesper rysującą się na mapie; przelot ekspedycji przez lodowe kaniony Vesperu; wschód słońca nad flotą, zapalające się latarnie i tytuł „Odzyskany Świt”. Te same podpisy i 30 sekund; przy ograniczonych animacjach kadry stoją.
+
+**Wersja 0.105 — cztery niepokojące motywy.** Muzyka dostała cztery nowe motywy w tym samym filmowym klimacie, z nutą „Obcego”: cisza i przestrzeń, flet wołający w ciemność z długim echem, jęczący metal, szum kadłuba, syki i trzaski w ścianach, bicie serca w napięciu i metaliczne uderzenia w walce (własne motywy, bez cytowania). **Wrak** — martwe statki (Popielny Szlak, rozdział III): szum kadłuba, wołanie fletu, zgrzyty metalu. **Ul** — każda gra przeciw Rojowi (akt III, scenariusze z Rojem): niski klaster chorału, nieregularne trzaski i syki. **Gąszcz** — obce dżungle i latające wyspy (Lumeria, Aerion): oddychający chór i szklane dzwony w skali całotonowej. **Kuźnia** — rzeki magmy i kompleks Hefajstos (rozdział VI): dron pieca i kowadło wybijające rytm. Nowe instrumenty: flet z echem, smyczkowany metal, bicie serca, szum statku, syk i kowadło. Motywy można odsłuchać w Ustawieniach. [Opis](docs/AUDIO.md#wersja-0105--cztery-niepokojące-motywy-2026-10-07).
+
+**Wersja 0.104 — odsłuch muzyki w ustawieniach.** W Ustawieniach (z menu głównego i z pauzy) jest sekcja „Odsłuch muzyki”: wybierasz motyw — menu, intro, pustynia, świt bliźniaczych słońc, lód albo front popiołu — i nastrój gry (eksploracja, rozbudowa, napięcie, bitwa, wytchnienie), a przycisk „Odtwórz / Zatrzymaj” uruchamia go od razu. Zmiana motywu lub nastroju w trakcie przełącza muzykę na bieżąco; intro gra w pętli; nastrój trzyma się, dopóki słuchasz. Po wyjściu z ustawień wraca zwykła muzyka. Status pokazuje, co gra, i ostrzega, gdy dźwięk jest wyciszony albo głośność muzyki wynosi 0. [Opis](docs/AUDIO.md#wersja-0104--odsłuch-muzyki-w-ustawieniach-2026-10-07).
+
+**Wersja 0.103 — nowa muzyka.** Ścieżka dźwiękowa w duchu filmowych partytur „Diuny” i „Interstellara” — własne motywy, bez cytowania melodii. Nowe instrumenty syntezowane w grze: organy piszczałkowe, chór bez słów, niski gardłowy chorał, potężne dęte „braam”, bębny wojenne taiko, tykający zegar, oddychający dron, zawodzący głos z podjazdami i vibrato oraz miękki fortepian. Menu: minorowa figura organów w ósemkach nad wolnym ciągiem akordów, z warstwami smyczków, chóru i zegara narastającymi przez kolejne frazy. Lód: organy, tykanie zegara i rzadki fortepian. Pustynia: dron, skala z obniżoną sekundą, zawodzący głos i rzadkie bębny; świt bliźniaczych słońc — jaśniejszy chór i dzwony; front popiołu — marsz taiko, chorał i uderzenia dętych. Nastroje gry (eksploracja, rozbudowa, napięcie, bitwa, wytchnienie) dokładają i zdejmują warstwy; intro to 30-sekundowa burza z akordem nadziei na końcu. [Opis](docs/AUDIO.md#wersja-0103--muzyka-filmowa-2026-10-07).
+
+Samodzielny prototyp 2D strategii science fiction. Powstał w HTML, CSS i JavaScript (Canvas 2D), bez bibliotek, pobieranych assetów ani wymaganej instalacji. To prototyp mechanik, nie projekt Unity.
+
+## Uruchomienie
+
+Otwórz `index.html` w aktualnym Chrome, Edge lub Firefox. Na Windows można również dwukrotnie kliknąć `START.cmd`.
+
+Opcjonalnie, jeśli masz Node.js: `npm start`, następnie http://127.0.0.1:4173. Serwer nasłuchuje tylko na lokalnym komputerze. Nie trzeba uruchamiać `npm install`.
+
+## Wersje
+
+**Wersja 0.102 — styl Dominium w kampanii.** Styl gry dowódcy AI zależny od frakcji (od 0.51 w scenariuszach: Dominium — „Twierdza”, Kolonie — „Nękanie”, Rój — „Fala”) obejmuje teraz także rozdziały kampanii z dowódcą (II, III, VI): Dominium stawia dodatkowe wieżyczki, rzadko zajmuje przekaźniki, nie nęka robotów i atakuje rzadziej, ale większymi grupami bastionów i ciężkich maszyn, a jego fabryka rusza wcześniej. Bez orbitalnych uderzeń w tych rozdziałach. Rozdziały przestrojono pod nowy rytm, a odprawa opisuje styl przeciwnika. [Opis](docs/AI_PRZECIWNIKA.md#styl-frakcji-051).
+
+**Wersja 0.101 — głos łączności.** Rozmówcy kampanii mówią własnymi, syntezowanymi głosami — bez nagrań: każda linia to ciąg sylab w barwie i rytmie postaci (wysoki, szybki głos Liry, spokojny z lekkim drżeniem Tessy, niski Vale’a, nerwowy Kossa, głęboki i szorstki Varna), z intonacją opadającą na końcu zdania i rosnącą przy pytaniu, przepuszczony przez radio: pasmo, przesterowanie, szum i trzaski nadajnika. Przechwycony kanał Dominium rwie się i brzęczy, a Szept Roju to szklany akord narastający i gasnący. W scenach łączności przed rozdziałami każda postać ma też krótki motyw muzyczny, grany, gdy odzywa się po raz pierwszy. Głos gra przy okienku łączności w grze i w scenach; głośność — kanał komunikatów. [Opis](docs/KAMPANIA_OPRAWA.md#głos-łączności-wersja-0101-2026-10-07).
+
+**Wersja 0.100 — wybory i rozgałęzienia kampanii.** Obok decyzji o kompleksie Hefajstos kampania ma trzy nowe wybory fabularne, podejmowane w trakcie rozdziału (gra staje, okno z dwiema opcjami i ich skutkami): w rozdziale I „Kody Dominium” — apel do kolonistów (ochotnicy na start rozdziałów II–III, ale ostrzeżony wróg) albo tajny nasłuch (rozkazy ataków 45 s wcześniej i baza wroga na mapie); w III „Upadek cytadeli” — arsenał (metal i czołg w IV–VI) albo jeńcy (słabsze budynki wroga i dwa zrzuty posiłków w IV–VI); w VIII „Propozycja Varna” — zaufanie (bastiony Dominium i szybsze uderzenie orbitalne w IX) albo dystans (metal i własna artyleria w IX). Wybór zapisuje się z postępem kampanii, odprawy rozdziałów pokazują skutki decyzji, a epilog kampanii opowiada o sojuszu z Varnem lub o drodze osobno. [Opis](docs/KAMPANIA_OPRAWA.md#wybory-i-rozgałęzienia-wersja-0100-2026-10-07).
+
+**Wersja 0.99 — portrety i sceny łączności.** Rozmówcy kampanii mają portrety rysowane w kodzie, w stylu ekranu łączności: Lira, dr Mira Tessa, kpt. Oren Vale, Adrian Koss, kmdr Aris Varn, a także przechwycony kanał Dominium (godło w szumie) i Szept Roju (pulsujący kryształ); mrugają i poruszają ustami, gdy mówią. W grze każda linia łączności pojawia się w okienku z mówiącym portretem, imieniem w kolorze postaci i treścią, a dziennik celów aktów II–III pokazuje portret ostatniego rozmówcy. Przed każdym rozdziałem kampanii (I–IX) — raz, przed pierwszą odprawą — odtwarza się krótka scena łączności: 3–4 kwestie z dużym portretem mówiącego (Kolonie po lewej, Dominium i Rój po prawej) na tle zbliżającej się planety rozdziału; można ją pominąć i powtórzyć z odprawy przyciskiem „Scena łączności”. [Opis](docs/KAMPANIA_OPRAWA.md).
+
+**Wersja 0.98 — żywsze misje kampanii.** Rozdziały kampanii reagują na gracza. Przed każdym atakiem dowódcy AI nasłuch przechwytuje rozkaz Dominium (siła i czas wymarszu). Przekaźnik odebrany wrogowi ściąga kontratak, który próbuje go odbić. Gdy armia gracza naciera na bazę wroga, mały oddział uderza na tyły — w roboty przy kopalniach. Raz na rozdział, przy ciężkich stratach albo z centrum dowodzenia w niebezpieczeństwie, z orbity ląduje desant posiłków (większy na łatwym). Od średniego poziomu dowódca szkoli ukrytych sabotażystów i wysyła ich na reaktor, fabrykę lub laboratorium gracza — wykryją ich tylko jednostki w pobliżu, a łączność ostrzega, gdy budynek gaśnie. Opóźnienia i siły zależą od poziomu trudności kampanii; zestaw zdarzeń dobrany do każdego rozdziału. [Opis](docs/AI_PRZECIWNIKA.md#zdarzenia-w-rozdziałach-kampanii-wersja-098-2026-10-07).
+
+**Wersja 0.97 — dowódca AI w kampanii.** W rozdziałach II (Archiwum pod lodem), III (Świt nad Nadir) i VI (Serce popiołu) zamiast zaplanowanych desantów Dominium prowadzi dowódca AI ze scenariuszy: zbiera rudę robotami, buduje i odbudowuje bazę, płaci za każdą jednostkę, broni kopalń, walczy o przekaźniki i planuje ataki (odliczanie „Planowany atak” w panelu). Każdy z tych rozdziałów ma własne dostrojenie — w II pierwszy atak później i mniejsze fale, bez lotnictwa; w III plan bliski poziomowi; w VI nieco rzadsze ataki, bo napiera też kompleks i fauna. Kampania ma teraz poziom trudności (Łatwy, Średni, Trudny) wybierany w odprawie i zapamiętywany: ustawia dowódcę AI w tych rozdziałach i w akcie III oraz siłę przeciwnika (−15% / +15% wytrzymałości i obrażeń) we wszystkich rozdziałach kampanii. Pozostałe rozdziały zachowują swoje skrypty. [Opis](docs/AI_PRZECIWNIKA.md#dowódca-ai-w-kampanii-wersja-097-2026-10-07).
+
+**Wersja 0.96 — zachowania zwierząt.** Zwierzęta na planszy 3D żyją własnym życiem: odpoczywają i pasą się (jeleń opuszcza łeb do ziemi), a potem wędrują daleko wokół swojego miejsca — jelenie do ok. 560 jednostek, lisy 480, zające 320, jaszczurki 220 — wybierając miejsca, do których da się dojść: omijają wodę, mury, budynki, przeszkody i strome zbocza, skręcają płynnie, przyspieszają i zwalniają. Jelenie chodzą stadami za przewodnikiem i czekają na maruderów, zające i jaszczurki poruszają się zrywami — bieg, bezruch, bieg. Jednostki, strzały i wybuchy w pobliżu płoszą je do ucieczki (całe stado naraz), po której zatrzymują się czujnie, z uniesionym łbem, i rozglądają. Krok nóg nadąża za prędkością, a w biegu wydłuża się. [Opis](docs/RENDERER_3D.md#zachowania-zwierząt-wersja-096-2026-10-06).
+
+**Wersja 0.95 — pochylanie kamery w grze.** W trybie 3D kamerę można pochylić ku horyzontowi, aż w kadrze pojawi się niebo — słońce, księżyc, gwiazdy, chmury, zorza i planety: PageUp / PageDown (przytrzymaj) albo Alt + przeciąganie środkowym przyciskiem w górę i w dół (w bok, jak dotąd, obraca). / przywraca widok z góry od południa, a pochylenie zapisuje się w zapisie gry. Kursor skierowany w niebo wskazuje daleki punkt pod nim zamiast punktu za kamerą. [Opis](docs/RENDERER_3D.md#pochylanie-kamery-w-grze-wersja-095-2026-10-06).
+
+**Wersja 0.94 — chmury, zmierzch i obce niebo.** Nad zwykłymi chmurami ciągną się wysoko cienkie smugi cirrusów, dryfujące szybciej i znikające przy zachmurzeniu. O zachodzie i po nim chmury świecą od spodu pomarańczem i różem (cirrusy najdłużej), ich grube środki są ciemniejsze od brzegów, a nocą brzegi chmur przy księżycu srebrzą się. O zmierzchu i świcie po stronie przeciwnej do słońca wznosi się nad horyzontem niebieskoszary cień planety, a nad nim różowy pas Wenus. Każdy świat ma swoje niebo: na Wydmach Bliźniaczych Słońc świeci drugie, mniejsze, pomarańczowe słońce (z własnym, delikatnym światłem na terenie), a na innych mapach widać planety i księżyce — oświetlone od strony słońca, pasiaste, z cienką atmosferą, niektóre z pierścieniem; za dnia blade, nocą wyraźne. [Opis](docs/RENDERER_3D.md#chmury-zmierzch-i-obce-niebo-wersja-094-2026-10-06).
+
+**Wersja 0.93 — gwiazdy, Droga Mleczna i zorza.** Gwiazdy mają kolory (czerwonawe, żółte, białe, niebieskie) i różną jasność: wiele słabych, kilka jasnych z krzyżykiem promieni dyfrakcyjnych; mrugają, najmocniej nisko nad horyzontem, a całe niebo powoli obraca się wokół bieguna. Droga Mleczna to pas obłoków światła, szerszy i cieplejszy przy jasnym jądrze, przecięty ciemnymi pasmami pyłu i gęściej usiany gwiazdami; przy pełni blednie. Co jakiś czas przez niebo przelatuje meteor z gasnącym ogonem, a po niebie powoli suną satelity. Nad mapami lodowymi nocą faluje zorza — zielone kurtyny przechodzące u góry w czerwień i fiolet, z pionowymi promieniami — i lekko zabarwia na zielono teren i modele. [Opis](docs/RENDERER_3D.md#gwiazdy-droga-mleczna-i-zorza-wersja-093-2026-10-06).
+
+**Wersja 0.92 — słońce i księżyc.** O złotej godzinie oraz w zapylonym lub mglistym powietrzu przez prześwity między chmurami padają na ziemię długie, miękkie snopy słonecznego światła, najjaśniejsze, gdy patrzy się w stronę słońca. Kiedy słońce jest na ekranie i nie zasłania go teren, wokół tarczy pojawia się poświata, a przez środek obrazu ciągnie się łańcuch refleksów obiektywu (pierścienie i sześciokątne odblaski); po zejściu słońca za wzgórze refleks płynnie gaśnie. Księżyc ma fazy, które zmieniają się z każdą nocą (od nowiu z ledwie widoczną tarczą w świetle popielatym po pełnię), a jasność nocy zależy od fazy: przy pełni księżyc świeci jaśniej i rzuca wyraźniejsze cienie, przy nowiu noc jest głębsza i bardziej granatowa. Cienie chmur przesuwają się także w świetle księżyca. [Opis](docs/RENDERER_3D.md#słońce-i-księżyc-wersja-092-2026-10-06).
+
+**Wersja 0.91 — pociski i trafienia.** Pociski to świecące smugi zwrócone do kamery — biało-gorący rdzeń, miękka poświata w kolorze strzału, najjaśniejszy czubek i ogon gasnący ku tyłowi (zamiast pudełek). Z lufy bucha gwiazda płomienia i kłębek dymu, a nocą błysk na moment oświetla okolicę. Trafienie to błysk, snop iskier i — na ziemi — obłoczek pyłu w kolorze podłoża (piasek, popiół, śnieg); rakieta wybucha małą kulą ognia z dymem, a w locie ciągnie gęstszą smugę dymu z płomykiem. [Opis](docs/RENDERER_3D.md#pociski-i-trafienia-wersja-091-2026-10-06).
+
+**Wersja 0.90 — kratery i ślady wybuchów.** Krater ma teraz lej z wewnętrzną ścianą oświetloną od strony słońca i ciemnym, osmalonym dnem, poszarpane promienie wyrzuconej ziemi i sadzy, wyniesiony wał ziemi dookoła (trójwymiarowy) i rozrzucone osmalone kamienie; świeży krater żarzy się na dnie i przez kilkadziesiąt sekund tli się, puszczając dym i iskry, a z czasem wał opada i krater blednie. Mniejsze wybuchy (bez krateru) zostawiają na ziemi postrzępione plamy sadzy, które bledną po minucie. [Opis](docs/RENDERER_3D.md#kratery-i-ślady-wybuchów-wersja-090-2026-10-06).
+
+**Wersja 0.89 — lawa i świecące jeziora.** Lawa ma ciemną, zastygłą skorupę z nieregularnych płyt dryfujących powoli z prądem, świecące pęknięcia między nimi (szersze tam, gdzie goręcej) i pulsujące plamy płynnej skały; przy brzegu jest chłodniejsza; pękają na niej bąble, rozpryskując krople i puszczając dym; lawa oświetla teren i modele wokół ciepłym, migoczącym światłem (w dzień słabiej). Świecące jeziora (Lumeria) to ciemna toń z wirującymi, pulsującymi smugami bioluminescencji i świecącą obwódką przy brzegu, jaśniejsze nocą, rzucające turkusowe światło na okolicę. [Opis](docs/RENDERER_3D.md#lawa-i-świecące-jeziora-wersja-089-2026-10-06).
 
 **Wersja 0.88 — woda i ryby.** Jeziora mają zawsze płaską taflę i równe dno (dotąd przy nierównym brzegu woda kładła się na dnie, a od 0.82 środek jeziora zakrywała płaszczyzna terenu wokół mapy — był piaszczystą „wyspą”). Woda jest ciemniejsza i bardziej niebieska w głębi, turkusowa na płyciznach, z migotaniem światła nad dnem, iskrzeniem słońca na falkach i pianą obmywającą brzeg. Ryby pływają tuż pod powierzchnią w dwóch luźnych ławicach, każda własnym, wijącym się torem, zwrócone tam, dokąd płyną, a co jakiś czas któraś wyskakuje łukiem z wody z pluskiem kropel. [Opis](docs/RENDERER_3D.md#woda-i-ryby-wersja-088-2026-10-06).
 
@@ -182,29 +244,21 @@
 
 **Nowość: ukończony etap A — Rozwój kolonii.** Trzy nowe badania, dwa poziomy centrum, akumulator, warsztat i szkolenie. Uruchom: Gra jednoosobowa → Szkolenie: Próba kolonii. [Zakres, parametry i cele](docs/ETAP_A_ROZWOJ_KOLONII.md).
 
-Samodzielny prototyp 2D strategii science fiction. Powstał w HTML, CSS i JavaScript (Canvas 2D), bez bibliotek, pobieranych assetów ani wymaganej instalacji. To prototyp mechanik, nie projekt Unity.
-
-## Uruchomienie
-
-Otwórz `index.html` w aktualnym Chrome, Edge lub Firefox. Na Windows można również dwukrotnie kliknąć `START.cmd`.
-
-Opcjonalnie, jeśli masz Node.js: `npm start`, następnie http://127.0.0.1:4173. Serwer nasłuchuje tylko na lokalnym komputerze. Nie trzeba uruchamiać `npm install`.
-
-## Nowości wersji 0.14
+**Wersja 0.14**
 
 Okrągły księżyc i światła nawigacyjne samolotów. Pełnoekranowy prolog z sześcioma scenami i osobnym motywem muzycznym. Bazy przy narożnikach, przekaźniki przy złożach oraz dźwięki ruchu i pracy robotów. [Szczegóły i zasady](docs/WERSJA_0_14.md).
 
-## Nowości wersji 0.13
+**Wersja 0.13**
 
 Przywrócone szczegóły budynków, mury pod dowolnym kątem i w okręgu, rozbiórka, łagodniejsza ulewa, mniejsze kafle, bezpośrednia konfiguracja scenariusza oraz trzy osobne mapy kampanii z 30-sekundowym animowanym prologiem. [Sterowanie i pełny opis](docs/WERSJA_0_13.md).
 
-## Nowości wersji 0.12
+**Wersja 0.12**
 
 Dwie frakcje i konfiguracja scenariuszy dla 2–4 uczestników, lotnictwo i hangar, roboty z bronią, przeciągane mury z bramami i wieżami. Nowe bryły budynków i fauna, osobny suwak muzyki oraz stronicowane kafle bez obciętych opisów.
 
 Sterowanie, parametry i wyniki testów: [Wersja 0.12](docs/WERSJA_0_12.md).
 
-## Nowości wersji 0.11
+**Wersja 0.11**
 
 - Dzień i noc (cykl 6 minut), księżyc, gwiazdy oraz nocne światła jednostek i budynków.
 - Śnieżyce, wyraźne burze piaskowe i ulewy z błyskawicami/grzmotem. Do −35% ruchu i 30% chybionych strzałów w najgorszych warunkach.
@@ -213,7 +267,7 @@ Sterowanie, parametry i wyniki testów: [Wersja 0.12](docs/WERSJA_0_12.md).
 - Ptaki i ryby jako dekoracyjna fauna. Pogoda, doba i badania obsługują zapis gry.
 - Weryfikacja: 72 testy automatyczne; pięć motywów wyrenderowanych w Web Audio bez przesterowania; przegląd graficzny dnia, nocy i trzech rodzajów burz.
 
-## Nowości wersji 0.10
+**Wersja 0.10**
 
 - **Pogoda na planszy:** śnieg na Nivalis pada w przestrzeni mapy i stopniowo osiada na gruncie. Deszcz na Vulkanie uderza w teren, a z czasem pojawiają się rosnące kałuże. Jeziora mają drobne, wielowarstwowe fale i ruchome refleksy.
 - **Uszkodzenia:** mechaniczne jednostki i budynki poniżej 55% wytrzymałości zaczynają dymić i płonąć; poniżej 28% ogień jest wyraźnie intensywniejszy.
@@ -223,13 +277,13 @@ Sterowanie, parametry i wyniki testów: [Wersja 0.12](docs/WERSJA_0_12.md).
 - **Muzyka proceduralna:** osobny spokojny motyw menu i trzy warianty muzyki bitwy dopasowane do biomu. Muzyka działa offline i podlega wspólnemu wyciszeniu oraz regulacji głośności.
 - **Interfejs:** przycisk zapisu znajduje się teraz w grupie sterowania dźwiękiem, bezpośrednio obok suwaka głośności. Zwierzęta są mniejsze i mniej dominują wizualnie nad piechotą.
 
-## Nowości wersji 0.9
+**Wersja 0.9**
 
 - Pięć ręcznych slotów zapisu oraz niezależny autosave, osobne podmenu trzech scenariuszy i trzy odblokowywane rozdziały kampanii.
 - Ciężka maszyna, artyleria, mur i otwierana brama. Mapy mają 3360 × 2160, cztery przekaźniki, jeziora, nowe złoża i planetarne drapieżniki.
 - Lewy panel jest podzielony na zakładki, a dolny panel zawsze pokazuje postęp produkcji, budowy lub badania.
 
-## Nowości wersji 0.8
+**Wersja 0.8**
 
 - **Reaktor [C]:** 180 metalu, 14 s, +60 mocy. Centrum dostarcza 40 mocy. Bilans w górnym pasku pokazuje zapotrzebowanie / podaż.
 - **Laboratorium [N]:** 220 metalu, 16 s; pobór 30 mocy. Pozostały pobór: koszary 10, fabryka 25, ekstraktor 10, wieżyczka 5. Liczą się ukończone budynki gracza. Niedobór spowalnia produkcję wojsk i badania proporcjonalnie do pokrycia zapotrzebowania, do minimum 25%. Produkcja robotów, wydobycie, naprawy i budowa pozostają dostępne.
@@ -243,17 +297,15 @@ Sterowanie, parametry i wyniki testów: [Wersja 0.12](docs/WERSJA_0_12.md).
 
 Weryfikacja: kontrola składni i testy logiki. Aktualne oględziny przeglądarkowe oraz pomiar płynności pozostają niewykonane z powodu blokady automatycznej kontroli uprawnień po przekroczeniu limitu użycia. Testy logiki nie zastępują oceny wizualnej ani balansu rozegranych misji.
 
-## Cel
-
+Cel
 Zniszcz czerwone centrum dowodzenia na północnym wschodzie. Zaczynasz z 6 jednostkami bojowymi, 2 robotami górniczymi, centrum i koszarami. Centrum zapewnia 8 metalu/s. Każdy przejęty przekaźnik dodaje 5 metalu/s i pozwala budować pobliski przyczółek. Przejmowanie trwa 7 sekund i wymaga jednostki w zaznaczonym promieniu; przeciwnik może je kontestować i odbijać. Pierwszy desant nadchodzi po 65 sekundach; następne są silniejsze.
 
-## Aktualizacja grafiki 2D
-
+Aktualizacja grafiki 2D
 Nowy moduł `art.js` rysuje szczegółowsze jednostki, odrębne budynki, rudę i gaz oraz detale terenu. Zawiera podstawowe animacje ruchu i pracy, dym uszkodzeń i buforowanie wyglądu budynków. Nowe operacje zaczynają się bliżej bazy; zapis zachowuje wcześniejsze ustawienie kamery. Home pokazuje całą mapę.
 
 Kontrola składni i 63 testy logiki przeszły. W przeglądarce sprawdzono sceny śnieżną i deszczową, animowaną wodę, pożar, pracę robota, menu, położenie zapisu oraz oba paski postępu; konsola nie zgłosiła błędów. Nie wykonano jeszcze pomiaru płynności przy pełnym limicie jednostek. Tryb 3D jest odłożony. Szczegółowy stan prac: [Grafika planszy](docs/GRAFIKA_PLANSZY.md).
 
-## Nowości wersji 0.6 — gospodarka i rozwój
+**Wersja 0.6 — gospodarka i rozwój**
 
 - **Magazyn polowy [G]:** 120 metalu, 10 s. Robot rozładowuje rudę w ukończonym centrum lub magazynie, wybierając krótszą dostępną trasę. Po utracie celu rozładunku zachowuje ładunek i szuka innego punktu.
 - **Gaz:** trzy skończone złoża oznaczone fioletem na mapie i minimapie. Oddzielny licznik w górnym pasku; początkowy zapas wynosi zero.
@@ -263,7 +315,7 @@ Kontrola składni i 63 testy logiki przeszły. W przeglądarce sprawdzono sceny 
 - **Migracja:** format zapisu 4 czyta formaty 2 i 3, zachowując metal, jednostki, kolejki i badania. Starsze mapy otrzymują złoża gazu przesunięte w razie kolizji z istniejącymi strukturami. Gaz zaczyna od zera; starsze badania i zamówienia nie wymagają dopłaty. Klucz zapisu pozostaje ten sam.
 - Koszty dotychczasowej armii oraz premii broni i pancerza pozostają w metalu. Pierwszym zastosowaniem gazu jest rozwój ładowni. Energia, laboratorium, budowa przez roboty i kryształy to dalsze etapy.
 
-## Nowości wersji 0.5 — menu główne
+**Wersja 0.5 — menu główne**
 
 - **Gra jednoosobowa:** odprawa misji Cichy Horyzont; start nowej operacji wymaga potwierdzenia, jeśli istnieje zapis.
 - **Kontynuuj:** dostępne przy poprawnym zapisie niezakończonej operacji; wczytana bitwa czeka w pauzie.
@@ -274,7 +326,7 @@ Kontrola składni i 63 testy logiki przeszły. W przeglądarce sprawdzono sceny 
 - Kampania, gra sieciowa i kolejne scenariusze pozostają propozycjami opisanymi w „Co nowego i plany”.
 - `menu.js` i `menu.css`: nawigacja oraz proceduralny pokład dowodzenia. `tests/menu-browser.html`: testy przejść, ochrony zapisu i błędów pamięci z kontrolowanymi odpowiedziami warstwy zapisu.
 
-## Nowości wersji 0.4 — dźwięk
+**Wersja 0.4 — dźwięk**
 
 - Proceduralne efekty strzałów, rakiet, eksplozji, zaznaczania i rozkazów oraz kliknięć interfejsu.
 - Sygnały ukończenia produkcji, budowy i badań, przejęcia przekaźnika, alarmu bazy, desantu oraz zakończenia bitwy.
@@ -284,7 +336,7 @@ Kontrola składni i 63 testy logiki przeszły. W przeglądarce sprawdzono sceny 
 - Limity częstotliwości i liczby jednoczesnych dźwięków ograniczają nakładanie efektów.
 - `audio.js`: synteza przez Web Audio API. `npm test` sprawdza logikę audio; `tests/audio-browser.html` wykonuje 14 prób rzeczywistej syntezy offline, amplitudy, wyciszenia i zwalniania źródeł.
 
-## Nowości wersji 0.3
+**Wersja 0.3**
 
 - **Grupy jednostek:** Ctrl+1–9 przypisuje zaznaczone jednostki, Ctrl+Shift+1–9 dodaje je do istniejącej grupy. Sam numer wybiera grupę; dwukrotne szybkie naciśnięcie centruje kamerę. Można też klikać przyciski grup na mapie (Ctrl+klik przypisuje). Polegli automatycznie znikają z przywołanej grupy. Przypisanie pustego zaznaczenia czyści grupę.
 - **Punkty zbiórki:** zaznacz własne centrum, koszary lub fabrykę i kliknij PPM na mapie. Zobaczysz flagę i linię. Nowe jednostki samodzielnie idą do wskazanego punktu. Punkt w skale jest przesuwany na dostępny teren.
@@ -293,7 +345,7 @@ Kontrola składni i 63 testy logiki przeszły. W przeglądarce sprawdzono sceny 
 - **Alarm bazy:** obrażenia zadane własnemu budynkowi uruchamiają czerwony komunikat i pulsujący znacznik na minimapie. Kliknięcie komunikatu lub J centruje kamerę na miejscu ataku. Alarm jest wizualny i od wersji 0.4 dźwiękowy; powiadomienia tekstowe są ograniczone do jednego na 10 sekund, żeby uniknąć zalewania ekranu.
 - **Zgodność zapisów:** zapisy wersji 0.2 są automatycznie migrowane. Zapis 0.3 obejmuje grupy, flagi zbiórki i przypisanie zamówień do budynków. Lokalizacja zapisu w przeglądarce pozostaje ta sama.
 
-## Mechaniki dodane w wersji 0.2
+**Wersja 0.2**
 
 - **Wydobycie:** roboty zabierają po 30 rudy z wyczerpywalnych złóż i dostarczają ją do centrum. Początkowe roboty pracują automatycznie. Nowe wymagają rozkazu PPM na rudzie.
 - **Budowa:** wieżyczka (150 metalu, 8 s), koszary (200, 12 s), fabryka (320, 18 s). Budowę zleca się na widocznym wolnym terenie do 380 jednostek od centrum lub 240 od własnego przekaźnika. Od wersji 0.10 fundament wymaga pracy robota.

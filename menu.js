@@ -1,4 +1,24 @@
 /* Navigation owns screens; the application retains a single simulation loop. */
+// Listening to the music in the settings: themes (audio.js music modes) and the game's moods.
+const MUSIC_THEMES = [
+	["menu", "Menu — Odległe światło"],
+	["intro", "Intro — burza"],
+	["game:dust", "Pustynia"],
+	["game:sun", "Świt bliźniaczych słońc"],
+	["game:ice", "Lód"],
+	["game:ash", "Front popiołu"],
+	["game:wreck", "Wrak"],
+	["game:hive", "Ul"],
+	["game:lumen", "Gąszcz"],
+	["game:forge", "Kuźnia"],
+];
+const MUSIC_MOODS = [
+	["explore", "Eksploracja"],
+	["develop", "Rozbudowa"],
+	["tension", "Napięcie"],
+	["battle", "Bitwa"],
+	["recovery", "Wytchnienie"],
+];
 const WINDOW_SCREENS = [
 	"news",
 	"campaign",
@@ -8,6 +28,22 @@ const WINDOW_SCREENS = [
 	"review",
 	"scenarios",
 ];
+// The line over each screen's title, like the channel of a console.
+const EYEBROWS = {
+	single: "WYBÓR OPERACJI / SEKTOR 07",
+	campaign: "MAPA OPERACYJNA / AKTY I–III",
+	scenarios: "SYMULATOR BITEW / KONFIGURACJA",
+	briefing: "ODPRAWA / KANAŁ SZYFROWANY",
+	review: "ODPRAWA / DZIENNIK ŁĄCZNOŚCI",
+	slots: "ARCHIWUM ZAPISÓW / PAMIĘĆ LOKALNA",
+	"slot-confirm": "ARCHIWUM ZAPISÓW / POTWIERDZENIE",
+	replace: "AUTOSAVE / POTWIERDZENIE",
+	"save-error": "BŁĄD PAMIĘCI / ZAPIS NIEUDANY",
+	settings: "KONFIGURACJA POKŁADU",
+	knowledge: "BAZA WIEDZY / ARCHIWUM KOLONII",
+	news: "DZIENNIK ZMIAN / PLANY",
+	pause: "SYMULACJA ZATRZYMANA",
+};
 class CommandMenu {
 	constructor(api) {
 		this.api = api;
@@ -69,11 +105,14 @@ class CommandMenu {
 		this.root.dataset.screen = screen;
 		this.root.hidden = false;
 		this.api.freeze();
+		if (screen !== "settings") this.api.audio?.()?.stopPreview?.();
 		this.api.music?.(
-			screen === "intro" || screen === "intro2" ? "intro" : "menu",
+			["intro", "intro2", "intro3", "interlude"].includes(screen) ? "intro" : "menu",
 		);
 		this.gameElements.forEach((e) => (e.inert = true));
 		document.body.classList.add("in-menu");
+		// The pause screen lies over the frozen battlefield.
+		document.body.classList.toggle("menu-over-game", screen === "pause");
 		const save = this.api.inspectSave();
 		let title = "",
 			body = "";
@@ -89,6 +128,21 @@ class CommandMenu {
 				'<div class="campaign-film"><canvas id="campaign-film" width="960" height="400" aria-label="Film wprowadzający do kampanii"></canvas><p id="film-caption" aria-live="polite"></p><progress id="film-progress" max="30" value="0" aria-label="Czas intro"></progress></div>' +
 				this.button("skip-intro", "Pomiń intro") +
 				"<small>Prolog · 30 sekund</small>";
+		} else if (screen === "interlude") {
+			// A radio scene before a campaign chapter (interludes.js).
+			const m = RTS.MISSIONS[this.selectedMission],
+				film = Interludes.film(this.selectedMission);
+			title = m.name;
+			body =
+				`<div class="campaign-film"><canvas id="campaign-film" width="960" height="400" aria-label="Scena łączności przed rozdziałem"></canvas><p id="film-caption" aria-live="polite"></p><progress id="film-progress" max="${film.duration}" value="0" aria-label="Czas sceny"></progress></div>` +
+				this.button("skip-interlude", "Pomiń scenę") +
+				`<small>Łączność przed rozdziałem · ${Math.round(film.duration)} sekund</small>`;
+		} else if (screen === "intro3") {
+			title = "Akt III · Przebudzenie Roju";
+			body =
+				'<div class="campaign-film"><canvas id="campaign-film" width="960" height="400" aria-label="Prolog trzeciego aktu kampanii"></canvas><p id="film-caption" aria-live="polite"></p><progress id="film-progress" max="20" value="0" aria-label="Czas prologu"></progress></div>' +
+				this.button("skip-intro3", "Pomiń prolog") +
+				"<small>Prolog aktu III · 20 sekund</small>";
 		} else if (screen === "intro2") {
 			title = "Akt II · Cena świtu";
 			body =
@@ -147,27 +201,28 @@ class CommandMenu {
 				.map(card)
 				.join(
 					"",
-				)}${missions.some(([, m]) => m.act === 3) ? `<h2 class="act-heading">Akt III · Przebudzenie Roju</h2>${missions
+				)}${missions.some(([, m]) => m.act === 3) ? `<h2 class="act-heading">Akt III · Przebudzenie Roju</h2>${progress.colony6 && typeof Act3Film !== "undefined" ? this.button("intro3", "Prolog aktu III") : ""}${missions
 				.filter(([, m]) => m.act === 3)
 				.map(card)
 				.join("")}` : ""}</nav><div class="galaxy-view"><canvas id="campaign-map" role="img" aria-label="Mapa galaktyki: układy planetarne pogranicza i trasa kampanii"></canvas><p class="galaxy-caption">Akt I: szkolenie i trzy rozdziały. Akt II — Cena świtu i akt III — Przebudzenie Roju: rozdziały z celami dodatkowymi (◆), które dają niewielką premię na start następnego rozdziału. Zwycięstwo odblokowuje kolejny rozdział. Kliknij świat na mapie galaktyki albo rozdział z listy.</p></div><aside id="galaxy-info" class="galaxy-info" aria-live="polite" aria-label="Wybrana planeta"></aside></div>${this.button("campaign-back", "Wróć do wyboru gry")}`;
 		} else if (screen === "slots") {
 			title =
 				this.slotMode === "save" ? "Zapisz w slocie" : "Wczytaj grę";
-			body = `<p>Pięć ręcznych zapisów na tym urządzeniu. Autosave pozostaje niezależny.</p><div class="mission-list">${(this.api.slots?.() || []).map((slot, i) => `<button class="menu-action" data-slot="${i + 1}" ${this.slotMode !== "save" && !slot.valid ? "disabled" : ""}><span><b>Slot ${i + 1} · ${slot.valid ? RTS.MISSIONS[slot.missionId].name : slot.exists ? slot.label || "Uszkodzony zapis" : "Pusty"}</b><small>${slot.valid ? slot.date + " · " + slot.time : ""}</small></span><span>${this.slotMode === "save" ? "Zapisz" : "Wczytaj"}</span></button>`).join("")}</div><p id="menu-feedback" role="status"></p>${this.button("slots-back", "Wróć")}`;
+			body = `<p>Pięć ręcznych zapisów na tym urządzeniu. Autosave pozostaje niezależny.</p><div class="mission-list">${(this.api.slots?.() || []).map((slot, i) => `<button class="menu-action slot-card ${slot.valid ? "" : slot.exists ? "broken" : "empty"}" data-slot="${i + 1}" ${this.slotMode !== "save" && !slot.valid ? "disabled" : ""}><i class="slot-world" data-world="${slot.valid ? RTS.MISSIONS[slot.missionId].theme || RTS.MISSIONS[slot.missionId].biome || "" : ""}"><small>SLOT</small> 0${i + 1}</i><span><b>${slot.valid ? RTS.MISSIONS[slot.missionId].name : slot.exists ? slot.label || "Uszkodzony zapis" : "Wolny slot"}</b><small>${slot.valid ? `${RTS.MISSIONS[slot.missionId].planet} · <em>T+${slot.time}</em> · ${slot.date}` : slot.exists ? "Zapis nieczytelny" : "— brak danych —"}</small></span><span>${this.slotMode === "save" ? "Zapisz" : "Wczytaj"}</span></button>`).join("")}</div><p id="menu-feedback" role="status"></p>${this.button("slots-back", "Wróć")}`;
 		} else if (screen === "slot-confirm") {
 			title = "Nadpisać slot " + this.slotNumber + "?";
 			body = `<p>Dotychczasowy ręczny zapis w tym slocie zostanie zastąpiony bieżącą operacją.</p>${this.button("slot-confirm", "Zapisz w tym slocie", true)}${this.button("slot-cancel", "Anuluj")}`;
 		} else if (screen === "briefing") {
 			const m = RTS.MISSIONS[this.selectedMission];
 			title = m.name;
-			body = `<span class="menu-tag">${m.training ? "SZKOLENIE WOLNYCH KOLONII" : m.campaign ? (m.act === 2 ? "KAMPANIA · AKT II · " : "KAMPANIA · ROZDZIAŁ ") + m.name : "OPERACJA NIEZALEŻNA"} / ${m.planet}</span><p>${m.description}</p><h2>Cele operacji</h2><p>${m.campaign ? m.objective : (RTS.describeScenario?.(this.scenario) || RTS.MODES?.[this.scenario.mode])?.objective || "Zniszcz wszystkie wrogie centra dowodzenia."}</p>${this.legacyHtml(m)}${m.facts ? `<div class="menu-facts"><span>${m.facts[0]}</span><span>${m.facts[1]}</span></div><p>Nowa umiejętność: ${m.lesson}. Wskazówki i dziennik łączności w panelu celów; odprawę można powtórzyć z menu pauzy.</p>` : `<div class="menu-facts"><span>Metal · gaz · kryształy<br>${m.training || !m.campaign ? "Start: Przyczółek → rozbudowa w BADANIA" : "Start: Kolonia"}</span><span>${m.training ? "1800" : m.campaign ? "650" : "400"} metalu na start<br>${m.training ? "Bez wrogich desantów" : "Pierwszy desant po " + (m.campaign ? "100" : "65") + " s"}</span></div><p>PPM robotem na złożu — wydobycie. Reaktor [C], laboratorium [N]. Home — cała mapa.</p>`}${this.button("launch", "Rozpocznij operację", true)}${this.button("mission-back", "Wróć do wyboru misji")}`;
+			body = `<span class="menu-tag">${m.training ? "SZKOLENIE WOLNYCH KOLONII" : m.campaign ? (m.act === 2 ? "KAMPANIA · AKT II · " : "KAMPANIA · ROZDZIAŁ ") + m.name : "OPERACJA NIEZALEŻNA"} / ${m.planet}</span><p>${m.description}</p><h2>Cele operacji</h2><p class="menu-objective">${m.campaign ? m.objective : (RTS.describeScenario?.(this.scenario) || RTS.MODES?.[this.scenario.mode])?.objective || "Zniszcz wszystkie wrogie centra dowodzenia."}</p>${this.legacyHtml(m)}${m.facts ? `<div class="menu-facts"><span>${m.facts[0]}</span><span>${m.facts[1]}</span></div><p>Nowa umiejętność: ${m.lesson}. Wskazówki i dziennik łączności w panelu celów; odprawę można powtórzyć z menu pauzy.</p>` : `<div class="menu-facts"><span>Metal · gaz · kryształy<br>${m.training || !m.campaign ? "Start: Przyczółek → rozbudowa w BADANIA" : "Start: Kolonia"}</span><span>${m.commanderFacts || (m.training ? "1800" : m.campaign ? "650" : "400") + " metalu na start<br>" + (m.training ? "Bez wrogich desantów" : "Pierwszy desant po " + (m.campaign ? "100" : "65") + " s")}</span></div><p>PPM robotem na złożu — wydobycie. Reaktor [C], laboratorium [N]. Home — cała mapa.</p>`}${m.campaign ? this.campaignLevelHtml(m) : ""}${this.button("launch", "Rozpocznij operację", true)}${typeof Interludes !== "undefined" && Interludes.has(this.selectedMission) ? this.button("replay-interlude", "Scena łączności") : ""}${this.button("mission-back", "Wróć do wyboru misji")}`;
 		} else if (screen === "replace") {
 			title = "Rozpocząć od nowa?";
 			body = `<p>Rozpoczęcie operacji zastąpi dotychczasowy autosave na tym urządzeniu; ręczne sloty pozostaną zachowane. Powrót do odprawy zachowa postęp.</p>${this.button("confirm", "Rozpocznij i zastąp zapis", true)}${this.button("cancel", "Wróć do odprawy")}`;
 		} else if (screen === "pause") {
-			title = "Pauza operacji";
-			body = `<p>Symulacja zatrzymana. Twoje oddziały czekają na rozkazy.</p>${this.button("resume", "Wznów", true)}${this.api.review?.() ? this.button("review", "Odprawa i dziennik") : ""}${this.button("save", "Zapisz w slocie")}${this.button("slots", "Wczytaj grę — sloty")}${this.button("settings", "Ustawienia")}${this.button("knowledge", "Baza wiedzy")}${this.button("home", "Menu główne")}<p id="menu-feedback" role="status"></p>`;
+			title = "Pauza taktyczna";
+			const sit = this.api.situation?.();
+			body = `<p class="pause-lead">${sit ? `${sit.mission} · ${sit.planet}<br><b>T+${sit.time}</b> · symulacja zatrzymana, oddziały czekają na rozkazy.` : "Symulacja zatrzymana. Twoje oddziały czekają na rozkazy."}</p>${this.button("resume", "Wznów", true)}${this.api.review?.() ? this.button("review", "Odprawa i dziennik") : ""}${this.button("save", "Zapisz w slocie")}${this.button("slots", "Wczytaj grę — sloty")}${this.button("settings", "Ustawienia")}${this.button("knowledge", "Baza wiedzy")}${this.button("home", "Menu główne")}<p id="menu-feedback" role="status"></p>`;
 		} else if (screen === "save-error") {
 			title = "Nie zapisano postępu";
 			body = `<p>Pamięć lokalna jest niedostępna. Możesz wrócić do gry lub opuścić bitwę bez zapisania ostatnich zmian.</p>${this.button("pause", "Wróć do pauzy", true)}${this.button("leave", "Opuść bez zapisu")}`;
@@ -185,7 +240,7 @@ class CommandMenu {
 				)
 				.join(
 					"",
-				)}<label class="menu-setting"><input type="checkbox" id="menu-muted"> Wycisz dźwięk</label><label class="menu-setting"><input type="checkbox" id="menu-reduced" ${this.reduced ? "checked" : ""}> Ogranicz animacje menu</label>${
+				)}<label class="menu-setting"><input type="checkbox" id="menu-muted"> Wycisz dźwięk</label><label class="menu-setting"><input type="checkbox" id="menu-reduced" ${this.reduced ? "checked" : ""}> Ogranicz animacje menu</label><h2>Odsłuch muzyki</h2><label class="menu-setting">Motyw<select id="music-theme" aria-label="Motyw muzyki">${MUSIC_THEMES.map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select></label><label class="menu-setting">Nastrój<select id="music-mood" aria-label="Nastrój muzyki">${MUSIC_MOODS.map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select></label><div class="music-preview"><button type="button" id="music-play" class="menu-action"><span>Odtwórz</span><span>▶</span></button><p id="music-now" role="status"></p></div>${
 				typeof SceneFX !== "undefined"
 					? `<h2>Grafika planszy</h2>${[
 							["terrain", "Detale terenu i roślinność"],
@@ -236,6 +291,32 @@ class CommandMenu {
 				body;
 		if (screen === "news")
 			body =
+				"<h2>0.114 / Ekrany menu jak panele taktyczne</h2><p>Okna z narożnikami i linią skanu, planeta misji z celownikiem w tle odprawy, ustawienia w zakładkach, karty zapisów z miniaturą planety, oś czasu zmian i bursztynowe ostrzeżenia.</p>" +
+				"<h2>0.113 / Pauza taktyczna</h2><p>Pauza nad zamrożoną bitwą z raportem sytuacyjnym: surowce, siły, przekaźniki, cele, planowany atak wroga, pogoda i ostatnia łączność.</p>" +
+				"<h2>0.112 / Nowe menu główne</h2><p>Za pokładem dowodzenia żyje układ planetarny — planeta z księżycem, latarnie, przelatujący konwój — a przyciski i karty mają filmowy, taktyczny wygląd.</p>" +
+				"<h2>0.111 / Ekran ładowania</h2><p>Start misji i wczytanie zapisu jak w filmie: wyjście z nadprzestrzeni nad planetę misji, pasek postępu z etapami i wskazówka.</p>" +
+				"<h2>0.110 / Ekrany zwycięstwa i porażki</h2><p>Animowane tło — świt i przelatująca flota albo płonąca baza i utracony sygnał — oraz nowy raport z banerem i statystykami w kafelkach.</p>" +
+				"<h2>0.109 / Zakończenia aktów</h2><p>Filmowe epilogi po każdym akcie — upadek cytadeli i powrót światła, los Hefajstosa według Twojej decyzji, gasnące Serce Roju i wspólny świt.</p>" +
+				"<h2>0.108 / Sceny łączności i prolog aktu III</h2><p>Sceny łączności przed rozdziałami jak w filmie — hologramy rozmówców, kwestie pisane na żywo — oraz prolog aktu III „Przebudzenie Roju”.</p>" +
+				"<h2>0.107 / Nowy prolog aktu II</h2><p>Prolog „Cena świtu” w stylu intro: sygnał spod piasku, wiertnie i paszczaki na Khepri, konwój w śnieżycy i kompleks Hefajstos wysysający energię planety.</p>" +
+				"<h2>0.106 / Nowe intro kampanii</h2><p>Prolog kampanii jak przerywnik z gry sci-fi: ruch kamery, krążowniki i lasery, gasnące miasta, hologram Liry, przelot przez lodowe kaniony i wschód słońca nad flotą.</p>" +
+				"<h2>0.105 / Cztery niepokojące motywy</h2><p>Nowa muzyka z nutą „Obcego”: Wrak, Ul (Rój), Gąszcz i Kuźnia — echo fletu, jęki metalu, syki, bicie serca i kowadło. Do odsłuchu w Ustawieniach.</p>" +
+				"<h2>0.104 / Odsłuch muzyki</h2><p>W Ustawieniach możesz posłuchać każdego motywu muzyki — menu, intro, pustyni, świtu, lodu i frontu popiołu — w wybranym nastroju gry.</p>" +
+				"<h2>0.103 / Nowa muzyka</h2><p>Ścieżka w duchu „Diuny” i „Interstellara”: organy i tykający zegar, dron, bębny wojenne, potężne dęte i zawodzący głos — własne motywy dla menu, lodu, pustyni, świtu i frontu popiołu.</p>" +
+				"<h2>0.102 / Styl Dominium w kampanii</h2><p>W rozdziałach z dowódcą AI Dominium gra jak twierdza: więcej wieżyczek, rzadsze, ale cięższe ataki bastionów i ciężkich maszyn.</p>" +
+				"<h2>0.101 / Głos łączności</h2><p>Syntezowane głosy rozmówców przy każdej linii łączności — inna barwa, rytm i radio dla każdej postaci — oraz motywy postaci w scenach przed rozdziałami.</p>" +
+				"<h2>0.100 / Wybory i rozgałęzienia</h2><p>Trzy nowe decyzje fabularne w rozdziałach I, III i VIII — kody Dominium, upadek cytadeli, propozycja Varna — zmieniają kolejne rozdziały i epilog kampanii.</p>" +
+				"<h2>0.99 / Portrety i sceny łączności</h2><p>Mówiące portrety rozmówców w okienku łączności i dzienniku, sceny łączności przed każdym rozdziałem kampanii (do pominięcia i powtórzenia z odprawy).</p>" +
+				"<h2>0.98 / Żywsze misje kampanii</h2><p>Przechwycone rozkazy przed atakiem, kontrataki o przekaźniki, uderzenia na tyły podczas natarcia, jednorazowe posiłki w kryzysie i sabotażyści dowódcy AI.</p>" +
+				"<h2>0.97 / Dowódca AI w kampanii</h2><p>W rozdziałach II, III i VI Dominium buduje, zbiera surowce i reaguje zamiast zaplanowanych desantów. Nowy poziom trudności kampanii w odprawie (także dla aktu III i siły wroga w każdym rozdziale).</p>" +
+				"<h2>0.96 / Zachowania zwierząt</h2><p>Zwierzęta pasą się i wędrują daleko, omijając przeszkody; jelenie chodzą stadami, zające i jaszczurki zrywami, a jednostki i wybuchy płoszą je do ucieczki.</p>" +
+				"<h2>0.95 / Pochylanie kamery</h2><p>W trybie 3D PageUp / PageDown albo Alt + środkowy przycisk (w górę i w dół) pochylają kamerę ku horyzontowi — widać niebo. / przywraca widok z góry.</p>" +
+				"<h2>0.94 / Chmury, zmierzch i obce niebo</h2><p>Cirrusy, chmury podświetlone o zachodzie i srebrne przy księżycu, cień planety i pas Wenus o zmierzchu, drugie słońce, planety i księżyce na niebie map.</p>" +
+				"<h2>0.93 / Gwiazdy, Droga Mleczna i zorza</h2><p>Kolorowe gwiazdy różnej jasności i obracające się niebo, Droga Mleczna z pasmami pyłu, meteory i satelity, zorza nad mapami lodowymi.</p>" +
+				"<h2>0.92 / Słońce i księżyc</h2><p>Snopy słońca przez prześwity w chmurach, refleksy obiektywu, fazy księżyca zmieniające się co noc, jaśniejsze noce przy pełni.</p>" +
+				"<h2>0.91 / Pociski i trafienia</h2><p>Świecące smugi pocisków, gwiazdy płomienia z luf i ich nocny błysk, iskry i pył przy trafieniach, ogniste wybuchy rakiet.</p>" +
+				"<h2>0.90 / Kratery i ślady wybuchów</h2><p>Kratery z lejem, wałem ziemi, promieniami wyrzutu, kamieniami i tlącym się dnem; mniejsze wybuchy zostawiają ślady sadzy.</p>" +
+				"<h2>0.89 / Lawa i świecące jeziora</h2><p>Lawa ze skorupą z płyt, świecącymi pęknięciami, płynnymi plamami i pękającymi bąblami, oświetlająca okolicę; świecące jeziora z wirującą bioluminescencją.</p>" +
 				"<h2>0.88 / Woda i ryby</h2><p>Płaska tafla jezior (koniec z piaszczystą wyspą w środku), głębsza barwa w środku, iskry słońca na falach i piana obmywająca brzeg; ryby pływają ławicami pod powierzchnią i wyskakują z pluskiem.</p>" +
 				"<h2>0.87 / Dym i ogień</h2><p>Kłębiasty dym jaśniejszy od góry, gęste słupy dymu nad pożarami niesione wiatrem; migoczące języki ognia przechodzące od żółci do czerwieni, iskry i nocny blask pożaru.</p>" +
 				"<h2>0.86 / Mgła</h2><p>Ławice mgły w zagłębieniach, blady welon mgły na nizinach o świcie, zmierzchu, w nocy i w deszczu; mgła wojny z poszarpaną granicą i dryfującą, ciemną zasłoną nad nieznanym.</p>" +
@@ -355,11 +436,27 @@ class CommandMenu {
 			);
 		}
 		this.root.classList.toggle("reduced-motion", this.reduced);
-		this.root.innerHTML = `<div class="menu-stars" aria-hidden="true"></div><div class="menu-orbit" aria-hidden="true"><div class="menu-planet"><div class="planet-surface"></div><div class="planet-clouds"></div><div class="planet-shade"></div></div></div><header class="menu-brand"><span>◈</span> POGRANICZE <small>GALAKTYKI / POKŁAD DOWODZENIA</small></header><div class="menu-layout"><section class="menu-content ${["knowledge", "scenarios", "intro", "campaign"].includes(screen) ? "wide" : ""}"><span class="eyebrow">WOLNE KOLONIE / SEKTOR 07</span><h1 tabindex="-1">${title}</h1>${body}</section>${screen === "home" ? `<aside class="menu-mission"><span class="eyebrow">${save.valid ? "OSTATNIA OPERACJA" : "SYGNAŁ Z POWIERZCHNI"}</span><h2>${save.valid ? RTS.MISSIONS[save.missionId]?.planet || "Khepri IV" : "Khepri IV"}</h2><p>${save.valid ? RTS.MISSIONS[save.missionId]?.name || "Cichy Horyzont" : "Ekspedycja Wolnych Kolonii"}</p><p>${save.valid ? `Czas bitwy: ${save.time}<br>Zapis: ${save.date}` : "Dominium zajęło północny kompleks.<br>Przywróć kontrolę nad sektorem."}</p><span class="menu-tag">${save.valid ? "ZAPIS GOTOWY DO WZNOWIENIA" : "OCZEKIWANIE NA ROZKAZY"}</span></aside>` : ""}</div><footer class="menu-footer"><span>PROTOTYP 0.16 · ZAPIS LOKALNY</span><button id="menu-news">Co nowego i plany</button><button id="menu-sound">Dźwięk</button></footer>`;
+		this.root.innerHTML = `<div class="menu-stars" aria-hidden="true"></div><div class="menu-orbit" aria-hidden="true"><div class="menu-planet"><div class="planet-surface"></div><div class="planet-clouds"></div><div class="planet-shade"></div></div></div><header class="menu-brand"><span>◈</span> POGRANICZE <small>GALAKTYKI / POKŁAD DOWODZENIA</small></header><div class="menu-layout"><section class="menu-content ${["knowledge", "scenarios", "intro", "intro2", "intro3", "interlude", "campaign"].includes(screen) ? "wide" : ""}"><span class="eyebrow">${EYEBROWS[screen] || "WOLNE KOLONIE / SEKTOR 07"}</span><h1 tabindex="-1">${title}</h1>${body}</section>${screen === "pause" ? this.situationHtml() : ""}${screen === "home" ? `<aside class="menu-mission"><span class="eyebrow">${save.valid ? "OSTATNIA OPERACJA" : "SYGNAŁ Z POWIERZCHNI"}</span><h2>${save.valid ? RTS.MISSIONS[save.missionId]?.planet || "Khepri IV" : "Khepri IV"}</h2><p>${save.valid ? RTS.MISSIONS[save.missionId]?.name || "Cichy Horyzont" : "Ekspedycja Wolnych Kolonii"}</p><p>${save.valid ? `Czas bitwy: ${save.time}<br>Zapis: ${save.date}` : "Dominium zajęło północny kompleks.<br>Przywróć kontrolę nad sektorem."}</p><span class="menu-tag">${save.valid ? "ZAPIS GOTOWY DO WZNOWIENIA" : "OCZEKIWANIE NA ROZKAZY"}</span></aside>` : ""}</div><footer class="menu-footer"><span>PROTOTYP 0.16 · ZAPIS LOKALNY</span><button id="menu-news">Co nowego i plany</button><button id="menu-sound">Dźwięk</button></footer>`;
+		// The living backdrop (menu-backdrop.js), one canvas kept across the screens.
+		if (this.backdrop === undefined) this.backdrop = typeof MenuBackdrop !== "undefined" ? MenuBackdrop.create(this) : null;
+		if (this.backdrop) {
+			this.root.prepend(this.backdrop);
+			this.root.classList.add("has-backdrop");
+			// On a briefing the world in the backdrop becomes the mission's planet.
+			this.backdrop.setWorld?.(["briefing", "scenarios", "review", "replace"].includes(screen) ? RTS.MISSIONS[this.selectedMission] : null);
+		}
 		if (WINDOW_SCREENS.includes(screen)) this.windowed();
+		if (screen === "settings") this.tabbed();
+		// Confirmations and the save error are warning cards.
+		this.root.querySelector(".menu-content").classList.toggle("menu-dialog", ["slot-confirm", "replace", "save-error"].includes(screen));
+		// Sliders filled up to their value (the settings set the values a moment later).
+		const ranges = [...this.root.querySelectorAll(".menu-setting input[type=range]")],
+			fill = (r) => r.style.setProperty("--fill", ((r.value - r.min) / (r.max - r.min)) * 100 + "%");
+		ranges.forEach((r) => r.addEventListener("input", () => fill(r)));
+		queueMicrotask(() => ranges.forEach(fill));
 		if (screen === "knowledge") KnowledgeBase.mount(this.root);
 		this.root.querySelector(".menu-footer span").textContent =
-			"PROTOTYP 0.88 · ZAPIS LOKALNY";
+			"PROTOTYP 0.114 · ZAPIS LOKALNY";
 		if (
 			screen === "scenarios" ||
 			(screen === "briefing" &&
@@ -572,11 +669,20 @@ class CommandMenu {
 			this.show("intro2");
 		});
 		on("skip-intro2", () => this.show(this.afterIntro2 || "campaign"));
+		on("intro3", () => {
+			this.afterIntro3 = "campaign";
+			this.show("intro3");
+		});
+		on("skip-intro3", () => this.show(this.afterIntro3 || "campaign"));
+		if (screen === "intro3") this.playIntro(Act3Film, this.afterIntro3 || "campaign");
 		on("review", () => {
 			this.selectedMission = this.api.review().missionId;
 			this.show("review");
 		});
 		if (screen === "intro") this.playIntro();
+		if (screen === "interlude") this.playIntro(Interludes.film(this.selectedMission), "briefing");
+		on("skip-interlude", () => this.show("briefing"));
+		on("replay-interlude", () => this.show("interlude"));
 		if (screen === "intro2")
 			this.playIntro(Act2Film, this.afterIntro2 || "campaign");
 		if (screen === "scenarios") {
@@ -585,6 +691,7 @@ class CommandMenu {
 			select.value = this.selectedMission;
 			select.onchange = () => {
 				this.selectedMission = select.value;
+				this.backdrop?.setWorld?.(RTS.MISSIONS[this.selectedMission]);
 				const code = this.root.querySelector("#scenario-code");
 				if (code)
 					code.value = RTS.scenarioCode(
@@ -598,6 +705,12 @@ class CommandMenu {
 		on("campaign-back", () => this.show("single"));
 		if (screen === "campaign") this.mountGalaxy();
 		on("mission-back", () => this.show(this.missionOrigin));
+		const levelSelect = this.root.querySelector("#campaign-difficulty");
+		if (levelSelect)
+			levelSelect.onchange = () => {
+				this.api.setCampaignDifficulty?.(levelSelect.value);
+				this.show("briefing", "campaign-difficulty");
+			};
 		this.root.querySelectorAll("[data-mission]").forEach(
 			(b) =>
 				(b.onclick = () => {
@@ -606,6 +719,13 @@ class CommandMenu {
 						.campaign
 						? "campaign"
 						: "scenarios";
+					// The act III prologue likewise, before chapter VII.
+					if (this.selectedMission === "colony7" && typeof Act3Film !== "undefined" && !(this.api.campaign?.() || {}).colony7 && !this.act3IntroSeen) {
+						this.act3IntroSeen = true;
+						this.afterIntro3 = this.firstInterlude(this.selectedMission) ? "interlude" : "briefing";
+						this.show("intro3");
+						return;
+					}
 					// The act II prologue plays once before its first chapter is completed.
 					if (
 						this.selectedMission === "colony4" &&
@@ -613,9 +733,9 @@ class CommandMenu {
 						!this.act2IntroSeen
 					) {
 						this.act2IntroSeen = true;
-						this.afterIntro2 = "briefing";
+						this.afterIntro2 = this.firstInterlude(this.selectedMission) ? "interlude" : "briefing";
 						this.show("intro2");
-					} else this.show("briefing");
+					} else this.show(this.firstInterlude(this.selectedMission) ? "interlude" : "briefing");
 				}),
 		);
 		on("back", () =>
@@ -704,6 +824,44 @@ class CommandMenu {
 				};
 				showStatus();
 			}
+			// Listening to the score: a theme and a mood, until stopped or the screen is left.
+			const theme = this.root.querySelector("#music-theme"),
+				mood = this.root.querySelector("#music-mood"),
+				playButton = this.root.querySelector("#music-play"),
+				now = this.root.querySelector("#music-now");
+			const audio = this.api.audio();
+			const showPreview = () => {
+				const p = audio.musicPreview,
+					fixed = ["menu", "intro"].includes(theme.value);
+				mood.disabled = fixed;
+				playButton.firstChild.textContent = p ? "Zatrzymaj" : "Odtwórz";
+				playButton.lastChild.textContent = p ? "■" : "▶";
+				const name = (list, v) => list.find(([k]) => k === v)?.[1] || v;
+				now.textContent = p
+					? `Teraz gra: ${name(MUSIC_THEMES, p.mode)}${["menu", "intro"].includes(p.mode) ? "" : " · " + name(MUSIC_MOODS, p.mood).toLowerCase()}.${audio.muted ? " Dźwięk jest wyciszony." : audio.musicVolume === 0 ? " Głośność muzyki: 0." : ""}`
+					: "Wybierz motyw i nastrój. Po wyjściu z ustawień wraca zwykła muzyka.";
+			};
+			const start = () => {
+				audio.unlock?.();
+				audio.previewMusic(theme.value, mood.value);
+				showPreview();
+			};
+			if (audio.musicPreview) {
+				theme.value = audio.musicPreview.mode;
+				mood.value = audio.musicPreview.mood;
+			}
+			playButton.onclick = () => {
+				if (audio.musicPreview) {
+					audio.stopPreview();
+					this.api.music?.("menu");
+					showPreview();
+				} else start();
+			};
+			theme.onchange = mood.onchange = () => {
+				if (audio.musicPreview) start();
+				else showPreview();
+			};
+			showPreview();
 			for (const key of ["combat", "units", "ambient", "alerts"])
 				this.root.querySelector("#mix-" + key).oninput = (e) => {
 					this.api
@@ -800,6 +958,38 @@ class CommandMenu {
 		this.root.querySelector("#menu-feedback").textContent = ok
 			? "Zapisano slot " + this.slotNumber + "."
 			: "Nie zapisano: pamięć lokalna niedostępna lub pełna.";
+	}
+	// The situation report on the pause screen: the battle at a glance.
+	situationHtml() {
+		const s = this.api.situation?.();
+		if (!s) return "";
+		const tile = (value, label) => `<span><b>${value}</b>${label}</span>`;
+		return `<aside class="pause-report" aria-label="Raport sytuacyjny"><span class="eyebrow">RAPORT SYTUACYJNY</span><div class="pause-tiles">${tile(s.metal, "metal")}${tile(s.gas, "gaz")}${tile(s.crystals, "kryształy")}${tile(s.army, "jednostki bojowe")}${tile(s.workers, "roboty")}${tile(s.relays, "przekaźniki")}</div><h3>Cele</h3><ul class="pause-objectives">${s.objectives.map((o) => `<li class="${o.done ? "done" : o.failed ? "failed" : ""}${o.secondary ? " secondary" : ""}">${o.text}</li>`).join("")}</ul><div class="pause-intel">${s.attack ? `<p class="pause-alert">⚠ Planowany atak wroga za <b>${s.attack}</b></p>` : ""}<p>${s.sky} · budynki: ${s.buildings}</p>${s.line ? `<p class="pause-radio"><b>${RTS.ACT2_SPEAKERS?.[s.line.who]?.name || s.line.who}:</b> ${s.line.text}</p>` : ""}</div></aside>`;
+	}
+	// The radio scene of a chapter plays once before its first briefing (remembered on this device).
+	firstInterlude(id) {
+		if (typeof Interludes === "undefined" || !Interludes.has(id)) return false;
+		let seen = {};
+		try {
+			seen = JSON.parse(localStorage.getItem("pogranicze-interludes-v1") || "{}");
+		} catch {}
+		if (seen[id]) return false;
+		seen[id] = true;
+		try {
+			localStorage.setItem("pogranicze-interludes-v1", JSON.stringify(seen));
+		} catch {}
+		return true;
+	}
+	// Campaign briefing: the difficulty of the whole campaign and what it means in this chapter.
+	campaignLevelHtml(m) {
+		const level = this.api.campaignDetails?.()?.difficulty || "normal",
+			info = {
+				easy: "Słabszy przeciwnik (−15% wytrzymałości i obrażeń).",
+				normal: "Przeciwnik w pełnej sile.",
+				hard: "Silniejszy przeciwnik (+15% wytrzymałości i obrażeń).",
+			}[level],
+			ai = m.commander || m.act === 3 ? " " + (RTS.AI_LEVELS?.[level]?.description || "") + (RTS.CAMPAIGN_AI?.[this.selectedMission]?.hangar === false && RTS.AI_LEVELS?.[level]?.hangarAt != null ? " W tym rozdziale bez hangaru i lotnictwa." : "") : "";
+		return `<label class="campaign-level">Poziom trudności kampanii<select id="campaign-difficulty" aria-label="Poziom trudności kampanii">${["easy", "normal", "hard"].map((k) => `<option value="${k}" ${k === level ? "selected" : ""}>${RTS.AI_LEVELS?.[k]?.name || k}</option>`).join("")}</select></label><p class="campaign-level-info">${m.commander ? "<b>Przeciwnik: dowódca AI</b> — zamiast zaplanowanych desantów Dominium buduje bazę, zbiera surowce, broni się i atakuje według poziomu. " + (RTS.AI_STYLES?.dominion ? `Styl „${RTS.AI_STYLES.dominion.name}”: ${RTS.AI_STYLES.dominion.description} ` : "") : m.act === 3 ? "<b>Przeciwnik: dowódca AI.</b> " : ""}${info}${ai}</p>`;
 	}
 	launch() {
 		this.hide();
@@ -988,6 +1178,25 @@ class CommandMenu {
 	// Long screens get the knowledge-base layout: fixed title and actions, scrolled content between them.
 	// Act III briefing: the consequences of the act II decision about the Hefajstos complex.
 	legacyHtml(m) {
+		return this.decisionsHtml() + this.act3LegacyHtml(m);
+	}
+	// Briefing: what earlier story decisions (campaign-choices.js) change in this chapter.
+	decisionsHtml() {
+		const ids = RTS.CAMPAIGN_DECISION_EFFECTS?.[this.selectedMission];
+		if (!ids) return "";
+		const choices = this.api.campaignDetails?.()?.choices || {};
+		return ids
+			.map((id) => {
+				const D = RTS.CAMPAIGN_DECISIONS[id],
+					O = D.options[choices[id]],
+					tag = "SKUTKI DECYZJI · " + D.eyebrow.split(" / ")[1];
+				return O
+					? `<div class="menu-legacy"><span class="menu-tag">${tag}</span><h3>${O.name}</h3><p>${O.text}</p></div>`
+					: `<div class="menu-legacy"><span class="menu-tag">${tag}</span><p>Brak zapisanej decyzji — podejmiesz ją w rozdziale ${RTS.MISSIONS[id].name.split(" · ")[0]}, a jej skutki trafią tutaj.</p></div>`;
+			})
+			.join("");
+	}
+	act3LegacyHtml(m) {
 		if (m.act !== 3 || !RTS.ACT3_LEGACY) return "";
 		const choice = this.api.campaignDetails?.()?.choices?.colony6,
 			legacy = RTS.ACT3_LEGACY[choice];
@@ -1022,6 +1231,48 @@ class CommandMenu {
 		content.append(scroll);
 		if (actions.children.length) content.append(actions);
 	}
+	// Settings in tabs: each section (a heading in the scroll) becomes a panel; the first one is the sound.
+	tabbed() {
+		const scroll = this.root.querySelector(".menu-scroll");
+		if (!scroll) return;
+		const groups = [{ label: "Dźwięk", nodes: [] }];
+		for (const el of [...scroll.children]) {
+			if (el.tagName === "H2") {
+				groups.push({ label: el.textContent, nodes: [] });
+				el.remove();
+			} else if (el.id !== "menu-preferences") groups.at(-1).nodes.push(el);
+		}
+		const tabs = document.createElement("div");
+		tabs.className = "menu-tabs";
+		tabs.setAttribute("role", "tablist");
+		const active = Math.min(this.settingsTab || 0, groups.length - 1);
+		groups.forEach((g, i) => {
+			const panel = document.createElement("div"),
+				tab = document.createElement("button");
+			panel.className = "menu-tab-panel";
+			panel.id = "settings-panel-" + i;
+			panel.setAttribute("role", "tabpanel");
+			panel.hidden = i !== active;
+			panel.append(...g.nodes);
+			scroll.append(panel);
+			tab.type = "button";
+			tab.id = "settings-tab-" + i;
+			tab.setAttribute("role", "tab");
+			tab.setAttribute("aria-controls", panel.id);
+			tab.setAttribute("aria-selected", String(i === active));
+			tab.innerHTML = `<small>0${i + 1}</small>${g.label}`;
+			tab.onclick = () => {
+				this.settingsTab = i;
+				tabs.querySelectorAll("[role=tab]").forEach((t, j) => t.setAttribute("aria-selected", String(j === i)));
+				scroll.querySelectorAll(".menu-tab-panel").forEach((p, j) => (p.hidden = j !== i));
+				scroll.scrollTop = 0;
+			};
+			tabs.append(tab);
+		});
+		const pref = scroll.querySelector("#menu-preferences");
+		if (pref) scroll.append(pref);
+		scroll.before(tabs);
+	}
 	playIntro(film = CampaignFilm, next = "campaign") {
 		const duration = film.duration || 30,
 			screen = this.screen;
@@ -1034,6 +1285,7 @@ class CommandMenu {
 		canvas.height = 800;
 		c.scale(2, 2);
 		let last = -1;
+		const heard = new Set();
 		const frame = (now) => {
 			if (this.screen !== screen) return;
 			const t = Math.min(duration, (now - start) / 1000),
@@ -1041,6 +1293,12 @@ class CommandMenu {
 			if (last !== shot.scene) {
 				caption.textContent = shot.caption;
 				last = shot.scene;
+				// Radio scenes: the speaker's voice, with their motif when they speak for the first time.
+				const line = film.lines?.[shot.scene];
+				if (line) {
+					this.api.speak?.(line[0], line[1], { motif: !heard.has(line[0]) });
+					heard.add(line[0]);
+				}
 			}
 			progress.value = t;
 			if (t >= duration) {
@@ -1053,11 +1311,12 @@ class CommandMenu {
 	}
 
 	hide() {
+		this.api.audio?.()?.stopPreview?.();
 		this.galaxy?.destroy();
 		this.galaxy = null;
 		if (this.fitGalaxy) window.removeEventListener("resize", this.fitGalaxy);
 		this.root.hidden = true;
-		document.body.classList.remove("in-menu");
+		document.body.classList.remove("in-menu", "menu-over-game");
 		this.gameElements.forEach((e) => (e.inert = false));
 		document.getElementById("game").focus();
 	}
@@ -1081,6 +1340,8 @@ class CommandMenu {
 			);
 		else if (this.screen === "briefing") this.show(this.missionOrigin);
 		else if (this.screen === "intro") this.show("campaign");
+		else if (this.screen === "interlude") this.show("briefing");
+		else if (this.screen === "intro3") this.show(this.afterIntro3 || "campaign");
 		else if (this.screen === "intro2")
 			this.show(this.afterIntro2 || "campaign");
 		else if (this.screen === "review") this.show("pause");

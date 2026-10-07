@@ -145,16 +145,16 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 	const WATER = {
 		lake: () => new THREE.MeshStandardMaterial({ color: "#2d6a80", roughness: 0.06, metalness: 0.1, transparent: true, opacity: 0.84, normalMap: ripples, normalScale: new THREE.Vector2(0.55, 0.55) }),
 		crevasse: () => new THREE.MeshStandardMaterial({ color: "#1f4558", roughness: 0.04, metalness: 0.2, transparent: true, opacity: 0.9, normalMap: ripples, normalScale: new THREE.Vector2(0.25, 0.25) }),
-		glow: () => new THREE.MeshStandardMaterial({ color: "#1f8f9c", emissive: "#23a9b8", emissiveIntensity: 0.3, roughness: 0.1, metalness: 0, transparent: true, opacity: 0.78, normalMap: ripples, normalScale: new THREE.Vector2(0.4, 0.4) }),
+		glow: () => new THREE.MeshStandardMaterial({ color: "#123e48", emissive: "#0d4a52", emissiveIntensity: 0.3, roughness: 0.1, metalness: 0, transparent: true, opacity: 0.78, normalMap: ripples, normalScale: new THREE.Vector2(0.4, 0.4) }),
 		lava: () => new THREE.MeshStandardMaterial({ color: "#2a0d06", emissive: "#ffffff", emissiveMap: cracks, emissiveIntensity: 1.3, roughness: 0.85, metalness: 0 }),
 	};
 	// The look of open water (lakes, crevasses, glowing pools; not lava), on top of the fog-of-war shader:
 	// small waves, a second ripple layer against tiling, the sky reflected at grazing angles (fresnel),
 	// lighter shallows towards the shore (the shore fade is the depth), foam along the shore line, and
 	// rings from the drops while it rains.
-	const waterUniforms = { waterTime: { value: 0 }, waterRain: { value: 0 }, waterSky: { value: new THREE.Color("#8fa6b4") }, waterSunDir: { value: new THREE.Vector3(0, 1, 0) }, waterSun: { value: new THREE.Color("#ffffff") } };
+	const waterUniforms = { glowPool: { value: 1 }, waterTime: { value: 0 }, waterRain: { value: 0 }, waterSky: { value: new THREE.Color("#8fa6b4") }, waterSunDir: { value: new THREE.Vector3(0, 1, 0) }, waterSun: { value: new THREE.Color("#ffffff") } };
 	const WATER_COMMON = `
-		uniform float waterTime; uniform float waterRain; uniform vec3 waterSky; uniform vec3 waterSunDir; uniform vec3 waterSun;
+		uniform float waterTime; uniform float waterRain; uniform vec3 waterSky; uniform vec3 waterSunDir; uniform vec3 waterSun; uniform float glowPool;
 		float wvHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 		float wvNoise(vec2 p) {
 			vec2 i = floor(p), f = fract(p);
@@ -172,6 +172,60 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 			}
 			return s;
 		}`;
+	// Lava: plates of dark crust drifting slowly with the flow (cells of a moving Voronoi pattern), cracks
+	// glowing between them, patches of open molten rock pulsing (low noise), cooler and darker at the
+	// banks (the shore fade).
+	const LAVA_COMMON = `
+		uniform float waterTime;
+		vec2 lvHash2(vec2 p) { p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3))); return fract(sin(p) * 43758.5453); }
+		vec2 lvCells(vec2 x) {
+			vec2 n = floor(x), f = fract(x);
+			float d1 = 8.0, d2 = 8.0;
+			for (int j = -1; j <= 1; j++)
+				for (int i = -1; i <= 1; i++) {
+					vec2 g = vec2(float(i), float(j)), o = lvHash2(n + g);
+					o = 0.5 + 0.38 * sin(waterTime * 0.12 + 6.2831 * o);
+					float d = length(g + o - f);
+					if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) d2 = d;
+				}
+			return vec2(d1, d2);
+		}
+		float lvNoise(vec2 p) {
+			vec2 i = floor(p), f = fract(p);
+			f = f * f * (3.0 - 2.0 * f);
+			float a = fract(sin(dot(i, vec2(12.9898, 78.233))) * 43758.5453), b = fract(sin(dot(i + vec2(1.0, 0.0), vec2(12.9898, 78.233))) * 43758.5453);
+			float c = fract(sin(dot(i + vec2(0.0, 1.0), vec2(12.9898, 78.233))) * 43758.5453), d = fract(sin(dot(i + vec2(1.0, 1.0), vec2(12.9898, 78.233))) * 43758.5453);
+			return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+		}`;
+	function lavaLook(material) {
+		const before = material.onBeforeCompile;
+		material.onBeforeCompile = (shader, renderer) => {
+			before?.call(material, shader, renderer);
+			Object.assign(shader.uniforms, waterUniforms);
+			shader.fragmentShader = shader.fragmentShader.replace("#include <common>", "#include <common>\n" + LAVA_COMMON).replace(
+				"#include <emissivemap_fragment>",
+				`#ifdef USE_COLOR_ALPHA
+				float bank = vColor.a;
+				#else
+				float bank = 1.0;
+				#endif
+				vec2 flow = vec2(waterTime * 0.9, waterTime * 0.35);
+				vec2 warp = vec2(lvNoise(vMapXY * 0.03), lvNoise(vMapXY * 0.03 + 7.3)) * 14.0;
+				vec2 cells = lvCells((vMapXY - flow + warp) / 19.0);
+				float heat = lvNoise((vMapXY - flow * 0.5) * 0.011 + waterTime * 0.02) * 0.6 + lvNoise(vMapXY * 0.037 + waterTime * 0.05) * 0.4;
+				float crack = 1.0 - smoothstep(0.0, 0.04 + 0.1 * heat, cells.y - cells.x);
+				float molten = smoothstep(0.56, 0.8, heat) * smoothstep(0.15, 0.7, bank);
+				float glowK = clamp(max(crack * (0.55 + 0.7 * heat) * smoothstep(0.05, 0.3, bank), molten), 0.0, 1.0);
+				float pulse = 0.85 + 0.15 * sin(waterTime * 2.2 + heat * 11.0);
+				vec3 hot = mix(vec3(0.85, 0.14, 0.02), vec3(1.0, 0.72, 0.24), glowK * glowK);
+				totalEmissiveRadiance = hot * glowK * 2.4 * pulse;
+				vec3 crust = vec3(0.03, 0.022, 0.02) * (0.6 + 0.8 * lvNoise(vMapXY * 0.09 + floor(cells.x * 3.0)));
+				diffuseColor.rgb = mix(crust, hot * 0.25, glowK);`,
+			);
+		};
+		material.customProgramCacheKey = () => "lava";
+		return material;
+	}
 	function waterLook(material) {
 		const before = material.onBeforeCompile;
 		material.onBeforeCompile = (shader, renderer) => {
@@ -219,10 +273,20 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 					outgoingLight += vec3(0.85, 0.9, 0.92) * foam * 0.35;
 					diffuseColor.a = max(diffuseColor.a, foam * 0.55);
 					outgoingLight += vec3(0.8, 0.86, 0.92) * waterRain * wvRings(vMapXY, waterTime) * 0.2;
+					#ifdef GLOW_POOL
+					// Bioluminescence: swirling filaments of light drifting through the dark water, pulsing; a
+					// glowing rim along the shore; brighter at night (glowPool).
+					vec2 swirl = vMapXY * 0.028 + vec2(sin(waterTime * 0.21), cos(waterTime * 0.17)) * 1.6 + wvNoise(vMapXY * 0.011 + waterTime * 0.04) * 3.0;
+					float sw = wvNoise(swirl) * 0.65 + wvNoise(swirl * 2.3 + 4.0) * 0.35;
+					float fil = pow(1.0 - abs(sw - 0.5) * 2.0, 7.0);
+					float pulse = 0.7 + 0.3 * sin(waterTime * 1.3 + sw * 7.0);
+					outgoingLight = outgoingLight * 0.55 + vec3(0.12, 0.85, 0.82) * (fil * 0.9 + 0.12) * pulse * smoothstep(0.08, 0.6, depthK) * glowPool;
+					outgoingLight += vec3(0.35, 1.0, 0.92) * smoothstep(0.04, 0.13, depthK) * (1.0 - smoothstep(0.13, 0.32, depthK)) * 0.45 * glowPool;
+					#endif
 					#include <opaque_fragment>`,
 				);
 		};
-		material.customProgramCacheKey = () => "water";
+		material.customProgramCacheKey = () => "water" + (material.defines?.GLOW_POOL !== undefined ? "|glow" : "");
 		return material;
 	}
 	let waters = [];
@@ -306,7 +370,9 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 			waterPoints(w, game, kind, byKind.get(kind));
 		}
 		for (const [kind, cells] of byKind) {
-			const material = kind === "lava" ? fogged(WATER[kind]()) : waterLook(fogged(WATER[kind]()));
+			const base = WATER[kind]();
+			if (kind === "glow") base.defines = { ...base.defines, GLOW_POOL: "" };
+			const material = kind === "lava" ? lavaLook(fogged(base)) : waterLook(fogged(base));
 			// Per-vertex opacity fades the shore.
 			Object.assign(material, { vertexColors: true, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
 			const mesh = new THREE.Mesh(waterMesh(cells, kind), material);
@@ -384,7 +450,7 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 		for (const o of game.obstacles || []) if (o.kind === "grove") glowSpots.push({ x: o.x + o.w / 2, y: o.y + o.h / 2, r: Math.max(o.w, o.h) * 1.4, color: "#3fd8c8", day: 0, night: 0.5 });
 		for (const w of game.waters || [])
 			if (w.kind === "glow") glowSpots.push({ x: w.x, y: w.y, r: Math.max(w.rx, w.ry) * 2.2, color: "#2fd0de", day: 0.05, night: 0.4 });
-			else if (w.kind === "lava") glowSpots.push({ x: w.x, y: w.y, r: Math.max(w.rx, w.ry) * 2.4, color: "#ff6a2a", day: 0.12, night: 0.42 });
+			else if (w.kind === "lava") glowSpots.push({ x: w.x, y: w.y, r: Math.max(w.rx, w.ry) * 2.4, color: "#ff6a2a", day: 0.04, night: 0.16 });
 	}
 	// Night lights (webgl3d/night-lights-3d.js): every lamp in the view at once, lighting the terrain and
 	// the models in their shaders — no fixed set of Three.js lights handed to the things nearest the
@@ -448,6 +514,22 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 						headlamp(e, { len, reach: r * 0.95, height: Math.max(8, r * 0.5), angle: 0.5, color: "#fff1cc", power: night * 1800, range: len * 1.6, haze: night * (0.05 + weather * 0.3) });
 					} else headlamp(e, { len: 90, reach: r * 0.5, height: 14, angle: 0.26, color: "#eef4ff", power: night * 420, range: 144, haze: night * (0.04 + weather * 0.22) });
 				}
+			}
+		// Lava and glowing pools near the view light the ground and the models round them (by day too,
+		// fainter): one light per body, flickering on lava.
+		for (const w of game.waters || []) {
+			if (w.kind !== "lava" && w.kind !== "glow") continue;
+			if (Math.abs(w.x - focus.x) > span * 0.7 || Math.abs(w.y - focus.y) > span * 0.7 || hidden({ x: w.x, y: w.y, team: -1 })) continue;
+			const lava = w.kind === "lava",
+				size = Math.max(w.rx, w.ry),
+				flick = lava ? 0.85 + 0.15 * Math.sin(clockNow * 3.1 + w.x * 0.01) : 1;
+			lights.point(w.x, w.y, heightAt(w.x, w.y) + 40, { color: lava ? "#ff6a22" : "#3fe0d0", power: flick * size * (lava ? 3 + night * 6 : 1.5 + night * 5), range: size * 2.2 + 70 });
+		}
+		// Muzzle flashes light up their surroundings at night for an instant.
+		if (night > 0.05)
+			for (const ef of game.effects) {
+				if (ef.kind !== "shot" || ef.life < ef.maxLife * 0.6 || Math.abs(ef.x - focus.x) > span * 0.6 || Math.abs(ef.y - focus.y) > span * 0.6 || hidden({ x: ef.x, y: ef.y, team: -1 })) continue;
+				lights.point(ef.x, ef.y, heightAt(ef.x, ef.y) + (ef.air ? 88 : 16), { color: "#ffc070", power: night * (ef.rocket ? 260 : 140), range: ef.rocket ? 90 : 60 });
 			}
 		// Fires on burning buildings and vehicles flicker over their surroundings at night.
 		if (night > 0.05)
@@ -531,7 +613,14 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 					vec2 q = gl_PointCoord;
 					float a;
 					vec3 col = vC.rgb;
-					if (vM.z > 0.5) {
+					if (vM.z > 1.5) {
+						// A flash: a bright core and a few spikes (a muzzle star), turned by the seed.
+						vec2 d = q - 0.5;
+						float r = length(d) * 2.0, ang = atan(d.y, d.x) + vM.y * 6.283;
+						float spikes = pow(abs(cos(ang * 2.5)), 14.0) * (1.0 - smoothstep(0.15, 1.0, r));
+						a = pow(1.0 - smoothstep(0.0, 0.6, r), 2.0) + spikes * 0.9;
+						col = mix(vC.rgb, vec3(1.0), pow(1.0 - smoothstep(0.0, 0.35, r), 2.0));
+					} else if (vM.z > 0.5) {
 						// A flame tongue: narrow at the top, flickering edges; white-hot → orange → red with age.
 						vec2 d = vec2((q.x - 0.5) * 2.0, (q.y - 0.5) * 2.0);
 						float w = mix(0.95, 0.25, smoothstep(-0.9, 0.9, -d.y));
@@ -664,6 +753,16 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 				}
 			}
 		}
+		// Fresh craters smoulder: thin smoke curling up and now and then a spark, for about 25 s.
+		for (const k of game.craters || []) {
+			const age = game.time - k.born;
+			if (age > 25 || hidden({ x: k.x, y: k.y, team: -1 })) continue;
+			const fade = 1 - age / 25;
+			if (Math.random() < dt * 3 * fade * density)
+				smoke.spawn({ x: k.x + rand(-k.size, k.size) * 0.4, y: heightAt(k.x, k.y) + 2, z: k.y + rand(-k.size, k.size) * 0.4, vx: rand(3, 9), vy: rand(10, 20), vz: rand(-2, 4), drag: 0.2, life: 0, max: rand(2.2, 3.6), s0: k.size * 0.3, s1: k.size * 1.4, r: 0.3, g: 0.28, b: 0.27, a: 0.4 * fade });
+			if (Math.random() < dt * 1.5 * fade * density)
+				fire.spawn({ x: k.x + rand(-k.size, k.size) * 0.2, y: heightAt(k.x, k.y) + 2, z: k.y + rand(-k.size, k.size) * 0.2, vx: rand(-4, 4), vy: rand(20, 40), vz: rand(-4, 4), lift: -30, life: 0, max: rand(0.8, 1.4), s0: rand(1.4, 2.4), s1: 0.5, r: 1, g: 0.55, b: 0.15, a: 1 });
+		}
 		for (const ef of game.effects) {
 			if (ef.kind !== "explosion" || seenExplosions.has(ef)) continue;
 			seenExplosions.add(ef);
@@ -710,7 +809,7 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 	// lava. Aerion: mist welling up from the chasms.
 	let byKind = {},
 		theme = null;
-	const owed = { spores: 0, embers: 0, mist: 0 },
+	const owed = { spores: 0, embers: 0, mist: 0, bubbles: 0 },
 		vapour = new WeakMap();
 	function emit(name, rate, dt) {
 		owed[name] += rate * dt * density;
@@ -746,6 +845,21 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 					y = w.y + rand(-0.5, 0.5) * w.ry;
 				if (!visible(x, y)) continue;
 				fire.spawn({ x, y: heightAt(x, y) + 2, z: y, vx: rand(-10, 10), vy: rand(50, 120), vz: rand(-10, 10), lift: -25, life: 0, max: rand(1.2, 2.4), s0: rand(3, 5), s1: 1, r: 1, g: rand(0.55, 0.85), b: 0.25, a: 0.9 });
+			}
+			// Bubbles bursting: a flash of molten rock, blobs thrown up and falling back, a puff of smoke.
+			for (let i = lava.length ? emit("bubbles", 6, dt) : 0; i-- > 0; ) {
+				const w = lava[Math.floor(Math.random() * lava.length)],
+					x = w.x + rand(-0.35, 0.35) * w.rx * 1.4,
+					y = w.y + rand(-0.35, 0.35) * w.ry;
+				if (!visible(x, y)) continue;
+				const g = heightAt(x, y) + 1.5;
+				fire.spawn({ x, y: g, z: y, vx: 0, vy: 6, vz: 0, life: 0, max: 0.35, s0: 9, s1: 3, r: 1, g: 0.6, b: 0.2, a: 0.8 });
+				for (let k = 0; k < 6; k++) {
+					const a = rand(0, TAU),
+						sp = rand(10, 28);
+					fire.spawn({ x, y: g, z: y, vx: Math.cos(a) * sp, vy: rand(25, 55), vz: Math.sin(a) * sp, lift: -140, life: 0, max: rand(0.5, 0.8), s0: rand(1.6, 2.6), s1: 1.2, r: 1, g: rand(0.45, 0.65), b: 0.12, a: 1 });
+				}
+				smoke.spawn({ x, y: g + 3, z: y, vx: rand(4, 9), vy: rand(10, 18), vz: rand(-2, 3), life: 0, max: rand(1.6, 2.6), s0: 6, s1: 20, r: 0.3, g: 0.27, b: 0.26, a: 0.35 });
 			}
 		}
 		// Themed maps (themed-art.js): sand blown low over the dunes, motes drifting over the derelict
@@ -862,7 +976,7 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 		clockNow = 0;
 
 	// ---------- shots: muzzle flashes, rocket trails, impact sparks ----------
-	function shotFx(what, x, y, z, rocket) {
+	function shotFx(what, x, y, z, rocket, opts = {}) {
 		if (what === "splash") {
 			// Droplets thrown up and out, and a little white water.
 			for (let i = 0; i < Math.ceil(12 * density); i++) {
@@ -873,15 +987,38 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 			smoke.spawn({ x, y: y + 1, z, vx: 0, vy: 3, vz: 0, life: 0, max: 0.6, s0: 4, s1: 12, r: 0.92, g: 0.96, b: 1, a: 0.5 });
 			return;
 		}
-		if (what === "muzzle") fire.spawn({ x, y, z, vx: 0, vy: 0, vz: 0, life: 0, max: 0.08, s0: rocket ? 16 : 11, s1: 4, r: 1, g: 0.85, b: 0.5, a: 1 });
-		else if (what === "trail") smoke.spawn({ x, y, z, vx: rand(-3, 3), vy: rand(4, 10), vz: rand(-3, 3), life: 0, max: rand(0.6, 1), s0: 5, s1: 18, r: 0.62, g: 0.6, b: 0.58, a: 0.45 });
-		else
-			for (let i = 0; i < (rocket ? 10 : 4); i++) {
-				const a = rand(0, TAU),
-					sp = rand(30, rocket ? 120 : 70);
-				fire.spawn({ x, y, z, vx: Math.cos(a) * sp, vy: rand(20, 90), vz: Math.sin(a) * sp, lift: -240, life: 0, max: rand(0.15, 0.35), s0: rand(2.5, 5), s1: 1, r: 1, g: rand(0.7, 0.95), b: 0.45, a: 1 });
-			}
+		if (what === "muzzle") {
+			// A star of flame at the muzzle and a little puff of smoke after it.
+			fire.spawn({ x, y, z, vx: 0, vy: 0, vz: 0, life: 0, max: 0.09, s0: rocket ? 18 : 12, s1: 5, r: 1, g: 0.85, b: 0.5, a: 1, style: 2 });
+			smoke.spawn({ x, y, z, vx: rand(-3, 3), vy: rand(4, 9), vz: rand(-3, 3), drag: 1, life: 0, max: rand(0.6, 1), s0: 3, s1: rocket ? 14 : 9, r: 0.55, g: 0.54, b: 0.52, a: 0.35 });
+			return;
+		}
+		if (what === "trail") {
+			smoke.spawn({ x, y, z, vx: rand(-3, 3), vy: rand(4, 10), vz: rand(-3, 3), life: 0, max: rand(0.8, 1.4), s0: 4, s1: 20, r: 0.66, g: 0.64, b: 0.62, a: 0.5 });
+			fire.spawn({ x, y, z, vx: 0, vy: 0, vz: 0, life: 0, max: 0.06, s0: 6, s1: 3, r: 1, g: 0.7, b: 0.35, a: 0.9 });
+			return;
+		}
+		// An impact: a flash, sparks flying off, a kick of dust (on the ground); a rocket blows up in a small
+		// ball of fire and smoke.
+		const air = opts.air,
+			dust = SOIL[biomeNow] || SOIL.dust;
+		fire.spawn({ x, y, z, vx: 0, vy: 0, vz: 0, life: 0, max: rocket ? 0.14 : 0.08, s0: rocket ? 16 : 7, s1: 3, r: 1, g: 0.9, b: 0.65, a: 1, style: 2 });
+		for (let i = 0; i < (rocket ? 14 : 7); i++) {
+			const a = rand(0, TAU),
+				sp = rand(30, rocket ? 130 : 80);
+			fire.spawn({ x, y, z, vx: Math.cos(a) * sp, vy: rand(air ? -40 : 30, 100), vz: Math.sin(a) * sp, lift: -260, life: 0, max: rand(0.15, 0.4), s0: rand(1.8, 3.6), s1: 0.6, r: 1, g: rand(0.72, 0.95), b: 0.45, a: 1 });
+		}
+		if (!air)
+			for (let i = 0; i < (rocket ? 5 : 2); i++)
+				smoke.spawn({ x: x + rand(-3, 3), y: y - 6, z: z + rand(-3, 3), vx: rand(-12, 12), vy: rand(10, 26), vz: rand(-12, 12), drag: 1.5, life: 0, max: rand(0.7, 1.3), s0: rocket ? 7 : 4, s1: rocket ? 22 : 12, r: dust[0], g: dust[1], b: dust[2], a: 0.5 });
+		if (rocket) {
+			for (let i = 0; i < 5; i++) fire.spawn({ x: x + rand(-4, 4), y: y + rand(-2, 4), z: z + rand(-4, 4), vx: rand(-8, 8), vy: rand(10, 30), vz: rand(-8, 8), life: 0, max: rand(0.3, 0.5), s0: rand(8, 12), s1: 3, r: 1, g: 1, b: 1, a: 0.6, style: 1 });
+			smoke.spawn({ x, y: y + 4, z, vx: rand(-4, 4), vy: rand(14, 24), vz: rand(-4, 4), drag: 0.4, life: 0, max: rand(1.4, 2.2), s0: 8, s1: 28, r: 0.26, g: 0.24, b: 0.23, a: 0.5 });
+		}
 	}
+	// Dust kicked up by impacts, by biome.
+	const SOIL = { dust: [0.62, 0.52, 0.4], ash: [0.33, 0.3, 0.28], ice: [0.86, 0.9, 0.95] };
+	let biomeNow = "dust";
 
 	return {
 		setGame(game, heights) {
@@ -891,6 +1028,7 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 			smoke.clear();
 			fire.clear();
 			theme = RTS.MISSIONS[game.missionId]?.theme || null;
+			biomeNow = RTS.MISSIONS[game.missionId]?.biome || "dust";
 			findGlow(game);
 			byKind = { lava: [], chasm: [], glow: [] };
 			for (const w of game.waters || []) byKind[w.kind]?.push(w);
@@ -900,6 +1038,7 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 		update(dt, { game, time, night, focus, span, hidden, scale, light, gasFlow, working, sky, mistLevel, sun, quality = {} }) {
 			density = quality.particles ?? 1;
 			waterUniforms.waterTime.value = time;
+			waterUniforms.glowPool.value = 0.55 + night * 0.65;
 			waterUniforms.waterRain.value = weatherNow.kind === "rain" ? weatherNow.intensity || 0 : 0;
 			if (sky) waterUniforms.waterSky.value.copy(sky);
 			if (sun) {
@@ -913,7 +1052,7 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 					m.emissiveMap.offset.set(time * 0.01, -time * 0.006);
 					m.emissiveIntensity = 1.2 + Math.sin(time * 1.7) * 0.2;
 				}
-				if (w.kind === "glow") m.emissiveIntensity = 0.25 + night * 0.4;
+				if (w.kind === "glow") m.emissiveIntensity = 0.1 + night * 0.25;
 			}
 			waterGroup.visible = quality.water !== false;
 			nightNow = night;

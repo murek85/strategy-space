@@ -29,6 +29,7 @@ import { createMarks3D } from "./marks-3d.js";
 import { createSky3D, cloudShade } from "./sky-3d.js";
 import { nightLightShade } from "./night-lights-3d.js";
 import { createRelief3D } from "./relief-3d.js";
+import { createSunFx3D } from "./sun-fx-3d.js";
 
 export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 	const { TYPES } = RTS;
@@ -66,10 +67,15 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 	sun.shadow.bias = -0.0004;
 	sun.shadow.normalBias = 1.5;
 	Object.assign(sun.shadow.camera, { left: -1100, right: 1100, top: 1100, bottom: -1100, near: 10, far: 6000 });
-	scene.add(hemi, sun, sun.target);
+	// The second sun (twin-sun worlds): a soft light without shadows, kept in the scene (intensity 0
+	// elsewhere) so the shaders don't change between maps.
+	const sun2 = new THREE.DirectionalLight("#ffae70", 0);
+	scene.add(hemi, sun, sun.target, sun2, sun2.target);
 	// The sky dome (sun, moon, stars, clouds) and the cloud shadows (webgl3d/sky-3d.js).
 	const sky = createSky3D(THREE);
 	scene.add(sky.mesh);
+	// Sunbeams through the clouds and the lens flare (webgl3d/sun-fx-3d.js).
+	const sunFx = createSunFx3D(THREE, { scene, heightAt: (x, y) => heightAt(x, y) });
 
 	const world = new THREE.Group(),
 		terrain = new THREE.Group();
@@ -954,7 +960,35 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 	// Tracers as thin glowing beams (one instanced draw: a unit box stretched from tail to head), explosions
 	// as additive flashes.
 	const MAX_TRACERS = 600,
-		tracers = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }), MAX_TRACERS);
+		// Tracers: streaks along their flight turned to face the camera — a white-hot core, a soft glow
+		// round it in the shot's colour, the head brightest, fading towards the tail.
+		tracers = new THREE.InstancedMesh(
+			new THREE.PlaneGeometry(1, 1),
+			new THREE.ShaderMaterial({
+				vertexShader: `varying vec2 vUv; varying vec3 vTint;
+					void main() {
+						mat4 w = modelMatrix * instanceMatrix;
+						vec3 centre = (w * vec4(0.0, 0.0, 0.0, 1.0)).xyz, axis = mat3(w) * vec3(1.0, 0.0, 0.0), across = mat3(w) * vec3(0.0, 1.0, 0.0);
+						vec3 side = normalize(cross(axis, cameraPosition - centre)) * length(across);
+						vUv = uv;
+						vTint = instanceColor;
+						gl_Position = projectionMatrix * viewMatrix * vec4(centre + axis * position.x + side * position.y, 1.0);
+					}`,
+				fragmentShader: `varying vec2 vUv; varying vec3 vTint;
+					void main() {
+						float v = abs(vUv.y - 0.5) * 2.0, along = pow(vUv.x, 1.6);
+						float core = pow(1.0 - v, 6.0), glow = pow(1.0 - v, 1.8) * 0.45;
+						float head = smoothstep(0.82, 1.0, vUv.x) * 0.8;
+						vec3 col = mix(vTint, vec3(1.0, 0.97, 0.88), core) * (core + glow) * (along + head);
+						gl_FragColor = vec4(col, 1.0);
+					}`,
+				transparent: true,
+				blending: THREE.AdditiveBlending,
+				depthWrite: false,
+				side: THREE.DoubleSide,
+			}),
+			MAX_TRACERS,
+		);
 	tracers.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(MAX_TRACERS * 3), 3);
 	tracers.frustumCulled = false;
 	world.add(tracers);
@@ -965,7 +999,8 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		beam.dir.subVectors(beam.to, beam.from);
 		const len = beam.dir.length();
 		beam.q.setFromUnitVectors(beam.x, beam.dir.normalize());
-		tracers.setMatrixAt(i, beam.m.compose(beam.from.lerp(beam.to, 0.5), beam.q, beam.s.set(Math.max(1, len), width, width)));
+		// (Three times the given width: the glow; the core is the middle third.)
+		tracers.setMatrixAt(i, beam.m.compose(beam.from.lerp(beam.to, 0.5), beam.q, beam.s.set(Math.max(1, len), width * 3, width * 3)));
 		tracers.setColorAt(i, c);
 	}
 	// Explosions: a fireball of churning noise (white-hot core → yellow → orange → dark red → smoke,
@@ -1162,7 +1197,7 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 					}
 				} else if (!impactsSeen.has(ef)) {
 					impactsSeen.add(ef);
-					fx.shot("impact", ef.tx, toY, ef.ty, ef.rocket || bomb);
+					fx.shot("impact", ef.tx, toY, ef.ty, ef.rocket || bomb, { air: ef.airTarget });
 				}
 			} else if (ef.kind === "explosion") {
 				// A churning fireball swelling fast, rising and cooling into smoke; a shock ring running over
@@ -1215,6 +1250,7 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 	// from its own, lower direction. The sky's colours (webgl3d/sky-3d.js) tint the ambient light and
 	// the distance haze; twilight warms the ambient from the horizon.
 	const MOON_LIGHT = new THREE.Color("#a3b8e6"),
+		NIGHT_DEEP = new THREE.Color("#1c2a4e"),
 		NIGHT_AMBIENT = new THREE.Color("#2b3d66"),
 		DAY_AMBIENT = new THREE.Color("#bcd4e6"),
 		DAY_GROUND = new THREE.Color("#3a3226"),
@@ -1233,8 +1269,12 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		skyState.sunlight.copy(colors.sunlight);
 		skyState.sunDir.set(-across, elevation, 0.45).normalize();
 		skyState.moonDir.set(0.6 + across * 0.2, 0.3, -0.74).normalize();
+		// The moon's phase: an eighth of a cycle a day (game days of 360 s; the prototype's own cycle).
+		const dayIndex = sunOverride ? Math.floor((game?.time || 0) / 360) : Math.floor(0.08 + clock / 150);
+		skyState.moonPhase = (dayIndex * 0.125 + 0.62) % 1;
+		const full = 0.5 - 0.5 * Math.cos(skyState.moonPhase * Math.PI * 2);
 		const sunI = 2.45 * smooth(-0.12, 0.3, elevation),
-			moonI = 0.55 * smooth(-0.05, -0.3, elevation),
+			moonI = 0.55 * (0.25 + 0.75 * full) * smooth(-0.05, -0.3, elevation),
 			bySun = sunI >= moonI,
 			// Moonlight from the moon's side but higher than its disk in the sky: a low light would throw
 			// shadows of the hills across half the map.
@@ -1243,8 +1283,9 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		sun.intensity = Math.max(0.18, bySun ? sunI : moonI);
 		// Ambient: night blue → day sky, warmed by the horizon in the twilight; the ground bounce darkens.
 		const twilight = Math.max(0, 1 - Math.abs(elevation + 0.02) / 0.2);
-		hemi.intensity = 0.38 + day * 0.6 + twilight * 0.12;
-		hemi.color.copy(NIGHT_AMBIENT).lerp(DAY_AMBIENT, day).lerp(colors.horizon, twilight * 0.4);
+		// At night the sky glows with the moon: deep blue and dim at the new moon, silvery at the full.
+		hemi.intensity = 0.3 + 0.14 * full + day * (0.68 - 0.14 * full) + twilight * 0.12;
+		hemi.color.copy(NIGHT_DEEP).lerp(NIGHT_AMBIENT, full).lerp(DAY_AMBIENT, day).lerp(colors.horizon, twilight * 0.4);
 		hemi.groundColor.copy(NIGHT_GROUND).lerp(DAY_GROUND, day);
 		// Distance haze and the clear colour: the horizon, a little towards the zenith.
 		scene.background.copy(colors.horizon).lerp(colors.zenith, 0.2);
@@ -1255,6 +1296,8 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		return day;
 	}
 	// Weather on the whole scene: haze closes in and tints the distance; lightning flashes the sky.
+	const AURORA_GREEN = new THREE.Color("#5cffb0"),
+		sun2Dir = new THREE.Vector3();
 	const HAZE = { sand: new THREE.Color("#b8925a"), snow: new THREE.Color("#c9d6df"), rain: new THREE.Color("#3c4a55") },
 		FLASH = new THREE.Color("#cfe0ff");
 	function weatherLight(state) {
@@ -1273,7 +1316,21 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		// The sky dome after the weather: hazy in rain, snow and sand, flashing with the lightning;
 		// clouds thicker in bad weather; their shadows drift over the board (fainter under overcast).
 		const cover = 0.35 + (state.kind ? (state.intensity || 0) * 0.5 : 0);
-		sky.update({ camera, time: clock, ...skyState, haze, hazeColor: HAZE[state.kind] || HAZE.rain, cover, flash: state.flash || 0, flashColor: FLASH });
+		// The aurora over ice maps at night, waxing and waning; it tints the ground and the models green.
+		const aurora = RTS.MISSIONS[game?.missionId]?.biome === "ice" ? smooth(-0.08, -0.28, skyState.e) * (0.6 + 0.4 * Math.sin(clock * 0.021) * Math.sin(clock * 0.013 + 1)) * (1 - Math.min(1, haze * 1.2)) : 0;
+		if (aurora > 0.01) {
+			const ripple = 0.85 + 0.15 * Math.sin(clock * 0.7) * Math.sin(clock * 0.31);
+			hemi.color.lerp(AURORA_GREEN, aurora * 0.3 * ripple);
+			hemi.intensity += aurora * 0.08 * ripple;
+		}
+		const twin = sky.sun2(skyState.sunDir, sun2Dir);
+		sun2.intensity = twin ? 0.5 * smooth(-0.04, 0.2, twin.y) * (1 - 0.6 * haze) : 0;
+		if (twin) {
+			sun2.target.position.set(rig.x, 0, rig.y);
+			sun2.position.copy(sun2.target.position).addScaledVector(twin, 2500);
+		}
+		sky.update({ camera, time: clock, ...skyState, aurora, haze, hazeColor: HAZE[state.kind] || HAZE.rain, cover, flash: state.flash || 0, flashColor: FLASH });
+		sunFx.update({ camera, sunDir: skyState.sunDir, sunColor: skyState.sunlight, e: skyState.e, haze, mist: groundWeather.mistLevel.value, focus: rig, span: Math.max(1600, Math.min(4200, rig.distance * 2.2)) });
 		sky.clouds(clock, options.cloudShadows === false ? 0 : 0.4 * (1 - haze * 0.6));
 	}
 
@@ -1436,6 +1493,7 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		setGame(next) {
 			game = next;
 			models3d.setMission(game.missionId);
+			sky.setTheme(RTS.MISSIONS[game.missionId]?.theme);
 			applyQuality(this, true);
 			canvasRenderer.setGame(game);
 			for (const r of records.values()) world.remove(r.group);
@@ -1486,7 +1544,7 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			gasView = labelView();
 			scatter.update(game);
 			life.update(game.time, { fog: options.fog, colors: COLORS });
-			marks.update(game, { hidden });
+			marks.update(game, { hidden, sun: sun.position.clone().sub(sun.target.position).normalize() });
 			syncGhosts();
 			objectives.update(game, clock, { beacons, colorOf: (team) => game.colorFor?.(team) || COLORS[team] || "#f5e27a" });
 			drawBatches();
@@ -1544,8 +1602,8 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			raycaster.setFromCamera(ndc, camera);
 			const hit = raycaster.intersectObject(terrain, true)[0];
 			if (hit) return { x: hit.point.x, y: hit.point.z };
-			// Off the map: the plane of height 0.
-			const t = -raycaster.ray.origin.y / raycaster.ray.direction.y;
+			// Off the map: the plane of height 0 (a ray into the sky: a point far out under it).
+			const t = raycaster.ray.origin.y / Math.max(-raycaster.ray.direction.y, 0.05);
 			return { x: raycaster.ray.origin.x + raycaster.ray.direction.x * t, y: raycaster.ray.origin.z + raycaster.ray.direction.z * t };
 		},
 		// Map point (on the ground, optionally raised) → screen point.

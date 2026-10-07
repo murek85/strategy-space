@@ -410,6 +410,63 @@ Akt I (Szkolenie, I · Iskra na Eos, II · Archiwum pod lodem, III · Świt nad 
 - **Wygląd** (`waterLook`): głębia ciemniejsza i bardziej niebieska, płycizny turkusowe z migotaniem światła nad dnem, iskry słońca (odbicie kierunku słońca/księżyca, `waterSunDir`, `waterSun` z renderera) na falkach wg szumu, piana przy brzegu przesuwająca się tam i z powrotem.
 - **Ryby** (`scene-life-3d.js`): po 8 w jeziorze, dwie ławice wędrujące gładkimi torami (sumy sinusów), każda ryba krąży wokół swojej ławicy; 2–3,4 pod taflą (poziom jak w `scene-fx-3d.js`), zwrot wg ruchu; co 20–40 s skok (1,1 s, łuk do 13 nad taflą, nos w górę, potem w dół) z pluskiem (`fx.shot("splash")`: krople i trochę piany) przy wyjściu i wejściu.
 
+## Lawa i świecące jeziora (wersja 0.89, 2026-10-06)
+
+- **Lawa** (`scene-fx-3d.js`, `lavaLook()`, zamiast przewijanej tekstury pęknięć): komórki Voronoi (ruchome punkty, przesunięte z prądem i zniekształcone szumem) — płyty ciemnej skorupy, pęknięcia przy granicach komórek (szersze, gdzie goręcej); plamy płynnej skały z szumu niskiej częstotliwości; pulsowanie; chłodniej przy brzegu (zanik brzegu). Bąble (ok. 6/s nad lawą w widoku): błysk, krople rzucone w górę, kłąb dymu.
+- **Świecące jeziora** (`waterLook`, `GLOW_POOL`): ciemniejsza toń, smugi bioluminescencji (wąskie pasma szumu z zawirowaniem domeny), pulsowanie, świecąca obwódka; jasność `glowPool` rośnie nocą.
+- **Światło**: każda lawa i każde świecące jezioro w widoku jest światłem punktowym na liście świateł nocy (lawa migocze), w dzień słabiej; poświata lawy na ziemi (naklejka) słabsza.
+
+## Kratery i ślady wybuchów (wersja 0.90, 2026-10-06)
+
+- **Naklejka krateru** (`marks-3d.js`, rodzaj 2): lej (do 0,45 promienia) — ściana wewnętrzna jaśniejsza po stronie zwróconej do słońca (`sun` z renderera), dno ciemne; poza wałem poszarpane promienie wyrzuconej ziemi (szum po kącie) i sadza; świeży (wiek < 8% życia) żarzy się plamami na dnie. Nowy atrybut `aAge`; kolor ziemi wg biomu (`soil`).
+- **Wał i kamienie**: wał z toczonego profilu (pierścień, wysokość poszarpana po obwodzie) w kolorze ziemi biomu, opadający w miarę blednięcia krateru; 7 osmalonych kamieni wokół każdego krateru (instancje).
+- **Tlenie się** (`scene-fx-3d.js`): przez 25 s od powstania z krateru unosi się cienki dym i co jakiś czas iskra.
+- **Ślady sadzy** (rodzaj 4): wybuchy bez krateru na ziemi (w polu widzenia) zostawiają postrzępioną plamę sadzy, bladnącą przez 60 s (do 80 naraz; przechowywane w rendererze, nie w grze).
+
+## Pociski i trafienia (wersja 0.91, 2026-10-06)
+
+- **Smugi** (`three-renderer.js`, `tracers`): kwadrat wzdłuż lotu obracany w shaderze wokół osi lotu do kamery (dwustronny), szerokość ×3 na poświatę: rdzeń biało-gorący (pow 6), poświata w kolorze strzału, jasność rośnie ku czubkowi.
+- **Wylot** (`scene-fx-3d.js`, `shotFx`): gwiazda płomienia (nowy styl ognia 2: jasny środek, promienie obrócone ziarnem) i kłębek dymu; nocą światło punktowe przez pierwsze 40% życia strzału (lista świateł nocy).
+- **Trafienie**: błysk (styl 2), iskry (więcej przy rakiecie), na ziemi pył w kolorze biomu (`SOIL`: pył, popiół, lód); w powietrzu (`air` — strzał w samolot) bez pyłu. Rakieta: kilka języków ognia i kłąb ciemnego dymu. Smuga rakiety: gęstszy dym i płomyk.
+
+## Słońce i księżyc (wersja 0.92, 2026-10-06)
+
+- **Snopy światła** (`sun-fx-3d.js`, nowy moduł): 140 instancji kwadratów (jedno rysowanie) rozsianych w kwadracie widoku wokół punktu kamery, nieruchomych względem mapy; oś wzdłuż kierunku słońca (długość 520–1040), obrócone wokół osi do kamery. Jasność: prześwit między chmurami nad punktem (ta sama funkcja pokrycia `cloudCover` co niebo i cienie chmur — `cloudGlsl()`, `cloudUniforms()` z `sky-3d.js`) × rozpraszanie w przód (najjaśniej patrząc w słońce) × wygaszenie na brzegach widoku. Siła: złota godzina (wysokość słońca 0,02–0,55) i zamglenie lub pył (`haze`, mgła o świcie), do 0,1; nocą brak.
+- **Refleks obiektywu**: 8 sprajtów (poświata, pierścienie, sześciokąty z tekstur rysowanych na kanwie) na linii słońce → środek ekranu i dalej, bez testu głębi. Widoczny, gdy słońce jest przed kamerą i blisko ekranu, a 14 próbek wzdłuż promienia nie trafia w teren; zanika na brzegach ekranu, w zamgleniu i o zachodzie; płynne wygaszanie (współczynnik `seen`).
+- **Fazy księżyca** (`sky-3d.js`, `moonPhase`, 0 nów → 0,5 pełnia): oświetlenie tarczy od kierunku zależnego od fazy, światło popielate 0,035, halo zależne od pełni. Faza przesuwa się o 1/8 z każdym dniem gry.
+- **Noc a faza**: natężenie księżyca 0,55 × (0,25 + 0,75 × pełnia); światło otoczenia i jego barwa od głębokiego granatu (`#1c2a4e`, nów) do zwykłej nocy (pełnia).
+- **Cienie chmur nocą**: cień chmur mnoży każde światło kierunkowe, więc działa także przy księżycu.
+
+## Gwiazdy, Droga Mleczna i zorza (wersja 0.93, 2026-10-06)
+
+- **Gwiazdy** (`sky-3d.js`, `skyStars`): dwie warstwy siatki komórek na sferze — gęsta słabych (300 komórek, gęstsza w pasie Drogi Mlecznej) i rzadsza jasnych (75) z krzyżykiem promieni. Kolor z temperatury (czerwony, żółty, biały, niebieski), jasność `pow(los, 3)` (mało jasnych). Gwiazda ma co najmniej piksel szerokości, a mniejsza jest proporcjonalnie ciemniejsza (bez migotania przy ruchu). Rozmiar piksela na niebie (`fwidth`) liczony raz, w jednolitym przepływie sterowania — pochodne po wczesnym `return` były niezdefiniowane i rysowały kanciaste artefakty. Mruganie: dwie sinusoidy, amplituda 0,18 w zenicie → 0,73 przy horyzoncie.
+- **Obrót nieba**: kierunek gwiazd i galaktyki obracany wokół nachylonej osi bieguna (0,0035 rad/s).
+- **Droga Mleczna**: pas wokół wielkiego koła (Gauss szerokości 0,12–0,21, szerszy przy jądrze), jasne jądro w jednym kierunku (cieplejsze), obłoki i ciemne pasma pyłu z szumu 3D (`skyNoise3`, `skyFbm3`; szum 2D rzutowany ze sfery dawał podłużne smugi), przygaszana przez pełnię.
+- **Meteory**: 3 sloty o okresach 8, 13, 18 s, każdy aktywny przez 8% okresu; początek i kierunek z hasha numeru przelotu, smuga o szerokości piksela z gasnącym ogonem.
+- **Satelity**: 2 punkty po orbitach (wielkie koła nachylone), okresy przejścia 110 i 180 s, widoczne nad horyzontem.
+- **Zorza** (uniform `aurora`): kurtyny na płaszczyźnie nad kamerą (`d.xz / h`) falujące sinusami i szumem, promienie z szumu po azymucie (pionowe w świecie, zbiegają do zenitu), od zielonej u dołu do czerwieni i fioletu u góry, w paśmie wysokości 0,03–0,65. Renderer (`weatherLight`): na mapach o biomie `ice` nocą, falująca w czasie, słabsza w zamgleniu; przesuwa barwę światła otoczenia ku zieleni (`AURORA_GREEN`) i lekko je wzmacnia.
+
+## Chmury, zmierzch i obce niebo (wersja 0.94, 2026-10-06)
+
+- **Cirrusy** (`sky-3d.js`): druga warstwa na wyższej płaszczyźnie (`d.xz / (h + 0.05)`), szum rozciągnięty w obróconym kierunku (smugi), dryf 1,75× szybszy niż chmur niskich, chowa się przy zachmurzeniu > 0,5.
+- **Światło zmierzchu na chmurach**: barwa `dusk` (czerwono-pomarańczowa → złota z wysokością słońca), najmocniej w stronę słońca; dla niskich chmur przy wysokości słońca −0,12…0,22, dla cirrusów −0,2…0,3 (dłużej). Grube środki chmur ciemniejsze (spód). Nocą brzegi chmur (`c·(1−c)`) przy księżycu srebrzyste.
+- **Cień planety i pas Wenus**: o zmierzchu i świcie (słońce −0,16…0,1), naprzeciw słońca (azymut) — niebieskoszary pas od horyzontu do wysokości rosnącej, gdy słońce opada (0,02–0,18), nad nim różowy pas.
+- **Obce niebo** (`sky.setTheme(theme)`, z `setGame`): `WORLDS` po motywie mapy. Drugie słońce (`twinsun`: obrócone o 0,3 rad wokół pionu i niżej o 0,07 od pierwszego, pomarańczowe, mniejsza tarcza z poświatą); w rendererze drugie światło kierunkowe bez cieni (`sun2`, zawsze w scenie — intensywność 0 na innych mapach, więc shadery się nie zmieniają). Ciała (do 2: planeta, księżyce) — tarcza oświetlona od słońca z terminatorem, pasy z szumu, poświata atmosfery na brzegu, opcjonalny nachylony pierścień (za tarczą u góry, przed nią u dołu, z przerwą); za dnia przygaszone (1 − 0,55·widoczność słońca), w zamgleniu znikają. Motywy: `skyfall`, `derelict`, `frozenhive` (z pierścieniem), `magma` (wielka czerwona), `dunesea`, `lumen` (dwa księżyce).
+
+## Pochylanie kamery w grze (wersja 0.95, 2026-10-06)
+
+- **Pochylenie** (`camera.tilt`, 0…1, `app.js`): PageUp / PageDown (0,8 na sekundę, przytrzymane), Alt + środkowy przycisk — ruch w pionie (0,004 na piksel; w górę = ku horyzontowi), ruch w poziomie obraca jak dotąd. `/` zeruje obrót i pochylenie. Zapisywane w zapisie gry razem z obrotem; poza trybem 3D zerowane.
+- **Kamera** (`three-game-renderer.js`): kąt z przybliżenia (1,05 → 0,7) obniżany przez pochylenie do 0,1 rad — horyzont i niebo w kadrze.
+- **Wskazywanie** (`three-renderer.js`, `screenToMap`): promień w niebo (nie trafia w teren i wznosi się) wskazuje punkt na płaszczyźnie ziemi z kierunkiem obniżonym do −0,05, zamiast punktu za kamerą.
+
+## Zachowania zwierząt (wersja 0.96, 2026-10-06)
+
+- **Mózgi** (`scene-life-3d.js`, `brains`): `game.wildlife()` (co 2 s) daje każdemu zwierzęciu dom i rodzaj; nowe zaczynają w domu, a znikają, gdy zniknie z listy (budynek obok domu). Dalej ruch liczy renderer (tylko wygląd, poza symulacją gry; plansze 2D pokazują dawny wzór).
+- **Rodzaje** (`BEASTS`): zasięg wokół domu (jeleń 560, lis 480, zając 320, jaszczurka 220), prędkość chodu i biegu, promień strachu, szybkość skrętu, czas odpoczynku, stado (jelenie: grupy, przewodnik = pierwszy z grupy, reszta celuje w okolicę jego celu i zwalnia, gdy ktoś został > 160 z tyłu), pasienie się (szansa przy odpoczynku), zrywy (zając, jaszczurka: 0,5–1,6 s biegu, 0,4–1,4 s bezruchu), wspinanie (jaszczurka).
+- **Stany**: odpoczynek (pasienie się lub rozglądanie) → wędrówka do losowego punktu, do którego da się dojść (`walkable`: na mapie, `game.blocked` — woda, mury, przeszkody — z dala od budynków, bez stromego zbocza) → odpoczynek; ucieczka przed najbliższą jednostką, strzałem lub wybuchem (sprawdzane co 0,2–0,35 s; stado ucieka razem), potem czujność (łeb w górę, uszy postawione, rozglądanie się). Smycz: dalej niż 1,4 zasięgu od domu — powrót.
+- **Sterowanie**: płynny skręt do celu, co 0,15 s próbka przed sobą; gdy nie da się przejść — skręt o ±0,5…2,4 rad, w ostateczności zawrócenie i nowy cel; przyspieszanie (60/s², w ucieczce 220/s²).
+- **Modele** (`nature-detail-3d.js`): szyja jako osobny staw (pasienie się: w dół o `graze`, czujność: w górę), krok liczony z przebytej drogi (`stride`, wykładnik 0,65 — w biegu dłuższe kroki); jaszczurka nieruchoma, gdy stoi.
+
 ## W grze
 
 - **Kamera**: kamera gry (`camera.x`, `camera.y`, `zoom` → `scale`) steruje kamerą 3D. Patrzy na środek widoku z pochylenia ok. 54°, z odległości, przy której środek ekranu ma tyle pikseli na jednostkę mapy co widok 2D. Przesuwanie, przybliżenie, Home i minimapa działają jak dotąd; obrotu i pochylenia w grze nie ma.

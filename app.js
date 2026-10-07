@@ -42,6 +42,7 @@
 	// The current battle, reachable from the browser console (diagnostics, tests).
 	window.currentGame = () => game;
 	window.currentNetwork = () => netSession;
+	window.currentMenu = () => menu;
 	let choiceOpen = false,
 		act2Signature = "";
 	let width = 1,
@@ -100,10 +101,40 @@
 		// With the 2.5D tilt the board is drawn in perspective; the game works on the flat frame.
 		return renderer.toFlat ? renderer.toFlat(p) : p;
 	}
+	// The music of a battle: the Swarm as the enemy — "Ul"; dead ships — "Wrak"; alien jungles and floating islands —
+	// "Gąszcz"; magma and the Hefajstos complex — "Kuźnia"; otherwise by the world (desert, dawn, ice, ash).
+	function musicModeFor(g) {
+		const m = MISSIONS[g.missionId] || {},
+			me = g.humans?.[0] ?? 0;
+		if (g.entities.some((e) => e.type === "hq" && e.hp > 0 && e.team !== me && e.team !== 2 && !g.allied?.(me, e.team) && g.factionFor?.(e.team)?.key === "swarm")) return "game:hive";
+		if (m.theme === "derelict") return "game:wreck";
+		if (m.theme === "lumen" || m.theme === "skyfall") return "game:lumen";
+		if (m.theme === "magma" || g.missionId === "colony6") return "game:forge";
+		return "game:" + (m.sunny ? "sun" : m.biome);
+	}
 	function toast(text) {
-		$("toast").textContent = text;
-		$("toast").classList.add("visible");
-		toastTimer = 4;
+		const el = $("toast"),
+			line = typeof Portraits !== "undefined" && Portraits.speakerOf(text);
+		el.classList.toggle("comms", !!line);
+		if (line) {
+			// A radio line: the speaker's portrait (talking), the name in their colour and the text.
+			const face = Portraits.canvas(line.who, 56),
+				box = document.createElement("span"),
+				name = document.createElement("b");
+			box.className = "comms-text";
+			name.textContent = line.name;
+			name.style.color = line.color;
+			box.append(name, document.createTextNode(" " + line.text));
+			el.replaceChildren(face, box);
+			Portraits.talk(face, line.who, Math.min(5, 1.2 + line.text.length / 28));
+			// The speaker's radio voice (audio-radio.js).
+			sound.speak?.(line.who, line.text);
+			toastTimer = 6.5;
+		} else {
+			el.textContent = text;
+			toastTimer = 4;
+		}
+		el.classList.add("visible");
 	}
 	function updateAudioControls() {
 		const button = $("sound-toggle");
@@ -646,6 +677,7 @@
 			!menu?.active
 		)
 			showChoice();
+		if (game.campaignDecision?.state === "pending" && started && !finished && !choiceOpen && !menu?.active) showDecision();
 		$("idle-workers").textContent =
 			`Bezczynne roboty: ${game.idleWorkers().length} [Z]`;
 		$("idle-workers").disabled = !started || !game.idleWorkers().length;
@@ -676,6 +708,67 @@
 			showEnd();
 		}
 	}
+	// The victory / defeat screen: the banner, the styling of the report, numbers counting up and the animated
+	// backdrop (end-screen.js) under it.
+	function decorateEnd(victory) {
+		const box = $("overlay").querySelector(".briefing");
+		if (!box) return;
+		box.classList.add("end-report", victory ? "victory" : "defeat");
+		$("overlay").classList.add("end-overlay");
+		const banner = document.createElement("div");
+		banner.className = "end-banner";
+		banner.innerHTML = `<span>${victory ? "ZWYCIĘSTWO" : "PORAŻKA"}</span>`;
+		box.prepend(banner);
+		if (typeof EndScreen === "undefined") return;
+		EndScreen.countUp(box, !!menu?.reduced);
+		const m = MISSIONS[game.missionId] || {};
+		EndScreen.mount($("overlay"), { victory, biome: m.biome, reduced: !!menu?.reduced });
+	}
+	// The epilogue of an act (epilogue-films.js) at the top of the report: it plays once and stops on its last
+	// shot (the title), with a button to play it again.
+	function showEpilogue() {
+		const f = Epilogues.film(game.missionId, game),
+			box = $("overlay").querySelector(".briefing");
+		if (!f || !box) return;
+		box.classList.add("with-epilogue");
+		const wrap = document.createElement("div");
+		wrap.className = "epilogue-film";
+		wrap.innerHTML = `<span class="eyebrow">${f.title.toUpperCase()}</span><canvas width="960" height="400" aria-label="${f.title}"></canvas><p class="epilogue-caption" aria-live="polite"></p><button type="button" class="epilogue-replay">Odtwórz epilog ponownie ↺</button>`;
+		box.insertBefore(wrap, box.firstChild);
+		const canvas = wrap.querySelector("canvas"),
+			caption = wrap.querySelector("p"),
+			c = canvas.getContext("2d"),
+			reduced = !!menu?.reduced,
+			end = f.duration - 0.5;
+		canvas.width = 1920;
+		canvas.height = 800;
+		c.scale(2, 2);
+		let start = performance.now(),
+			last = -1,
+			running = false;
+		const frame = (now) => {
+			if (!canvas.isConnected) return (running = false);
+			const t = Math.min(end, (now - start) / 1000),
+				shot = f.draw(c, t, reduced);
+			if (shot.scene !== last) {
+				caption.textContent = shot.caption;
+				last = shot.scene;
+			}
+			if (t < end) requestAnimationFrame(frame);
+			else running = false;
+		};
+		const play = () => {
+			start = performance.now();
+			last = -1;
+			if (!running) {
+				running = true;
+				requestAnimationFrame(frame);
+			}
+		};
+		wrap.querySelector("button").onclick = play;
+		play();
+		sound.setMusicMode("intro");
+	}
 	function showChoice() {
 		choiceOpen = true;
 		paused = true;
@@ -691,6 +784,25 @@
 				updateHud();
 			};
 		$("choose-destroy").focus();
+	}
+	// A story decision of the campaign (campaign-choices.js): two options, the game paused until one is taken.
+	function showDecision() {
+		const D = game.campaignDecisionInfo();
+		if (!D) return;
+		choiceOpen = true;
+		paused = true;
+		$("overlay").hidden = false;
+		const keys = Object.keys(D.options);
+		$("overlay").innerHTML = `<div class="briefing act2-choice"><span class="eyebrow">${D.eyebrow}</span><h2>${D.title}</h2><p>${D.prompt} Tej decyzji nie można cofnąć.</p>${keys.map((k) => `<button id="decide-${k}" class="primary-button"><b>${D.options[k].label}</b><small>${D.options[k].text}</small></button>`).join("")}</div>`;
+		for (const k of keys)
+			$("decide-" + k).onclick = () => {
+				game.decideCampaign(k);
+				choiceOpen = false;
+				$("overlay").hidden = true;
+				paused = false;
+				updateHud();
+			};
+		$("decide-" + keys[0]).focus();
 	}
 	function renderAct2Objectives() {
 		const speakers = RTS.ACT2_SPEAKERS,
@@ -714,7 +826,7 @@
 				? `<p class="act2-status">${game.convoyStatus()}</p>`
 				: "") +
 			(line
-				? `<p class="act2-line"><b style="color:${speakers[line.who]?.color || "#c5d7d9"}">${speakers[line.who]?.name || line.who}:</b> ${line.text}</p>`
+				? `<p class="act2-line">${typeof Portraits !== "undefined" && Portraits.known(line.who) ? `<img class="act2-face" src="${Portraits.still(line.who, 34)}" alt="">` : ""}<b style="color:${speakers[line.who]?.color || "#c5d7d9"}">${speakers[line.who]?.name || line.who}:</b> ${line.text}</p>`
 				: "");
 	}
 	function act2Report(victory) {
@@ -990,6 +1102,7 @@
 			setTimeout(() => {
 				if (netSession === ended) endNetwork(true);
 			}, 1500);
+			decorateEnd(victory);
 			rematch = { mine: false, theirs: false, gone: !netLink?.open };
 			renderRematch();
 			$("rematch").onclick = askRematch;
@@ -1028,7 +1141,10 @@
 			}
 		} else
 			$("overlay").innerHTML =
-				`<div class="briefing"><span class="eyebrow">RAPORT Z OPERACJI / ${timeLabel(game.time)}</span><div class="briefing-symbol">${victory ? "◈" : "⌁"}</div><h2>${victory ? "Sektor<br>odzyskany." : "Utraciliśmy<br>przyczółek."}</h2><p>${victory ? (MISSIONS[game.missionId].campaign ? { training: "Poligon zaliczony. Załoga potrafi rozwijać kolonię, podtrzymać sieć i naprawić pojazdy. ", colony1: "Latarnia Eos znów nadaje. Lira odczytała współrzędne archiwum na Vesperze. Konwój wyrusza po klucz do sieci. ", colony2: "Archiwum ujawniło plan blokady. Klucz jest bezpieczny; teraz flota może dotrzeć do centralnego węzła na Nadirze. ", colony3: "Węzeł Nadir odzyskany. Lira uruchamia sieć, latarnie rozbłyskują jedna po drugiej, a transporty pomocy ruszają ku Koloniom. Nadszedł Odzyskany Świt. " }[game.missionId] + (campaignSaved ? "Postęp kampanii zapisano." : "Nie można zapisać postępu kampanii na tym urządzeniu.") : modeText || "Operacja " + MISSIONS[game.missionId].name + " zakończona zwycięstwem.") : modeText || "Centrum dowodzenia zostało zniszczone. Odbuduj siły i spróbuj ponownie."}</p><div class="briefing-controls"><span><b>${game.kills}</b>Zniszczonych celów</span><span><b>${game.nodes.filter((n) => n.owner === (game.viewer ?? 0)).length} / ${game.nodes.length}</b>Przekaźników pod kontrolą</span></div><button id="play-again" class="primary-button">NOWA OPERACJA <span>↗</span></button></div>`;
+				`<div class="briefing"><span class="eyebrow">RAPORT Z OPERACJI / ${timeLabel(game.time)}</span><div class="briefing-symbol">${victory ? "◈" : "⌁"}</div><h2>${victory ? "Sektor<br>odzyskany." : "Utraciliśmy<br>przyczółek."}</h2><p>${victory ? (MISSIONS[game.missionId].campaign ? { training: "Poligon zaliczony. Załoga potrafi rozwijać kolonię, podtrzymać sieć i naprawić pojazdy. ", colony1: "Latarnia Eos znów nadaje. Lira odczytała współrzędne archiwum na Vesperze. Konwój wyrusza po klucz do sieci. ", colony2: "Archiwum ujawniło plan blokady. Klucz jest bezpieczny; teraz flota może dotrzeć do centralnego węzła na Nadirze. ", colony3: "Węzeł Nadir odzyskany. Lira uruchamia sieć, latarnie rozbłyskują jedna po drugiej, a transporty pomocy ruszają ku Koloniom. Nadszedł Odzyskany Świt. " }[game.missionId] + (campaignSaved ? "Postęp kampanii zapisano." : "Nie można zapisać postępu kampanii na tym urządzeniu.") : modeText || "Operacja " + MISSIONS[game.missionId].name + " zakończona zwycięstwem.") : modeText || "Centrum dowodzenia zostało zniszczone. Odbuduj siły i spróbuj ponownie."}</p><div class="briefing-controls"><span><b>${timeLabel(game.time)}</b>Czas operacji</span><span><b>${game.kills}</b>Zniszczonych celów</span><span><b>${game.nodes.filter((n) => n.owner === (game.viewer ?? 0)).length} / ${game.nodes.length}</b>Przekaźników pod kontrolą</span><span><b>${Math.round(game.mined || 0)}</b>Wydobytego metalu</span><span><b>${game.units(game.viewer ?? 0).filter((e) => e.type !== "worker").length}</b>Jednostek na koniec</span></div><button id="play-again" class="primary-button">NOWA OPERACJA <span>↗</span></button></div>`;
+		// The end of an act: its epilogue film over the report.
+		if (victory && typeof Epilogues !== "undefined" && Epilogues.has(game.missionId)) showEpilogue();
+		decorateEnd(victory);
 		const nextChapter = {
 			training: "colony1",
 			colony1: "colony2",
@@ -1120,12 +1236,7 @@
 		started = true;
 		paused = false;
 		$("overlay").hidden = true;
-		sound.setMusicMode(
-			"game:" +
-				(MISSIONS[game.missionId].sunny
-					? "sun"
-					: MISSIONS[game.missionId].biome),
-		);
+		sound.setMusicMode(musicModeFor(game));
 		toast(
 			game.act2
 				? game.act2Status()
@@ -1141,10 +1252,13 @@
 		if (!prepared) endNetwork();
 		game = prepared || new Game(42, missionId);
 		if (scenario && !prepared) game.configureSkirmish(scenario);
+		// The campaign difficulty: the commander AI in its chapters and the enemy's strength.
+		if (!prepared) game.applyCampaignLevel?.(campaign.difficulty);
 		game.applyAct2Bonus?.(campaign.badges);
 		// Act III: the consequences of the act II decision (Hefajstos).
 		game.applyCampaignChoices?.(campaign.choices);
 		choiceOpen = false;
+		$("overlay").classList.remove("end-overlay");
 		act2Signature = "";
 		for (let t = 0; t < colors.length; t++) colors[t] = game.colorFor(t);
 		productionSignature = "";
@@ -1170,6 +1284,42 @@
 		terrainTexture();
 		fit();
 		start();
+	}
+	// The loading screen (loading-screen.js) over the start of a mission: shown first, the mission built two frames
+	// later (so the screen is painted), held until the board has drawn its first frames.
+	function launchWithScreen(missionId = "horizon", scenario = null, prepared = null) {
+		if (typeof LoadingScreen === "undefined" || prepared) return restart(missionId, scenario, prepared);
+		const m = MISSIONS[missionId] || {},
+			screen = LoadingScreen.show({
+				eyebrow: m.training ? "SZKOLENIE WOLNYCH KOLONII" : m.campaign ? "KAMPANIA · ODZYSKANY ŚWIT" : "OPERACJA NIEZALEŻNA",
+				title: m.name,
+				planet: m.planet,
+				biome: m.biome,
+				reduced: !!menu?.reduced,
+			});
+		requestAnimationFrame(() =>
+			requestAnimationFrame(() => {
+				try {
+					restart(missionId, scenario, prepared);
+				} finally {
+					afterFrames(3, () => screen.done());
+				}
+			}),
+		);
+	}
+	// Loading a save: the screen covers the board being rebuilt.
+	function loadWithScreen(key) {
+		const ok = loadGame(key);
+		if (ok && typeof LoadingScreen !== "undefined") {
+			const m = MISSIONS[game.missionId] || {},
+				screen = LoadingScreen.show({ eyebrow: "WCZYTANY ZAPIS · " + timeLabel(game.time), title: m.name, planet: m.planet, biome: m.biome, reduced: !!menu?.reduced, minTime: 1.2 });
+			afterFrames(3, () => screen.done());
+		}
+		return ok;
+	}
+	function afterFrames(n, fn) {
+		if (n <= 0) return fn();
+		requestAnimationFrame(() => afterFrames(n - 1, fn));
 	}
 	function togglePause() {
 		if (!started || finished) return;
@@ -1311,6 +1461,8 @@
 							zoom: clamp(saved.camera.zoom, 1, 5.5),
 							// The 3D board's turn (0 = looking north; ignored by the flat renderers).
 							yaw: Number.isFinite(saved.camera.yaw) ? saved.camera.yaw : 0,
+							// Its tilt towards the horizon (0 = from above … 1 = the sky in view).
+							tilt: Number.isFinite(saved.camera.tilt) ? clamp(saved.camera.tilt, 0, 1) : 0,
 						}
 					: { x: W / 2, y: H / 2, zoom: 1 };
 			selected = new Set(
@@ -1332,12 +1484,7 @@
 			missionLabels();
 			terrainTexture();
 			fit();
-			sound.setMusicMode(
-				"game:" +
-					(MISSIONS[game.missionId].sunny
-						? "sun"
-						: MISSIONS[game.missionId].biome),
-			);
+			sound.setMusicMode(musicModeFor(game));
 			updateHud();
 			toast("Wczytano zapis operacji.");
 			autosaveClock = 0;
@@ -1704,7 +1851,7 @@
 		document.querySelector(".briefing-controls").innerHTML =
 			"<span><b>Ctrl+1–9 / 1–9</b>Zapisz / wybierz grupę</span><span><b>Wybierz budynek → PPM</b>Ustaw punkt zbiórki</span><span><b>Kilka koszar / fabryk</b>Produkuj równolegle</span><span><b>J / kliknij alarm</b>Pokaż atakowaną bazę</span>";
 		document.querySelector(".controls-note p").innerHTML =
-			"<b>Ctrl+1–9</b> przypisz · <b>1–9</b> grupa<br><b>Shift+S</b> utrzymaj pozycję<br><b>J</b> alarm · <b>Ctrl+S</b> zapis<br><b>, / .</b> lub <b>Alt+ŚPM</b> obrót kamery 3D · <b>/</b> od południa";
+			"<b>Ctrl+1–9</b> przypisz · <b>1–9</b> grupa<br><b>Shift+S</b> utrzymaj pozycję<br><b>J</b> alarm · <b>Ctrl+S</b> zapis<br><b>, / .</b> lub <b>Alt+ŚPM</b> obrót kamery 3D · <b>PgUp / PgDn</b> pochylenie (niebo) · <b>/</b> od południa";
 		try {
 			const save = JSON.parse(localStorage.getItem(SAVE_KEY));
 			if ([2, 3, 4, 5, 6].includes(save?.state?.version)) {
@@ -1913,9 +2060,9 @@
 		const p = world(mouse);
 		if (e.button === 1) {
 			e.preventDefault();
-			// On the 3D board: Alt + middle button turns the camera; a plain drag keeps the grabbed ground
+			// On the 3D board: Alt + middle button turns (sideways) and tilts (up and down) the camera; a plain drag keeps the grabbed ground
 			// point under the pointer (the board is in perspective, so flat-frame deltas are not enough).
-			pan = { ...mouse, cx: camera.x, cy: camera.y, ground: p, turn: e.altKey && rendererMode === "three", sx: e.clientX, client: { x: e.clientX, y: e.clientY }, yaw: camera.yaw || 0 };
+			pan = { ...mouse, cx: camera.x, cy: camera.y, ground: p, turn: e.altKey && rendererMode === "three", sx: e.clientX, sy: e.clientY, client: { x: e.clientX, y: e.clientY }, yaw: camera.yaw || 0, tilt: camera.tilt || 0 };
 			canvas.setPointerCapture(e.pointerId);
 			return;
 		}
@@ -2067,7 +2214,10 @@
 	});
 	canvas.addEventListener("pointermove", (e) => {
 		mouse = pointer(e);
-		if (pan?.turn) camera.yaw = pan.yaw + (e.clientX - pan.sx) * 0.008;
+		if (pan?.turn) {
+			camera.yaw = pan.yaw + (e.clientX - pan.sx) * 0.008;
+			camera.tilt = clamp(pan.tilt + (pan.sy - e.clientY) * 0.004, 0, 1);
+		}
 		// 3D: only remember where the pointer is; the camera follows once per frame (panTowardsPointer),
 		// because the 3D view (and so the ground under the pointer) changes only when a frame is drawn.
 		else if (pan && rendererMode === "three") pan.client = { x: e.clientX, y: e.clientY };
@@ -2218,13 +2368,18 @@
 				"arrowleft",
 				"arrowright",
 				"home",
+				"pageup",
+				"pagedown",
 			].includes(key)
 		)
 			e.preventDefault();
 		keys.add(key);
 		if (e.repeat || !started) return;
 		if (key === " ") togglePause();
-		else if (key === "/") camera.yaw = 0;
+		else if (key === "/") {
+			camera.yaw = 0;
+			camera.tilt = 0;
+		}
 		else if (key === "j") focusAlert();
 		else if (key === "f") selectAll();
 		else if (key === "r") selectWorkers();
@@ -2411,14 +2566,42 @@
 				inspectSave("pogranicze-slot-" + (i + 1)),
 			),
 		saveSlot: (n) => saveGame(true, "pogranicze-slot-" + n),
-		loadSlot: (n) => loadGame("pogranicze-slot-" + n),
+		loadSlot: (n) => loadWithScreen("pogranicze-slot-" + n),
+		// The situation report of the pause screen.
+		situation: () => {
+			if (!started || !game) return null;
+			const me = game.viewer ?? 0,
+				m = MISSIONS[game.missionId] || {},
+				own = game.units(me),
+				objectives = game.act2Objectives?.() || [{ text: m.campaign ? m.objective : RTS.describeScenario?.(game.scenario)?.objective || m.objective || "Zniszcz wszystkie wrogie centra dowodzenia.", done: false }],
+				nextAttack = Number.isFinite(game.nextWave) && game.enemyBases?.().length ? game.nextWave - game.time : null,
+				weather = game.weather;
+			return {
+				mission: m.name,
+				planet: m.planet,
+				time: timeLabel(game.time),
+				metal: Math.floor(game.credits),
+				gas: Math.floor(game.gas || 0),
+				crystals: Math.floor(game.crystals || 0),
+				army: own.filter((e) => e.type !== "worker" && RTS.TYPES[e.type]?.damage > 0).length,
+				workers: own.filter((e) => e.type === "worker").length,
+				buildings: game.entities.filter((e) => e.team === me && e.hp > 0 && !RTS.TYPES[e.type]?.speed).length,
+				relays: `${game.nodes.filter((n) => n.owner === me).length} / ${game.nodes.length}`,
+				objectives: objectives.slice(0, 5).map((o) => ({ text: o.text, done: !!o.done, failed: !!o.failed, secondary: !!o.secondary })),
+				attack: nextAttack != null && nextAttack > 0 && nextAttack < 3600 ? timeLabel(nextAttack) : null,
+				sky: `${game.night > 0.5 ? "☾ Noc" : "☀ Dzień"} · ${weather?.intensity > 0.05 ? weather.name : "spokojna pogoda"}`,
+				line: game.act2?.radio?.at(-1) || null,
+			};
+		},
 		inspectSave,
 		campaign: () => campaign.completed,
 		rendererStatus: () => ({ mode: rendererMode, note: rendererNote }),
 		campaignDetails: () => ({
 			badges: campaign.badges,
 			choices: campaign.choices,
+			difficulty: campaign.difficulty,
 		}),
+		setCampaignDifficulty: (level) => campaign.setDifficulty(level),
 		review: () =>
 			started && game.act2 && !game.result
 				? {
@@ -2434,8 +2617,8 @@
 			pan = null;
 			sound.silenceEffects();
 		},
-		start: restart,
-		load: loadGame,
+		start: launchWithScreen,
+		load: () => loadWithScreen(),
 		save: () => saveGame(true),
 		leave: () => {
 			endNetwork();
@@ -2451,16 +2634,12 @@
 		surrender: () => act("surrender"),
 		resume: () => {
 			paused = false;
-			sound.setMusicMode(
-				"game:" +
-					(MISSIONS[game.missionId].sunny
-						? "sun"
-						: MISSIONS[game.missionId].biome),
-			);
+			sound.setMusicMode(musicModeFor(game));
 			fit();
 			updateHud();
 		},
 		music: (mode) => sound.setMusicMode(mode),
+		speak: (who, text, opts) => sound.speak?.(who, text, opts),
 		audio: () => sound,
 		toggleSound,
 		volume: (value) => {
@@ -2526,7 +2705,13 @@
 		if (rendererMode === "three") {
 			if (keys.has(",")) camera.yaw = (camera.yaw || 0) - 1.5 * dt;
 			if (keys.has(".")) camera.yaw = (camera.yaw || 0) + 1.5 * dt;
-		} else camera.yaw = 0;
+			// PageUp raises the view towards the horizon and the sky, PageDown looks down again.
+			if (keys.has("pageup")) camera.tilt = clamp((camera.tilt || 0) + 0.8 * dt, 0, 1);
+			if (keys.has("pagedown")) camera.tilt = clamp((camera.tilt || 0) - 0.8 * dt, 0, 1);
+		} else {
+			camera.yaw = 0;
+			camera.tilt = 0;
+		}
 		const yaw = camera.yaw || 0,
 			ahead = (keys.has("arrowup") ? 1 : 0) - (keys.has("arrowdown") ? 1 : 0),
 			side = (keys.has("arrowright") ? 1 : 0) - (keys.has("arrowleft") ? 1 : 0);
@@ -2566,4 +2751,10 @@
 		requestAnimationFrame(frame);
 	}
 	requestAnimationFrame(frame);
+	// A short boot screen while the page settles (once per load).
+	if (typeof LoadingScreen !== "undefined") {
+		const boot = LoadingScreen.show({ eyebrow: "WOLNE KOLONIE / SEKTOR 07", title: "Pogranicze Galaktyki", planet: "Pokład dowodzenia · uruchamianie systemów", biome: "ice", reduced: !!menu?.reduced, minTime: 1.4 });
+		if (document.readyState === "complete") afterFrames(2, () => boot.done());
+		else addEventListener("load", () => boot.done(), { once: true });
+	}
 })();

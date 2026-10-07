@@ -115,3 +115,38 @@
 		grid-template-columns: 1fr 1fr;
 	}
 }
+.act2-face {
+	float: left;
+	width: 34px;
+	height: 34px;
+	margin: 2px 8px 2px 0;
+	border-radius: 3px;
+}
+/* The epilogue of an act over its report (epilogue-films.js). */
+.briefing.with-epilogue {
+	width: 840px;
+	max-width: 94vw;
+	max-height: calc(100% - 16px);
+	overflow-y: auto;
+}
+.epilogue-film canvas {
+	display: block;
+	width: 100%;
+	aspect-ratio: 960 / 400;
+	margin-top: 8px;
+	border: 1px solid #2c3d44;
+}
+.epilogue-caption {
+	min-height: 3.4em;
+	margin: 8px 0 6px !important;
+	color: #d7e6e4;
+}
+.epilogue-replay {
+	background: none;
+	border: 1px solid #4a6066;
+	color: #a9c4c2;
+	padding: 5px 12px;
+	font-size: 11px;
+	cursor: pointer;
+	margin-bottom: 14px;
+}

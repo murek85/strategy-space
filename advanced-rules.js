@@ -1589,6 +1589,9 @@
 			require("./factions-rules.js")(RTS);
 			require("./swarm-rules.js")(RTS);
 			require("./campaign-act3.js")(RTS);
+			require("./campaign-ai.js")(RTS);
+			require("./campaign-events.js")(RTS);
+			require("./campaign-choices.js")(RTS);
 			require("./trade-rules.js")(RTS);
 			require("./network-rules.js")(RTS);
 		};

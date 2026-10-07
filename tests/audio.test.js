@@ -268,3 +268,49 @@ test("activity audio follows visible working robots and respects pause", () => {
 	a.update(game, view);
 	assert.equal(calls.length, 2);
 });
+test("listening from the settings holds the theme and mood; the intro loops", () => {
+	const a = new GameAudio();
+	a.instrument = () => {};
+	a.previewMusic("game:ash", "battle");
+	assert.equal(a.musicMode, "game:ash");
+	assert.equal(a.musicMood, "battle");
+	// The game's state does not take the mood away while listening.
+	a.updateMusicState({ time: 100, entities: [], isVisible: () => true });
+	for (let step = 0; step < 40; step++) a.musicStep(step, step);
+	assert.equal(a.musicMood, "battle");
+	// The intro starts over (step 64 = step 0).
+	a.previewMusic("intro");
+	const notes = [];
+	a.instrument = (...n) => notes.push(n[0]);
+	a.musicStep(64, 0);
+	assert.ok(notes.includes("drone") && notes.includes("braam"));
+	assert.ok(a.stopPreview());
+	assert.equal(a.musicPreview, null);
+	assert.equal(a.stopPreview(), false);
+});
+test("four eerie themes: their own instruments, tempo and harmony; moods change them", () => {
+	const sets = [],
+		seqs = [];
+	for (const mode of ["game:wreck", "game:hive", "game:lumen", "game:forge"]) {
+		const a = new GameAudio(),
+			notes = [];
+		a.musicMode = mode;
+		a.instrument = (...n) => notes.push(n);
+		let t = 0;
+		for (let step = 0; step < 64; step++) t += a.musicStep(step, t);
+		const kinds = new Set(notes.map((n) => n[0]));
+		assert.ok(kinds.size >= 3, mode + " " + [...kinds]);
+		assert.ok(notes.every((n) => n.slice(1).every(Number.isFinite) && n[2] >= 0 && n[3] > 0 && n[4] > 0 && n[1] > 20), mode);
+		sets.push([...kinds].sort().join());
+		seqs.push(JSON.stringify(notes));
+		// Battle: the heartbeat, drums and blasts.
+		const b = new GameAudio(),
+			fight = [];
+		b.previewMusic(mode, "battle");
+		b.instrument = (...n) => fight.push(n[0]);
+		for (let step = 0; step < 32; step++) b.musicStep(step, step);
+		for (const kind of ["heart", "taiko", "braam"]) assert.ok(fight.includes(kind), mode + " battle " + kind);
+	}
+	assert.equal(new Set(sets).size, 4, sets.join(" | "));
+	assert.equal(new Set(seqs).size, 4);
+});

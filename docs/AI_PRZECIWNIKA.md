@@ -5,7 +5,7 @@ Aktualizacja: 2026-09-27. Realizuje pomysły [AI-01–AI-05](POMYSLY.md): gospod
 ## Zakres
 
 - **Scenariusze** mają domyślnie dowódcę AI. W ustawieniach („Przeciwnik”) można wybrać **klasyczne desanty** — dawnego przeciwnika bez gospodarki, z darmowymi falami co 35–65 s. Wybór trafia do kodu operacji (przyrostek `-W` dla klasycznych desantów).
-- **Kampania** zachowuje swoje zaplanowane fale i skrypty; dowódca AI jej nie dotyczy.
+- **Kampania** zachowuje swoje zaplanowane fale i skrypty z wyjątkiem rozdziałów II, III i VI, w których od 0.97 Dominium prowadzi dowódca AI (zob. [niżej](#dowódca-ai-w-kampanii-wersja-097-2026-10-07)); akt III korzysta z dowódcy od początku.
 - Zapisy scenariuszy sprzed tej wersji wczytują się z klasycznymi desantami.
 - Każda strona AI (w grze na 3–4 graczy każda osobno) ma własny skarbiec, roboty, bazę i plan ataków.
 
@@ -61,9 +61,50 @@ Na plan poziomu trudności nakłada się styl frakcji przeciwnika (`RTS.AI_STYLE
 | Wycofanie przegranego ataku | jak poziom | tak (od średniego) | jak poziom |
 | Jednostki | bastiony ×1,8, ciężkie ×1,6 (o 1,5 min wcześniej), niszczyciele ×1,3, mniej piechoty, bez zwiadowców; fabryka o 1 min wcześniej | zwiadowcy ×2,5, grenadierzy ×1,2, mniej ciężkich | jak poziom |
 
-Na łatwym Kolonie nie nękają robotów i nie wycofują ataków (poziom zachowuje łagodny charakter), zmienia się tylko tempo i przekaźniki. W menu opis przeciwnika mówi też o stylu wybranej frakcji (albo wszystkich trzech, gdy frakcja jest losowa). Domyślny przeciwnik scenariuszy to Dominium, więc zwykła potyczka ma teraz rzadsze, ale większe ataki i więcej wieżyczek.
+Na łatwym Kolonie nie nękają robotów i nie wycofują ataków (poziom zachowuje łagodny charakter), zmienia się tylko tempo i przekaźniki.
+
+**Kampania (0.102).** Styl wybiera `game.aiStyleKey(drużyna)` — w scenariuszach frakcja strony; w rozdziałach kampanii z dowódcą (II, III, VI) Dominium gra stylem „Twierdza”, choć nie ma frakcji scenariusza (bez jej cech: wytrzymałości, kosztów, tempa produkcji). Z tym samym kluczem dowódca dobiera jednostki (bastiony, ciężkie maszyny, miotacze ognia; bez zwiadowców) i budynki; stacji orbitalnej nie stawia (`uplinkAt: null`). Dostrojenie rozdziałów nakłada się na styl — mnożniki pierwszego ataku i odstępu obniżone (II ×1,15 / ×0,95, III ×0,9 / ×0,85, VI ×0,85 / ×0,85), więc ataki przychodzą rzadziej niż w samym poziomie, ale nie aż tak jak w czystej „Twierdzy”. Akt III bez zmian (Rój — „Fala”, sojusznik Varn — Dominium scenariusza).
+
+Symulacje 12 min z botem bez rozbudowy i bez natarcia: średni — bot przetrwał wszystkie trzy rozdziały (wcześniej VI: porażka po 706 s); trudny — II przetrwał (centrum 1666/2600), III porażka po 398 s, VI po 450 s. Nacisk na bazę gracza zmalał na średnim, za to baza Dominium jest mocniejsza — przełamanie jej to zadanie gracza. W menu opis przeciwnika mówi też o stylu wybranej frakcji (albo wszystkich trzech, gdy frakcja jest losowa). Domyślny przeciwnik scenariuszy to Dominium, więc zwykła potyczka ma teraz rzadsze, ale większe ataki i więcej wieżyczek.
 
 Symulacja 10 min, średni, bierny gracz: Dominium — pierwszy atak w 214. s, 6 wieżyczek, w armii bastiony i niszczyciele; Kolonie — pierwszy atak w 136. s, zwiadowcy nękają roboty, wygrana ok. 200. s; Rój — pierwszy atak w 170. s.
+
+## Dowódca AI w kampanii (wersja 0.97, 2026-10-07)
+
+Reguły w `campaign-ai.js` (ładowany po `campaign-act3.js`), dostrojenie rozdziałów w `RTS.CAMPAIGN_AI`.
+
+- **Poziom trudności kampanii** — Łatwy, Średni (domyślny), Trudny; wybór w odprawie każdego rozdziału kampanii, zapamiętany w postępie kampanii (`CampaignProgress.difficulty`, klucz `pogranicze-campaign-v1`). `game.applyCampaignLevel(poziom)` wywoływane raz na starcie rozdziału (nie przy wczytaniu zapisu) i zapisywane w zapisie gry (`campaignLevel`).
+- **Siła przeciwnika we wszystkich rozdziałach**: wytrzymałość i obrażenia strony przeciwnika ×0,85 / ×1 / ×1,15 (jak poziom scenariusza; fauna i gracz bez zmian) — także jednostki skryptowanych desantów.
+- **Dowódca zamiast desantów** w rozdziałach II, III i VI: Dominium dostaje gospodarkę i plan poziomu (roboty, budowa, odbudowa, obrona, przekaźniki, ataki, ulepszenia). Garnizon z mapy staje się obroną bazy. Darmowe desanty są wyłączone; każda fala to atak dowódcy. Od 0.102 z nałożonym stylem Dominium „Twierdza” (bez frakcji scenariusza); mnożniki w tabeli działają na plan poziomu już zmieniony przez styl, a symulacje pod tabelą pochodzą z wersji 0.97, sprzed stylu.
+- **Akt III**: dowódca rozdziałów VII–IX przyjmuje poziom kampanii zamiast stałego „Średniego” (czas pierwszego ataku liczony od nowa).
+
+| Rozdział | Pierwszy atak | Odstęp | Wielkość ataku | Armia | Metal na start | Hangar |
+|---|---|---|---|---|---|---|
+| II · Archiwum pod lodem | ×1,15 | ×0,95 | ×0,85 | ×0,85 | 250 | nie |
+| III · Świt nad Nadir | ×0,9 | ×0,85 | ×0,9 | ×0,95 | 300 | wg poziomu |
+| VI · Serce popiołu | ×0,85 | ×0,85 | ×1 | ×1 | 350 | nie |
+
+Symulacje 12 minut, bot gracza z [wcześniejszych symulacji](#weryfikacja) w uproszczonej wersji (roboty przy rudzie, piechota i rakietowcy z koszar, obrona przy budynkach; bez rozbudowy, wieżyczek i celów rozdziału):
+
+| Rozdział | Łatwy | Średni | Trudny | Dawne desanty (dla porównania) |
+|---|---|---|---|---|
+| II | przetrwał, centrum nietknięte | przetrwał (4 ataki w 11 min) | porażka po 417 s | przetrwał (centrum 2032/2600) |
+| III | przetrwał (przed złagodzeniem rozdziału) | przetrwał (centrum 2152/2600) | porażka po 424 s | porażka po 647 s |
+| VI | przetrwał, centrum nietknięte | porażka po 706 s | porażka po 656 s | przetrwał na włosku (centrum 110/2600) |
+
+Rozdziały wymagają dalszego strojenia z prawdziwych rozgrywek — bot nie wykonuje celów misji (magazyny, przekaźniki, decyzja o kompleksie), a dowódca może o przekaźniki walczyć.
+
+## Zdarzenia w rozdziałach kampanii (wersja 0.98, 2026-10-07)
+
+Reguły w `campaign-events.js` (po `campaign-ai.js`): `RTS.CAMPAIGN_EVENTS` (zestaw na rozdział), `RTS.CAMPAIGN_EVENT_TUNE` (wartości poziomów), `RTS.CAMPAIGN_EVENT_RULES` (stałe). Zdarzenia startują razem z poziomem kampanii na początku rozdziału, sprawdzane co 0,5 s, stan w zapisie gry (`campaignEvents`). Komunikaty idą łącznością (dziennik w aktach II–III, powiadomienia w akcie I).
+
+- **Przechwycony rozkaz** (rozdziały z dowódcą AI: II, III, VI): 25 s przed planowanym atakiem — „grupa uderzeniowa N, ok. X jednostek — wymarsz za … s” i rada Liry.
+- **Kontratak o przekaźnik** (I, II, III, VI): przekaźnik przejęty przez gracza → po 40 / 22 / 12 s (łatwy / średni / trudny) wróg wysyła 3 / 4 / 6 jednostek, żeby go odbić (dowódca — z wolnych jednostek, zawsze zostawia 2 w bazie; rozdział I — oddział z bazy wroga). Ten sam przekaźnik najwyżej co 90 s.
+- **Uderzenie na tyły** (I, II, III, VI, VII, IX): co najmniej 6 uzbrojonych jednostek gracza w promieniu 650 od wrogiego centrum → 2 / 3 / 4 najszybsze jednostki ruszają na najdalszego od wroga robota gracza; potem przerwa 200 / 150 / 110 s.
+- **Posiłki** (wszystkie rozdziały I–IX): raz na rozdział, po 60. sekundzie, gdy centrum ma mniej niż 45% wytrzymałości albo gracz stracił 8 jednostek w 60 s i zostało mu mniej niż 5: łatwy — 3 piechurów, 2 rakietowców i czołg; średni — 2 piechurów, rakietowiec i czołg; trudny — 2 piechurów i rakietowiec. Mówi Lira (V — kpt. Vale, VIII — kmdr Varn).
+- **Sabotażyści dowódcy** (II, III, VI; od średniego): od 300 / 210 s co 170 / 120 s dowódca płaci 280 metalu, po 16 s przy koszarach pojawia się para sabotażystów z 2 ładunkami. Cel: reaktor, fabryka, laboratorium, hangar, koszary, na końcu centrum (najbliższy nie wyłączony); po zużyciu ładunków wracają. Działa mechanika etapu E: ukryci, dopóki nie podejdzie jednostka gracza; ładunek wyłącza budynek na 25 s. Łączność ostrzega o wyłączonym budynku (najwyżej co 20 s).
+
+Testy: `tests/campaign-events.test.js` (7). Symulacje 8 minut wszystkich rozdziałów I–IX na średnim (bot bez gospodarki, nacierający na wrogie centrum od 4. minuty): bez błędów; w rozdziałach II, III i VI nasłuch zapowiadał ataki, sabotażyści wyłączali koszary i reaktor, posiłki lądowały w I, II, III, VI i IX.
 
 ## Interfejs
 
@@ -90,6 +131,6 @@ Symulacja 10 min, średni, bierny gracz: Dominium — pierwszy atak w 214. s, 6 
 ## Ograniczenia
 
 - Dowódca zna położenie budynków i armii gracza (jak dawne desanty) — nie korzysta z mgły wojny.
-- Nie buduje murów, ekstraktorów gazu, laboratoriów ani budynków wsparcia etapu E i nie używa transporterów, dronów ani sabotażystów.
+- Nie buduje murów, ekstraktorów gazu, laboratoriów ani budynków wsparcia etapu E i nie używa transporterów ani dronów. Sabotażystów używa tylko w rozdziałach kampanii z dowódcą (0.98).
 - Strony AI nie tworzą sojuszu: w grze na 3–4 graczy walczą także między sobą, gdy się spotkają, ale atakują tylko gracza.
 - Balans oparty na symulacjach z prostym botem — wymaga rozgrywek.

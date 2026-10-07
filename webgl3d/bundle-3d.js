@@ -54577,7 +54577,9 @@ const THREE = Object.freeze({ ACESFilmicToneMapping: ACESFilmicToneMapping, AddE
 // ---- webgl3d/sky-3d.js ----
 /* Sky of the 3D board: a dome around the camera with the colours of the time of day (blue noon, golden
    hour, orange sunset, blue hour, moonlit night), the sun's disk and glow, the moon (a gibbous phase,
-   faint maria, a halo), twinkling stars and the band of the galaxy at night, and drifting clouds. The
+   faint maria, a halo, phases), stars of many colours and magnitudes and the Milky Way turning slowly
+   at night, meteors and satellites, the aurora (ice maps), the planet's shadow and the belt of Venus at
+   twilight, the second sun and planets or moons of the map's world, high cirrus over the clouds, and drifting clouds. The
    same clouds cast soft shadows drifting over the terrain and the models: cloudShade() puts them into
    the sun (moon) light of a material's shader.
    The game camera looks down steeply, so the dome mostly shows when the camera is tilted (prototype)
@@ -54601,6 +54603,13 @@ const SKY_CLOUD_GLSL = `
 		return 1.0 - cloudAmount * smoothstep(0.47, 0.7, cloudCover(world.xz / 1300.0 + cloudOffset));
 	}`;
 
+// The cloud cover for other shaders (sunbeams through the gaps): its GLSL and its shared uniforms.
+function cloudGlsl() {
+	return SKY_CLOUD_GLSL;
+}
+function cloudUniforms() {
+	return SKY_CLOUDS;
+}
 // Cloud shadows in a material: the directional lights (sun or moon) dimmed under the clouds. Call from
 // onBeforeCompile; the uniforms are shared, so every material follows the same clouds.
 function cloudShade(THREE, shader) {
@@ -54653,6 +54662,18 @@ function createSky3D(THREE) {
 		cloudLight: { value: C("#ffffff") },
 		skyTime: { value: 0 },
 		cloudOffset: SKY_CLOUDS.cloudOffset,
+		// Moon phase 0…1: 0 new, 0.5 full (lit from the side facing the sun).
+		moonPhase: { value: 0.62 },
+		// Aurora 0…1 (ice maps at night).
+		aurora: { value: 0 },
+		// The sky of the map's world (setTheme): a second sun (direction, colour × visibility) and up to
+		// two bodies — planets or moons: [direction xyz, angular radius], [colour A, ring 0/1], [colour B].
+		sun2Dir: { value: new THREE.Vector3(0, 1, 0) },
+		sun2Color: { value: C("#000000") },
+		bodyDir: { value: [new THREE.Vector4(0, 1, 0, 0), new THREE.Vector4(0, 1, 0, 0)] },
+		bodyA: { value: [new THREE.Vector4(), new THREE.Vector4()] },
+		bodyB: { value: [new THREE.Vector4(), new THREE.Vector4()] },
+		clear: { value: 1 },
 	};
 	const material = new THREE.ShaderMaterial({
 		uniforms,
@@ -54665,7 +54686,8 @@ function createSky3D(THREE) {
 		fragmentShader: `
 			uniform vec3 zenith; uniform vec3 horizon; uniform vec3 sunColor; uniform vec3 sunDir; uniform vec3 moonDir;
 			uniform float sunVis; uniform float moonVis; uniform float starVis; uniform float cover; uniform vec3 cloudLight;
-			uniform float skyTime; uniform vec2 cloudOffset;
+			uniform float skyTime; uniform vec2 cloudOffset; uniform float moonPhase; uniform float aurora;
+			uniform vec3 sun2Dir; uniform vec3 sun2Color; uniform vec4 bodyDir[2]; uniform vec4 bodyA[2]; uniform vec4 bodyB[2]; uniform float clear;
 			varying vec3 vDir;
 			float skyHash(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
 			float skyNoise(vec2 p) {
@@ -54675,25 +54697,150 @@ function createSky3D(THREE) {
 				return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
 			}
 			float skyFbm(vec2 p) { return skyNoise(p) * 0.55 + skyNoise(p * 2.3 + 5.2) * 0.3 + skyNoise(p * 5.1 - 1.7) * 0.15; }
+			float skyNoise3(vec3 p) {
+				vec3 i = floor(p), f = fract(p);
+				f = f * f * (3.0 - 2.0 * f);
+				return mix(mix(mix(skyHash(i), skyHash(i + vec3(1.0, 0.0, 0.0)), f.x), mix(skyHash(i + vec3(0.0, 1.0, 0.0)), skyHash(i + vec3(1.0, 1.0, 0.0)), f.x), f.y),
+					mix(mix(skyHash(i + vec3(0.0, 0.0, 1.0)), skyHash(i + vec3(1.0, 0.0, 1.0)), f.x), mix(skyHash(i + vec3(0.0, 1.0, 1.0)), skyHash(i + vec3(1.0, 1.0, 1.0)), f.x), f.y), f.z);
+			}
+			float skyFbm3(vec3 p) { return skyNoise3(p) * 0.55 + skyNoise3(p * 2.3 + 5.2) * 0.3 + skyNoise3(p * 5.1 - 1.7) * 0.15; }
+			vec3 skyRot(vec3 v, vec3 k, float a) { float c = cos(a), s = sin(a); return v * c + cross(k, v) * s + k * dot(k, v) * (1.0 - c); }
+			// One layer of stars: at most one in a cell of a grid on the sphere (scale cells across), kept
+			// above the threshold; a colour by temperature (red, yellow, white, blue), a magnitude (most
+			// faint, a few bright), at least a pixel wide (fainter when smaller, so they don't shimmer),
+			// twinkling, more near the horizon (h); the bright ones with a cross of diffraction spikes.
+			vec3 skyStars(vec3 ds, float scale, float keep, float rad, float h, float spikes, float pxd) {
+				vec3 g = ds * scale, cell = floor(g);
+				float r = skyHash(cell);
+				if (r < keep) return vec3(0.0);
+				vec3 at = cell + 0.5 + (vec3(skyHash(cell + 1.3), skyHash(cell + 2.7), skyHash(cell + 4.1)) - 0.5) * 0.7;
+				vec3 off = g - at;
+				float px = max(pxd * scale * 0.7, 1e-4), rr = max(rad, px);
+				float mag = pow(fract(r * 97.0), 3.0);
+				float b = exp(-dot(off, off) / (rr * rr)) * (rad * rad) / (rr * rr) * 3.0;
+				float t = fract(r * 531.0);
+				vec3 tint = t < 0.14 ? vec3(1.0, 0.7, 0.5) : t < 0.36 ? vec3(1.0, 0.9, 0.74) : t < 0.78 ? vec3(0.96, 0.97, 1.0) : vec3(0.7, 0.8, 1.0);
+				float low = 1.0 - smoothstep(0.0, 0.35, h);
+				float tw = max(0.0, 1.0 + (0.18 + 0.55 * low) * (sin(skyTime * (3.0 + r * 7.0) + r * 60.0) * 0.6 + sin(skyTime * (7.3 + r * 3.0) + r * 13.0) * 0.4));
+				if (spikes > 0.0 && mag > 0.45) {
+					vec3 tx = normalize(cross(ds, vec3(0.0, 1.0, 0.0))), ty = cross(tx, ds);
+					vec2 o = vec2(dot(off, tx), dot(off, ty)) / px;
+					b += (exp(-abs(o.x) * 1.5 - abs(o.y) * 0.5) + exp(-abs(o.y) * 1.5 - abs(o.x) * 0.5)) * exp(-dot(o, o) * 0.03) * (mag - 0.45) * spikes;
+				}
+				return tint * b * (0.2 + 2.6 * mag) * tw;
+			}
 			void main() {
 				vec3 d = normalize(vDir);
 				float h = d.y;
+				// The size of a pixel on the sky (taken here, in uniform control flow).
+				float pxd = max(length(fwidth(d)), 1e-4);
 				// Gradient: horizon → zenith; below the horizon the haze darkens a little.
 				vec3 col = mix(horizon, zenith, pow(smoothstep(-0.02, 0.65, h), 0.55));
 				col = mix(col, horizon * 0.7, smoothstep(0.0, -0.4, h));
+				// Twilight opposite the sun: the planet's shadow rising as a blue-grey band over the horizon,
+				// the pink belt of Venus above it.
+				float tw = smoothstep(-0.16, -0.03, sunDir.y) * (1.0 - smoothstep(0.02, 0.1, sunDir.y));
+				if (tw > 0.0) {
+					float anti = max(-dot(normalize(d.xz + 1e-5), normalize(sunDir.xz + 1e-5)), 0.0);
+					float top = clamp(0.03 - sunDir.y * 0.9, 0.02, 0.18);
+					float belt = (1.0 - smoothstep(top - 0.02, top + 0.01, h)) * smoothstep(-0.06, 0.0, h);
+					float venus = exp(-pow((h - top - 0.05) / 0.045, 2.0));
+					float wb = tw * pow(anti, 1.3);
+					col = mix(col, col * vec3(0.55, 0.6, 0.82) + vec3(0.015, 0.025, 0.06), belt * wb * 0.75);
+					col += vec3(0.42, 0.22, 0.28) * venus * wb * 0.3;
+				}
 				// The sun: a wide warm glow (stronger along the horizon at sunset), the corona and the disk.
 				float s = max(dot(d, sunDir), 0.0);
 				col += sunColor * (pow(s, 6.0) * 0.22 * (1.0 + 1.5 * (1.0 - smoothstep(0.0, 0.25, abs(h)))) + pow(s, 90.0) * 0.6) * sunVis;
 				col += sunColor * smoothstep(0.99955, 0.9998, s) * 5.0 * sunVis;
-				// Stars: one in some cells of a grid on the sphere, twinkling; the band of the galaxy.
+				// The second sun (twin-sun worlds): smaller, its own glow.
+				float s2 = max(dot(d, sun2Dir), 0.0);
+				col += sun2Color * (pow(s2, 14.0) * 0.12 + pow(s2, 160.0) * 0.5 + smoothstep(0.99984, 0.99993, s2) * 4.5);
+				float full = 0.5 - 0.5 * cos(moonPhase * 6.2832);
+				// The night sky: stars and the galaxy turning slowly round the pole; meteors, satellites.
 				if (starVis > 0.0) {
-					vec3 g = d * 220.0, cell = floor(g);
-					float r = skyHash(cell);
-					vec3 at = cell + 0.5 + (vec3(skyHash(cell + 1.3), skyHash(cell + 2.7), skyHash(cell + 4.1)) - 0.5) * 0.7;
-					float star = step(0.965, r) * smoothstep(0.16, 0.0, length(g - at)) * (0.55 + 0.45 * sin(skyTime * (2.0 + r * 5.0) + r * 60.0));
-					float band = exp(-pow(dot(d, normalize(vec3(0.35, 0.55, 0.75))), 2.0) * 22.0);
-					vec3 sky = vec3(0.95, 0.97, 1.0) * star * (0.6 + 1.4 * fract(r * 97.0)) + vec3(0.55, 0.6, 0.78) * band * (0.25 + 0.75 * skyFbm(d.xz * 9.0 + d.y * 4.0)) * 0.09;
+					vec3 ds = skyRot(d, normalize(vec3(0.0, 0.8, -0.6)), skyTime * 0.0035);
+					// The Milky Way: a band along a great circle, wider and warmer at the bright core, clumped,
+					// split by dark dust lanes along its middle; washed out by a full moon.
+					vec3 N = normalize(vec3(0.35, 0.55, 0.75)), U = normalize(cross(N, vec3(0.0, 0.0, 1.0))), V = cross(N, U);
+					float lat = dot(ds, N);
+					float core = exp(-pow(distance(ds, normalize(U * 0.8 + V * 0.6)), 2.0) * 5.0);
+					float w = 0.12 + 0.09 * core + 0.035 * skyNoise3(ds * 3.0);
+					float band = exp(-lat * lat / (w * w));
+					float clumps = skyFbm3(ds * 6.0);
+					float dust = smoothstep(0.42, 0.72, skyFbm3(ds * 12.0 + 3.1)) * exp(-pow(lat / (w * 0.5) - 0.12, 2.0));
+					float mw = band * (0.3 + 0.7 * clumps) * (1.0 - 0.8 * dust) * (0.55 + 1.6 * core) * (1.0 - 0.6 * full * moonVis);
+					vec3 sky = mix(vec3(0.5, 0.58, 0.85), vec3(1.0, 0.85, 0.66), core) * mw * 0.13;
+					// Two layers of stars: many faint (denser in the band), fewer bright with spikes.
+					sky += skyStars(ds, 300.0, 0.955 - 0.06 * band, 0.12, h, 0.0, pxd) * 0.55;
+					sky += skyStars(ds, 75.0, 0.982, 0.06, h, 0.7, pxd);
+					// Meteors: now and then a streak flashing across, its tail fading.
+					for (int i = 0; i < 3; i++) {
+						float fi = float(i), k = skyTime / (8.0 + fi * 5.0) + fi * 0.37, id = floor(k), u = fract(k) / 0.08;
+						if (u < 1.0) {
+							vec3 S = normalize(vec3(skyHash(vec3(id, fi, 1.0)) - 0.5, 0.3 + 0.5 * skyHash(vec3(id, fi, 2.0)), skyHash(vec3(id, fi, 3.0)) - 0.5));
+							vec3 T0 = vec3(skyHash(vec3(id, fi, 4.0)) - 0.5, -0.45 * skyHash(vec3(id, fi, 5.0)), skyHash(vec3(id, fi, 6.0)) - 0.5);
+							vec3 T = normalize(T0 - S * dot(T0, S)), B = cross(S, T);
+							float len = 0.1 + 0.12 * skyHash(vec3(id, fi, 7.0)), head = u * len * 1.6;
+							if (dot(d, S) > 0.85) {
+								float px = pxd, along = dot(d, T), across = dot(d, B);
+								float tail = (head - along) / (len * 0.6);
+								float on = step(0.0, tail) * step(tail, 1.0) * pow(1.0 - clamp(tail, 0.0, 1.0), 1.5);
+								sky += vec3(1.0, 0.95, 0.86) * exp(-across * across / (px * px * 1.2)) * on * sin(u * 3.14159) * 1.4;
+							}
+						}
+					}
+					// Satellites: steady dim points crawling across the sky along their orbits.
+					for (int i = 0; i < 2; i++) {
+						float fi = float(i);
+						vec3 On = normalize(vec3(sin(fi * 2.3 + 0.4) * 0.7, 0.3, cos(fi * 2.3 + 0.4) * 0.7));
+						vec3 A = normalize(cross(On, vec3(0.0, 1.0, 0.0))), Bo = cross(On, A);
+						float ang = skyTime / (110.0 + fi * 70.0) * 3.14159 + fi * 2.0;
+						vec3 sat = cos(ang) * A + sin(ang) * Bo;
+						float px = pxd;
+						sky += vec3(0.95, 0.95, 0.9) * exp(-dot(d - sat, d - sat) / (px * px * 0.8)) * 0.5 * step(0.05, sat.y);
+					}
 					col += sky * starVis * smoothstep(-0.02, 0.12, h);
+				}
+				// Aurora: curtains of green light, red and violet towards their tops, rippling slowly, with
+				// rays (vertical in the world, so converging on the zenith).
+				if (aurora > 0.0 && h > 0.0) {
+					vec2 q = d.xz / (h + 0.06);
+					float lane = q.y * 0.45 + sin(q.x * 0.32 + skyTime * 0.05) * 1.3 + sin(q.x * 0.85 - skyTime * 0.09) * 0.45 + skyNoise(q * 0.4 + skyTime * 0.02) * 0.8;
+					float curt = exp(-pow(lane - 1.2, 2.0) * 2.5) + exp(-pow(lane + 0.9, 2.0) * 3.5) * 0.6;
+					vec2 az = normalize(d.xz + 1e-5);
+					float rays = (0.4 + 0.6 * skyNoise(az * 22.0 + vec2(skyTime * 0.25, lane))) * (0.6 + 0.4 * skyNoise(az * 70.0 - vec2(0.0, skyTime * 0.6)));
+					float vert = smoothstep(0.03, 0.1, h) * (1.0 - smoothstep(0.22, 0.65, h));
+					vec3 ac = mix(vec3(0.15, 1.0, 0.5), vec3(0.8, 0.25, 0.75), smoothstep(0.14, 0.5, h));
+					col += ac * curt * rays * vert * aurora * 0.6;
+				}
+				// Planets and moons of the map's world: a disk lit by the sun (a terminator), banded, with a thin
+				// atmosphere at the rim and a tilted ring (behind the disk above, in front below); faint by day.
+				for (int k = 0; k < 2; k++) {
+					vec4 bd = bodyDir[k];
+					if (bd.w <= 0.0) continue;
+					vec3 bdir = normalize(bd.xyz);
+					if (dot(d, bdir) < 0.6) continue;
+					vec3 right = normalize(cross(bdir, vec3(0.0, 1.0, 0.0))), up = cross(right, bdir);
+					vec2 p = vec2(dot(d, right), dot(d, up)) / bd.w;
+					vec2 pt = mat2(0.94, -0.34, 0.34, 0.94) * p;
+					float r2 = dot(p, p), vis = (1.0 - 0.55 * sunVis) * clear * smoothstep(-0.01, 0.05, h);
+					vec2 rp = vec2(pt.x, pt.y / 0.26);
+					float rr = length(rp);
+					float ring = bodyA[k].w * smoothstep(1.3, 1.36, rr) * (1.0 - smoothstep(2.05, 2.15, rr)) * (0.55 + 0.45 * sin(rr * 46.0)) * (1.0 - 0.6 * smoothstep(1.62, 1.66, rr) * (1.0 - smoothstep(1.7, 1.74, rr)));
+					vec3 ringCol = mix(bodyA[k].rgb, bodyB[k].rgb, 0.4) * (0.35 + 0.65 * clamp(dot(sunDir, up) * 0.5 + 0.6, 0.0, 1.0));
+					if (pt.y > 0.0) col = mix(col, ringCol, ring * 0.8 * vis);
+					if (r2 < 1.0) {
+						vec3 n = vec3(p, sqrt(1.0 - r2));
+						vec3 wn = right * n.x + up * n.y - bdir * n.z;
+						float lit = smoothstep(-0.08, 0.25, dot(wn, sunDir));
+						float bands = skyFbm(vec2(pt.y * 7.0 + float(k) * 3.0, pt.x * 0.8 + skyNoise(vec2(pt.y * 20.0, float(k))) * 0.4));
+						vec3 surf = mix(bodyA[k].rgb, bodyB[k].rgb, smoothstep(0.35, 0.65, bands)) * (0.04 + 0.85 * lit) * (0.75 + 0.25 * n.z);
+						col = mix(col, surf, vis * smoothstep(1.0, 0.94, r2));
+					} else {
+						col += bodyA[k].rgb * (1.0 - smoothstep(1.0, 1.25, sqrt(r2))) * 0.12 * vis;
+					}
+					if (pt.y <= 0.0) col = mix(col, ringCol, ring * 0.8 * vis);
 				}
 				// The moon: a disk lit from one side (gibbous), darker maria, a soft halo.
 				if (moonVis > 0.0) {
@@ -54703,18 +54850,44 @@ function createSky3D(THREE) {
 					float r2 = dot(p, p);
 					if (m > 0.0 && r2 < 1.0) {
 						vec3 n = vec3(p, sqrt(1.0 - r2));
-						float lit = smoothstep(-0.08, 0.12, dot(n, normalize(vec3(-0.75, 0.25, 0.62))));
+						// The phase: the light comes round from behind (new) over the side to the front (full).
+						float ph = moonPhase * 6.2832;
+						float lit = smoothstep(-0.06, 0.1, dot(n, normalize(vec3(-sin(ph), 0.15, -cos(ph)))));
 						float maria = 0.78 + 0.22 * smoothstep(0.35, 0.65, skyNoise(p * 2.2 + 3.0));
-						col = mix(col, vec3(0.93, 0.95, 1.0) * (0.06 + 1.3 * lit * maria), moonVis * smoothstep(1.0, 0.85, r2));
+						// The dark part faintly lit by the planet (earthshine).
+						col = mix(col, vec3(0.93, 0.95, 1.0) * (0.035 + 1.3 * lit * maria), moonVis * smoothstep(1.0, 0.85, r2));
 					}
-					col += vec3(0.55, 0.65, 0.9) * (pow(max(m, 0.0), 300.0) * 0.12 + pow(max(m, 0.0), 3000.0) * 0.25) * moonVis;
+					col += vec3(0.55, 0.65, 0.9) * (pow(max(m, 0.0), 300.0) * 0.12 + pow(max(m, 0.0), 3000.0) * 0.25) * moonVis * (0.2 + 0.8 * full);
 				}
-				// Clouds: a layer seen in perspective, lit by the sun or the moon, thinning to the horizon.
-				if (h > 0.0 && cover > 0.0) {
-					vec2 q = d.xz / (h + 0.12) * 0.9 + cloudOffset * 2.0;
-					float c = smoothstep(0.62 - cover * 0.3, 0.9 - cover * 0.2, skyFbm(q)) * smoothstep(0.0, 0.18, h);
-					vec3 tone = mix(horizon, cloudLight, 0.55) + sunColor * pow(s, 4.0) * 0.35 * sunVis;
-					col = mix(col, tone, c * 0.85);
+				// Clouds. Glow of the low sun on them: lit from below at sunset and after it (the high cirrus
+				// longer); silvery edges round the moon.
+				if (h > 0.0) {
+					float sy = sunDir.y;
+					vec3 dusk = mix(vec3(1.0, 0.38, 0.26), vec3(1.0, 0.72, 0.44), smoothstep(-0.05, 0.12, sy));
+					float toward = 0.35 + 0.65 * pow(s, 1.5);
+					float moonM = pow(max(dot(d, moonDir), 0.0), 6.0) * moonVis;
+					// Cirrus: thin high streaks, drifting faster, hidden by overcast.
+					vec2 qc = d.xz / (h + 0.05) * 0.32 + cloudOffset * 3.5;
+					vec2 rq = mat2(0.8, 0.6, -0.6, 0.8) * qc;
+					float ci = smoothstep(0.55, 0.85, skyFbm(vec2(rq.x * 0.3, rq.y * 3.2))) * (0.3 + 0.7 * skyNoise(qc * 0.45 + 7.0));
+					ci *= smoothstep(0.03, 0.3, h) * (1.0 - smoothstep(0.5, 0.9, cover)) * 0.55;
+					float hiGlow = smoothstep(-0.2, -0.04, sy) * (1.0 - smoothstep(0.1, 0.3, sy));
+					vec3 ciTone = mix(horizon, cloudLight * 1.1, 0.65) + dusk * hiGlow * toward * 0.9 + sunColor * pow(s, 6.0) * 0.3 * sunVis;
+					col = mix(col, ciTone, ci);
+					col += vec3(0.7, 0.76, 0.92) * ci * moonM * 0.35;
+					// The low layer, seen in perspective, thinning to the horizon.
+					if (cover > 0.0) {
+						vec2 q = d.xz / (h + 0.12) * 0.9 + cloudOffset * 2.0;
+						float f = skyFbm(q);
+						float c = smoothstep(0.62 - cover * 0.3, 0.9 - cover * 0.2, f) * smoothstep(0.0, 0.18, h);
+						float loGlow = smoothstep(-0.12, -0.01, sy) * (1.0 - smoothstep(0.06, 0.22, sy));
+						// Undersides: the thick middles darker, the thin edges catching the light.
+						float thick = smoothstep(0.75, 1.0, f);
+						vec3 tone = mix(horizon, cloudLight, 0.55) * (1.0 - 0.25 * thick) + sunColor * pow(s, 4.0) * 0.35 * sunVis + dusk * loGlow * toward * (0.75 - 0.4 * thick);
+						col = mix(col, tone, c * 0.85);
+						float edge = c * (1.0 - c) * 4.0;
+						col += vec3(0.75, 0.8, 0.95) * edge * moonM * 0.45;
+					}
 				}
 				gl_FragColor = vec4(col, 1.0);
 				#include <tonemapping_fragment>
@@ -54729,6 +54902,20 @@ function createSky3D(THREE) {
 	// Drawn after the opaque board, behind it (depth test on): the sky is shaded only where it shows.
 	mesh.renderOrder = 1000;
 
+	// Worlds by map theme: a second sun (offset from the first along its path: [turn round, lower],
+	// colour) and bodies [direction, angular radius, colour A, colour B, ring].
+	const WORLDS = {
+		twinsun: { sun2: [0.3, 0.07, "#ffae70"] },
+		skyfall: { bodies: [[[-0.55, 0.2, -0.62], 0.13, "#d8b48c", "#9c6c56", 1]] },
+		derelict: { bodies: [[[0.45, 0.18, -0.8], 0.11, "#93abc8", "#5c6c8c", 1]] },
+		magma: { bodies: [[[0.72, 0.1, -0.62], 0.2, "#b0583e", "#5e2620", 0]] },
+		lumen: { bodies: [[[-0.32, 0.3, -0.8], 0.03, "#b0eedc", "#5fa892", 0], [[0.52, 0.36, -0.58], 0.016, "#dccab2", "#9a8a74", 0]] },
+		dunesea: { bodies: [[[-0.7, 0.15, -0.66], 0.05, "#e2c9a4", "#b48f6a", 0]] },
+		frozenhive: { bodies: [[[0.3, 0.25, -0.85], 0.07, "#c4d8ec", "#7c93b0", 1]] },
+	};
+	let world = {};
+	const sun2Base = C("#000"),
+		yAxis = new THREE.Vector3(0, 1, 0);
 	const zenith = C("#000"),
 		horizon = C("#000"),
 		sunlight = C("#000"),
@@ -54737,6 +54924,26 @@ function createSky3D(THREE) {
 	return {
 		mesh,
 		uniforms,
+		// The map's world (its theme): the second sun, planets and moons in the sky.
+		setTheme(theme) {
+			world = WORLDS[theme] || {};
+			const bodies = world.bodies || [];
+			for (let k = 0; k < 2; k++) {
+				const b = bodies[k];
+				uniforms.bodyDir.value[k].set(...(b ? b[0] : [0, 1, 0]), b ? b[1] : 0);
+				if (!b) continue;
+				const a = C(b[2]),
+					bb = C(b[3]);
+				uniforms.bodyA.value[k].set(a.r, a.g, a.b, b[4]);
+				uniforms.bodyB.value[k].set(bb.r, bb.g, bb.b, 0);
+			}
+			if (world.sun2) sun2Base.set(world.sun2[2]);
+		},
+		// The second sun's direction for a sun direction (null on worlds with one sun).
+		sun2(sunDir, out) {
+			if (!world.sun2) return null;
+			return out.copy(sunDir).applyAxisAngle(yAxis, world.sun2[0]).setY(sunDir.y - world.sun2[1]).normalize();
+		},
 		// Colours at a sun height: { zenith, horizon, sunlight } (shared objects, copy them to keep).
 		palette(e) {
 			palette(e, zenith, horizon, sunlight);
@@ -54744,7 +54951,9 @@ function createSky3D(THREE) {
 		},
 		// Every frame, after the light and the weather: e the sun's height (-1…1), sunDir the true
 		// direction to the sun (below the horizon too), moonDir, haze 0…1 (weather), hazeColor, cover 0…1.
-		update({ camera, time, e, sunDir, moonDir, zenith: z, horizon: h, sunlight: sl, haze = 0, hazeColor, cover = 0.4, flash = 0, flashColor }) {
+		update({ camera, time, e, sunDir, moonDir, zenith: z, horizon: h, sunlight: sl, haze = 0, hazeColor, cover = 0.4, flash = 0, flashColor, moonPhase = 0.62, aurora = 0 }) {
+			uniforms.moonPhase.value = moonPhase;
+			uniforms.aurora.value = aurora * (1 - Math.min(1, haze * 1.2));
 			mesh.position.copy(camera.position);
 			mesh.scale.setScalar(camera.far * 0.9);
 			uniforms.zenith.value.copy(z);
@@ -54767,6 +54976,12 @@ function createSky3D(THREE) {
 			uniforms.cover.value = Math.min(1, cover + haze * 0.6);
 			uniforms.cloudLight.value.copy(MOONLIT).lerp(WHITE, Math.max(0, Math.min(1, (e + 0.1) / 0.3)));
 			uniforms.skyTime.value = time;
+			uniforms.clear.value = clear;
+			if (world.sun2) {
+				this.sun2(sunDir, uniforms.sun2Dir.value);
+				const e2 = uniforms.sun2Dir.value.y;
+				uniforms.sun2Color.value.copy(sun2Base).multiplyScalar(Math.max(0, Math.min(1, (e2 + 0.04) / 0.08)) * (1 - haze * 0.8));
+			} else uniforms.sun2Color.value.setRGB(0, 0, 0);
 		},
 		// Cloud drift and the shadow they cast (0 none … 1 dark).
 		clouds(time, shadow) {
@@ -57119,12 +57334,16 @@ function createNature3D(THREE, { tools, group, materials }) {
 			neckBase = [L * 0.42, H * 0.3, 0],
 			neckMid = [L * 0.42 + nf * s * 0.45, H * 0.3 + nu * s * 0.55, 0],
 			neckTop = [L * 0.42 + nf * s, H * 0.3 + nu * s, 0];
-		limb(body, o.coat, neckBase, neckMid, W * 0.62, W * 0.46, 10);
-		ball(body, o.coat, W * 0.46, neckMid);
-		limb(body, o.coat, neckMid, neckTop, W * 0.46, W * 0.36, 10);
-		if (o.bib) limb(body, o.bib, [neckBase[0] + W * 0.25, neckBase[1] - W * 0.25, 0], [neckMid[0] + W * 0.22, neckMid[1] - W * 0.2, 0], W * 0.4, W * 0.28, 8);
+		// The neck is its own joint at the shoulders: it lowers the head to the ground (grazing) and
+		// raises it (alert).
+		const neck = group(body, neckBase),
+			rel = (q) => [q[0] - neckBase[0], q[1] - neckBase[1], q[2]];
+		limb(neck, o.coat, [0, 0, 0], rel(neckMid), W * 0.62, W * 0.46, 10);
+		ball(neck, o.coat, W * 0.46, rel(neckMid));
+		limb(neck, o.coat, rel(neckMid), rel(neckTop), W * 0.46, W * 0.36, 10);
+		if (o.bib) limb(neck, o.bib, [W * 0.25, -W * 0.25, 0], rel([neckMid[0] + W * 0.22, neckMid[1] - W * 0.2, 0]), W * 0.4, W * 0.28, 8);
 		// Head: skull, cheeks, a tapering muzzle, the nose; eyes with a glint; ears.
-		const head = group(body, neckTop),
+		const head = group(neck, rel(neckTop)),
 			hl = o.head * s,
 			ears = [];
 		mesh(head, loft("h" + key, [[-0.2, 0.36, 0.4, 0.06], [0.08, 0.42, 0.46, 0.08], [0.36, 0.32, 0.34, -0.02], [0.66, 0.2, 0.22, -0.12], [0.92, 0.13, 0.14, -0.17], [1, 0.06, 0.07, -0.18]].map(([x, w, h, y]) => [x * hl, w * hl, h * hl, y * hl]), 10), o.coat);
@@ -57184,11 +57403,17 @@ function createNature3D(THREE, { tools, group, materials }) {
 		else if (tl > 0) limb(tail, o.coat, [0, 0, 0], [-tl * 0.85, -tl * 0.5, 0], W * 0.16, W * 0.06, 6);
 		if (o.tip) ball(tail, o.tip, tl * (o.bushy ? 0.15 : 0.3), [-tl * 0.92, o.bushy ? -tl * 0.35 : -tl * 0.45, 0], o.bushy ? [1.4, 1, 1] : [0.8, 1, 1]);
 		o.extra?.({ head, body, tail, hl, L, W, H }, s);
-		const speed = o.gait ?? 13;
+		const speed = o.gait ?? 13,
+			reach = o.graze ?? 1.5;
 		return {
 			root,
+			// i: time, moving; optionally stride (the walk cycle, advancing with the speed), graze 0…1 (head
+			// down to the ground), alert 0…1 (head up, ears pricked), aim (head turned).
 			update(e, i) {
-				const t = i.time * speed + e.id;
+				const t = (i.stride ?? i.time) * speed + e.id,
+					graze = i.graze || 0,
+					alert = i.alert || 0;
+				neck.rotation.z = -graze * reach + alert * 0.25 + (graze > 0.5 ? Math.sin(i.time * 2.3 + e.id) * 0.05 : 0);
 				if (o.hop) {
 					// Hops: the hind legs push together, the front legs reach together, the body arcs.
 					const ph = i.moving ? Math.sin(t) : 0;
@@ -57208,9 +57433,9 @@ function createNature3D(THREE, { tools, group, materials }) {
 					body.position.y = lift + (i.moving ? Math.abs(Math.sin(t)) * s * 0.8 : Math.sin(i.time * 1.8 + e.id) * s * 0.06);
 				}
 				head.rotation.y = -Math.max(-0.6, Math.min(0.6, i.aim));
-				head.rotation.z = i.recoil * 0.4 + (i.moving ? Math.sin(t * 2) * 0.04 : Math.sin(i.time * 0.7 + e.id) * 0.08);
-				// Ears twitch now and then.
-				ears.forEach((ear, n) => (ear.rotation.y = Math.max(0, Math.sin(i.time * 0.9 + e.id * 3 + n * 2) - 0.93) * 4));
+				head.rotation.z = i.recoil * 0.4 - graze * 0.45 + (i.moving ? Math.sin(t * 2) * 0.04 : Math.sin(i.time * 0.7 + e.id) * 0.08);
+				// Ears twitch now and then; pricked up when alert.
+				ears.forEach((ear, n) => (ear.rotation.y = Math.max(0, Math.sin(i.time * 0.9 + e.id * 3 + n * 2) - 0.93) * 4 * (1 - alert) - alert * 0.25));
 				tail.rotation.y = Math.sin(i.time * (i.moving ? 9 : 2.5) + e.id) * 0.3;
 			},
 		};
@@ -57290,8 +57515,8 @@ function createNature3D(THREE, { tools, group, materials }) {
 		return {
 			root,
 			update(e, i) {
-				const t = i.time * 10 + e.id,
-					run = i.moving ? 1 : 0.15;
+				const t = (i.stride ?? i.time) * 10 + e.id,
+					run = i.moving ? 1 : i.stride !== undefined ? 0 : 0.15;
 				legs.forEach((l, n) => (l.rotation.y = Math.sin(t + n * 1.6) * 0.5 * run));
 				body.rotation.y = Math.sin(t) * 0.1 * run;
 				tail.rotation.y = -Math.sin(t - 0.6) * 0.32 * run;
@@ -59868,16 +60093,16 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 	const WATER = {
 		lake: () => new THREE.MeshStandardMaterial({ color: "#2d6a80", roughness: 0.06, metalness: 0.1, transparent: true, opacity: 0.84, normalMap: ripples, normalScale: new THREE.Vector2(0.55, 0.55) }),
 		crevasse: () => new THREE.MeshStandardMaterial({ color: "#1f4558", roughness: 0.04, metalness: 0.2, transparent: true, opacity: 0.9, normalMap: ripples, normalScale: new THREE.Vector2(0.25, 0.25) }),
-		glow: () => new THREE.MeshStandardMaterial({ color: "#1f8f9c", emissive: "#23a9b8", emissiveIntensity: 0.3, roughness: 0.1, metalness: 0, transparent: true, opacity: 0.78, normalMap: ripples, normalScale: new THREE.Vector2(0.4, 0.4) }),
+		glow: () => new THREE.MeshStandardMaterial({ color: "#123e48", emissive: "#0d4a52", emissiveIntensity: 0.3, roughness: 0.1, metalness: 0, transparent: true, opacity: 0.78, normalMap: ripples, normalScale: new THREE.Vector2(0.4, 0.4) }),
 		lava: () => new THREE.MeshStandardMaterial({ color: "#2a0d06", emissive: "#ffffff", emissiveMap: cracks, emissiveIntensity: 1.3, roughness: 0.85, metalness: 0 }),
 	};
 	// The look of open water (lakes, crevasses, glowing pools; not lava), on top of the fog-of-war shader:
 	// small waves, a second ripple layer against tiling, the sky reflected at grazing angles (fresnel),
 	// lighter shallows towards the shore (the shore fade is the depth), foam along the shore line, and
 	// rings from the drops while it rains.
-	const waterUniforms = { waterTime: { value: 0 }, waterRain: { value: 0 }, waterSky: { value: new THREE.Color("#8fa6b4") }, waterSunDir: { value: new THREE.Vector3(0, 1, 0) }, waterSun: { value: new THREE.Color("#ffffff") } };
+	const waterUniforms = { glowPool: { value: 1 }, waterTime: { value: 0 }, waterRain: { value: 0 }, waterSky: { value: new THREE.Color("#8fa6b4") }, waterSunDir: { value: new THREE.Vector3(0, 1, 0) }, waterSun: { value: new THREE.Color("#ffffff") } };
 	const WATER_COMMON = `
-		uniform float waterTime; uniform float waterRain; uniform vec3 waterSky; uniform vec3 waterSunDir; uniform vec3 waterSun;
+		uniform float waterTime; uniform float waterRain; uniform vec3 waterSky; uniform vec3 waterSunDir; uniform vec3 waterSun; uniform float glowPool;
 		float wvHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 		float wvNoise(vec2 p) {
 			vec2 i = floor(p), f = fract(p);
@@ -59895,6 +60120,60 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 			}
 			return s;
 		}`;
+	// Lava: plates of dark crust drifting slowly with the flow (cells of a moving Voronoi pattern), cracks
+	// glowing between them, patches of open molten rock pulsing (low noise), cooler and darker at the
+	// banks (the shore fade).
+	const LAVA_COMMON = `
+		uniform float waterTime;
+		vec2 lvHash2(vec2 p) { p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3))); return fract(sin(p) * 43758.5453); }
+		vec2 lvCells(vec2 x) {
+			vec2 n = floor(x), f = fract(x);
+			float d1 = 8.0, d2 = 8.0;
+			for (int j = -1; j <= 1; j++)
+				for (int i = -1; i <= 1; i++) {
+					vec2 g = vec2(float(i), float(j)), o = lvHash2(n + g);
+					o = 0.5 + 0.38 * sin(waterTime * 0.12 + 6.2831 * o);
+					float d = length(g + o - f);
+					if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) d2 = d;
+				}
+			return vec2(d1, d2);
+		}
+		float lvNoise(vec2 p) {
+			vec2 i = floor(p), f = fract(p);
+			f = f * f * (3.0 - 2.0 * f);
+			float a = fract(sin(dot(i, vec2(12.9898, 78.233))) * 43758.5453), b = fract(sin(dot(i + vec2(1.0, 0.0), vec2(12.9898, 78.233))) * 43758.5453);
+			float c = fract(sin(dot(i + vec2(0.0, 1.0), vec2(12.9898, 78.233))) * 43758.5453), d = fract(sin(dot(i + vec2(1.0, 1.0), vec2(12.9898, 78.233))) * 43758.5453);
+			return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+		}`;
+	function lavaLook(material) {
+		const before = material.onBeforeCompile;
+		material.onBeforeCompile = (shader, renderer) => {
+			before?.call(material, shader, renderer);
+			Object.assign(shader.uniforms, waterUniforms);
+			shader.fragmentShader = shader.fragmentShader.replace("#include <common>", "#include <common>\n" + LAVA_COMMON).replace(
+				"#include <emissivemap_fragment>",
+				`#ifdef USE_COLOR_ALPHA
+				float bank = vColor.a;
+				#else
+				float bank = 1.0;
+				#endif
+				vec2 flow = vec2(waterTime * 0.9, waterTime * 0.35);
+				vec2 warp = vec2(lvNoise(vMapXY * 0.03), lvNoise(vMapXY * 0.03 + 7.3)) * 14.0;
+				vec2 cells = lvCells((vMapXY - flow + warp) / 19.0);
+				float heat = lvNoise((vMapXY - flow * 0.5) * 0.011 + waterTime * 0.02) * 0.6 + lvNoise(vMapXY * 0.037 + waterTime * 0.05) * 0.4;
+				float crack = 1.0 - smoothstep(0.0, 0.04 + 0.1 * heat, cells.y - cells.x);
+				float molten = smoothstep(0.56, 0.8, heat) * smoothstep(0.15, 0.7, bank);
+				float glowK = clamp(max(crack * (0.55 + 0.7 * heat) * smoothstep(0.05, 0.3, bank), molten), 0.0, 1.0);
+				float pulse = 0.85 + 0.15 * sin(waterTime * 2.2 + heat * 11.0);
+				vec3 hot = mix(vec3(0.85, 0.14, 0.02), vec3(1.0, 0.72, 0.24), glowK * glowK);
+				totalEmissiveRadiance = hot * glowK * 2.4 * pulse;
+				vec3 crust = vec3(0.03, 0.022, 0.02) * (0.6 + 0.8 * lvNoise(vMapXY * 0.09 + floor(cells.x * 3.0)));
+				diffuseColor.rgb = mix(crust, hot * 0.25, glowK);`,
+			);
+		};
+		material.customProgramCacheKey = () => "lava";
+		return material;
+	}
 	function waterLook(material) {
 		const before = material.onBeforeCompile;
 		material.onBeforeCompile = (shader, renderer) => {
@@ -59942,10 +60221,20 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 					outgoingLight += vec3(0.85, 0.9, 0.92) * foam * 0.35;
 					diffuseColor.a = max(diffuseColor.a, foam * 0.55);
 					outgoingLight += vec3(0.8, 0.86, 0.92) * waterRain * wvRings(vMapXY, waterTime) * 0.2;
+					#ifdef GLOW_POOL
+					// Bioluminescence: swirling filaments of light drifting through the dark water, pulsing; a
+					// glowing rim along the shore; brighter at night (glowPool).
+					vec2 swirl = vMapXY * 0.028 + vec2(sin(waterTime * 0.21), cos(waterTime * 0.17)) * 1.6 + wvNoise(vMapXY * 0.011 + waterTime * 0.04) * 3.0;
+					float sw = wvNoise(swirl) * 0.65 + wvNoise(swirl * 2.3 + 4.0) * 0.35;
+					float fil = pow(1.0 - abs(sw - 0.5) * 2.0, 7.0);
+					float pulse = 0.7 + 0.3 * sin(waterTime * 1.3 + sw * 7.0);
+					outgoingLight = outgoingLight * 0.55 + vec3(0.12, 0.85, 0.82) * (fil * 0.9 + 0.12) * pulse * smoothstep(0.08, 0.6, depthK) * glowPool;
+					outgoingLight += vec3(0.35, 1.0, 0.92) * smoothstep(0.04, 0.13, depthK) * (1.0 - smoothstep(0.13, 0.32, depthK)) * 0.45 * glowPool;
+					#endif
 					#include <opaque_fragment>`,
 				);
 		};
-		material.customProgramCacheKey = () => "water";
+		material.customProgramCacheKey = () => "water" + (material.defines?.GLOW_POOL !== undefined ? "|glow" : "");
 		return material;
 	}
 	let waters = [];
@@ -60029,7 +60318,9 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 			waterPoints(w, game, kind, byKind.get(kind));
 		}
 		for (const [kind, cells] of byKind) {
-			const material = kind === "lava" ? fogged(WATER[kind]()) : waterLook(fogged(WATER[kind]()));
+			const base = WATER[kind]();
+			if (kind === "glow") base.defines = { ...base.defines, GLOW_POOL: "" };
+			const material = kind === "lava" ? lavaLook(fogged(base)) : waterLook(fogged(base));
 			// Per-vertex opacity fades the shore.
 			Object.assign(material, { vertexColors: true, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
 			const mesh = new THREE.Mesh(waterMesh(cells, kind), material);
@@ -60107,7 +60398,7 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 		for (const o of game.obstacles || []) if (o.kind === "grove") glowSpots.push({ x: o.x + o.w / 2, y: o.y + o.h / 2, r: Math.max(o.w, o.h) * 1.4, color: "#3fd8c8", day: 0, night: 0.5 });
 		for (const w of game.waters || [])
 			if (w.kind === "glow") glowSpots.push({ x: w.x, y: w.y, r: Math.max(w.rx, w.ry) * 2.2, color: "#2fd0de", day: 0.05, night: 0.4 });
-			else if (w.kind === "lava") glowSpots.push({ x: w.x, y: w.y, r: Math.max(w.rx, w.ry) * 2.4, color: "#ff6a2a", day: 0.12, night: 0.42 });
+			else if (w.kind === "lava") glowSpots.push({ x: w.x, y: w.y, r: Math.max(w.rx, w.ry) * 2.4, color: "#ff6a2a", day: 0.04, night: 0.16 });
 	}
 	// Night lights (webgl3d/night-lights-3d.js): every lamp in the view at once, lighting the terrain and
 	// the models in their shaders — no fixed set of Three.js lights handed to the things nearest the
@@ -60171,6 +60462,22 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 						headlamp(e, { len, reach: r * 0.95, height: Math.max(8, r * 0.5), angle: 0.5, color: "#fff1cc", power: night * 1800, range: len * 1.6, haze: night * (0.05 + weather * 0.3) });
 					} else headlamp(e, { len: 90, reach: r * 0.5, height: 14, angle: 0.26, color: "#eef4ff", power: night * 420, range: 144, haze: night * (0.04 + weather * 0.22) });
 				}
+			}
+		// Lava and glowing pools near the view light the ground and the models round them (by day too,
+		// fainter): one light per body, flickering on lava.
+		for (const w of game.waters || []) {
+			if (w.kind !== "lava" && w.kind !== "glow") continue;
+			if (Math.abs(w.x - focus.x) > span * 0.7 || Math.abs(w.y - focus.y) > span * 0.7 || hidden({ x: w.x, y: w.y, team: -1 })) continue;
+			const lava = w.kind === "lava",
+				size = Math.max(w.rx, w.ry),
+				flick = lava ? 0.85 + 0.15 * Math.sin(clockNow * 3.1 + w.x * 0.01) : 1;
+			lights.point(w.x, w.y, heightAt(w.x, w.y) + 40, { color: lava ? "#ff6a22" : "#3fe0d0", power: flick * size * (lava ? 3 + night * 6 : 1.5 + night * 5), range: size * 2.2 + 70 });
+		}
+		// Muzzle flashes light up their surroundings at night for an instant.
+		if (night > 0.05)
+			for (const ef of game.effects) {
+				if (ef.kind !== "shot" || ef.life < ef.maxLife * 0.6 || Math.abs(ef.x - focus.x) > span * 0.6 || Math.abs(ef.y - focus.y) > span * 0.6 || hidden({ x: ef.x, y: ef.y, team: -1 })) continue;
+				lights.point(ef.x, ef.y, heightAt(ef.x, ef.y) + (ef.air ? 88 : 16), { color: "#ffc070", power: night * (ef.rocket ? 260 : 140), range: ef.rocket ? 90 : 60 });
 			}
 		// Fires on burning buildings and vehicles flicker over their surroundings at night.
 		if (night > 0.05)
@@ -60254,7 +60561,14 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 					vec2 q = gl_PointCoord;
 					float a;
 					vec3 col = vC.rgb;
-					if (vM.z > 0.5) {
+					if (vM.z > 1.5) {
+						// A flash: a bright core and a few spikes (a muzzle star), turned by the seed.
+						vec2 d = q - 0.5;
+						float r = length(d) * 2.0, ang = atan(d.y, d.x) + vM.y * 6.283;
+						float spikes = pow(abs(cos(ang * 2.5)), 14.0) * (1.0 - smoothstep(0.15, 1.0, r));
+						a = pow(1.0 - smoothstep(0.0, 0.6, r), 2.0) + spikes * 0.9;
+						col = mix(vC.rgb, vec3(1.0), pow(1.0 - smoothstep(0.0, 0.35, r), 2.0));
+					} else if (vM.z > 0.5) {
 						// A flame tongue: narrow at the top, flickering edges; white-hot → orange → red with age.
 						vec2 d = vec2((q.x - 0.5) * 2.0, (q.y - 0.5) * 2.0);
 						float w = mix(0.95, 0.25, smoothstep(-0.9, 0.9, -d.y));
@@ -60387,6 +60701,16 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 				}
 			}
 		}
+		// Fresh craters smoulder: thin smoke curling up and now and then a spark, for about 25 s.
+		for (const k of game.craters || []) {
+			const age = game.time - k.born;
+			if (age > 25 || hidden({ x: k.x, y: k.y, team: -1 })) continue;
+			const fade = 1 - age / 25;
+			if (Math.random() < dt * 3 * fade * density)
+				smoke.spawn({ x: k.x + rand(-k.size, k.size) * 0.4, y: heightAt(k.x, k.y) + 2, z: k.y + rand(-k.size, k.size) * 0.4, vx: rand(3, 9), vy: rand(10, 20), vz: rand(-2, 4), drag: 0.2, life: 0, max: rand(2.2, 3.6), s0: k.size * 0.3, s1: k.size * 1.4, r: 0.3, g: 0.28, b: 0.27, a: 0.4 * fade });
+			if (Math.random() < dt * 1.5 * fade * density)
+				fire.spawn({ x: k.x + rand(-k.size, k.size) * 0.2, y: heightAt(k.x, k.y) + 2, z: k.y + rand(-k.size, k.size) * 0.2, vx: rand(-4, 4), vy: rand(20, 40), vz: rand(-4, 4), lift: -30, life: 0, max: rand(0.8, 1.4), s0: rand(1.4, 2.4), s1: 0.5, r: 1, g: 0.55, b: 0.15, a: 1 });
+		}
 		for (const ef of game.effects) {
 			if (ef.kind !== "explosion" || seenExplosions.has(ef)) continue;
 			seenExplosions.add(ef);
@@ -60433,7 +60757,7 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 	// lava. Aerion: mist welling up from the chasms.
 	let byKind = {},
 		theme = null;
-	const owed = { spores: 0, embers: 0, mist: 0 },
+	const owed = { spores: 0, embers: 0, mist: 0, bubbles: 0 },
 		vapour = new WeakMap();
 	function emit(name, rate, dt) {
 		owed[name] += rate * dt * density;
@@ -60469,6 +60793,21 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 					y = w.y + rand(-0.5, 0.5) * w.ry;
 				if (!visible(x, y)) continue;
 				fire.spawn({ x, y: heightAt(x, y) + 2, z: y, vx: rand(-10, 10), vy: rand(50, 120), vz: rand(-10, 10), lift: -25, life: 0, max: rand(1.2, 2.4), s0: rand(3, 5), s1: 1, r: 1, g: rand(0.55, 0.85), b: 0.25, a: 0.9 });
+			}
+			// Bubbles bursting: a flash of molten rock, blobs thrown up and falling back, a puff of smoke.
+			for (let i = lava.length ? emit("bubbles", 6, dt) : 0; i-- > 0; ) {
+				const w = lava[Math.floor(Math.random() * lava.length)],
+					x = w.x + rand(-0.35, 0.35) * w.rx * 1.4,
+					y = w.y + rand(-0.35, 0.35) * w.ry;
+				if (!visible(x, y)) continue;
+				const g = heightAt(x, y) + 1.5;
+				fire.spawn({ x, y: g, z: y, vx: 0, vy: 6, vz: 0, life: 0, max: 0.35, s0: 9, s1: 3, r: 1, g: 0.6, b: 0.2, a: 0.8 });
+				for (let k = 0; k < 6; k++) {
+					const a = rand(0, TAU),
+						sp = rand(10, 28);
+					fire.spawn({ x, y: g, z: y, vx: Math.cos(a) * sp, vy: rand(25, 55), vz: Math.sin(a) * sp, lift: -140, life: 0, max: rand(0.5, 0.8), s0: rand(1.6, 2.6), s1: 1.2, r: 1, g: rand(0.45, 0.65), b: 0.12, a: 1 });
+				}
+				smoke.spawn({ x, y: g + 3, z: y, vx: rand(4, 9), vy: rand(10, 18), vz: rand(-2, 3), life: 0, max: rand(1.6, 2.6), s0: 6, s1: 20, r: 0.3, g: 0.27, b: 0.26, a: 0.35 });
 			}
 		}
 		// Themed maps (themed-art.js): sand blown low over the dunes, motes drifting over the derelict
@@ -60585,7 +60924,7 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 		clockNow = 0;
 
 	// ---------- shots: muzzle flashes, rocket trails, impact sparks ----------
-	function shotFx(what, x, y, z, rocket) {
+	function shotFx(what, x, y, z, rocket, opts = {}) {
 		if (what === "splash") {
 			// Droplets thrown up and out, and a little white water.
 			for (let i = 0; i < Math.ceil(12 * density); i++) {
@@ -60596,15 +60935,38 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 			smoke.spawn({ x, y: y + 1, z, vx: 0, vy: 3, vz: 0, life: 0, max: 0.6, s0: 4, s1: 12, r: 0.92, g: 0.96, b: 1, a: 0.5 });
 			return;
 		}
-		if (what === "muzzle") fire.spawn({ x, y, z, vx: 0, vy: 0, vz: 0, life: 0, max: 0.08, s0: rocket ? 16 : 11, s1: 4, r: 1, g: 0.85, b: 0.5, a: 1 });
-		else if (what === "trail") smoke.spawn({ x, y, z, vx: rand(-3, 3), vy: rand(4, 10), vz: rand(-3, 3), life: 0, max: rand(0.6, 1), s0: 5, s1: 18, r: 0.62, g: 0.6, b: 0.58, a: 0.45 });
-		else
-			for (let i = 0; i < (rocket ? 10 : 4); i++) {
-				const a = rand(0, TAU),
-					sp = rand(30, rocket ? 120 : 70);
-				fire.spawn({ x, y, z, vx: Math.cos(a) * sp, vy: rand(20, 90), vz: Math.sin(a) * sp, lift: -240, life: 0, max: rand(0.15, 0.35), s0: rand(2.5, 5), s1: 1, r: 1, g: rand(0.7, 0.95), b: 0.45, a: 1 });
-			}
+		if (what === "muzzle") {
+			// A star of flame at the muzzle and a little puff of smoke after it.
+			fire.spawn({ x, y, z, vx: 0, vy: 0, vz: 0, life: 0, max: 0.09, s0: rocket ? 18 : 12, s1: 5, r: 1, g: 0.85, b: 0.5, a: 1, style: 2 });
+			smoke.spawn({ x, y, z, vx: rand(-3, 3), vy: rand(4, 9), vz: rand(-3, 3), drag: 1, life: 0, max: rand(0.6, 1), s0: 3, s1: rocket ? 14 : 9, r: 0.55, g: 0.54, b: 0.52, a: 0.35 });
+			return;
+		}
+		if (what === "trail") {
+			smoke.spawn({ x, y, z, vx: rand(-3, 3), vy: rand(4, 10), vz: rand(-3, 3), life: 0, max: rand(0.8, 1.4), s0: 4, s1: 20, r: 0.66, g: 0.64, b: 0.62, a: 0.5 });
+			fire.spawn({ x, y, z, vx: 0, vy: 0, vz: 0, life: 0, max: 0.06, s0: 6, s1: 3, r: 1, g: 0.7, b: 0.35, a: 0.9 });
+			return;
+		}
+		// An impact: a flash, sparks flying off, a kick of dust (on the ground); a rocket blows up in a small
+		// ball of fire and smoke.
+		const air = opts.air,
+			dust = SOIL[biomeNow] || SOIL.dust;
+		fire.spawn({ x, y, z, vx: 0, vy: 0, vz: 0, life: 0, max: rocket ? 0.14 : 0.08, s0: rocket ? 16 : 7, s1: 3, r: 1, g: 0.9, b: 0.65, a: 1, style: 2 });
+		for (let i = 0; i < (rocket ? 14 : 7); i++) {
+			const a = rand(0, TAU),
+				sp = rand(30, rocket ? 130 : 80);
+			fire.spawn({ x, y, z, vx: Math.cos(a) * sp, vy: rand(air ? -40 : 30, 100), vz: Math.sin(a) * sp, lift: -260, life: 0, max: rand(0.15, 0.4), s0: rand(1.8, 3.6), s1: 0.6, r: 1, g: rand(0.72, 0.95), b: 0.45, a: 1 });
+		}
+		if (!air)
+			for (let i = 0; i < (rocket ? 5 : 2); i++)
+				smoke.spawn({ x: x + rand(-3, 3), y: y - 6, z: z + rand(-3, 3), vx: rand(-12, 12), vy: rand(10, 26), vz: rand(-12, 12), drag: 1.5, life: 0, max: rand(0.7, 1.3), s0: rocket ? 7 : 4, s1: rocket ? 22 : 12, r: dust[0], g: dust[1], b: dust[2], a: 0.5 });
+		if (rocket) {
+			for (let i = 0; i < 5; i++) fire.spawn({ x: x + rand(-4, 4), y: y + rand(-2, 4), z: z + rand(-4, 4), vx: rand(-8, 8), vy: rand(10, 30), vz: rand(-8, 8), life: 0, max: rand(0.3, 0.5), s0: rand(8, 12), s1: 3, r: 1, g: 1, b: 1, a: 0.6, style: 1 });
+			smoke.spawn({ x, y: y + 4, z, vx: rand(-4, 4), vy: rand(14, 24), vz: rand(-4, 4), drag: 0.4, life: 0, max: rand(1.4, 2.2), s0: 8, s1: 28, r: 0.26, g: 0.24, b: 0.23, a: 0.5 });
+		}
 	}
+	// Dust kicked up by impacts, by biome.
+	const SOIL = { dust: [0.62, 0.52, 0.4], ash: [0.33, 0.3, 0.28], ice: [0.86, 0.9, 0.95] };
+	let biomeNow = "dust";
 
 	return {
 		setGame(game, heights) {
@@ -60614,6 +60976,7 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 			smoke.clear();
 			fire.clear();
 			theme = RTS.MISSIONS[game.missionId]?.theme || null;
+			biomeNow = RTS.MISSIONS[game.missionId]?.biome || "dust";
 			findGlow(game);
 			byKind = { lava: [], chasm: [], glow: [] };
 			for (const w of game.waters || []) byKind[w.kind]?.push(w);
@@ -60623,6 +60986,7 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 		update(dt, { game, time, night, focus, span, hidden, scale, light, gasFlow, working, sky, mistLevel, sun, quality = {} }) {
 			density = quality.particles ?? 1;
 			waterUniforms.waterTime.value = time;
+			waterUniforms.glowPool.value = 0.55 + night * 0.65;
 			waterUniforms.waterRain.value = weatherNow.kind === "rain" ? weatherNow.intensity || 0 : 0;
 			if (sky) waterUniforms.waterSky.value.copy(sky);
 			if (sun) {
@@ -60636,7 +61000,7 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 					m.emissiveMap.offset.set(time * 0.01, -time * 0.006);
 					m.emissiveIntensity = 1.2 + Math.sin(time * 1.7) * 0.2;
 				}
-				if (w.kind === "glow") m.emissiveIntensity = 0.25 + night * 0.4;
+				if (w.kind === "glow") m.emissiveIntensity = 0.1 + night * 0.25;
 			}
 			waterGroup.visible = quality.water !== false;
 			nightNow = night;
@@ -60668,7 +61032,11 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 /* Scenery of the 3D renderer that is not a game entity, with the same code-built models
    (webgl3d/models-3d.js scenery()) and the same instanced drawing as the units. Visual only; positions
    follow the same formulas as the Canvas and WebGL boards, so every renderer shows the same world.
-   - Land animals: game.wildlife() (deer, hares, foxes, lizards), walking, heading where they drift.
+   - Land animals: game.wildlife() (deer, hares, foxes, lizards) gives each one its home; from there it
+     lives on its own here (visual only): rests and grazes, wanders far round its home to places it can
+     reach (round water, walls, buildings, obstacles and steep slopes), deer in herds following a
+     leader, hares and lizards in dashes and freezes; units, shots and explosions nearby put it to flight
+     (the herd with it), then it stops, alert, and looks round.
    - Birds: 18 crossing the map (PlanetArt.fauna formula), flapping, high over the ground.
    - Fish: seven per plain lake, circling under the surface (webgl/fauna-native.js formula).
    - Floating islands: MapArt.islands() (Lumeria, Aerion), bobbing high over impassable ground; they
@@ -60703,6 +61071,195 @@ function createSceneLife3D(THREE, { world, heightAt, models3d, hiddenLayer, spla
 		return levels.get(key);
 	}
 	const TAU = Math.PI * 2;
+	// ---------- wildlife behaviour ----------
+	// Per kind: range round the home, walking and running speed, how near a unit scares it, turning rate
+	// (rad/s), rest between walks (s), herd size, how much it grazes, dashes (move and freeze), climbs.
+	const BEASTS = {
+		deer: { range: 560, walk: 22, run: 110, fear: 180, turn: 2.6, rest: [4, 12], herd: 5, graze: 0.8 },
+		fox: { range: 480, walk: 32, run: 100, fear: 140, turn: 3.6, rest: [2, 7], herd: 0, graze: 0.45 },
+		hare: { range: 320, walk: 26, run: 125, fear: 120, turn: 5, rest: [2, 8], herd: 0, graze: 0.5, dashes: true },
+		lizard: { range: 220, walk: 18, run: 75, fear: 85, turn: 7, rest: [1.5, 6], herd: 0, graze: 0, dashes: true, climbs: true },
+	};
+	const brains = new Map(),
+		rand = (a, b) => a + Math.random() * (b - a);
+	let lastTime = null,
+		wildlifeClock = 0;
+	// Animals of game.wildlife(): new ones start at their home; those gone (a building next to the
+	// home) leave.
+	function syncBrains() {
+		const seen = new Set();
+		for (const a of game.wildlife()) {
+			if (a.kind === "bird" || a.kind === "fish" || !BEASTS[a.kind]) continue;
+			seen.add(a.id);
+			if (brains.has(a.id)) continue;
+			const k = BEASTS[a.kind];
+			brains.set(a.id, {
+				id: a.id,
+				kind: a.kind,
+				home: { x: a.x, y: a.y },
+				x: a.x,
+				y: a.y,
+				h: Math.random() * TAU,
+				v: 0,
+				state: "rest",
+				timer: rand(0, k.rest[1]),
+				target: null,
+				herd: k.herd ? a.kind + Math.floor(a.id / (k.herd * 3)) : null,
+				stride: Math.random() * 10,
+				graze: 0,
+				alert: 0,
+				look: 0,
+				fearClock: Math.random() * 0.3,
+				probeClock: 0,
+				dash: 0,
+			});
+		}
+		for (const id of brains.keys()) if (!seen.has(id)) brains.delete(id);
+	}
+	// Somewhere an animal can stand: on the map, not in water, walls or obstacles, away from buildings,
+	// and (unless it climbs) not up a steep slope from where it is.
+	function walkable(b, x, y, statics) {
+		if (x < 60 || y < 60 || x > game.W - 60 || y > game.H - 60 || game.blocked(x, y, 14)) return false;
+		for (const e of statics) if (Math.abs(e.x - x) < 90 && Math.abs(e.y - y) < 90 && Math.hypot(e.x - x, e.y - y) < (RTS.TYPES[e.type]?.radius || 30) + 22) return false;
+		return BEASTS[b.kind].climbs || Math.abs(heightAt(x, y) - heightAt(b.x, b.y)) < Math.hypot(x - b.x, y - b.y) * 0.6 + 3;
+	}
+	// A new place to go: round the home (a herd round its leader's goal).
+	function pickTarget(b, statics) {
+		const k = BEASTS[b.kind],
+			leader = b.herd && [...brains.values()].find((o) => o.herd === b.herd);
+		for (let n = 0; n < 10; n++) {
+			let x, y;
+			if (leader && leader !== b && leader.target) {
+				const a = rand(0, TAU),
+					d = rand(25, 70);
+				x = leader.target.x + Math.cos(a) * d;
+				y = leader.target.y + Math.sin(a) * d;
+			} else {
+				const a = rand(0, TAU),
+					d = k.range * Math.sqrt(rand(0.05, 1));
+				x = b.home.x + Math.cos(a) * d;
+				y = b.home.y + Math.sin(a) * d;
+			}
+			if (walkable({ ...b, x, y }, x, y, statics)) return { x, y };
+		}
+		return null;
+	}
+	function scare(b, from, k) {
+		b.state = "flee";
+		b.timer = rand(1.6, 2.8);
+		b.from = { x: from.x, y: from.y };
+		b.swerve = rand(-0.5, 0.5);
+		b.graze = Math.min(b.graze, 0.3);
+		if (b.herd)
+			for (const o of brains.values())
+				if (o !== b && o.herd === b.herd && o.state !== "flee" && Math.hypot(o.x - b.x, o.y - b.y) < 260) {
+					o.state = "flee";
+					o.timer = rand(1.8, 3);
+					o.from = b.from;
+					o.swerve = rand(-0.6, 0.6);
+				}
+	}
+	function think(b, dt, time, movers, statics, booms) {
+		const k = BEASTS[b.kind];
+		// Danger: the nearest unit, a shot or an explosion close by.
+		b.fearClock -= dt;
+		if (b.fearClock <= 0) {
+			b.fearClock = rand(0.2, 0.35);
+			let threat = null,
+				best = k.fear;
+			for (const m of movers) {
+				const d = Math.abs(m.x - b.x) + Math.abs(m.y - b.y) < best * 1.5 ? Math.hypot(m.x - b.x, m.y - b.y) : Infinity;
+				if (d < best) {
+					best = d;
+					threat = m;
+				}
+			}
+			for (const f of booms) {
+				const fx = f.tx ?? f.x,
+					fy = f.ty ?? f.y;
+				if (Math.hypot(fx - b.x, fy - b.y) < k.fear * 1.8) threat = { x: fx, y: fy };
+			}
+			if (threat) scare(b, threat, k);
+		}
+		let want = 0,
+			goal = null;
+		if (b.state === "flee") {
+			want = k.run;
+			goal = Math.atan2(b.y - b.from.y, b.x - b.from.x) + b.swerve;
+			b.timer -= dt;
+			if (b.timer <= 0) {
+				// Safe for now: stop and look round.
+				b.state = "rest";
+				b.timer = rand(2, 4);
+				b.alert = 1;
+				b.target = null;
+			}
+		} else if (b.state === "walk") {
+			if (!b.target || Math.hypot(b.target.x - b.x, b.target.y - b.y) < 14) {
+				b.state = "rest";
+				b.timer = rand(...k.rest);
+				b.grazing = Math.random() < k.graze;
+			} else {
+				goal = Math.atan2(b.target.y - b.y, b.target.x - b.x);
+				want = k.walk;
+				// Dashes: run a little, freeze, run again.
+				if (k.dashes) {
+					b.dash -= dt;
+					if (b.dash <= 0) b.dash = b.dashOn ? ((b.dashOn = false), rand(0.4, 1.4)) : ((b.dashOn = true), rand(0.5, 1.6));
+					want = b.dashOn ? k.walk * 2 : 0;
+				}
+				// A herd keeps together: wait for those left behind.
+				if (b.herd) {
+					const lag = [...brains.values()].filter((o) => o.herd === b.herd && Math.hypot(o.x - b.x, o.y - b.y) > 160).length;
+					if (lag) want *= 0.55;
+				}
+			}
+		} else {
+			b.timer -= dt;
+			if (b.timer <= 0) {
+				b.target = pickTarget(b, statics);
+				if (b.target) b.state = "walk";
+				else b.timer = rand(1, 3);
+			}
+		}
+		// Steering: turn towards the goal, look ahead, swerve round what can't be crossed.
+		if (goal !== null) {
+			let dh = ((goal - b.h + Math.PI * 3) % TAU) - Math.PI;
+			b.h += Math.max(-1, Math.min(1, dh)) * Math.min(1, k.turn * (b.state === "flee" ? 1.8 : 1) * dt);
+			b.probeClock -= dt;
+			if (b.probeClock <= 0 && want > 0) {
+				b.probeClock = 0.15;
+				const look = 14 + b.v * 0.5;
+				if (!walkable(b, b.x + Math.cos(b.h) * look, b.y + Math.sin(b.h) * look, statics)) {
+					let free = null;
+					for (const turn of [0.5, -0.5, 1, -1, 1.6, -1.6, 2.4, -2.4])
+						if (walkable(b, b.x + Math.cos(b.h + turn) * look, b.y + Math.sin(b.h + turn) * look, statics)) {
+							free = turn;
+							break;
+						}
+					if (free === null) {
+						b.v = 0;
+						b.h += Math.PI;
+						if (b.state === "walk") b.target = pickTarget(b, statics);
+					} else {
+						b.h += free;
+						if (b.state === "flee") b.swerve += free;
+					}
+				}
+			}
+			// Too far from home: head back.
+			if (b.state !== "flee" && Math.hypot(b.x - b.home.x, b.y - b.home.y) > k.range * 1.4) b.target = { ...b.home };
+		}
+		b.v += Math.max(-1, Math.min(1, want - b.v)) * Math.min(Math.abs(want - b.v), (b.state === "flee" ? 220 : 60) * dt);
+		b.x += Math.cos(b.h) * b.v * dt;
+		b.y += Math.sin(b.h) * b.v * dt;
+		// The walk cycle follows the speed (longer strides when running).
+		b.stride += dt * Math.pow(b.v / k.walk, 0.65);
+		// Grazing while resting; alert after a scare, looking round.
+		b.graze += ((b.state === "rest" && b.grazing && b.alert < 0.3 ? 1 : 0) - b.graze) * Math.min(1, dt * 2);
+		b.alert = Math.max(0, b.alert - dt * 0.25);
+		b.look = b.state === "rest" ? Math.sin(time * 0.8 + b.id) * 0.5 * (0.3 + b.alert) : 0;
+	}
 	const group = new THREE.Group();
 	world.add(group);
 	const records = new Map();
@@ -60791,16 +61348,28 @@ function createSceneLife3D(THREE, { world, heightAt, models3d, hiddenLayer, spla
 			visible = (x, y) => !fog || game.isVisible(x, y);
 		for (const r of records.values()) r.seen = false;
 
-		// Land animals (advanced-rules.js wildlife()): heading from the drift of their position.
-		for (const a of game.wildlife()) {
-			if (a.kind === "bird" || a.kind === "fish" || !visible(a.x, a.y)) continue;
-			const r = make("animal|" + a.id + "|" + a.kind, () => models3d.scenery("animal", a.kind, biome)),
-				i = a.id,
-				dx = Math.cos(time * 0.18 + i) * 10 * 0.18,
-				dy = -Math.sin(time * 0.12 + i) * 8 * 0.12;
-			r.holder.position.set(a.x, heightAt(a.x, a.y), a.y);
-			r.holder.rotation.y = -Math.atan2(dy, dx);
-			r.model.update({ id: a.id }, { time, moving: true, aim: 0, recoil: 0 });
+		// Land animals: their own behaviour round the homes game.wildlife() gives them.
+		const dt = lastTime === null ? 0 : Math.max(0, Math.min(0.1, time - lastTime));
+		lastTime = time;
+		wildlifeClock -= dt;
+		if (wildlifeClock <= 0 || !brains.size) {
+			wildlifeClock = 2;
+			syncBrains();
+		}
+		const movers = [],
+			statics = [];
+		for (const e of game.entities) {
+			if (e.hp <= 0) continue;
+			(RTS.TYPES[e.type]?.speed ? movers : statics).push(e);
+		}
+		const booms = (game.effects || []).filter((f) => f.kind === "explosion" || f.kind === "shot");
+		for (const b of brains.values()) think(b, dt, time, movers, statics, booms);
+		for (const b of brains.values()) {
+			if (!visible(b.x, b.y)) continue;
+			const r = make("animal|" + b.id + "|" + b.kind, () => models3d.scenery("animal", b.kind, biome));
+			r.holder.position.set(b.x, heightAt(b.x, b.y), b.y);
+			r.holder.rotation.y = -b.h;
+			r.model.update({ id: b.id }, { time, stride: b.stride, moving: b.v > 3, graze: b.graze, alert: b.alert, aim: b.look, recoil: 0 });
 		}
 		// Birds (PlanetArt.fauna): eighteen crossing the map, flying along +x.
 		for (let i = 0; i < 18; i++) {
@@ -60980,6 +61549,8 @@ function createSceneLife3D(THREE, { world, heightAt, models3d, hiddenLayer, spla
 	return {
 		setGame(next) {
 			game = next;
+			brains.clear();
+			lastTime = null;
 			for (const r of records.values()) group.remove(r.holder);
 			records.clear();
 			islands = typeof MapArt !== "undefined" && MapArt.islands ? MapArt.islands(game) : [];
@@ -61765,7 +62336,10 @@ function createObjectives3D(THREE, { world, heightAt }) {
    - Wall links: a wall between neighbouring walls, gates and turrets of one side (30–70 apart, not through
      an open gate; AdvancedArt.walls), half height while either end is being built.
    - Tracks: vehicle treads and infantry footprints (game.tracks), fading with their life.
-   - Craters: scorched pits of heavy blasts (game.craters), fading over CRATER_LIFE.
+   - Craters: pits of heavy blasts (game.craters), fading over CRATER_LIFE — a decal of the pit (the inner
+     wall lit on the side facing the sun, soot, rays of thrown-out soil, the floor glowing while fresh),
+     a raised rim of earth all round and scorched stones scattered about.
+   - Scorch marks: smaller blasts (no crater) leave soot splashes on the ground for a minute.
    - Creature habitats: a dashed ring and scattered bones around the home of every threat in sight
      (AdvancedArt.habitats).
    Decals are flat quads tilted to the slope under them; one instanced draw per kind. */
@@ -61826,15 +62400,21 @@ function createMarks3D(THREE, { world, heightAt, fogged }) {
 		g.setAttribute("position", base.attributes.position);
 		g.setAttribute("uv", base.attributes.uv);
 		const alpha = new THREE.InstancedBufferAttribute(new Float32Array(max), 1),
-			kind = new THREE.InstancedBufferAttribute(new Float32Array(max), 1);
+			kind = new THREE.InstancedBufferAttribute(new Float32Array(max), 1),
+			age = new THREE.InstancedBufferAttribute(new Float32Array(max), 1);
 		g.setAttribute("aAlpha", alpha);
 		g.setAttribute("aKind", kind);
+		g.setAttribute("aAge", age);
 		const material = new THREE.ShaderMaterial({
-			uniforms: { tint: { value: new THREE.Color(kindColor) } },
-			vertexShader: `attribute float aAlpha; attribute float aKind; varying float vAlpha; varying float vKind; varying vec2 vUv;
-				void main() { vAlpha = aAlpha; vKind = aKind; vUv = uv;
+			uniforms: { tint: { value: new THREE.Color(kindColor) }, sun: { value: new THREE.Vector2(0.5, 0.5) }, soil: { value: new THREE.Color("#5a4a3a") } },
+			vertexShader: `attribute float aAlpha; attribute float aKind; attribute float aAge; varying float vAlpha; varying float vKind; varying float vAge; varying vec2 vUv;
+				void main() { vAlpha = aAlpha; vKind = aKind; vAge = aAge; vUv = uv;
 					gl_Position = projectionMatrix * viewMatrix * modelMatrix * instanceMatrix * vec4(position, 1.0); }`,
-			fragmentShader: `uniform vec3 tint; varying float vAlpha; varying float vKind; varying vec2 vUv;
+			fragmentShader: `uniform vec3 tint; uniform vec2 sun; uniform vec3 soil; varying float vAlpha; varying float vKind; varying float vAge; varying vec2 vUv;
+				float dHash(float n) { return fract(sin(n * 12.9898) * 43758.5453); }
+				// Smooth noise round a circle (angle) and over the decal, for ragged rays and blotches.
+				float dWave(float x) { float i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f); return mix(dHash(i), dHash(i + 1.0), f); }
+				float dSpot(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); float a = dHash(i.x + i.y * 57.0), b = dHash(i.x + 1.0 + i.y * 57.0), c2 = dHash(i.x + (i.y + 1.0) * 57.0), d = dHash(i.x + 1.0 + (i.y + 1.0) * 57.0); return mix(mix(a, b, f.x), mix(c2, d, f.x), f.y); }
 				void main() {
 					vec2 c = vUv - 0.5; float a = 0.0; vec3 col = tint;
 					if (vKind < 0.5) {
@@ -61846,13 +62426,29 @@ function createMarks3D(THREE, { world, heightAt, fogged }) {
 						a = 1.0 - smoothstep(0.12, 0.2, length((c - vec2(-0.15, -0.18)) * vec2(1.0, 1.6)));
 						a = max(a, 1.0 - smoothstep(0.12, 0.2, length((c - vec2(0.15, 0.18)) * vec2(1.0, 1.6))));
 					} else if (vKind < 2.5) {
-						// Crater: dark pit, a lighter thrown-out rim, scorch fading outward.
-						float r = length(c) * 2.0;
-						float pit = 1.0 - smoothstep(0.35, 0.55, r);
-						float rim = smoothstep(0.45, 0.6, r) * (1.0 - smoothstep(0.6, 0.78, r));
-						float scorch = (1.0 - smoothstep(0.5, 1.0, r)) * 0.6;
-						a = max(max(pit, scorch), rim * 0.7);
-						col = mix(tint, vec3(0.45, 0.38, 0.3), rim * (1.0 - pit));
+						// Crater: the pit (its inner wall lit where it faces the sun, the floor dark with soot),
+						// rays of thrown-out soil and soot beyond the rim, the floor glowing while fresh.
+						float r = length(c) * 2.0, ang = atan(c.y, c.x);
+						float pit = 1.0 - smoothstep(0.42, 0.5, r);
+						float wall = smoothstep(0.12, 0.42, r) * pit;
+						float facing = clamp(0.5 - dot(normalize(c + 1e-4), normalize(sun)) * 0.5, 0.0, 1.0);
+						vec3 floorCol = vec3(0.05, 0.045, 0.04);
+						vec3 wallCol = mix(soil * 0.35, soil * 1.05, facing);
+						float u = (ang + 3.1416) / 6.2832 * 13.0;
+						float rays = smoothstep(0.25, 0.85, dWave(u) * 0.6 + dWave(u * 2.7 + 5.0) * 0.4);
+						float ejecta = smoothstep(0.45, 0.55, r) * (1.0 - smoothstep(0.6 + rays * 0.35, 1.0, r)) * (0.35 + 0.65 * rays);
+						float soot = (1.0 - smoothstep(0.4, 0.95, r)) * (0.5 + 0.5 * rays);
+						col = mix(mix(floorCol, wallCol, wall), soil * 0.55, (1.0 - pit) * 0.5);
+						col = mix(col, tint, soot * (1.0 - pit) * 0.7);
+						a = max(pit, max(ejecta * 0.75, soot * 0.6));
+						float ember = (1.0 - smoothstep(0.0, 0.08, vAge)) * (1.0 - smoothstep(0.08, 0.34, r)) * smoothstep(0.45, 0.75, dSpot(vUv * 18.0));
+						col += vec3(1.0, 0.35, 0.08) * ember * 1.4;
+					} else if (vKind > 3.5) {
+						// Scorch: a splash of soot, darkest in the middle, ragged rays outwards.
+						float r = length(c) * 2.0, ang = atan(c.y, c.x);
+						float u = (ang + 3.1416) / 6.2832 * 11.0;
+						float rays = dWave(u) * 0.6 + dWave(u * 2.9 + 3.0) * 0.4;
+						a = (1.0 - smoothstep(0.12, 0.45 + rays * 0.5, r)) * (0.5 + 0.5 * rays) * (0.75 + 0.25 * dSpot(vUv * 12.0));
 					} else {
 						// Habitat: a dashed ring.
 						float r = length(c) * 2.0, ang = atan(c.y, c.x);
@@ -61873,11 +62469,11 @@ function createMarks3D(THREE, { world, heightAt, fogged }) {
 		mesh.renderOrder = 1;
 		mesh.count = 0;
 		group.add(mesh);
-		return { mesh, alpha, kind, max, n: 0 };
+		return { mesh, alpha, kind, age, max, n: 0 };
 	}
 	const decals = decalBatch(900, "#0c1218");
 	// A decal at (x, y), turned by angle, size w × h, tilted to the slope.
-	function decal(x, y, angle, w, h, alpha, kind) {
+	function decal(x, y, angle, w, h, alpha, kind, age = 1) {
 		if (decals.n >= decals.max) return;
 		const e = 4,
 			dx = (heightAt(x + e, y) - heightAt(x - e, y)) / (2 * e),
@@ -61887,8 +62483,38 @@ function createMarks3D(THREE, { world, heightAt, fogged }) {
 		decals.mesh.setMatrixAt(decals.n, m.compose(p.set(x, heightAt(x, y) + 0.7, y), q, s.set(w, 1, h)));
 		decals.alpha.array[decals.n] = alpha;
 		decals.kind.array[decals.n] = kind;
+		decals.age.array[decals.n] = age;
 		decals.n++;
 	}
+
+	// ---------- crater rims and debris ----------
+	// A rim of thrown-up earth: a ragged ring lathe (unit diameter 1), and scorched stones round it.
+	const rimGeo = (() => {
+		const pts = [[0.2, 0], [0.235, 0.18], [0.265, 0.35], [0.3, 0.22], [0.35, 0.08], [0.4, 0]].map(([r, y]) => new THREE.Vector2(r, y)),
+			g = new THREE.LatheGeometry(pts, 22),
+			pos = g.attributes.position;
+		for (let i = 0; i < pos.count; i++) {
+			const x = pos.getX(i),
+				z = pos.getZ(i),
+				a = Math.atan2(z, x),
+				k = 1 + 0.12 * Math.sin(a * 5 + 1.3) + 0.06 * Math.sin(a * 11);
+			pos.setY(i, pos.getY(i) * k * (0.8 + 0.4 * Math.abs(Math.sin(a * 3.7))));
+		}
+		g.computeVertexNormals();
+		return g;
+	})();
+	const MAX_CRATERS = 60,
+		rims = new THREE.InstancedMesh(rimGeo, std("#4c3f33"), MAX_CRATERS),
+		stones = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 0), std("#4a4038"), MAX_CRATERS * 7);
+	for (const r of [rims, stones]) {
+		r.castShadow = r.receiveShadow = true;
+		r.frustumCulled = false;
+		r.count = 0;
+		group.add(r);
+	}
+	// Scorch marks of smaller blasts, kept here (the game keeps craters only).
+	const scorches = [],
+		seenBlasts = new WeakSet();
 
 	// ---------- habitat bones ----------
 	const bones = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), std("#d1bc8b"), 200);
@@ -61897,22 +62523,52 @@ function createMarks3D(THREE, { world, heightAt, fogged }) {
 	bones.count = 0;
 	group.add(bones);
 
-	function update(game, { hidden }) {
+	function update(game, { hidden, sun }) {
 		wallLinks(game);
 		decals.n = 0;
 		const biome = RTS.MISSIONS[game.missionId]?.biome;
 		decals.mesh.material.uniforms.tint.value.set(biome === "ice" ? "#162c40" : "#0a0f16");
+		decals.mesh.material.uniforms.soil.value.set(biome === "ice" ? "#7c8a94" : biome === "ash" ? "#3e3633" : "#6a5642");
+		rims.material.color.set(biome === "ice" ? "#8796a0" : biome === "ash" ? "#3a3330" : "#5a4a3a");
+		if (sun) decals.mesh.material.uniforms.sun.value.set(sun.x, sun.z);
 		for (const t of game.tracks || []) {
 			if (!game.isVisible(t.x, t.y)) continue;
 			const a = Math.min(0.38, t.life / 45);
 			if (t.vehicle) decal(t.x, t.y, t.angle, 16, 30, a, 0);
 			else decal(t.x, t.y, t.angle, 12, 12, a, 1);
 		}
+		// Scorch marks from blasts that made no crater (on the ground, seen): a minute each.
+		for (const ef of game.effects || []) {
+			if (ef.kind !== "explosion" || seenBlasts.has(ef) || ef.crater === undefined) continue;
+			seenBlasts.add(ef);
+			if (!ef.crater && !ef.air && game.isVisible(ef.x, ef.y)) scorches.push({ x: ef.x, y: ef.y, size: ef.size || 40, born: game.time, turn: (ef.x * 7 + ef.y * 3) % 6.28 });
+		}
+		while (scorches.length && (game.time - scorches[0].born > 60 || scorches.length > 80)) scorches.shift();
+		for (const sc of scorches) decal(sc.x, sc.y, sc.turn, sc.size * 1.3, sc.size * 1.3, Math.max(0, 1 - (game.time - sc.born) / 60) * 0.55, 4);
+		let cr = 0,
+			st = 0;
 		for (const c of game.craters || []) {
 			if (!game.explored[game.visionIndex(c.x, c.y)]) continue;
-			const age = (game.time - c.born) / (RTS.CRATER_LIFE || 300);
-			decal(c.x, c.y, c.seed, c.size * 2.6, c.size * 2.6, Math.max(0, 1 - age) * 0.85, 2);
+			const age = (game.time - c.born) / (RTS.CRATER_LIFE || 300),
+				fade = Math.max(0, 1 - age),
+				d = c.size * 2.6;
+			decal(c.x, c.y, c.seed, d, d, fade * 0.9, 2, age);
+			// The rim sinks back as the crater fades; the stones stay until it is gone.
+			if (cr < MAX_CRATERS) {
+				rims.setMatrixAt(cr++, m.compose(p.set(c.x, heightAt(c.x, c.y) - 0.3, c.y), q.setFromAxisAngle(up, c.seed), s.set(d, c.size * 0.7 * Math.min(1, fade * 1.6), d)));
+				for (let k = 0; k < 7 && st < stones.instanceMatrix.count; k++) {
+					const a = c.seed * 3 + k * 2.39,
+						rr = d * (0.32 + ((k * 37 + c.seed * 11) % 10) * 0.05),
+						x = c.x + Math.cos(a) * rr,
+						y = c.y + Math.sin(a) * rr,
+						sz = c.size * (0.04 + (k % 3) * 0.02) * Math.min(1, fade * 2);
+					stones.setMatrixAt(st++, m.compose(p.set(x, heightAt(x, y) + sz * 0.3, y), q.setFromAxisAngle(up, a * 1.7), s.set(sz * 1.3, sz * 0.8, sz)));
+				}
+			}
 		}
+		rims.count = cr;
+		stones.count = st;
+		rims.instanceMatrix.needsUpdate = stones.instanceMatrix.needsUpdate = true;
 		// Habitats: ring, bones (AdvancedArt.habitats: threats with a home, in sight).
 		let b = 0;
 		for (const e of game.entities) {
@@ -61931,7 +62587,7 @@ function createMarks3D(THREE, { world, heightAt, fogged }) {
 		bones.instanceMatrix.needsUpdate = true;
 		decals.mesh.count = decals.n;
 		decals.mesh.instanceMatrix.needsUpdate = true;
-		decals.alpha.needsUpdate = decals.kind.needsUpdate = true;
+		decals.alpha.needsUpdate = decals.kind.needsUpdate = decals.age.needsUpdate = true;
 	}
 	return { update, stats: () => ({ decals: decals.n, wallLinks: wallBody.count }) };
 }
@@ -62114,6 +62770,180 @@ function createRelief3D({ RISE }) {
 	return { cell: CELL, build };
 }
 
+// ---- webgl3d/sun-fx-3d.js ----
+/* Sunlight effects of the 3D board (on top of webgl3d/sky-3d.js):
+   - Shafts: long soft beams of sunlight slanting down through the air towards the ground, where the
+     clouds part (the same cloud cover as the sky and the cloud shadows), strongest in the golden hour
+     and in hazy air (dust, mist); world-fixed around the camera focus, turned to face the camera
+     round their axis. One draw.
+   - Lens flare: when the sun is on screen and not behind the ground, a veil of glare round it and a
+     chain of rings and glints along the line through the middle of the screen. */
+
+function createSunFx3D(THREE, { scene, heightAt }) {
+	// ---------- shafts ----------
+	const COUNT = 140,
+		quad = new THREE.PlaneGeometry(1, 1),
+		g = new THREE.InstancedBufferGeometry();
+	g.index = quad.index;
+	g.setAttribute("position", quad.attributes.position);
+	g.setAttribute("uv", quad.attributes.uv);
+	const seeds = new Float32Array(COUNT * 4);
+	for (let i = 0; i < seeds.length; i++) seeds[i] = Math.random();
+	g.setAttribute("seed", new THREE.InstancedBufferAttribute(seeds, 4));
+	g.instanceCount = COUNT;
+	const shaftUniforms = {
+		sunDir: { value: new THREE.Vector3(0, 1, 0) },
+		sunColor: { value: new THREE.Color("#ffd9a0") },
+		focus: { value: new THREE.Vector2() },
+		span: { value: 2000 },
+		groundY: { value: 0 },
+		strength: { value: 0 },
+		...cloudUniforms(),
+	};
+	const shafts = new THREE.Mesh(
+		g,
+		new THREE.ShaderMaterial({
+			uniforms: shaftUniforms,
+			vertexShader: `uniform vec3 sunDir; uniform vec2 focus; uniform float span; uniform float groundY;
+				attribute vec4 seed; varying float vA; varying vec2 vUv;
+				${cloudGlsl()}
+				void main() {
+					vec2 base = focus - span * 0.5 + mod(seed.xy * span - (focus - span * 0.5), span);
+					float len = 520.0 + seed.z * 520.0, w = 26.0 + seed.w * 64.0;
+					vec3 ground = vec3(base.x, groundY, base.y), axis = normalize(sunDir) * len;
+					vec3 side = normalize(cross(axis, cameraPosition - (ground + axis * 0.5))) * w;
+					vec3 pos = ground + axis * (position.x + 0.5) + side * position.y;
+					// Light gets through where the clouds part over this point.
+					float clear = 1.0 - smoothstep(0.42, 0.66, cloudCover(base / 1300.0 + cloudOffset));
+					vec2 rel = abs(base - focus) / span;
+					vA = clear * (1.0 - smoothstep(0.3, 0.5, max(rel.x, rel.y))) * (0.5 + 0.5 * seed.z);
+					// Forward scattering: brightest looking towards the sun, faint looking away.
+					float fwd = max(dot(normalize(pos - cameraPosition), normalize(sunDir)), 0.0);
+					vA *= 0.25 + 0.75 * fwd * fwd;
+					vUv = uv;
+					gl_Position = projectionMatrix * viewMatrix * vec4(pos, 1.0);
+				}`,
+			fragmentShader: `uniform vec3 sunColor; uniform float strength; varying float vA; varying vec2 vUv;
+				void main() {
+					float across = 1.0 - abs(vUv.y - 0.5) * 2.0;
+					float a = vA * strength * pow(sin(vUv.x * 3.14159), 1.3) * across * across;
+					gl_FragColor = vec4(sunColor * a, 1.0);
+				}`,
+			transparent: true,
+			depthWrite: false,
+			blending: THREE.AdditiveBlending,
+			side: THREE.DoubleSide,
+			fog: false,
+		}),
+	);
+	shafts.frustumCulled = false;
+	shafts.renderOrder = 9;
+	scene.add(shafts);
+
+	// ---------- lens flare ----------
+	const canvasTex = (draw) => {
+		const c = document.createElement("canvas");
+		c.width = c.height = 128;
+		draw(c.getContext("2d"), 128);
+		return new THREE.CanvasTexture(c);
+	};
+	const glow = canvasTex((x, s) => {
+			const r = x.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
+			r.addColorStop(0, "#ffffffff");
+			r.addColorStop(0.2, "#ffffff66");
+			r.addColorStop(1, "#ffffff00");
+			x.fillStyle = r;
+			x.fillRect(0, 0, s, s);
+		}),
+		ring = canvasTex((x, s) => {
+			const r = x.createRadialGradient(s / 2, s / 2, s * 0.3, s / 2, s / 2, s / 2);
+			r.addColorStop(0, "#ffffff00");
+			r.addColorStop(0.7, "#ffffff55");
+			r.addColorStop(0.85, "#ffffff22");
+			r.addColorStop(1, "#ffffff00");
+			x.fillStyle = r;
+			x.fillRect(0, 0, s, s);
+		}),
+		hex = canvasTex((x, s) => {
+			x.beginPath();
+			for (let i = 0; i < 6; i++) {
+				const a = (i / 6) * Math.PI * 2;
+				x.lineTo(s / 2 + Math.cos(a) * s * 0.45, s / 2 + Math.sin(a) * s * 0.45);
+			}
+			x.closePath();
+			const r = x.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
+			r.addColorStop(0, "#ffffff40");
+			r.addColorStop(1, "#ffffff10");
+			x.fillStyle = r;
+			x.fill();
+		});
+	// [place along the line sun → centre → beyond (0 at the sun), size (share of the screen height), texture, colour, strength]
+	const ELEMENTS = [
+		[0, 0.9, glow, "#fff2d8", 0.45],
+		[0, 0.22, glow, "#ffffff", 0.9],
+		[0.35, 0.06, hex, "#a8d8ff", 0.5],
+		[0.55, 0.11, ring, "#ffd59a", 0.35],
+		[0.75, 0.04, hex, "#c8ffd2", 0.5],
+		[1.1, 0.14, hex, "#b8c8ff", 0.35],
+		[1.4, 0.07, ring, "#ffb0c8", 0.4],
+		[1.75, 0.2, ring, "#a8e0ff", 0.25],
+	];
+	const flares = ELEMENTS.map(([t, size, map, color, power]) => {
+		const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map, color, blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false, transparent: true, fog: false }));
+		sprite.renderOrder = 2000;
+		sprite.raycast = () => {};
+		sprite.visible = false;
+		scene.add(sprite);
+		return { sprite, t, size, power };
+	});
+	const ndc = new THREE.Vector3(),
+		at = new THREE.Vector3(),
+		probe = new THREE.Vector3();
+	let seen = 0;
+
+	return {
+		// Every frame: sun direction (true, may be below the horizon), its colour, e (its height), haze and
+		// mist 0…1, the camera and the focus of the view (map point) with the span of the view.
+		update({ camera, sunDir, sunColor, e, haze = 0, mist = 0, focus, span }) {
+			// Shafts: in the golden hour, and in dusty or misty air; never at night.
+			const golden = Math.max(0, Math.min(1, (e - 0.02) / 0.1)) * (1 - Math.max(0, Math.min(1, (e - 0.3) / 0.25)));
+			shaftUniforms.strength.value = e > 0 ? Math.min(0.1, golden * 0.06 + haze * 0.05 + mist * 0.05) : 0;
+			shafts.visible = shaftUniforms.strength.value > 0.002;
+			shaftUniforms.sunDir.value.copy(sunDir);
+			shaftUniforms.sunColor.value.copy(sunColor);
+			shaftUniforms.focus.value.set(focus.x, focus.y);
+			shaftUniforms.span.value = span;
+			shaftUniforms.groundY.value = heightAt(focus.x, focus.y);
+			// Flare: the sun on screen, above the horizon, not behind the ground (a few steps along the ray).
+			// (A point close in front of the camera along the sun's direction: within the far plane.)
+			camera.getWorldDirection(probe);
+			const ahead = probe.dot(sunDir) > 0.05;
+			ndc.copy(camera.position).addScaledVector(sunDir, camera.near * 20).project(camera);
+			let vis = e > -0.02 && ahead && Math.abs(ndc.x) < 1.25 && Math.abs(ndc.y) < 1.25 ? 1 : 0;
+			if (vis)
+				for (let k = 1; k <= 14; k++) {
+					probe.copy(camera.position).addScaledVector(sunDir, k * 180);
+					if (heightAt(probe.x, probe.z) > probe.y) {
+						vis = 0;
+						break;
+					}
+				}
+			const edge = 1 - Math.max(0, Math.min(1, (Math.max(Math.abs(ndc.x), Math.abs(ndc.y)) - 0.8) / 0.45));
+			seen += ((vis ? edge * (1 - Math.min(1, haze * 1.3)) * Math.max(0, Math.min(1, (e + 0.02) / 0.08)) : 0) - seen) * 0.2;
+			const tanHalf = Math.tan((camera.fov * Math.PI) / 360);
+			for (const f of flares) {
+				f.sprite.visible = seen > 0.01;
+				if (!f.sprite.visible) continue;
+				at.set(ndc.x * (1 - f.t * 2), ndc.y * (1 - f.t * 2), 0.2).unproject(camera);
+				const d = at.distanceTo(camera.position);
+				f.sprite.position.copy(at);
+				f.sprite.scale.setScalar(f.size * 2 * d * tanHalf);
+				f.sprite.material.opacity = seen * f.power;
+			}
+		},
+	};
+}
+
 // ---- webgl3d/three-renderer.js ----
 /* 3D renderer prototype (Three.js). Visual only: the simulation, orders and saves stay 2D (x, y on the
    map); the renderer places them in 3D with X = x, Z = y and Y = terrain height.
@@ -62174,10 +63004,15 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 	sun.shadow.bias = -0.0004;
 	sun.shadow.normalBias = 1.5;
 	Object.assign(sun.shadow.camera, { left: -1100, right: 1100, top: 1100, bottom: -1100, near: 10, far: 6000 });
-	scene.add(hemi, sun, sun.target);
+	// The second sun (twin-sun worlds): a soft light without shadows, kept in the scene (intensity 0
+	// elsewhere) so the shaders don't change between maps.
+	const sun2 = new THREE.DirectionalLight("#ffae70", 0);
+	scene.add(hemi, sun, sun.target, sun2, sun2.target);
 	// The sky dome (sun, moon, stars, clouds) and the cloud shadows (webgl3d/sky-3d.js).
 	const sky = createSky3D(THREE);
 	scene.add(sky.mesh);
+	// Sunbeams through the clouds and the lens flare (webgl3d/sun-fx-3d.js).
+	const sunFx = createSunFx3D(THREE, { scene, heightAt: (x, y) => heightAt(x, y) });
 
 	const world = new THREE.Group(),
 		terrain = new THREE.Group();
@@ -63062,7 +63897,35 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 	// Tracers as thin glowing beams (one instanced draw: a unit box stretched from tail to head), explosions
 	// as additive flashes.
 	const MAX_TRACERS = 600,
-		tracers = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }), MAX_TRACERS);
+		// Tracers: streaks along their flight turned to face the camera — a white-hot core, a soft glow
+		// round it in the shot's colour, the head brightest, fading towards the tail.
+		tracers = new THREE.InstancedMesh(
+			new THREE.PlaneGeometry(1, 1),
+			new THREE.ShaderMaterial({
+				vertexShader: `varying vec2 vUv; varying vec3 vTint;
+					void main() {
+						mat4 w = modelMatrix * instanceMatrix;
+						vec3 centre = (w * vec4(0.0, 0.0, 0.0, 1.0)).xyz, axis = mat3(w) * vec3(1.0, 0.0, 0.0), across = mat3(w) * vec3(0.0, 1.0, 0.0);
+						vec3 side = normalize(cross(axis, cameraPosition - centre)) * length(across);
+						vUv = uv;
+						vTint = instanceColor;
+						gl_Position = projectionMatrix * viewMatrix * vec4(centre + axis * position.x + side * position.y, 1.0);
+					}`,
+				fragmentShader: `varying vec2 vUv; varying vec3 vTint;
+					void main() {
+						float v = abs(vUv.y - 0.5) * 2.0, along = pow(vUv.x, 1.6);
+						float core = pow(1.0 - v, 6.0), glow = pow(1.0 - v, 1.8) * 0.45;
+						float head = smoothstep(0.82, 1.0, vUv.x) * 0.8;
+						vec3 col = mix(vTint, vec3(1.0, 0.97, 0.88), core) * (core + glow) * (along + head);
+						gl_FragColor = vec4(col, 1.0);
+					}`,
+				transparent: true,
+				blending: THREE.AdditiveBlending,
+				depthWrite: false,
+				side: THREE.DoubleSide,
+			}),
+			MAX_TRACERS,
+		);
 	tracers.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(MAX_TRACERS * 3), 3);
 	tracers.frustumCulled = false;
 	world.add(tracers);
@@ -63073,7 +63936,8 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		beam.dir.subVectors(beam.to, beam.from);
 		const len = beam.dir.length();
 		beam.q.setFromUnitVectors(beam.x, beam.dir.normalize());
-		tracers.setMatrixAt(i, beam.m.compose(beam.from.lerp(beam.to, 0.5), beam.q, beam.s.set(Math.max(1, len), width, width)));
+		// (Three times the given width: the glow; the core is the middle third.)
+		tracers.setMatrixAt(i, beam.m.compose(beam.from.lerp(beam.to, 0.5), beam.q, beam.s.set(Math.max(1, len), width * 3, width * 3)));
 		tracers.setColorAt(i, c);
 	}
 	// Explosions: a fireball of churning noise (white-hot core → yellow → orange → dark red → smoke,
@@ -63270,7 +64134,7 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 					}
 				} else if (!impactsSeen.has(ef)) {
 					impactsSeen.add(ef);
-					fx.shot("impact", ef.tx, toY, ef.ty, ef.rocket || bomb);
+					fx.shot("impact", ef.tx, toY, ef.ty, ef.rocket || bomb, { air: ef.airTarget });
 				}
 			} else if (ef.kind === "explosion") {
 				// A churning fireball swelling fast, rising and cooling into smoke; a shock ring running over
@@ -63323,6 +64187,7 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 	// from its own, lower direction. The sky's colours (webgl3d/sky-3d.js) tint the ambient light and
 	// the distance haze; twilight warms the ambient from the horizon.
 	const MOON_LIGHT = new THREE.Color("#a3b8e6"),
+		NIGHT_DEEP = new THREE.Color("#1c2a4e"),
 		NIGHT_AMBIENT = new THREE.Color("#2b3d66"),
 		DAY_AMBIENT = new THREE.Color("#bcd4e6"),
 		DAY_GROUND = new THREE.Color("#3a3226"),
@@ -63341,8 +64206,12 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		skyState.sunlight.copy(colors.sunlight);
 		skyState.sunDir.set(-across, elevation, 0.45).normalize();
 		skyState.moonDir.set(0.6 + across * 0.2, 0.3, -0.74).normalize();
+		// The moon's phase: an eighth of a cycle a day (game days of 360 s; the prototype's own cycle).
+		const dayIndex = sunOverride ? Math.floor((game?.time || 0) / 360) : Math.floor(0.08 + clock / 150);
+		skyState.moonPhase = (dayIndex * 0.125 + 0.62) % 1;
+		const full = 0.5 - 0.5 * Math.cos(skyState.moonPhase * Math.PI * 2);
 		const sunI = 2.45 * smooth(-0.12, 0.3, elevation),
-			moonI = 0.55 * smooth(-0.05, -0.3, elevation),
+			moonI = 0.55 * (0.25 + 0.75 * full) * smooth(-0.05, -0.3, elevation),
 			bySun = sunI >= moonI,
 			// Moonlight from the moon's side but higher than its disk in the sky: a low light would throw
 			// shadows of the hills across half the map.
@@ -63351,8 +64220,9 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		sun.intensity = Math.max(0.18, bySun ? sunI : moonI);
 		// Ambient: night blue → day sky, warmed by the horizon in the twilight; the ground bounce darkens.
 		const twilight = Math.max(0, 1 - Math.abs(elevation + 0.02) / 0.2);
-		hemi.intensity = 0.38 + day * 0.6 + twilight * 0.12;
-		hemi.color.copy(NIGHT_AMBIENT).lerp(DAY_AMBIENT, day).lerp(colors.horizon, twilight * 0.4);
+		// At night the sky glows with the moon: deep blue and dim at the new moon, silvery at the full.
+		hemi.intensity = 0.3 + 0.14 * full + day * (0.68 - 0.14 * full) + twilight * 0.12;
+		hemi.color.copy(NIGHT_DEEP).lerp(NIGHT_AMBIENT, full).lerp(DAY_AMBIENT, day).lerp(colors.horizon, twilight * 0.4);
 		hemi.groundColor.copy(NIGHT_GROUND).lerp(DAY_GROUND, day);
 		// Distance haze and the clear colour: the horizon, a little towards the zenith.
 		scene.background.copy(colors.horizon).lerp(colors.zenith, 0.2);
@@ -63363,6 +64233,8 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		return day;
 	}
 	// Weather on the whole scene: haze closes in and tints the distance; lightning flashes the sky.
+	const AURORA_GREEN = new THREE.Color("#5cffb0"),
+		sun2Dir = new THREE.Vector3();
 	const HAZE = { sand: new THREE.Color("#b8925a"), snow: new THREE.Color("#c9d6df"), rain: new THREE.Color("#3c4a55") },
 		FLASH = new THREE.Color("#cfe0ff");
 	function weatherLight(state) {
@@ -63381,7 +64253,21 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		// The sky dome after the weather: hazy in rain, snow and sand, flashing with the lightning;
 		// clouds thicker in bad weather; their shadows drift over the board (fainter under overcast).
 		const cover = 0.35 + (state.kind ? (state.intensity || 0) * 0.5 : 0);
-		sky.update({ camera, time: clock, ...skyState, haze, hazeColor: HAZE[state.kind] || HAZE.rain, cover, flash: state.flash || 0, flashColor: FLASH });
+		// The aurora over ice maps at night, waxing and waning; it tints the ground and the models green.
+		const aurora = RTS.MISSIONS[game?.missionId]?.biome === "ice" ? smooth(-0.08, -0.28, skyState.e) * (0.6 + 0.4 * Math.sin(clock * 0.021) * Math.sin(clock * 0.013 + 1)) * (1 - Math.min(1, haze * 1.2)) : 0;
+		if (aurora > 0.01) {
+			const ripple = 0.85 + 0.15 * Math.sin(clock * 0.7) * Math.sin(clock * 0.31);
+			hemi.color.lerp(AURORA_GREEN, aurora * 0.3 * ripple);
+			hemi.intensity += aurora * 0.08 * ripple;
+		}
+		const twin = sky.sun2(skyState.sunDir, sun2Dir);
+		sun2.intensity = twin ? 0.5 * smooth(-0.04, 0.2, twin.y) * (1 - 0.6 * haze) : 0;
+		if (twin) {
+			sun2.target.position.set(rig.x, 0, rig.y);
+			sun2.position.copy(sun2.target.position).addScaledVector(twin, 2500);
+		}
+		sky.update({ camera, time: clock, ...skyState, aurora, haze, hazeColor: HAZE[state.kind] || HAZE.rain, cover, flash: state.flash || 0, flashColor: FLASH });
+		sunFx.update({ camera, sunDir: skyState.sunDir, sunColor: skyState.sunlight, e: skyState.e, haze, mist: groundWeather.mistLevel.value, focus: rig, span: Math.max(1600, Math.min(4200, rig.distance * 2.2)) });
 		sky.clouds(clock, options.cloudShadows === false ? 0 : 0.4 * (1 - haze * 0.6));
 	}
 
@@ -63544,6 +64430,7 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		setGame(next) {
 			game = next;
 			models3d.setMission(game.missionId);
+			sky.setTheme(RTS.MISSIONS[game.missionId]?.theme);
 			applyQuality(this, true);
 			canvasRenderer.setGame(game);
 			for (const r of records.values()) world.remove(r.group);
@@ -63594,7 +64481,7 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			gasView = labelView();
 			scatter.update(game);
 			life.update(game.time, { fog: options.fog, colors: COLORS });
-			marks.update(game, { hidden });
+			marks.update(game, { hidden, sun: sun.position.clone().sub(sun.target.position).normalize() });
 			syncGhosts();
 			objectives.update(game, clock, { beacons, colorOf: (team) => game.colorFor?.(team) || COLORS[team] || "#f5e27a" });
 			drawBatches();
@@ -63652,8 +64539,8 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			raycaster.setFromCamera(ndc, camera);
 			const hit = raycaster.intersectObject(terrain, true)[0];
 			if (hit) return { x: hit.point.x, y: hit.point.z };
-			// Off the map: the plane of height 0.
-			const t = -raycaster.ray.origin.y / raycaster.ray.direction.y;
+			// Off the map: the plane of height 0 (a ray into the sky: a point far out under it).
+			const t = raycaster.ray.origin.y / Math.max(-raycaster.ray.direction.y, 0.05);
 			return { x: raycaster.ray.origin.x + raycaster.ray.direction.x * t, y: raycaster.ray.origin.z + raycaster.ray.direction.z * t };
 		},
 		// Map point (on the ground, optionally raised) → screen point.
@@ -63783,7 +64670,11 @@ function createThreeGameRenderer({ gameCanvas, canvasRenderer, onContextLost }) 
 		rig.yaw = v.camera.yaw || 0;
 		// Far out the camera looks down steeply (overview); close in it lowers for a more cinematic view.
 		const zoom = Math.max(1, Math.min(5.5, v.camera.zoom || 1));
-		rig.pitch = 1.05 - ((zoom - 1) / 4.5) * 0.35;
+		const pitch = 1.05 - ((zoom - 1) / 4.5) * 0.35,
+			// The player's tilt (PageUp / PageDown, Alt + middle drag) lowers it to just over the ground:
+			// the horizon and the sky come into view.
+			tilt = Math.max(0, Math.min(1, v.camera.tilt || 0));
+		rig.pitch = pitch - tilt * (pitch - 0.1);
 		base.setSelection(v.selected);
 		// Tall things (floating islands, spires, giant mushrooms) fade in front of the pointer.
 		base.setPointer(v.mouse ? fromFlat(v.mouse) : null);
