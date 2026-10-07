@@ -1,4 +1,6 @@
-# Pogranicze Galaktyki — prototyp RTS 0.122
+# Pogranicze Galaktyki — prototyp RTS 0.123
+
+**Wersja 0.123 — płynna gra sieciowa u gospodarza.** Naprawione szarpanie obrazu u gospodarza bitwy wieloosobowej (najmocniej widoczne w trybie 3D). Gospodarz zaczyna bitwę od razu, a gość dopiero po zbudowaniu planszy, więc gospodarz był stale o krok do przodu: co turę czekał na ruchy gościa, a potem nadrabiał czas po 3 kroki naraz. Teraz czas czekania nie jest nadrabiany — komputer, który wyprzedza, ustawia się równo za drugim i biegnie płynnie.
 
 **Wersja 0.122 — wybór rozdziału z podglądem zamiast mapy galaktyki.** Ekran kampanii nie pokazuje już mapy galaktyki: po lewej jest lista aktów i rozdziałów, po prawej podgląd rozdziału wskazanego kursorem lub klawiaturą (na początku następnego do rozegrania). Podgląd ma numer rozdziału w kolorze stanu, obracającą się planetę pod celownikiem, stan (ukończony, do rozegrania, zablokowany, ◆), planetę, klimat i księżyce, wymagany rozdział, opis, cel i świecący przycisk „Odprawa”. Kliknięcie rozdziału na liście nadal otwiera odprawę.
 

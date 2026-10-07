@@ -291,6 +291,7 @@ class CommandMenu {
 				body;
 		if (screen === "news")
 			body =
+				"<h2>0.123 / Płynna gra sieciowa</h2><p>Gospodarz bitwy wieloosobowej nie ma już przycięć: czekanie na ruchy drugiego gracza nie jest potem nadrabiane skokami.</p>" +
 				"<h2>0.122 / Wybór rozdziału z podglądem</h2><p>Zamiast mapy galaktyki: lista rozdziałów i podgląd wskazanego — obracająca się planeta, stan, dane, opis, cel i przycisk odprawy.</p>" +
 				"<h2>0.121 / Mapa galaktyki na pełnym ekranie</h2><p>Ekran kampanii to sama mapa galaktyki na całym ekranie; lista rozdziałów, karta planety i powrót leżą na niej jak w grze.</p>" +
 				"<h2>0.120 / Prologi i sceny na pełnym ekranie</h2><p>Prologi aktów II i III oraz sceny łączności przed rozdziałami wyświetlają się na całym ekranie, tak jak intro kampanii.</p>" +
@@ -466,7 +467,7 @@ class CommandMenu {
 		queueMicrotask(() => ranges.forEach(fill));
 		if (screen === "knowledge") KnowledgeBase.mount(this.root);
 		this.root.querySelector(".menu-footer span").textContent =
-			"PROTOTYP 0.122 · ZAPIS LOKALNY";
+			"PROTOTYP 0.123 · ZAPIS LOKALNY";
 		if (
 			screen === "scenarios" ||
 			(screen === "briefing" &&

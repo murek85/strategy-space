@@ -227,6 +227,10 @@ const NetPlay = (() => {
 					const slot = this.turns.get(this.turn);
 					if (!slot || !slot[0] || !slot[1]) {
 						this.waiting += dt;
+						// The time spent waiting is not made up afterwards: the computer that is ahead (usually the
+						// host, which starts first while the guest still builds its board) falls in behind the
+						// other one and runs evenly, instead of catching up in bursts and waiting again every turn.
+						this.clock = Math.min(this.clock, NET.step);
 						return steps;
 					}
 					this.waiting = 0;

@@ -199,6 +199,26 @@ test("a network battle moves smoothly: the steps of a turn are spread over the f
 	assert.ok(a.game.time > 29);
 });
 
+test("the host stays smooth when the guest starts later (the guest still builds its board)", () => {
+	const { a, b, frame } = lockstepPair();
+	// The guest's first 0.8 s go to loading: it does not advance yet, the host already does.
+	const late = b.advance.bind(b);
+	let loading = 0.8;
+	b.advance = (dt) => ((loading -= dt) > 0 ? 0 : late(dt));
+	const perFrame = [];
+	for (let f = 0; f < 60 * 20; f++) {
+		const [steps] = frame(1 / 60);
+		if (f >= 60 * 4) perFrame.push(steps);
+	}
+	// After the first seconds the host runs one step every other frame again — no bursts after each wait.
+	let still = 0,
+		longest = 0;
+	for (const s of perFrame) longest = Math.max(longest, (still = s ? 0 : still + 1));
+	assert.ok(Math.max(...perFrame) <= 1, `most steps in a frame: ${Math.max(...perFrame)}`);
+	assert.ok(longest <= 2, `longest pause ${longest} frames`);
+	assert.ok(!a.desync && !b.desync);
+});
+
 test("shared pause: both players stop on the same step, limited count and length, a countdown before the battle goes on", () => {
 	const g = RTS.createNetworkGame(settings());
 	const step = () => g.tick(RTS.NET.step);
