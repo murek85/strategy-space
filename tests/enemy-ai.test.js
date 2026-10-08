@@ -320,7 +320,9 @@ test("faction styles in play: the Dominium raises more towers, the Colonies send
 		colBarracks = mix(col, "barracks"),
 		domBarracks = mix(dom, "barracks");
 	assert.ok((domFactory.sentinel || 0) + (domFactory.heavy || 0) > 400 * 0.35, JSON.stringify(domFactory));
-	assert.ok((colBarracks.raider || 0) > 400 * 0.3, JSON.stringify(colBarracks));
+	// The expected raider share is about 0.28 once the commander sees player infantry (it then also wants troopers and
+	// grenadiers); 0.2 leaves room for the 400-sample draw.
+	assert.ok((colBarracks.raider || 0) > 400 * 0.2, JSON.stringify(colBarracks));
 	assert.equal(domBarracks.raider || 0, 0);
 	// Raids: the Colonies' fast units go for a worker mining away from the player's base.
 	const g = run(peaceful(skirmish({ difficulty: "normal", enemyFaction: "colonies" })), 240),

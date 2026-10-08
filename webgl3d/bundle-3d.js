@@ -54632,9 +54632,9 @@ function createSky3D(THREE) {
 		[-1, "#03060e", "#0b1424", "#ff6a3a"],
 		[-0.25, "#050a17", "#111c31", "#ff6a3a"],
 		[-0.1, "#111d3c", "#2f3659", "#ff6a3a"],
-		[-0.02, "#24305e", "#8c5a68", "#ff7444"],
-		[0.03, "#2f4374", "#e0784c", "#ff8a50"],
-		[0.12, "#3b5f93", "#e8a874", "#ffc184"],
+		[-0.02, "#2a2c62", "#a8607a", "#ff7444"],
+		[0.03, "#36407a", "#f07848", "#ff8a50"],
+		[0.12, "#3d5c94", "#f0ae74", "#ffc184"],
 		[0.3, "#3c70a6", "#a8c2d2", "#fff0d8"],
 		[1, "#3874b0", "#b2cada", "#fff4e4"],
 	].map(([e, z, h, s]) => [e, C(z), C(h), C(s)]);
@@ -55240,7 +55240,25 @@ function createPost3D(THREE, renderer) {
 		uniform float vignette; uniform float aspect; uniform float grade; uniform float view;
 		uniform sampler2D tDepth; uniform sampler2D tRays; uniform mat4 projInv; uniform mat4 camWorld; uniform vec3 camPos;
 		uniform float atmoOn; uniform vec3 sunDir; uniform vec3 sunColor; uniform vec3 hazeColor; uniform float fogBase; uniform float fogDensity; uniform float fogFalloff; uniform float raysOn;
+		uniform vec4 heat[16]; uniform float heatTime;
 		varying vec2 vUv;
+		// Heat haze (0.144): the air shimmers over explosions, fires, lava and engines — the picture is
+		// shifted by small ripples climbing up the screen, strongest in the middle of each source (x, y its
+		// centre on screen, z its radius in screen heights, w its strength).
+		vec2 heatShift(vec2 uv) {
+			vec2 off = vec2(0.0);
+			for (int i = 0; i < 16; i++) {
+				vec4 h = heat[i];
+				if (h.w <= 0.0) break;
+				vec2 d = (uv - h.xy) * vec2(aspect, 1.0);
+				float f = smoothstep(1.0, 0.15, length(d) / h.z) * h.w;
+				if (f <= 0.001) continue;
+				float ph = uv.y / h.z * 22.0 - heatTime * 7.0,
+					px = uv.x * aspect / h.z * 9.0 + heatTime * 2.1;
+				off += vec2(sin(ph + 1.6 * sin(px)), cos(ph * 0.83 + px * 0.5)) * f * h.z * 0.03;
+			}
+			return off;
+		}
 		// ACES filmic, the fit by Stephen Hill (input and output in linear sRGB primaries).
 		vec3 aces(vec3 c) {
 			const mat3 i = mat3(0.59719, 0.07600, 0.02840, 0.35458, 0.90834, 0.13383, 0.04823, 0.01566, 0.83777);
@@ -55255,7 +55273,7 @@ function createPost3D(THREE, renderer) {
 			// Diagnostics (window.post3dView): 1 = the occlusion alone, 2 = the bloom alone.
 			if (view > 2.5) { vec4 r = texture2D(tColor, vUv); bool bad = any(isnan(r)) || any(isinf(r)); float l = max(r.r, max(r.g, r.b)); gl_FragColor = vec4(bad ? vec3(0.0, 0.0, 1.0) : l > 8.0 ? vec3(1.0, 0.0, 0.0) : l < 0.0 ? vec3(0.0, 1.0, 0.0) : vec3(min(l, 1.0) * 0.3), 1.0); return; }
 			if (view > 0.5) { gl_FragColor = vec4(view < 1.5 ? vec3(texture2D(tAo, vUv).r) : srgb(min(texture2D(tBloom, vUv).rgb, 1.0)), 1.0); return; }
-			vec3 c = texture2D(tColor, vUv).rgb;
+			vec3 c = texture2D(tColor, heat[0].w > 0.0 ? vUv + heatShift(vUv) : vUv).rgb;
 			if (any(isnan(c)) || any(isinf(c))) c = vec3(0.0);
 			c = min(c, vec3(64.0));
 			if (aoOn > 0.5) c *= texture2D(tAo, vUv).r;
@@ -55319,6 +55337,8 @@ function createPost3D(THREE, renderer) {
 			fogDensity: { value: 0 },
 			fogFalloff: { value: 0.01 },
 			raysOn: { value: 0 },
+			heat: { value: Array.from({ length: 16 }, () => new THREE.Vector4()) },
+			heatTime: { value: 0 },
 		},
 	);
 
@@ -55479,6 +55499,10 @@ function createPost3D(THREE, renderer) {
 			u.vignette.value = s.vignette ?? 0.28;
 			u.grade.value = s.grade ?? 1;
 			u.view.value = s.view || 0;
+			// Heat sources: [x, y, radius, strength] × up to 16 (s.heat), the rest switched off.
+			const hs = s.heat || [];
+			u.heat.value.forEach((v, i) => (i < hs.length ? v.fromArray(hs[i]) : v.set(0, 0, 0, 0)));
+			u.heatTime.value = s.time || 0;
 			u.aspect.value = width / height;
 			pass(finish, null);
 			renderer.autoClear = autoClear;
@@ -59661,8 +59685,12 @@ function createShips3D(THREE, { tools, group }) {
 				frame.position.y = Math.sin(t * 1.1) * 1.4;
 				frame.rotation.x = Math.sin(t * 0.6) * 0.05 + (i.moving ? Math.sin(t * 0.35) * 0.06 : 0);
 				frame.rotation.z = Math.sin(t * 0.8) * 0.025;
-				const thrust = i.moving ? 1 + 0.15 * Math.sin(i.time * 40 + e.id) : 0.35;
-				for (const [p, len] of parts.plumes) p.scale.set(len * thrust, 1, 1);
+				// Afterburner (0.144.1, i.boost 0…1 from the renderer: speeding up from a stop, hard turns): the
+				// flames grow longer and wider and flicker faster; cruising they burn steady.
+				const boost = i.boost || 0,
+					thrust = i.moving || boost > 0.05 ? (1 + 0.15 * Math.sin(i.time * (40 + boost * 30) + e.id)) * (1 + boost * 1.6) : 0.35,
+					wide = 1 + boost * 0.5;
+				for (const [p, len] of parts.plumes) p.scale.set(len * thrust, wide, wide);
 				for (const g of parts.turrets) g.rotation.y = -i.aim;
 				if (parts.strobe) parts.strobe.visible = (i.time * 1.1 + e.id * 0.37) % 1 < 0.1;
 				// The carrier's deck lights run towards the bow in sequence (a landing guide).
@@ -60266,6 +60294,17 @@ function createModels3D(THREE) {
 			stem: std("#cfc6b0", { roughness: 0.8, metalness: 0 }),
 		};
 	glowing.push([prop.egg, prop.egg.emissiveIntensity]);
+	const HULK = {
+		plate: std("#8a827a", { roughness: 0.62, metalness: 0.2 }),
+		plate2: std("#a49a90", { roughness: 0.55, metalness: 0.22 }),
+		dark: std("#4a4440", { roughness: 0.6, metalness: 0.25 }),
+		rib: std("#625a54", { roughness: 0.75, metalness: 0.25 }),
+		burnt: std("#2a1e1a", { roughness: 0.95, metalness: 0.1 }),
+		light: std("#ff3a22", { emissive: "#ff2a12", emissiveIntensity: 1.4 }),
+		ember: std("#3a1408", { emissive: "#ff5a12", emissiveIntensity: 1.8, roughness: 1 }),
+		window: std("#40301c", { emissive: "#ffc878", emissiveIntensity: 1.1 }),
+	};
+	for (const m of [HULK.light, HULK.ember, HULK.window]) glowing.push([m, m.emissiveIntensity]);
 	const ASTEROID = std("#5e5853", { roughness: 0.95, metalness: 0.05 }),
 		ASTEROID_DARK = std("#3b3734", { roughness: 1, metalness: 0.05 }),
 		ASTEROID_ICE = std("#9fb0bc", { roughness: 0.55, metalness: 0.05 });
@@ -60326,7 +60365,139 @@ function createModels3D(THREE) {
 					edge = Math.hypot(x / rx, z / rz),
 					s = small * (n ? 0.07 + rnd(n + 9) * 0.13 : 0.24) * (1 - edge * 0.4),
 					y = 26 + rnd(n + 40) * 70 + (1 - edge) * 20;
-				rockPart(root, n % 4 === 3 ? ASTEROID_ICE : n % 2 ? ASTEROID : ASTEROID_DARK, [s * (1 + rnd(n + 3) * 0.6), s * (0.8 + rnd(n + 4) * 0.5), s * (0.9 + rnd(n + 5) * 0.4)], [x, y, z], n * 7 + seed);
+				// The map's stone (biome holds the look's rocks in space): ice fields, dark basalt, or mixed rock.
+				const m = biome === "ice" ? (n % 3 ? ASTEROID_ICE : ASTEROID) : biome === "dark" ? (n % 3 ? ASTEROID_DARK : ASTEROID) : n % 4 === 3 ? ASTEROID_ICE : n % 2 ? ASTEROID : ASTEROID_DARK;
+				rockPart(root, m, [s * (1 + rnd(n + 3) * 0.6), s * (0.8 + rnd(n + 4) * 0.5), s * (0.9 + rnd(n + 5) * 0.4)], [x, y, z], n * 7 + seed);
+			}
+		} else if (kind === "hulk") {
+			// The hulk of a dead warship (0.143, "Cmentarzysko Floty"), floating along the long side of its
+			// field. A shaped hull (a faceted section, a long tapering prow); long wrecks broken in two with the
+			// prow bent away, short ones a prow or a stern torn off. On the stern the engine block with dead
+			// nozzles and the stepped tower with its bridge; turrets turned every which way, armour seams, holes
+			// torn in the plating, bare frames and glowing breaches at the torn ends, a few windows and red
+			// lights still lit, debris drifting from the break.
+			const { box, cyl, pipe, mesh, loftGeo } = detail.tools,
+				long = w >= h,
+				L = (long ? w : h) * 0.98,
+				W = Math.min((long ? h : w) * 0.85, L * 0.17, 82),
+				H = W * 0.6,
+				ship = group(root, [0, 34 + rnd(3) * 14, 0]);
+			ship.rotation.order = "YXZ";
+			ship.rotation.y = (long ? 0 : Math.PI / 2) + (rnd(4) > 0.5 ? Math.PI : 0);
+			ship.rotation.x = (rnd(2) - 0.5) * 0.35;
+			ship.rotation.z = (rnd(1) - 0.5) * 0.1;
+			const key = `${Math.round(L)}x${Math.round(W)}`;
+			// The hull's section at x: a narrow deck, wide shoulders, sloping sides, a keel; `s` scales it,
+			// `top` lowers the deck (the prow).
+			const ring = (x, s, top = 1) => [
+				[x, H * 0.5 * s * top, W * 0.2 * s],
+				[x, H * 0.3 * s * top, W * 0.5 * s],
+				[x, -H * 0.12 * s, W * 0.44 * s],
+				[x, -H * 0.5 * s, W * 0.14 * s],
+				[x, -H * 0.5 * s, -W * 0.14 * s],
+				[x, -H * 0.12 * s, -W * 0.44 * s],
+				[x, H * 0.3 * s * top, -W * 0.5 * s],
+				[x, H * 0.5 * s * top, -W * 0.2 * s],
+			];
+			const hullOf = (parent, name, rings) => mesh(parent, loftGeo(`hulk-${name}-${key}`, rings), HULK.plate);
+			let n = 10;
+			// Armour seams across the deck and along the sides, scorched holes torn in the plating.
+			const plating = (parent, x0, x1) => {
+				for (let x = x0 + W * 0.3; x < x1 - W * 0.2; x += W * 0.55) box(parent, HULK.dark, [W * 0.03, H * 0.03, W * 0.42], [x, H * 0.5, 0], null, 0);
+				for (const z of [-1, 1]) box(parent, HULK.dark, [x1 - x0, H * 0.04, W * 0.04], [(x0 + x1) / 2, H * 0.1, z * W * 0.47], [z * 0.25, 0, 0], 0);
+				// Big armour panels along the sides, in two shades, a few missing (dark hollows).
+				for (let x = x0 + W * 0.1, k = 0; x < x1 - W * 0.6; x += W * 0.62, k++)
+					for (const z of [-1, 1]) {
+						const gone = rnd(n++) > 0.85;
+						box(parent, gone ? HULK.burnt : k % 2 ? HULK.plate2 : HULK.plate, [W * 0.56, H * 0.36, W * 0.03], [x + W * 0.28, H * 0.09, z * (W * 0.48 - (gone ? W * 0.02 : 0))], [z * 0.24, 0, 0], 0);
+					}
+				for (let i = 0; i < 3; i++) {
+					const x = x0 + (x1 - x0) * (0.2 + rnd(n++) * 0.6),
+						side = rnd(n++) > 0.5 ? 1 : -1;
+					box(parent, HULK.burnt, [W * (0.25 + rnd(n++) * 0.25), H * 0.3, W * 0.05], [x, H * 0.05, side * W * 0.465], [side * 0.25, 0, 0], 0);
+					box(parent, HULK.ember, [W * 0.1, H * 0.08, W * 0.03], [x, H * 0.02, side * W * 0.48], [side * 0.25, 0, 0], 0);
+				}
+				box(parent, HULK.burnt, [W * 0.35, H * 0.03, W * 0.3], [x0 + (x1 - x0) * (0.3 + rnd(n++) * 0.4), H * 0.505, 0], null, 0);
+			};
+			const turret = (parent, x, r) => {
+				const t = group(parent, [x, H * 0.5, 0]);
+				t.rotation.y = rnd(n++) * Math.PI * 2;
+				t.rotation.z = (rnd(n++) - 0.5) * 0.3;
+				cyl(t, HULK.dark, r, r * 0.4, [0, r * 0.2, 0], { segs: 10, top: r * 0.85 });
+				box(t, HULK.plate, [r * 1.4, r * 0.5, r * 1.1], [0, r * 0.62, 0], null, r * 0.12);
+				for (const z of [-1, 1]) box(t, HULK.rib, [r * 1.8, r * 0.14, r * 0.14], [r * 1.45, r * 0.68, z * r * 0.28], [0, 0, rnd(n++) * 0.25], 0);
+			};
+			// A torn end at x (`dir` pointing out of the hull): bare frames, pipes sticking out, a breach glowing.
+			const torn = (parent, x, dir) => {
+				box(parent, HULK.ember, [W * 0.04, H * 0.62, W * 0.72], [x - dir * W * 0.03, -H * 0.02, 0], null, 0);
+				for (let i = 0; i < 5; i++) {
+					const s2 = 0.92 - i * 0.1,
+						fx = x + dir * W * (0.1 + i * 0.14),
+						frame = [
+							[[W * 0.04, H * 0.06, W * 0.8 * s2], H * 0.42 * s2, 0],
+							[[W * 0.04, H * 0.06, W * 0.4 * s2], -H * 0.45 * s2, 0],
+							[[W * 0.04, H * 0.8 * s2, W * 0.06], 0, W * 0.42 * s2],
+							[[W * 0.04, H * 0.8 * s2, W * 0.06], 0, -W * 0.42 * s2],
+						];
+					for (const [size, py, pz] of frame) if (rnd(n++) > 0.18 * i) box(parent, HULK.rib, size, [fx, py, pz], [(rnd(n++) - 0.5) * 0.3, 0, 0], 0);
+				}
+				pipe(parent, HULK.rib, [x, H * 0.3, W * 0.3], [x + dir * W * 0.9, H * 0.4, W * 0.42], W * 0.025, 5);
+				pipe(parent, HULK.rib, [x, -H * 0.25, -W * 0.25], [x + dir * W * 0.75, -H * 0.4, -W * 0.38], W * 0.025, 5);
+				for (let i = 0; i < 6; i++) {
+					const f = i % 2 ? box(parent, HULK.plate, [W * 0.18, H * 0.03, W * 0.14], [0, 0, 0], null, 0) : rockPart(parent, HULK.burnt, [W * 0.07, W * 0.04, W * 0.06], [0, 0, 0], i + seed);
+					f.position.set(x + dir * W * (0.6 + rnd(n++) * 1.4), (rnd(n++) - 0.5) * H * 1.6, (rnd(n++) - 0.5) * W * 1.4);
+					f.rotation.set(rnd(n++) * 3, rnd(n++) * 3, rnd(n++) * 3);
+				}
+			};
+			// The prow: from x0, `len` long, pointing +x.
+			const prow = (parent, x0, len, name) => {
+				hullOf(parent, name, [ring(x0, 1), ring(x0 + len * 0.5, 1), ring(x0 + len * 0.82, 0.74, 0.85), ring(x0 + len, 0.16, 0.5)]);
+				box(parent, HULK.dark, [len * 0.5, H * 0.08, W * 0.08], [x0 + len * 0.62, -H * 0.42, 0], null, 0);
+				plating(parent, x0, x0 + len * 0.6);
+				if (len > W * 2.2) turret(parent, x0 + len * 0.3, W * 0.17);
+				if (len > W * 3.5) turret(parent, x0 + len * 0.12, W * 0.13);
+			};
+			// The stern: from x0 (its end, the engines) to x1, pointing +x.
+			const stern = (parent, x0, x1, name) => {
+				const len = x1 - x0;
+				hullOf(parent, name, [ring(x0, 0.84, 0.9), ring(x0 + W * 0.35, 1), ring(x1, 1)]);
+				// Engine block and nozzles, cold and dark, a last glow deep inside the big one.
+				box(parent, HULK.dark, [W * 0.25, H * 0.7, W * 0.85], [x0 - W * 0.08, 0, 0], null, W * 0.03);
+				for (const [z, y, r] of [[0, 0, 0.2], [W * 0.27, -H * 0.05, 0.13], [-W * 0.27, -H * 0.05, 0.13]]) {
+					cyl(parent, HULK.rib, W * r * 0.8, W * 0.3, [x0 - W * 0.33, y, z], { axis: "x", segs: 12, top: W * r });
+					cyl(parent, r > 0.15 ? HULK.ember : HULK.burnt, W * r * 0.62, W * 0.02, [x0 - W * 0.48, y, z], { axis: "x", segs: 12 });
+				}
+				// The tower: stepped blocks, the bridge with a few windows lit, a mast with a red light.
+				const tx = x0 + Math.min(len * 0.32, W * 1.4),
+					tilt = (rnd(n++) - 0.5) * 0.12;
+				box(parent, HULK.plate, [W * 0.85, H * 0.28, W * 0.5], [tx, H * 0.62, 0], [tilt, 0, 0], W * 0.04);
+				box(parent, HULK.dark, [W * 0.55, H * 0.26, W * 0.4], [tx - W * 0.08, H * 0.88, 0], [tilt, 0, 0], W * 0.04);
+				box(parent, HULK.plate2, [W * 0.32, H * 0.16, W * 0.62], [tx + W * 0.04, H * 1.07, 0], [tilt, 0, 0], W * 0.03);
+				for (let i = 0; i < 5; i++) if (rnd(n++) > 0.4) box(parent, HULK.window, [W * 0.02, H * 0.05, W * 0.07], [tx + W * 0.205, H * 1.08, (i - 2) * W * 0.11], null, 0);
+				const mast = [tx - W * 0.22 + tilt * W, H * 1.6, (rnd(n++) - 0.5) * W * 0.3];
+				pipe(parent, HULK.rib, [tx - W * 0.16, H * 1.12, 0], mast, W * 0.02, 5);
+				box(parent, HULK.light, [W * 0.04, W * 0.04, W * 0.04], mast, null, 0);
+				plating(parent, x0 + W * 0.3, x1);
+				if (len > W * 2.6) turret(parent, tx + W * 1.1, W * 0.17);
+				if (len > W * 3.6) turret(parent, x1 - W * 0.5, W * 0.15);
+				for (const z of [-1, 1]) box(parent, HULK.light, [W * 0.035, W * 0.035, W * 0.035], [x0 + W * 0.4, H * 0.3, z * W * 0.5], null, 0);
+			};
+			if (L > W * 7) {
+				// Broken in two: the stern as it was, the prow bent away past a gap full of debris.
+				const brk = -L * 0.08 + (rnd(5) - 0.5) * L * 0.1,
+					gap = W * 0.9;
+				stern(ship, -L / 2, brk - gap / 2, "s");
+				torn(ship, brk - gap / 2, 1);
+				const front = group(ship, [brk + gap / 2, (rnd(6) - 0.5) * H * 0.6, 0]);
+				front.rotation.set((rnd(7) - 0.5) * 0.5, (rnd(8) - 0.5) * 0.3, (rnd(9) - 0.5) * 0.2);
+				prow(front, 0, L / 2 - brk - gap / 2, "p");
+				torn(front, 0, -1);
+			} else if (rnd(5) > 0.5) {
+				prow(ship, -L / 2 + W * 0.3, L - W * 0.3, "p");
+				torn(ship, -L / 2 + W * 0.3, -1);
+			} else {
+				stern(ship, -L / 2 + W * 0.3, L / 2 - W * 0.3, "s");
+				torn(ship, L / 2 - W * 0.3, 1);
 			}
 		} else {
 			// Mesa: a few boulders on the plateau. Rock and outcrop: a tight pile of big boulders over most of
@@ -60447,38 +60618,77 @@ function createModels3D(THREE) {
 		}
 		return { root, update() {} };
 	}
-	// ---- Space (the orbital battle, 0.132): deposits float over the plane of the battle ----
+	// ---- Space (the orbital battle, 0.132; 0.143.7 richer): deposits float over the plane of the battle ----
 	const SPACE_DEP = {
-		gas: std("#b27aee", { emissive: "#8a48d8", emissiveIntensity: 1.3, roughness: 0.4, transparent: true, opacity: 0.5 }),
-		gasBlue: std("#7aa8f0", { emissive: "#3f70d8", emissiveIntensity: 1.1, roughness: 0.4, transparent: true, opacity: 0.38 }),
 		gasCore: std("#f2dcff", { emissive: "#e0b8ff", emissiveIntensity: 2.2, roughness: 0.3 }),
+		gasHalo: std("#e0c0ff", { emissive: "#c890ff", emissiveIntensity: 1.4, roughness: 1, transparent: true, opacity: 0.2, flatShading: false, depthWrite: false }),
+		gasPuff: std("#b27aee", { emissive: "#8a48d8", emissiveIntensity: 1.0, roughness: 1, transparent: true, opacity: 0.15, flatShading: false, depthWrite: false }),
+		gasPuffBlue: std("#7aa8f0", { emissive: "#3f70d8", emissiveIntensity: 0.9, roughness: 1, transparent: true, opacity: 0.13, flatShading: false, depthWrite: false }),
+		spark: std("#ffffff", { emissive: "#f0e0ff", emissiveIntensity: 2.4 }),
 		ice: std("#c6d6e2", { roughness: 0.45, metalness: 0.05 }),
-		buoy: std("#a9b4b8", { roughness: 0.4, metalness: 0.65 }),
-		panel: std("#1f3a5c", { roughness: 0.25, metalness: 0.55, emissive: "#0a1a30", emissiveIntensity: 0.4 }),
-		strut: std("#2c3437", { roughness: 0.5, metalness: 0.75 }),
+		oreRock: std("#4c4540", { roughness: 0.92, metalness: 0.08 }),
+		oreDark: std("#2f2a27", { roughness: 0.95, metalness: 0.05 }),
+		metal: std("#c98a42", { roughness: 0.28, metalness: 0.95, emissive: "#5a3010", emissiveIntensity: 0.3 }),
+		vein: std("#ffc060", { roughness: 0.3, metalness: 0.7, emissive: "#ff9a2a", emissiveIntensity: 0.9 }),
+		crystal: std("#ffd060", { emissive: "#ff9a1a", emissiveIntensity: 1.1, roughness: 0.12, metalness: 0.1, transparent: true, opacity: 0.9 }),
+		buoy: std("#c4ccd0", { roughness: 0.45, metalness: 0.3 }),
+		panel: std("#24476e", { roughness: 0.25, metalness: 0.4, emissive: "#0c2240", emissiveIntensity: 0.5 }),
+		strut: std("#4a5458", { roughness: 0.5, metalness: 0.4 }),
 	};
-	glowing.push([SPACE_DEP.gas, SPACE_DEP.gas.emissiveIntensity], [SPACE_DEP.gasBlue, SPACE_DEP.gasBlue.emissiveIntensity], [SPACE_DEP.gasCore, SPACE_DEP.gasCore.emissiveIntensity]);
-	// Ore: a cluster of asteroids with metal veins and nuggets; gas: a glowing nebula pocket with a bright
-	// heart and drifting ice; crystals: a small asteroid bristling with golden shards. Fewer and smaller
-	// as the deposit empties (stage n: 0 exhausted … 6 full).
+	for (const m of ["gasCore", "gasHalo", "gasPuff", "gasPuffBlue", "spark", "metal", "vein", "crystal"]) glowing.push([SPACE_DEP[m], SPACE_DEP[m].emissiveIntensity]);
+	// Ore: a big asteroid of dark stone set with nuggets of copper-gold metal and glowing veins, a train of
+	// smaller chunks round it; gas: a pocket of nebula — a bright knot with a halo and two spiral arms of
+	// soft glowing gas round it, sparks and ice caught in the swirl (the wider cloud: buildNebula,
+	// three-renderer.js); crystals: a geode asteroid split open, clusters of glowing amber crystal bursting
+	// out of it on every side, a soft glow round them. Fewer and smaller as the deposit empties (stage n:
+	// 0 exhausted … 6 full).
 	function spaceDeposit(kind, n) {
 		const root = new THREE.Group(),
 			k = n ? 0.55 + (n / 6) * 0.45 : 0.35,
-			H = 30;
+			H = 30,
+			{ mesh, sphereGeo } = detail.tools;
 		if (kind === "ore") {
 			const rocks = [[0, 0, 0, 15], [-22, 6, 8, 8], [20, -4, 10, 7], [8, 14, -18, 6], [-12, -6, -16, 5], [26, 10, -10, 4]].slice(0, n ? 1 + Math.ceil(n * 0.8) : 4);
 			rocks.forEach(([x, y, z, s], i) => {
-				const r = s * (n ? k : 0.5);
-				rockPart(root, i % 2 ? DEP.oreDark : DEP.ore, [r * 1.2, r, r * 1.05], [x * k, H + y, z * k], i * 5 + 2);
-				if (n && s >= 7)
-					for (let j = 0; j < 3; j++) part(root, "octa", DEP.vein, [r * 0.25, r * 0.32, r * 0.2], [x * k + (j - 1) * r * 0.4, H + y + r * 0.75, z * k + (j % 2 ? 1 : -1) * r * 0.25], [j, i + j, 0.4]);
+				const r = s * (n ? k : 0.5),
+					c = [x * k, H + y, z * k];
+				rockPart(root, i % 2 ? SPACE_DEP.oreDark : SPACE_DEP.oreRock, [r * 1.25, r, r * 1.05], c, i * 5 + 2);
+				if (!n) return;
+				// Nuggets of metal breaking the surface, spread over the rock, more on the big ones.
+				const count = s >= 12 ? 10 : s >= 7 ? 4 : 2;
+				for (let j = 0; j < count; j++) {
+					const a = j * 2.39 + i,
+						b = Math.acos(1 - (2 * (j + 0.5)) / count),
+						ns = r * (0.16 + ((j * 7) % 5) * 0.035);
+					rockPart(root, j % 3 ? SPACE_DEP.metal : SPACE_DEP.vein, [ns * 1.3, ns, ns * 1.1], [c[0] + Math.sin(b) * Math.cos(a) * r * 1.1, c[1] + Math.cos(b) * r * 0.9, c[2] + Math.sin(b) * Math.sin(a) * r * 0.98], j + i * 11);
+				}
 			});
+			// Gravel and flakes of metal trailing round the big rock.
+			if (n)
+				for (let i = 0; i < 10; i++) {
+					const a = i * 0.63,
+						d = 25 + (i % 3) * 5;
+					rockPart(root, i % 4 ? SPACE_DEP.oreDark : SPACE_DEP.metal, [1.3 + (i % 2), 1, 1.2], [Math.cos(a) * d * k, H - 4 + Math.sin(i * 1.7) * 5, Math.sin(a) * d * k * 0.6], i + 31);
+				}
 		} else if (kind === "gas") {
 			if (n) {
-				part(root, "sphere", SPACE_DEP.gas, [26 * k, 18 * k, 24 * k], [0, H, 0]);
-				part(root, "sphere", SPACE_DEP.gasBlue, [20 * k, 14 * k, 18 * k], [-12 * k, H + 4, 8 * k]);
-				part(root, "sphere", SPACE_DEP.gas, [14 * k, 10 * k, 14 * k], [14 * k, H - 3, -10 * k]);
-				part(root, "sphere", SPACE_DEP.gasCore, [6 * k, 6 * k, 6 * k], [0, H, 0]);
+				mesh(root, sphereGeo(1, 16, 12), SPACE_DEP.gasCore, [0, H, 0]).scale.setScalar(4.5 * k);
+				mesh(root, sphereGeo(1, 20, 14), SPACE_DEP.gasHalo, [0, H, 0]).scale.setScalar(8 * k);
+				// Two spiral arms of soft puffs, larger and fainter outwards.
+				for (const arm of [0, Math.PI])
+					for (let j = 0; j < 12; j++) {
+						const t = j / 11,
+							a = arm + t * 3.4,
+							d = (7 + t * 36) * k,
+							s = (4 + t * 10) * k;
+						mesh(root, sphereGeo(1, 14, 10), j % 3 === 2 ? SPACE_DEP.gasPuffBlue : SPACE_DEP.gasPuff, [Math.cos(a) * d, H + Math.sin(t * 6 + arm) * 3, Math.sin(a) * d * 0.85]).scale.set(s * 1.3, s * 0.6, s);
+					}
+				// Sparks: new stars lighting up in the cloud.
+				for (let i = 0; i < 8; i++) {
+					const a = i * 2.1,
+						d = (10 + (i % 4) * 8) * k;
+					mesh(root, sphereGeo(1, 6, 4), SPACE_DEP.spark, [Math.cos(a) * d, H + ((i * 5) % 7) - 3, Math.sin(a) * d]).scale.setScalar(0.5 + (i % 3) * 0.25);
+				}
 			}
 			// Ice and dust caught in the cloud.
 			for (let i = 0; i < 7; i++) {
@@ -60487,36 +60697,77 @@ function createModels3D(THREE) {
 				rockPart(root, SPACE_DEP.ice, [1.6 + (i % 2), 1.3, 1.5], [Math.cos(a) * d, H - 8 + (i % 4) * 5, Math.sin(a) * d], i + 11);
 			}
 		} else {
-			rockPart(root, DEP.oreDark, [11, 8, 10], [0, H - 4, 0], 7);
+			rockPart(root, SPACE_DEP.oreDark, [14, 10, 13], [0, H - 2, 0], 7);
 			if (n) {
-				const shards = [[0, 0, 14, 4, 0], [-6, 4, 11, 3, -0.4], [6, -3, 10, 3, 0.4], [-3, -7, 8, 2.5, 0.25], [7, 6, 7, 2.5, -0.3], [-8, -3, 6, 2, 0.6], [2, 8, 6, 2, -0.5]];
-				shards.slice(0, n + 1).forEach(([x, z, h, w, lean], i) => {
-					const g = natureKit.crystals(root, DEP.crystal, [x, z], h * k + w, w, lean, i + 1);
-					g.position.y += H + 2;
+				// [tilt from up, turn round, height, width]: the biggest on top, the rest round the sides.
+				const clusters = [[0, 0, 14, 4], [0.9, 0.4, 11, 3.2], [0.85, 2.5, 10, 3], [1.2, 4.3, 9, 2.6], [1.0, 1.5, 8, 2.4], [1.35, 3.4, 7, 2.2], [1.5, 5.4, 6, 2], [0.7, 5.9, 6, 2]];
+				clusters.slice(0, n + 2).forEach(([tilt, turn, h, w], i) => {
+					const pivot = group(root, [0, H - 2, 0]);
+					pivot.rotation.set(0, turn, tilt);
+					const g = natureKit.crystals(pivot, SPACE_DEP.crystal, [0, 0], (h * k + w) * 1.5, w * 1.5, 0, i + 1);
+					g.position.y = 7.5;
 				});
 			}
 		}
 		return { root, update() {} };
 	}
-	// The relay in space: a buoy over the plane — a hexagonal core, a ring in the owner's colour, solar
-	// panels on two arms, antennae and a beacon; the ring and panels turn (returned as the "dish").
+	// The relay in space (0.143.8): a relay satellite over the plane — a hexagonal core with radiator fins
+	// and a band of the owner's colour, an outer ring on four spokes with a light strip and pods, long wings
+	// of solar panels with their cells, a mast with a dish that sweeps round, whip antennae, a beacon on top
+	// and a light underneath. The ring and the dish turn (returned as the "dish"); the wings stay.
 	function buoy(root, light) {
-		const b = group(root, [0, 44, 0]),
+		const b = group(root, [0, 50, 0]),
 			turn = group(b);
-		const { mesh, cyl, ball, box, pipe, torusGeo } = detail.tools;
-		cyl(b, SPACE_DEP.buoy, 7, 12, [0, 0, 0], { segs: 6 });
-		cyl(b, SPACE_DEP.strut, 4, 5, [0, -8, 0], { segs: 6, top: 6 });
-		ball(b, light, 2.6, [0, -11.5, 0]);
-		mesh(turn, torusGeo(15, 1.8, 24, "y"), light);
-		mesh(turn, torusGeo(15, 0.7, 24, "y"), SPACE_DEP.strut, [0, -1.6, 0]);
-		for (const side of [-1, 1]) {
-			pipe(turn, SPACE_DEP.strut, [side * 7, 0, 0], [side * 22, 0, 0], 0.7, 6);
-			box(turn, SPACE_DEP.panel, [16, 0.6, 10], [side * 31, 0, 0], null, 0.2);
-			for (let k = -1; k <= 1; k++) box(turn, SPACE_DEP.strut, [0.4, 0.8, 10.2], [side * 31 + k * 5, 0, 0], null, 0.05);
+		const { mesh, cyl, ball, box, pipe, torusGeo, latheGeo } = detail.tools;
+		// Core: the hex body, collars, the cone underneath with its light.
+		cyl(b, SPACE_DEP.buoy, 8, 16, [0, 0, 0], { segs: 6 });
+		cyl(b, SPACE_DEP.strut, 9.6, 2.4, [0, 8.6, 0], { segs: 6 });
+		cyl(b, SPACE_DEP.strut, 9.6, 2.4, [0, -8.6, 0], { segs: 6 });
+		cyl(b, SPACE_DEP.buoy, 4, 8, [0, -13.5, 0], { segs: 6, top: 7 });
+		ball(b, light, 3, [0, -18.5, 0]);
+		mesh(b, torusGeo(8.6, 1, 24, "y"), light, [0, 2.5, 0]);
+		// Radiator fins between the wings.
+		for (const a of [Math.PI / 2, -Math.PI / 2]) {
+			const fin = group(b, [Math.cos(a) * 8, 0, Math.sin(a) * 8]);
+			fin.rotation.y = -a;
+			box(fin, SPACE_DEP.panel, [12, 12, 0.5], [6, 0, 0], null, 0.1);
+			for (let k = -2; k <= 2; k++) box(fin, SPACE_DEP.strut, [12, 0.5, 0.7], [6, k * 2.5, 0], null, 0.05);
 		}
-		pipe(b, SPACE_DEP.strut, [0, 6, 0], [0, 22, 0], 0.5, 5);
-		pipe(b, SPACE_DEP.strut, [0, 6, 0], [7, 18, 4], 0.35, 5);
-		ball(b, light, 1.6, [0, 23, 0]);
+		// Wings: a truss out each side, two panels with frames and cells.
+		for (const side of [-1, 1]) {
+			pipe(b, SPACE_DEP.strut, [side * 8, 0, 0], [side * 66, 0, 0], 0.9, 6);
+			pipe(b, SPACE_DEP.strut, [side * 8, 1.6, 0], [side * 30, 0, 0], 0.4, 5);
+			for (const x of [37, 57]) {
+				box(b, SPACE_DEP.panel, [18, 0.6, 14], [side * x, 0, 0], null, 0.2);
+				box(b, SPACE_DEP.strut, [18.6, 0.8, 0.6], [side * x, 0, 7], null, 0.05);
+				box(b, SPACE_DEP.strut, [18.6, 0.8, 0.6], [side * x, 0, -7], null, 0.05);
+				for (let k = -2; k <= 2; k++) box(b, SPACE_DEP.strut, [0.35, 0.75, 14], [side * x + k * 3.6, 0, 0], null, 0.05);
+				box(b, SPACE_DEP.strut, [18, 0.75, 0.3], [side * x, 0, 0], null, 0.05);
+			}
+		}
+		// The outer ring on four spokes, its light strip, pods.
+		mesh(turn, torusGeo(24, 2.2, 40, "y"), SPACE_DEP.buoy);
+		mesh(turn, torusGeo(24, 0.9, 40, "y"), light, [0, 1.6, 0]);
+		for (let i = 0; i < 4; i++) {
+			const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+			pipe(turn, SPACE_DEP.strut, [Math.cos(a) * 9, 0, Math.sin(a) * 9], [Math.cos(a) * 22.5, 0, Math.sin(a) * 22.5], 0.8, 6);
+			const pod = group(turn, [Math.cos(a) * 24, 0, Math.sin(a) * 24]);
+			pod.rotation.y = -a;
+			box(pod, SPACE_DEP.buoy, [5, 4.4, 6], [0, 0, 0], null, 0.6);
+			ball(pod, light, 0.9, [2.6, 0, 0]);
+		}
+		// The mast and the dish sweeping round, the feed horn at its focus.
+		pipe(turn, SPACE_DEP.strut, [0, 9.8, 0], [0, 20, 0], 1.1, 6);
+		const dish = group(turn, [0, 22, 0]);
+		dish.rotation.z = -0.9;
+		mesh(dish, latheGeo([[0, 0], [3, 0.35], [6, 1.4], [9, 3.3], [9.6, 3.9], [9.2, 4.1], [6, 2.0], [3, 0.95], [0, 0.6]], 24), SPACE_DEP.buoy);
+		pipe(dish, SPACE_DEP.strut, [0, 0.6, 0], [0, 7, 0], 0.4, 5);
+		for (const a of [0, 2.1, 4.2]) pipe(dish, SPACE_DEP.strut, [Math.cos(a) * 8.5, 3.4, Math.sin(a) * 8.5], [0, 7, 0], 0.25, 4);
+		ball(dish, light, 0.9, [0, 7.4, 0]);
+		// Whip antennae and the beacon on top.
+		pipe(b, SPACE_DEP.strut, [4, 9.8, 3], [6, 24, 5], 0.3, 4);
+		pipe(b, SPACE_DEP.strut, [-4, 9.8, -3], [-5, 20, -6], 0.3, 4);
+		ball(b, light, 1.4, [6, 24.5, 5]);
 		return turn;
 	}
 	// Relay: a hexagonal plinth, a tripod mast with a dish, a light in the owner's colour and a capture
@@ -60557,7 +60808,7 @@ function createModels3D(THREE) {
 			// Parts lying on the ground: the renderer sets their height to the terrain under them.
 			ground,
 			update(node, i) {
-				dish.rotation.y = i.time * 0.6;
+				dish.rotation.y = i.time * (space ? 0.25 : 0.6);
 				if (jammer) jammer.rotation.y = i.time * 0.7;
 				machine?.(node, i);
 				const shown = Math.round((node.progress || 0) * SEGMENTS),
@@ -60977,7 +61228,8 @@ gl_FragColor.a *= smoothstep(0.0, ${reach.toFixed(1)}, vSoftWorld.y - softGround
 				float n = sNoise(q) * 0.55 + sNoise(q * 2.4 + 4.1) * 0.3 + sNoise(q * 5.3 - 2.3) * 0.15;
 				float body = smoothstep(0.3, 0.72, n) * (1.0 - smoothstep(0.2, 1.0, vUv.y)) * smoothstep(0.0, 0.08, vUv.y) * (1.0 - smoothstep(0.5, 1.0, abs(vUv.x - 0.5) * 2.0));
 				vec3 col = mix(vec3(0.82, 0.87, 0.93), vec3(0.97, 0.98, 1.0), vUv.y + n * 0.3);
-				gl_FragColor = vec4(col, vAlpha * body * ${lowness > 0.5 ? "0.5" : "0.42"});
+				// (0.147.2: thinner — the board stays readable in the blizzard.)
+				gl_FragColor = vec4(col, vAlpha * body * ${lowness > 0.5 ? "0.4" : "0.3"});
 			}`,
 		);
 	const snowCurtains = snowVeil(260, 0),
@@ -61131,7 +61383,8 @@ gl_FragColor.a *= smoothstep(0.0, ${reach.toFixed(1)}, vSoftWorld.y - softGround
 			float n = dNoise(q) * 0.55 + dNoise(q * 2.3 + 4.1) * 0.3 + dNoise(q * 5.1 - 2.3) * 0.15;
 			float body = smoothstep(0.32, 0.72, n) * (1.0 - smoothstep(0.25, 1.0, vUv.y)) * smoothstep(0.0, 0.08, vUv.y) * (1.0 - smoothstep(0.55, 1.0, abs(vUv.x - 0.5) * 2.0));
 			vec3 col = mix(vec3(0.76, 0.62, 0.44), vec3(0.92, 0.82, 0.64), vUv.y + n * 0.3);
-			gl_FragColor = vec4(col, vAlpha * body * 0.22);
+			// (0.147.1: thinner — the board stays readable in the storm.)
+			gl_FragColor = vec4(col, vAlpha * body * 0.15);
 		}`,
 	);
 
@@ -61224,7 +61477,8 @@ gl_FragColor.a *= smoothstep(0.0, ${reach.toFixed(1)}, vSoftWorld.y - softGround
 		show(curtains, kind === "sand", 1);
 		show(sheets, kind === "rain");
 		// Mist: in rain and snow, and a little at night everywhere (its own amount, not the weather's).
-		const mistAmount = Math.max(mistLevel, kind === "rain" ? k * 0.8 : kind === "snow" ? k * 0.6 : 0);
+		// Ground mist of a storm (0.147.2: lighter in rain and snow, the board stays readable).
+		const mistAmount = Math.max(mistLevel, kind === "rain" ? k * 0.6 : kind === "snow" ? k * 0.45 : 0);
 		mist.mesh.visible = mistAmount > 0.03;
 		mist.mesh.geometry.instanceCount = mist.mesh.visible ? Math.floor(mist.count * density) : 0;
 		mistIntensity.value = mistAmount;
@@ -61260,7 +61514,7 @@ gl_FragColor.a *= smoothstep(0.0, ${reach.toFixed(1)}, vSoftWorld.y - softGround
 		// A blizzard's haze breathes with the gusts (towards a whiteout, never hiding the units in view).
 		// Solar storm: slow surges of light (flares), handled by the renderer as a warm glow.
 		const solar = kind === "solar" ? k * (0.55 + 0.45 * Math.pow(Math.max(0, Math.sin(time * 0.45)), 3)) : 0;
-		return { kind, intensity: k, solar, flash: kind === "ion" ? ionFlash : kind === "solar" || kind === "meteor" ? 0 : flash, haze: kind === "ion" || kind === "solar" || kind === "meteor" ? 0 : kind === "sand" ? k * 0.7 : kind === "snow" ? k * (0.45 + 0.15 * gust) : k * 0.35, wetness, snowCover, sandCover, strike: struck };
+		return { kind, intensity: k, solar, flash: kind === "ion" ? ionFlash : kind === "solar" || kind === "meteor" ? 0 : flash, haze: kind === "ion" || kind === "solar" || kind === "meteor" ? 0 : kind === "sand" ? k * 0.45 : kind === "snow" ? k * (0.3 + 0.12 * gust) : k * 0.25, wetness, snowCover, sandCover, strike: struck };
 	}
 	return {
 		setTerrain,
@@ -61842,18 +62096,64 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 		if (night > 0.05)
 			for (const m of miners)
 				if (m.resource !== "gas") lights.point(m.x, m.y, heightAt(m.x, m.y) + 10, { color: m.resource === "crystal" ? "#ffd98a" : "#ffb35c", power: night * (110 + Math.random() * 120), range: 90 });
-		// Explosions light the ground and the models around them for a moment, by day too.
+		// Explosions light the ground and the models around them for a moment, by day too: a white-hot
+		// flash at first (0.144), stronger and wider, then the orange of the fire.
 		for (const ef of game.effects) {
 			if (ef.kind !== "explosion" || hidden({ x: ef.x, y: ef.y, team: -1 })) continue;
 			const k = 1 - ef.life / ef.maxLife,
 				f = Math.max(0, 1 - k / 0.55),
+				hot = Math.max(0, 1 - k / 0.1),
 				size = ef.size || 40;
-			if (f > 0) lights.point(ef.x, ef.y, ef.space ? ef.lift : heightAt(ef.x, ef.y) + (ef.air ? 90 : size * 0.4), { color: "#ffb35c", power: f * f * size * (25 + night * 15), range: size * 5 + 80 });
+			if (f > 0) lights.point(ef.x, ef.y, ef.space ? ef.lift : heightAt(ef.x, ef.y) + (ef.air ? 90 : size * 0.4), { color: hot > 0.3 ? "#fff0d8" : "#ffb35c", power: f * f * size * (25 + night * 15) * (1 + hot * 2), range: size * (5 + hot * 2.5) + 80 });
 		}
+		// Sparks of damaged machines flash blue-white for an instant (0.144).
+		for (const l of sparkLights) lights.point(l.x, l.y, l.h, { color: "#c8dcff", power: 90 * (1 + night * 2), range: 80 });
 		lights.end(focus, span, true);
 		pools.visible = pools.count > 0;
 		pools.instanceMatrix.needsUpdate = true;
 		pools.instanceColor.needsUpdate = true;
+	}
+	// What vehicles throw up behind them (0.144.2): on dry ground a trail of dust (pale sand on the desert,
+	// grey ash, the planet's soil), in the rain mud — dark clods flung up and falling back — and on snow or ice
+	// a white spray; more the faster and the bigger the vehicle. Ground vehicles moving near the view only.
+	const lastGround = new Map();
+	function vehicleDust(game, dt, hidden, focus, span) {
+		if (RTS.MISSIONS[game.missionId]?.space) return;
+		const wet = weatherNow.kind === "rain" && weatherNow.intensity > 0.25,
+			snowy = biomeNow === "ice" || (weatherNow.kind === "snow" && weatherNow.intensity > 0.3),
+			soil = SOIL[biomeNow] || SOIL.dust,
+			seen = new Set();
+		for (const e of game.entities) {
+			const s = TYPES[e.type];
+			if (!s?.speed || s.flying || s.ship || s.radius < 9 || e.hp <= 0 || hidden(e) || Math.abs(e.x - focus.x) > span || Math.abs(e.y - focus.y) > span) continue;
+			seen.add(e.id);
+			const was = lastGround.get(e.id);
+			lastGround.set(e.id, { x: e.x, y: e.y, t: game.time });
+			if (!was || game.time <= was.t) {
+				if (was) lastGround.set(e.id, was);
+				continue;
+			}
+			const v = Math.hypot(e.x - was.x, e.y - was.y) / (game.time - was.t);
+			if (v < 8) continue;
+			const c = Math.cos(e.angle || 0),
+				sn = Math.sin(e.angle || 0),
+				r = s.radius,
+				k = Math.min(1.5, v / 60) * (r / 14),
+				x = e.x - c * r * 0.85,
+				z = e.y - sn * r * 0.85,
+				g = heightAt(x, z);
+			if (Math.random() > dt * 14 * k * density) continue;
+			const side = rand(-0.6, 0.6) * r;
+			if (wet)
+				for (let i = 0; i < 3; i++)
+					smoke.spawn({ x: x - sn * side, y: g + 2, z: z + c * side, vx: -c * rand(10, 30) + rand(-12, 12), vy: rand(30, 70), vz: -sn * rand(10, 30) + rand(-12, 12), lift: -300, life: 0, max: rand(0.4, 0.7), s0: rand(1.4, 2.6), s1: 1.2, r: 0.2, g: 0.16, b: 0.12, a: 1, style: 1 });
+			else if (snowy) {
+				smoke.spawn({ x: x - sn * side, y: g + 3, z: z + c * side, vx: -c * rand(14, 30), vy: rand(16, 34), vz: -sn * rand(14, 30), lift: -60, drag: 1.2, life: 0, max: rand(0.7, 1.2), s0: r * 0.35, s1: r * 1.3, r: 0.94, g: 0.96, b: 1, a: 0.45 });
+				for (let i = 0; i < 2; i++) smoke.spawn({ x, y: g + 3, z, vx: -c * rand(20, 40) + rand(-10, 10), vy: rand(30, 60), vz: -sn * rand(20, 40) + rand(-10, 10), lift: -200, life: 0, max: rand(0.4, 0.7), s0: rand(1, 1.8), s1: 0.8, r: 0.95, g: 0.97, b: 1, a: 1, style: 1 });
+			} else
+				smoke.spawn({ x: x - sn * side, y: g + 3, z: z + c * side, vx: -c * rand(6, 16) + rand(-4, 4), vy: rand(6, 16), vz: -sn * rand(6, 16) + rand(-4, 4), drag: 0.9, life: 0, max: rand(1.4, 2.4), s0: r * 0.45, s1: r * (1.8 + k), r: soil[0], g: soil[1], b: soil[2], a: 0.42 });
+		}
+		for (const id of lastGround.keys()) if (!seen.has(id)) lastGround.delete(id);
 	}
 	// Engine trails of aircraft in the air: a short glowing streak at the nozzle and a pale vapour trail
 	// thinning out behind (only flying units that move, near the view).
@@ -62091,6 +62391,47 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 			}
 		}
 	}
+	// Stages of damage (0.144): the harder it is hit, the more it shows. Below 75 % now and then a burst of
+	// sparks from a torn spot (a short circuit), with a flash lighting its surroundings for an instant; the
+	// worse, the more often. Below 50 % smoke on a planet (damageAndExplosions) or, in space, a pale jet of
+	// gas venting from a torn line; below 30 % (buildings) / 20 % (big vehicles) the fires of burnFires.
+	const sparkLights = [];
+	function damageSparks(game, dt, hidden) {
+		const space = !!RTS.MISSIONS[game.missionId]?.space;
+		for (const e of game.entities) {
+			if (e.hp <= 0 || e.constructionLeft > 0 || e.team === 2) continue;
+			const s = TYPES[e.type];
+			if (!s || s.flying || s.radius < 9) continue;
+			const f = e.hp / e.maxHp;
+			if (f >= 0.75 || hidden(e)) continue;
+			const building = !s.speed,
+				hurt = (0.75 - f) / 0.75,
+				base = heightAt(e.x, e.y) + (space ? (building ? s.radius * 0.8 + 10 : s.ship ? 34 : 22) : 0),
+				top = building ? Math.min(60, s.radius * 0.8) : s.ship ? 6 : 14,
+				n = building ? 3 : 2;
+			for (let i = 0; i < n; i++) {
+				if (Math.random() > dt * (0.3 + hurt * 1.3) * density) continue;
+				const [ox, oy, oz] = spotOf(e, i + 7, n, s.radius, top),
+					x = e.x + ox,
+					y = base + oy,
+					z = e.y + oz;
+				for (let j = 0, count = 6 + Math.round(Math.random() * 6); j < count; j++) {
+					const a = rand(0, TAU),
+						sp = rand(30, 90);
+					fire.spawn({ x, y, z, vx: Math.cos(a) * sp, vy: space ? rand(-50, 50) : rand(20, 70), vz: Math.sin(a) * sp, lift: space ? 0 : -260, drag: space ? 0.4 : 0.2, life: 0, max: rand(0.25, 0.6), s0: rand(1, 1.8), s1: 0.3, r: 1, g: rand(0.8, 0.95), b: rand(0.5, 0.75), a: 1 });
+				}
+				fire.spawn({ x, y, z, vx: 0, vy: 0, vz: 0, lift: 0, life: 0, max: 0.08, s0: 7, s1: 3, r: 0.85, g: 0.9, b: 1, a: 0.9, style: 2 });
+				sparkLights.push({ x, y: z, h: y, t: clockNow });
+			}
+			if (space && f < 0.5 && Math.random() < dt * 8 * density) {
+				const [ox, oy, oz] = spotOf(e, 11, 1, s.radius, top),
+					a = e.id * 1.7 + Math.sin(clockNow * 0.7 + e.id) * 0.3,
+					sp = rand(30, 50);
+				smoke.spawn({ x: e.x + ox, y: base + oy, z: e.y + oz, vx: Math.cos(a) * sp, vy: rand(-4, 4), vz: Math.sin(a) * sp, lift: 0, drag: 0.6, life: 0, max: rand(0.8, 1.4), s0: s.radius * 0.12, s1: s.radius * 0.5, r: 0.85, g: 0.9, b: 1, a: 0.25 });
+			}
+		}
+		while (sparkLights.length && clockNow - sparkLights[0].t > 0.15) sparkLights.shift();
+	}
 	// Burning debris of explosions: chunks flying on their arcs (straight in space), each leaving a trail of
 	// small flames and, on a planet, smoke behind it; they burn out or hit the ground.
 	const burners = [];
@@ -62134,7 +62475,7 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 				if (!s || s.flying || e.team === 2) continue;
 				const f = e.hp / e.maxHp,
 					building = !s.speed,
-					vehicle = s.speed && s.radius >= 16;
+					vehicle = s.speed && s.radius >= 10;
 				if (!(building ? f < 0.5 : vehicle && f < 0.35)) continue;
 				const ground = heightAt(e.x, e.y),
 					top = building ? Math.min(60, s.radius * 0.8) : 18;
@@ -62148,7 +62489,10 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 				// (The flames themselves come every frame from steady fire spots: burnFires below.)
 			}
 		}
-		if (scars) burnFires(game, dt, hidden);
+		if (scars) {
+			burnFires(game, dt, hidden);
+			damageSparks(game, dt, hidden);
+		}
 		// Fresh craters smoulder: thin smoke curling up and now and then a spark, for about 25 s.
 		for (const k of game.craters || []) {
 			const age = game.time - k.born;
@@ -62230,6 +62574,14 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 					const a = (i / n(12)) * TAU + rand(-0.2, 0.2),
 						sp = rand(70, 130) * scale;
 					smoke.spawn({ x: ef.x + Math.cos(a) * size * 0.2, y: ground + 4, z: ef.y + Math.sin(a) * size * 0.2, vx: Math.cos(a) * sp, vy: rand(3, 10), vz: Math.sin(a) * sp, drag: 2.2, life: 0, max: rand(1.1, 1.8), s0: size * 0.25, s1: size * 0.9, r: 0.56, g: 0.49, b: 0.4, a: 0.42 });
+				}
+			// The shock wave of a big blast (0.144): a second, faster ring of pale dust racing out low over the
+			// ground, thinning as it goes.
+			if (!ef.air && size >= 45)
+				for (let i = 0, m = n(22); i < m; i++) {
+					const a = (i / m) * TAU + rand(-0.1, 0.1),
+						sp = rand(170, 240) * scale;
+					smoke.spawn({ x: ef.x + Math.cos(a) * size * 0.3, y: ground + 3, z: ef.y + Math.sin(a) * size * 0.3, vx: Math.cos(a) * sp, vy: rand(1, 5), vz: Math.sin(a) * sp, drag: 1.6, life: 0, max: rand(0.9, 1.4), s0: size * 0.3, s1: size * 1.2, r: 0.62, g: 0.56, b: 0.47, a: 0.3 });
 				}
 		}
 	}
@@ -62428,6 +62780,30 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 			fire.spawn({ x, y, z, vx: 0, vy: 0, vz: 0, life: 0, max: 0.06, s0: 6, s1: 3, r: 1, g: 0.7, b: 0.35, a: 0.9 });
 			return;
 		}
+		if (what === "hull") {
+			// A shot through a ship's dropped shield (0.144.1): a white-hot flash on the hull, a spray of sparks
+			// back towards the shooter, flakes of plating tumbling away, a glowing scorch cooling for a moment,
+			// and a flash of light round it.
+			const dx = opts.dx || 0,
+				dz = opts.dz || 0;
+			fire.spawn({ x, y, z, vx: 0, vy: 0, vz: 0, lift: 0, life: 0, max: 0.1, s0: rocket ? 18 : 10, s1: 4, r: 1, g: 0.95, b: 0.8, a: 1, style: 2 });
+			for (let i = 0; i < Math.ceil((rocket ? 18 : 10) * density); i++) {
+				const ax = dx + rand(-0.7, 0.7),
+					ay = rand(-0.6, 0.6),
+					az = dz + rand(-0.7, 0.7),
+					l = Math.hypot(ax, ay, az) || 1,
+					sp = rand(60, 160);
+				fire.spawn({ x, y, z, vx: (ax / l) * sp, vy: (ay / l) * sp, vz: (az / l) * sp, lift: 0, drag: 0.6, life: 0, max: rand(0.2, 0.5), s0: rand(1.4, 2.6), s1: 0.4, r: 1, g: rand(0.75, 0.95), b: rand(0.45, 0.7), a: 1 });
+			}
+			for (let i = 0; i < (rocket ? 5 : 3); i++) {
+				const sp = rand(15, 45),
+					c = rand(0.28, 0.4);
+				smoke.spawn({ x, y, z, vx: (dx + rand(-1, 1)) * sp, vy: rand(-12, 12), vz: (dz + rand(-1, 1)) * sp, lift: 0, drag: 0.1, life: 0, max: rand(1.2, 2.2), s0: rand(1.4, 2.4), s1: rand(1, 1.6), r: c, g: c * 1.02, b: c * 1.1, a: 1, style: 1 });
+			}
+			fire.spawn({ x, y, z, vx: 0, vy: 0, vz: 0, lift: 0, life: 0, max: rocket ? 1.1 : 0.7, s0: rocket ? 7 : 4.5, s1: 1.5, r: 1, g: 0.45, b: 0.12, a: 0.85, style: 2 });
+			sparkLights.push({ x, y: z, h: y, t: clockNow });
+			return;
+		}
 		// An impact: a flash, sparks flying off, a kick of dust (on the ground); a rocket blows up in a small
 		// ball of fire and smoke.
 		const air = opts.air,
@@ -62468,6 +62844,8 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 	}
 	return {
 		water: { group: waterGroup, uniforms: waterUniforms, levelNear: waterLevelNear },
+		// The height map of the ground (texture and size), for effects draped over it.
+		ground: weather3d.ground,
 		setGame(game, heights) {
 			if (heights) weather3d.setTerrain(heights);
 			weather3d.reset();
@@ -62507,6 +62885,7 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 			findMiners(game, hidden, focus, span, working);
 			nightLights(game, quality.lights === false ? 0 : night, hidden, focus, span);
 			airTrails(game, dt, hidden, focus, span);
+			if (quality.scars !== false) vehicleDust(game, dt, hidden, focus, span);
 			damageAndExplosions(game, dt, hidden, quality.scars !== false);
 			updateBurners(dt);
 			mapEffects(game, dt, focus, span, night, (x, y) => !hidden({ x, y, team: -1 }), gasFlow);
@@ -62940,7 +63319,7 @@ function createSceneLife3D(THREE, { world, heightAt, models3d, hiddenLayer, spla
 			const piece = marks.get(i),
 				r = piece
 					? make(`landmark|${i}|${piece}`, () => models3d.scenery("landmark", piece, o.w, o.h), piece === "eosBeacon" || piece === "nadirCitadel")
-					: make("obstacle|" + i + "|" + o.x + "|" + o.y, () => models3d.scenery("obstacle", space ? "asteroids" : o.kind || "rock", o.w, o.h, biome, i + 1), o.kind === "spire" || o.kind === "grove"),
+					: make("obstacle|" + i + "|" + o.x + "|" + o.y, () => models3d.scenery("obstacle", space ? (o.kind === "hulk" ? "hulk" : "asteroids") : o.kind || "rock", o.w, o.h, space ? RTS.MISSIONS[game.missionId].look?.rocks || "rock" : biome, i + 1), o.kind === "spire" || o.kind === "grove"),
 				cx = o.x + o.w / 2,
 				cy = o.y + o.h / 2;
 			if (!r.placed) {
@@ -62948,6 +63327,8 @@ function createSceneLife3D(THREE, { world, heightAt, models3d, hiddenLayer, spla
 				r.holder.position.set(cx, heightAt(cx, cy), cy);
 			}
 			if (piece) r.model.update({ lit, progress: held }, { time });
+			// Asteroid fields turn slowly; hulks of warships only drift a little, keeping to their field.
+			else if (space && o.kind === "hulk") r.holder.rotation.y = Math.sin(time * 0.06 + i) * 0.015;
 			else if (space) r.holder.rotation.y = time * (0.012 + (i % 3) * 0.006) * (i % 2 ? 1 : -1);
 		});
 		// Deposits (ore, gas, crystals): one model per stage (art.js layouts), swapped when the stage
@@ -63090,15 +63471,18 @@ function createScatter3D(THREE, { world, heightAt, fogged }) {
 	world.add(group);
 
 	// ---------- wind (shared by every swaying material) ----------
-	const wind = { time: { value: 0 }, power: { value: 0.3 } };
+	const wind = { time: { value: 0 }, power: { value: 0.3 } },
+		// Units pushing through the plants (0.144.2): xz, reach, strength — up to 16 near the view.
+		pushers = { value: Array.from({ length: 16 }, () => new THREE.Vector4()) };
 	function windy(material) {
 		const before = material.onBeforeCompile;
 		material.onBeforeCompile = (shader, renderer) => {
 			before?.call(material, shader, renderer);
 			shader.uniforms.windTime = wind.time;
 			shader.uniforms.windPower = wind.power;
+			shader.uniforms.pushers = pushers;
 			shader.vertexShader = shader.vertexShader
-				.replace("#include <common>", "#include <common>\nuniform float windTime;\nuniform float windPower;")
+				.replace("#include <common>", "#include <common>\nuniform float windTime;\nuniform float windPower;\nuniform vec4 pushers[16];")
 				.replace(
 					"#include <begin_vertex>",
 					`#include <begin_vertex>
@@ -63110,7 +63494,22 @@ function createScatter3D(THREE, { world, heightAt, fogged }) {
 					float gust = sin(windTime * 1.6 + root.x * 0.031 + root.y * 0.023) + 0.45 * sin(windTime * 3.3 + root.x * 0.07 - root.y * 0.05);
 					float bend = position.y * position.y * windPower;
 					transformed.x += gust * bend * 0.22;
-					transformed.z += gust * bend * 0.09;`,
+					transformed.z += gust * bend * 0.09;
+					// Grass, reeds, ferns and shrubs bow and spread under a vehicle or a soldier pushing through
+					// (not the trees).
+					#ifdef USE_INSTANCING
+					if (length(instanceMatrix[1].xyz) < 20.0)
+						for (int i = 0; i < 16; i++) {
+							vec4 pu = pushers[i];
+							if (pu.z <= 0.0) break;
+							float d = length(root - pu.xy);
+							if (d < pu.z) {
+								float f = (1.0 - d / pu.z) * pu.w;
+								transformed.y *= 1.0 - f * 0.75;
+								transformed.xz *= 1.0 + f * 0.5;
+							}
+						}
+					#endif`,
 				);
 		};
 		return material;
@@ -63610,12 +64009,55 @@ function createScatter3D(THREE, { world, heightAt, fogged }) {
 			});
 			mesh.count = spots.length;
 			group.add(mesh);
-			batches.push({ mesh, spots });
+			batches.push({ mesh, spots, tree: shape === "tree" });
 		}
 	}
 	// Hides what lies under buildings (zero scale), re-checked when the buildings change.
 	const hidden = new THREE.Matrix4().makeScale(0, 0, 0);
+	// Blasts (0.144.2): trees within a crater's reach fall away from it and stay down; the small plants in
+	// the crater itself are gone.
+	const cratersDone = new WeakSet(),
+		fallQ = new THREE.Quaternion(),
+		turnQ = new THREE.Quaternion(),
+		fallAxis = new THREE.Vector3(),
+		fp = new THREE.Vector3(),
+		fs = new THREE.Vector3();
+	function blasts(game) {
+		let changed = false;
+		for (const k of game.craters || []) {
+			if (cratersDone.has(k)) continue;
+			cratersDone.add(k);
+			const reach = (k.size || 20) * 1.6 + 14;
+			for (const b of batches)
+				for (const o of b.spots) {
+					if (o.fallen || o.gone) continue;
+					const dx = o.x - k.x,
+						dy = o.y - k.y,
+						d = Math.hypot(dx, dy);
+					if (d > reach) continue;
+					if (b.tree) {
+						const a = Math.atan2(dy, dx);
+						fallAxis.set(Math.sin(a), 0, -Math.cos(a));
+						o.matrix.decompose(fp, turnQ, fs);
+						fallQ.setFromAxisAngle(fallAxis, 1.35 + (o.tilt - 0.5) * 0.3).multiply(turnQ);
+						o.matrix = new THREE.Matrix4().compose(fp.setY(fp.y - o.size * 0.08), fallQ, fs);
+						o.fallen = true;
+					} else if (d < reach * 0.55) {
+						o.matrix = hidden;
+						o.gone = true;
+					}
+					changed = true;
+				}
+		}
+		if (!changed) return;
+		for (const { mesh, spots } of batches) {
+			spots.forEach((o, i) => mesh.setMatrixAt(i, o.matrix));
+			mesh.instanceMatrix.needsUpdate = true;
+		}
+		buildingsKey = null;
+	}
 	function update(game) {
+		blasts(game);
 		const buildings = game.entities.filter((e) => e.hp > 0 && !RTS.TYPES[e.type]?.speed);
 		const key = buildings.map((b) => b.id).join(",");
 		if (key === buildingsKey) return;
@@ -63627,8 +64069,9 @@ function createScatter3D(THREE, { world, heightAt, fogged }) {
 		}
 	}
 	// Each frame: the wind (time, and how hard it blows: a breeze, a gale in storms).
-	function tick(time, weather = {}) {
+	function tick(time, weather = {}, push = []) {
 		wind.time.value = time;
+		for (let i = 0; i < 16; i++) (i < push.length ? pushers.value[i].fromArray(push[i]) : pushers.value[i].set(0, 0, 0, 0));
 		const storm = weather.kind ? weather.intensity || 0 : 0;
 		wind.power.value += (0.3 + storm * (weather.kind === "snow" ? 0.6 : 1.2) - wind.power.value) * 0.05;
 	}
@@ -64496,14 +64939,14 @@ function createSpace3D(THREE) {
 		backLight = new THREE.Vector3(0.5, -0.2, -0.84).normalize();
 
 	// ---- the sky sphere: stars, Milky Way, nebulae, the sun (follows the camera, behind everything) ----
-	const skyUniforms = { sunDir: { value: sunDir }, time: { value: 0 } };
+	const skyUniforms = { sunDir: { value: sunDir }, time: { value: 0 }, neb1a: { value: new THREE.Color(0.4, 0.07, 0.3) }, neb1b: { value: new THREE.Color(0.85, 0.3, 0.42) }, neb2a: { value: new THREE.Color(0.04, 0.18, 0.38) }, neb2b: { value: new THREE.Color(0.18, 0.65, 0.8) } };
 	const sky = new THREE.Mesh(
 		new THREE.SphereGeometry(1, 64, 32),
 		new THREE.ShaderMaterial({
 			uniforms: skyUniforms,
 			vertexShader: `varying vec3 vDir;
 				void main() { vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-			fragmentShader: `varying vec3 vDir; uniform vec3 sunDir; uniform float time;
+			fragmentShader: `varying vec3 vDir; uniform vec3 sunDir; uniform float time; uniform vec3 neb1a; uniform vec3 neb1b; uniform vec3 neb2a; uniform vec3 neb2b;
 				${SPACE_NOISE}
 				vec3 hash3(vec3 p) { return fract(sin(vec3(dot(p, vec3(127.1, 311.7, 74.7)), dot(p, vec3(269.5, 183.3, 246.1)), dot(p, vec3(113.5, 271.9, 124.6)))) * 43758.5453); }
 				// A layer of stars: one candidate per cell of a 3D grid on the direction.
@@ -64529,8 +64972,8 @@ function createSpace3D(THREE) {
 					float n1 = smoothstep(0.5, 0.85, sFbm(d * 2.2 + vec3(3.0, 1.0, 7.0))) * smoothstep(0.2, 0.9, dot(d, normalize(vec3(-0.6, -0.3, -0.75))));
 					float n2 = smoothstep(0.52, 0.86, sFbm(d * 2.6 + vec3(9.0, 4.0, 2.0))) * smoothstep(0.1, 0.9, dot(d, normalize(vec3(0.7, -0.2, 0.68))));
 					float fil = sFbm(d * 9.0);
-					col += n1 * mix(vec3(0.4, 0.07, 0.3), vec3(0.85, 0.3, 0.42), fil) * 0.28;
-					col += n2 * mix(vec3(0.04, 0.18, 0.38), vec3(0.18, 0.65, 0.8), fil) * 0.28;
+					col += n1 * mix(neb1a, neb1b, fil) * 0.28;
+					col += n2 * mix(neb2a, neb2b, fil) * 0.28;
 					// Stars: many faint, fewer bright, a few big; tinted by a hash.
 					float s = stars(d, 180.0, 0.35, 0.09) * 0.5 + stars(d, 90.0, 0.18, 0.08) + stars(d, 34.0, 0.08, 0.06) * 2.2;
 					s *= 1.0 + band * 1.5;
@@ -64553,7 +64996,23 @@ function createSpace3D(THREE) {
 	group.add(sky);
 
 	// ---- the gas giant ----
-	const planetUniforms = { sunDir: { value: backLight }, time: { value: 0 }, radius: { value: 1 } };
+	// The light on the planet, its rings and moon (backLight by default; per map in setGame).
+	const planetLight = backLight.clone(),
+		ICE_LIGHT = new THREE.Vector3(-0.65, 0.2, 0.45).normalize();
+	const planetUniforms = {
+		sunDir: { value: planetLight },
+		time: { value: 0 },
+		radius: { value: 1 },
+		// Kind (0 gas giant, 1 ice giant, 2 volcanic moon), its four colours, the contrast of its bands and
+		// the colour of its limb (0.143).
+		kind: { value: 0 },
+		c0: { value: new THREE.Color(0.33, 0.2, 0.14) },
+		c1: { value: new THREE.Color(0.55, 0.3, 0.18) },
+		c2: { value: new THREE.Color(0.78, 0.55, 0.33) },
+		c3: { value: new THREE.Color(0.93, 0.83, 0.66) },
+		bandAmp: { value: 1 },
+		atmo: { value: new THREE.Color(0.45, 0.7, 1.0) },
+	};
 	const planet = new THREE.Mesh(
 		new THREE.SphereGeometry(1, 160, 96),
 		new THREE.ShaderMaterial({
@@ -64567,16 +65026,23 @@ function createSpace3D(THREE) {
 					gl_Position = projectionMatrix * viewMatrix * w;
 				}`,
 			fragmentShader: `varying vec3 vObj; varying vec3 vNormal; varying vec3 vWorld; uniform vec3 sunDir; uniform float time;
+				uniform float kind; uniform vec3 c0; uniform vec3 c1; uniform vec3 c2; uniform vec3 c3; uniform float bandAmp; uniform vec3 atmo;
 				${SPACE_NOISE}
 				void main() {
 					vec3 p = normalize(vObj);
 					float lat = p.y;
+					// Jets (0.144.1): each band of the gas giant drifts at its own speed, its neighbours the other
+					// way, so the eddies and the great storm travel along them and shear at the band edges.
+					if (kind < 0.5) {
+						float ang = time * ((smoothstep(-0.35, 0.35, sin(lat * 7.0)) - 0.5) * 0.02 + 0.006);
+						p = vec3(cos(ang) * p.x - sin(ang) * p.z, p.y, sin(ang) * p.x + cos(ang) * p.z);
+					}
 					// Bands warped by turbulence; slow drift of the jets.
 					float turb = sFbm(p * 6.0 + vec3(0.0, 0.0, time * 0.004));
 					float wob = sFbm(vec3(p.x * 2.0, lat * 18.0, p.z * 2.0) + time * 0.002);
 					float b = lat * 9.0 + turb * 1.4 + wob * 0.8;
-					float bands = 0.5 + 0.5 * sin(b * 3.1) * 0.7 + 0.5 * sin(b * 7.3 + 1.3) * 0.3;
-					vec3 cream = vec3(0.93, 0.83, 0.66), ochre = vec3(0.78, 0.55, 0.33), rust = vec3(0.55, 0.3, 0.18), umber = vec3(0.33, 0.2, 0.14);
+					float bands = 0.5 + (0.5 * sin(b * 3.1) * 0.7 + 0.5 * sin(b * 7.3 + 1.3) * 0.3) * bandAmp;
+					vec3 cream = c3, ochre = c2, rust = c1, umber = c0;
 					vec3 col = mix(mix(umber, rust, smoothstep(0.1, 0.4, bands)), mix(ochre, cream, smoothstep(0.6, 0.9, bands)), smoothstep(0.3, 0.7, bands));
 					// Fine streaks along the bands.
 					col *= 0.85 + 0.3 * sFbm(vec3(p.x * 30.0, lat * 160.0, p.z * 30.0));
@@ -64587,7 +65053,51 @@ function createSpace3D(THREE) {
 					vec3 q = p - c;
 					float spot = length(vec2(dot(q, normalize(cross(c, vec3(0, 1, 0)))) * 0.75, q.y * 1.6));
 					float swirl = sin(atan(q.y, dot(q, normalize(cross(c, vec3(0, 1, 0))))) * 3.0 + spot * 40.0 - time * 0.05);
-					col = mix(col, mix(vec3(0.72, 0.28, 0.16), vec3(0.95, 0.6, 0.42), 0.5 + 0.5 * swirl), smoothstep(0.16, 0.06, spot) * step(0.0, dot(p, c)));
+					if (kind < 0.5) col = mix(col, mix(vec3(0.72, 0.28, 0.16), vec3(0.95, 0.6, 0.42), 0.5 + 0.5 * swirl), smoothstep(0.16, 0.06, spot) * step(0.0, dot(p, c)));
+					// Ice giant: soft bands under high white haze, bright polar caps.
+					// Ice giant (0.143.3, Uranus and Neptune): its pole turned towards the battle — soft haze bands
+					// round it, a bright polar hood with a collar of cloud, white methane clouds drawn out along
+					// the bands, a dark storm with bright clouds riding its edge.
+					if (kind > 0.5 && kind < 1.5) {
+						col = mix(col, vec3(0.82, 0.95, 1.0), smoothstep(0.62, 0.92, lat) * 0.55);
+						col = mix(col, vec3(0.9, 0.98, 1.0), exp(-pow((lat - 0.55) / 0.035, 2.0)) * 0.4);
+						float lon = atan(p.z, p.x);
+						float streaks = smoothstep(0.68, 0.84, sFbm(vec3(lon * 3.0 + time * 0.01, lat * 46.0, 1.0)));
+						col = mix(col, vec3(0.96, 1.0, 1.0), streaks * 0.65 * smoothstep(0.75, 0.1, abs(lat)));
+						// The dark storm drifts round the planet with its band (0.144.1).
+						float ia = time * 0.012;
+						vec3 sc = normalize(vec3(0.75 * cos(ia) - 0.6 * sin(ia), 0.25, 0.75 * sin(ia) + 0.6 * cos(ia))), sq = p - sc;
+						float sd = length(vec2(dot(sq, normalize(cross(sc, vec3(0, 1, 0)))) * 0.7, sq.y * 1.5));
+						float side = step(0.0, dot(p, sc));
+						col = mix(col, vec3(0.06, 0.2, 0.42), smoothstep(0.11, 0.05, sd) * side);
+						col = mix(col, vec3(0.95, 1.0, 1.0), exp(-pow((sd - 0.125) / 0.012, 2.0)) * smoothstep(0.0, 0.05, sq.y) * side * 0.8);
+					}
+					// Volcanic moon: dark crust in plates, no bands.
+					float cracks = 0.0;
+					if (kind > 1.5) {
+						// Volcanic moon (0.143.4, like Io): dark basalt and plains of sulphur, yellow and ochre, pale
+						// patches of frost; calderas — black rims round glowing lakes of lava; a few long lava flows
+						// in some regions only. The lava glows on the day side too, brightest at night.
+						float crust = sFbm(p * 4.0);
+						float sulphur = smoothstep(0.42, 0.62, sFbm(p * 2.6 + 5.0));
+						col = mix(c0, c1, smoothstep(0.3, 0.7, crust));
+						col = mix(col, mix(vec3(0.5, 0.24, 0.04), vec3(0.78, 0.55, 0.1), sFbm(p * 9.0)), sulphur * 0.85);
+						col = mix(col, vec3(0.7, 0.66, 0.55), smoothstep(0.72, 0.86, sFbm(p * 6.0 + 2.0)) * 0.3);
+						col *= (0.75 + 0.5 * sFbm(p * 24.0)) * 0.32;
+						float lakeN = sFbm(p * 3.2 + 17.0);
+						float lake = smoothstep(0.65, 0.69, lakeN);
+						float rim = smoothstep(0.58, 0.65, lakeN) * (1.0 - lake);
+						col = mix(col, vec3(0.05, 0.03, 0.03), clamp(rim * 0.85 + lake, 0.0, 1.0));
+						float vein = abs(sFbm(p * 5.0 + 11.0) - 0.5);
+						float region = smoothstep(0.5, 0.62, sFbm(p * 1.8 + 3.0));
+						col = mix(col, vec3(0.08, 0.04, 0.03), smoothstep(0.03, 0.0, vein) * region * 0.7);
+						cracks = lake * (0.7 + 0.3 * sFbm(p * 30.0 + time * 0.05)) + smoothstep(0.012, 0.0, vein) * region * 0.7;
+						cracks *= 0.85 + 0.15 * sin(time * 0.7 + lakeN * 30.0);
+						// Eruptions (0.144.1): lake after lake flares up white-hot for a moment, the ground round it
+						// glowing too.
+						float erupt = pow(max(0.0, sin(time * 0.45 + lakeN * 53.0)), 14.0);
+						cracks += (lake * 2.2 + rim * 0.6) * erupt;
+					}
 					// Light: a soft terminator, a dim blue night side; the limb glows and scatters the light.
 					vec3 n = normalize(vNormal), v = normalize(cameraPosition - vWorld);
 					float ndl = dot(n, sunDir);
@@ -64598,15 +65108,17 @@ function createSpace3D(THREE) {
 					vec3 cell = floor(p * 26.0);
 					float flash = step(0.996, sHash(cell + floor(time * 2.5))) * (0.5 + 0.5 * sin(time * 40.0 + sHash(cell) * 9.0));
 					float spotL = smoothstep(0.5, 0.0, length(fract(p * 26.0) - 0.5));
-					lit += vec3(0.55, 0.65, 1.0) * flash * spotL * (1.0 - day) * 0.8;
+					lit += vec3(0.55, 0.65, 1.0) * flash * spotL * (1.0 - day) * 0.8 * (1.0 - step(1.5, kind));
 					// Aurorae: curtains of green and violet round the poles, rippling, on the night side.
 					float polar = smoothstep(0.72, 0.84, abs(lat)) * smoothstep(0.97, 0.88, abs(lat));
 					float curtain = 0.5 + 0.5 * sin(atan(p.z, p.x) * 22.0 + sFbm(p * 8.0 + time * 0.03) * 6.0 + time * 0.2);
 					// Seen only edge-on, near the limb (the curtains rise above the clouds).
 					float edgeOn = pow(1.0 - max(0.0, dot(normalize(vNormal), normalize(cameraPosition - vWorld))), 3.0);
-					lit += mix(vec3(0.15, 1.0, 0.55), vec3(0.6, 0.3, 1.0), smoothstep(0.82, 0.93, abs(lat))) * polar * curtain * (1.0 - day) * edgeOn * 0.35;
+					lit += mix(vec3(0.15, 1.0, 0.55), vec3(0.6, 0.3, 1.0), smoothstep(0.82, 0.93, abs(lat))) * polar * curtain * (1.0 - day) * edgeOn * 0.35 * (1.0 - step(1.5, kind));
+					// Lava glowing in the cracks of the volcanic moon, brightest on its night side.
+					lit += mix(c3, c2, 0.5) * cracks * (1.2 - day * 0.75);
 					float fres = pow(1.0 - max(0.0, dot(n, v)), 3.0);
-					lit += vec3(0.45, 0.7, 1.0) * fres * (0.05 + 1.2 * smoothstep(-0.25, 0.4, ndl));
+					lit += atmo * fres * (0.05 + 1.2 * smoothstep(-0.25, 0.4, ndl));
 					// Twilight band: warm scattering along the terminator.
 					lit += vec3(1.0, 0.45, 0.2) * exp(-ndl * ndl / 0.01) * 0.25;
 					gl_FragColor = vec4(lit, 1.0);
@@ -64620,15 +65132,15 @@ function createSpace3D(THREE) {
 	const halo = new THREE.Mesh(
 		new THREE.SphereGeometry(1.045, 96, 64),
 		new THREE.ShaderMaterial({
-			uniforms: { sunDir: { value: backLight } },
+			uniforms: { sunDir: { value: planetLight }, haloColor: planetUniforms.atmo },
 			vertexShader: `varying vec3 vNormal; varying vec3 vWorld;
 				void main() { vNormal = normalize(mat3(modelMatrix) * normal); vec4 w = modelMatrix * vec4(position, 1.0); vWorld = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
-			fragmentShader: `varying vec3 vNormal; varying vec3 vWorld; uniform vec3 sunDir;
+			fragmentShader: `varying vec3 vNormal; varying vec3 vWorld; uniform vec3 sunDir; uniform vec3 haloColor;
 				void main() {
 					vec3 n = normalize(vNormal), v = normalize(cameraPosition - vWorld);
 					float rim = pow(1.0 - abs(dot(n, v)), 5.0);
 					float lit = smoothstep(-0.35, 0.5, dot(n, sunDir));
-					gl_FragColor = vec4(vec3(0.35, 0.62, 1.0) * rim * (0.2 + 1.6 * lit), rim);
+					gl_FragColor = vec4(haloColor * 0.8 * rim * (0.2 + 1.6 * lit), rim);
 				}`,
 			side: THREE.BackSide,
 			transparent: true,
@@ -64644,30 +65156,33 @@ function createSpace3D(THREE) {
 		RING_OUT = 2.05;
 	const ringGeo = new THREE.RingGeometry(RING_IN, RING_OUT, 256, 1);
 	ringGeo.rotateX(-Math.PI / 2);
-	const ringUniforms = { sunDir: { value: backLight }, planetCentre: { value: new THREE.Vector3() }, planetRadius: { value: 1 } };
+	const ringUniforms = { sunDir: { value: planetLight }, planetCentre: { value: new THREE.Vector3() }, planetRadius: { value: 1 }, ringA: { value: new THREE.Color(0.62, 0.55, 0.47) }, ringB: { value: new THREE.Color(0.95, 0.9, 0.82) }, ringAlpha: { value: 0.6 } };
 	const rings = new THREE.Mesh(
 		ringGeo,
 		new THREE.ShaderMaterial({
 			uniforms: ringUniforms,
 			vertexShader: `varying vec3 vLocal; varying vec3 vWorld;
 				void main() { vLocal = position; vec4 w = modelMatrix * vec4(position, 1.0); vWorld = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
-			fragmentShader: `varying vec3 vLocal; varying vec3 vWorld; uniform vec3 sunDir; uniform vec3 planetCentre; uniform float planetRadius;
+			fragmentShader: `varying vec3 vLocal; varying vec3 vWorld; uniform vec3 sunDir; uniform vec3 planetCentre; uniform float planetRadius; uniform vec3 ringA; uniform vec3 ringB; uniform float ringAlpha;
 				${SPACE_NOISE}
 				void main() {
 					float r = length(vLocal.xz);
 					float t = (r - ${RING_IN.toFixed(2)}) / ${(RING_OUT - RING_IN).toFixed(2)};
 					// Bands and gaps: layered ripples, a wide dark gap, thin bright ringlets.
-					float d = 0.55 + 0.25 * sin(r * 160.0) + 0.2 * sin(r * 61.0 + 1.0) + 0.25 * (sNoise(vec3(r * 90.0, 0.0, 0.0)) - 0.5);
+					// Ripples finer than a pixel fade out (no shimmer when the rings are small on screen).
+					float px = fwidth(r);
+					float fine = 1.0 - smoothstep(0.004, 0.012, px), mid = 1.0 - smoothstep(0.01, 0.03, px);
+					float d = 0.55 + 0.25 * sin(r * 160.0) * fine + 0.2 * sin(r * 61.0 + 1.0) * mid + 0.25 * (sNoise(vec3(r * 90.0, 0.0, 0.0)) - 0.5) * fine;
 					d *= smoothstep(0.0, 0.08, t) * smoothstep(1.0, 0.85, t);
 					d *= 1.0 - 0.9 * smoothstep(0.035, 0.0, abs(t - 0.58));
 					d *= 1.0 - 0.6 * smoothstep(0.02, 0.0, abs(t - 0.22));
 					d += smoothstep(0.006, 0.0, abs(t - 0.74)) * 0.6;
-					vec3 col = mix(vec3(0.62, 0.55, 0.47), vec3(0.95, 0.9, 0.82), sNoise(vec3(r * 40.0, 2.0, 0.0)));
+					vec3 col = mix(ringA, ringB, sNoise(vec3(r * 40.0, 2.0, 0.0)));
 					// The planet's shadow: does the way to the sun pass through the planet?
 					vec3 o = vWorld - planetCentre;
 					float bb = dot(o, sunDir), cc = dot(o, o) - planetRadius * planetRadius;
 					float shadow = (bb < 0.0 && bb * bb - cc > 0.0) ? 0.08 : 1.0;
-					gl_FragColor = vec4(col * (0.25 + 1.0 * shadow), clamp(d, 0.0, 1.0) * 0.6);
+					gl_FragColor = vec4(col * (0.25 + 1.0 * shadow), clamp(d, 0.0, 1.0) * ringAlpha);
 					#include <colorspace_fragment>
 				}`,
 			side: THREE.DoubleSide,
@@ -64677,6 +65192,91 @@ function createSpace3D(THREE) {
 		}),
 	);
 	group.add(rings);
+
+	// ---- the black hole (0.143, the map "Wrota Pustki"; 0.143.2 Gargantua as in Interstellar): one
+	// picture facing the camera, drawn whole in a shader so it reads right from every angle — the black
+	// shadow of the horizon, a thin photon ring hugging it, the accretion disk seen almost edge-on as a
+	// bright band across the shadow, and the image of the disk's far side bent by gravity into a halo
+	// over the top (wide) and under the bottom (thin). The disk swirls, white-hot inside, deep red outside,
+	// brighter on the side turning towards the camera (Doppler); the stars behind are lensed into a ring.
+	// Units: the horizon's shadow has radius 1, the picture spans ±7. ----
+	let openRings = false,
+		ringsAligned = false;
+	const blackHole = new THREE.Group();
+	blackHole.visible = false;
+	const holeUniforms = { time: skyUniforms.time };
+	{
+		const picture = new THREE.Mesh(
+			new THREE.PlaneGeometry(14, 14),
+			new THREE.ShaderMaterial({
+				uniforms: holeUniforms,
+				vertexShader: `varying vec2 vP; void main() { vP = position.xy; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+				fragmentShader: `varying vec2 vP; uniform float time;
+					${SPACE_NOISE}
+					// Colour of the gas by heat: deep red, orange, gold, white.
+					vec3 heatCol(float h) {
+						vec3 c = mix(vec3(0.28, 0.02, 0.0), vec3(0.95, 0.28, 0.04), smoothstep(0.0, 0.5, h));
+						c = mix(c, vec3(1.0, 0.62, 0.22), smoothstep(0.5, 0.85, h));
+						return mix(c, vec3(1.0, 0.9, 0.7), smoothstep(0.93, 1.0, h));
+					}
+					// The disk at radius rd (horizon radii) and angle a: brightness, and its heat.
+					float diskAt(float rd, float a, out float heat) {
+						float t = (rd - 1.55) / (5.8 - 1.55);
+						float spin = a - time * 0.25 / max(rd, 1.0);
+						float sw = sFbm(vec3(cos(spin) * rd * 1.7, sin(spin) * rd * 1.7, rd * 2.4));
+						float lanes = 0.78 + 0.22 * sin(rd * 13.0 + sw * 7.0);
+						heat = clamp(0.95 - t * 1.1 + (sw - 0.5) * 0.4, 0.0, 1.0);
+						return smoothstep(0.0, 0.05, t) * smoothstep(1.0, 0.4, t) * (0.5 + 0.5 * sw) * lanes;
+					}
+					void main() {
+						vec2 p = vP;
+						float r = length(p);
+						float shadow = 1.0 - smoothstep(0.97, 1.0, r);
+						vec3 col = vec3(0.0);
+						// The far side of the disk, bent over the top and under the bottom of the shadow.
+						float up = p.y / max(r, 0.001);
+						float band = mix(0.16, 1.0, smoothstep(-0.5, 0.9, up));
+						float u = (r - 1.05) / band;
+						if (u > 0.0 && u < 1.0) {
+							float h;
+							float d = diskAt(1.55 + u * 4.2, atan(p.y, p.x) * 1.3 + 2.0, h);
+							float dop = 1.0 + 0.5 * (-p.x / r);
+							col += heatCol(h) * d * (0.45 + 1.5 * h * h) * dop * smoothstep(0.0, 0.1, u) * (1.0 - u * 0.6);
+						}
+						// The photon ring: a thin, sharp line of light just outside the shadow.
+						col += vec3(1.0, 0.78, 0.5) * exp(-pow((r - 1.025) / 0.014, 2.0)) * 1.3;
+						// The disk itself, almost edge-on; its far half (above the middle) hides behind the shadow,
+						// its near half crosses in front of it.
+						vec2 q = vec2(p.x, p.y / 0.075);
+						float rd = length(q), hd;
+						float dd = diskAt(rd, atan(q.y, q.x), hd);
+						float front = step(p.y, 0.0);
+						float seen = max(front, 1.0 - shadow);
+						float dopD = 1.0 + 0.6 * (-q.x / max(rd, 0.001));
+						vec3 disk = heatCol(hd) * dd * (0.45 + 1.7 * hd * hd) * dopD * seen;
+						float cover = clamp(dd * 1.6, 0.0, 1.0) * front;
+						col = col * (1.0 - cover * shadow) + disk;
+						// A warm haze round it all, and the stars behind bent into a faint ring (the Einstein ring).
+						col += vec3(1.0, 0.36, 0.1) * 0.08 * exp(-max(r - 1.0, 0.0) * 0.8) * (1.0 - shadow);
+						float ring = exp(-pow((r - 2.6) / 0.5, 2.0)) * step(0.985, sHash(vec3(floor(vec2(atan(p.y, p.x) * 60.0, r * 18.0)), 3.0)));
+						col += vec3(0.75, 0.82, 1.0) * ring * 0.6;
+						// Fade the edge of the picture.
+						col *= smoothstep(7.0, 5.5, r);
+						// Premultiplied: the shadow blocks what lies behind, the light adds.
+						gl_FragColor = vec4(col, shadow * (1.0 - cover));
+					}`,
+				transparent: true,
+				blending: THREE.CustomBlending,
+				blendSrc: THREE.OneFactor,
+				blendDst: THREE.OneMinusSrcAlphaFactor,
+				depthWrite: false,
+				fog: false,
+			}),
+		);
+		blackHole.add(picture);
+		blackHole.userData.picture = picture;
+	}
+	group.add(blackHole);
 
 	// ---- a moon: grey, cratered, lit like the planet ----
 	const moon = new THREE.Mesh(
@@ -65166,20 +65766,64 @@ function createSpace3D(THREE) {
 			if (!space) return;
 			// Ahead of the default camera (north) and far below: the planet rises over the far edge of the
 			// view while the battle itself floats over dark space; the rings arc steeply behind it.
-			const R = 6500,
-				centre = new THREE.Vector3(game.W * 0.3, -9500, -8500);
+			// The map's world (0.143): `look` from the mission — gas giant (default), ice giant with rings near
+			// the battle, volcanic moon, or a black hole instead of a planet; colours of sky, nebulae, rings.
+			const look = RTS.MISSIONS[game.missionId].look || {},
+				kind = look.planet || "gas";
+			const PAL = {
+				gas: { c: ["#54331f", "#8c4d2e", "#c78c54", "#edd4a8"], amp: 1, atmo: "#73b3ff", rings: ["#9e8c78", "#f2e6d1"], ringAlpha: 0.6 },
+				ice: { c: ["#24607e", "#3a88a8", "#68b8cf", "#b4e4ee"], amp: 0.35, atmo: "#8fe0ff", rings: ["#8aa6b8", "#eef8ff"], ringAlpha: 0.75 },
+				lava: { c: ["#1c1614", "#4a3a2c", "#ff7a1e", "#ffd070"], amp: 0, atmo: "#a8481e", rings: ["#000000", "#000000"], ringAlpha: 0 },
+			}[kind === "none" ? "gas" : kind];
+			planet.visible = kind !== "none";
+			planetUniforms.kind.value = kind === "ice" ? 1 : kind === "lava" ? 2 : 0;
+			["c0", "c1", "c2", "c3"].forEach((k, i) => planetUniforms[k].value.set(PAL.c[i]));
+			planetUniforms.bandAmp.value = PAL.amp;
+			planetUniforms.atmo.value.set(PAL.atmo);
+			ringUniforms.ringA.value.set(PAL.rings[0]);
+			ringUniforms.ringB.value.set(PAL.rings[1]);
+			ringUniforms.ringAlpha.value = PAL.ringAlpha;
+			// The ice giant (0.143.3) sits far off beyond the board's corner, tipped over like Uranus: its pole
+			// and its rings turned almost towards the battle, the rings open round it like a target (set on the
+			// first frame, from the camera, in update).
+			const R = kind === "ice" ? 1450 : kind === "lava" ? 4200 : 6500,
+				centre = kind === "ice" ? new THREE.Vector3(game.W * 0.2, -9800, -11000) : kind === "lava" ? new THREE.Vector3(game.W * 0.15, -9000, -10500) : new THREE.Vector3(game.W * 0.3, -9500, -8500);
+			// The ice giant is lit from the side (a bright half-disc of ice); the others from behind.
+			planetLight.copy(kind === "ice" || kind === "lava" ? ICE_LIGHT : backLight);
 			planet.position.copy(centre);
 			planet.scale.setScalar(R);
 			planet.rotation.set(0.08, 0.6, -0.12);
 			planetUniforms.radius.value = R;
+			rings.visible = !!look.rings && kind !== "none";
 			rings.position.copy(centre);
 			rings.scale.setScalar(R);
-			// Tilted so the half towards the battle dives down and the far half rises behind the planet.
+			// Far rings: tilted so the half towards the battle dives down and the far half rises behind the
+			// planet; open rings (the ice giant): turned towards the camera in update.
 			rings.rotation.set(1.0, 0.35, 0.2);
+			openRings = look.rings === "near";
+			ringsAligned = false;
 			ringUniforms.planetCentre.value.copy(centre);
 			ringUniforms.planetRadius.value = R;
+			moon.visible = kind === "gas" || kind === "ice";
 			moon.position.set(game.W * 1.35, -2500, -15000);
 			moon.scale.setScalar(650);
+			blackHole.visible = !!look.blackHole;
+			blackHole.position.set(game.W * 0.76, -9500, -8000);
+			blackHole.scale.setScalar(1150);
+			// Sky nebulae in the map's colours.
+			const sky2 = look.sky || [["#661230", "#d94d6b"], ["#0a2e61", "#2ea6cc"]];
+			skyUniforms.neb1a.value.set(sky2[0][0]);
+			skyUniforms.neb1b.value.set(sky2[0][1]);
+			skyUniforms.neb2a.value.set(sky2[1][0]);
+			skyUniforms.neb2b.value.set(sky2[1][1]);
+			// What else floats about.
+			derelict.visible = drones.visible = look.derelict !== false;
+			for (const w of welds) w.userData.off = look.derelict === false;
+			comet.visible = look.comet !== false;
+			convoyShips.visible = glows.visible = look.convoys !== false;
+			iceChunks.visible = look.ice !== false;
+			// The rocks of the deep field take the map's stone: ice, dark basalt, or the default.
+			debris.material.color.set(look.rocks === "ice" ? "#a9bccb" : look.rocks === "dark" ? "#3a3634" : look.rocks === "hulk" ? "#5a4e48" : "#77706a");
 			buildDeep(game);
 			derelict.position.set(game.W * 0.9, -2300, game.H * 0.15);
 			derelict.scale.setScalar(620);
@@ -65190,8 +65834,9 @@ function createSpace3D(THREE) {
 				c.material?.dispose();
 				if (c.isPoints) c.geometry.dispose();
 			}
-			buildNebula(new THREE.Vector3(game.W * 1.6, -2000, -26000), new THREE.Vector3(9000, 4500, 5000), ["#c050d8", "#6a4ae0", "#e0607a"], 777);
-			buildNebula(new THREE.Vector3(game.W * 0.7, -21000, game.H * 2.2), new THREE.Vector3(12000, 3500, 9000), ["#3fa0d8", "#2f6ad0", "#58d0c0"], 991);
+			const neb = look.nebula || [["#c050d8", "#6a4ae0", "#e0607a"], ["#3fa0d8", "#2f6ad0", "#58d0c0"]];
+			buildNebula(new THREE.Vector3(game.W * 1.6, -2000, -26000), new THREE.Vector3(9000, 4500, 5000), neb[0], 777);
+			buildNebula(new THREE.Vector3(game.W * 0.7, -21000, game.H * 2.2), new THREE.Vector3(12000, 3500, 9000), neb[1], 991);
 			let sd = 5151;
 			const r = () => (sd = (Math.imul(sd, 1664525) + 1013904223) >>> 0) / 4294967296;
 			ice = Array.from({ length: ICE }, () => ({ x: r() * game.W * 1.2, z: r() * game.H * 1.2, W: game.W * 1.2, H: game.H * 1.2, y: -140 + r() * 260, vx: 4 + r() * 8, vz: (r() - 0.5) * 5, s: 3 + r() * 7, rx: r() * 6, ry: r() * 6, spin: (r() - 0.5) * 0.4 }));
@@ -65205,8 +65850,22 @@ function createSpace3D(THREE) {
 			planetUniforms.time.value = time;
 			updateDeep(time);
 			derelict.rotation.y = 0.5 + time * 0.006;
+			// The volcanic moon turns slowly, its lava lakes coming round (0.144.1).
+			if (planetUniforms.kind.value > 1.5) planet.rotation.y = 0.6 + time * 0.008;
 			derelictLamps.forEach((l, i) => (l.visible = (time * 0.7 + i * 0.37) % 1 < 0.15));
 			updateSurroundings(time);
+			if (blackHole.visible) blackHole.userData.picture.quaternion.copy(camera.quaternion);
+			if (openRings && !ringsAligned) {
+				// The axis towards the camera, tipped 0.6 rad aside so the rings open as a slightly flat ellipse.
+				ringsAligned = true;
+				const axis = camera.position.clone().sub(planet.position).normalize(),
+					side = new THREE.Vector3().crossVectors(axis, new THREE.Vector3(0, 1, 0)).normalize();
+				axis.applyAxisAngle(side, 0.6);
+				const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), axis);
+				planet.quaternion.copy(q);
+				rings.quaternion.copy(q);
+			}
+			if (welds[0]?.userData.off) for (const w of welds) w.visible = false;
 			sky.position.copy(camera.position);
 			sky.scale.setScalar(camera.far * 0.9);
 			// The streak sits on the sun, fades out as it leaves the view.
@@ -65216,6 +65875,318 @@ function createSpace3D(THREE) {
 			streak.material.opacity = Math.max(0, (inFront - 0.75) / 0.25) * 0.55;
 			streak.visible = streak.material.opacity > 0.01;
 			updateFlare(camera, inFront);
+		},
+	};
+}
+
+// ---- webgl3d/holo-3d.js ----
+/* Holograms of the interface on the 3D board (0.144.3):
+   - Selection: a holographic ring at the foot of every selected unit or building (a thin outer line,
+     dashes running round inside it, four brackets turning) and a column of light rising from it, with a
+     scan line climbing up — for ships it reaches up to the hull.
+   - Orders of the selected units: dashes flowing along the ground from each unit to where it goes, a
+     hologram diamond bobbing over the spot with a ring pulsing under it (mint for a move, amber for an
+     attack move); an attack: red dashes to the target and a red reticle turning round it, pulsing.
+   - Relays: beams of energy from the units taking a relay to its top, pulses running up them in the
+     colour of the side taking it; when a relay changes hands, a burst — a ring racing out over the ground
+     and a pillar of light in the new owner's colour.
+   Visual only; drawn additively, over the scene, without writing depth. */
+function createHolo3D(THREE, { world, heightAt }) {
+	const group = new THREE.Group();
+	group.renderOrder = 9;
+	world.add(group);
+	const time = { value: 0 };
+	const VS = `varying vec3 vP; varying vec2 vUv; void main() { vP = position; vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
+	const shader = (fragmentShader, side = THREE.FrontSide) =>
+		new THREE.ShaderMaterial({
+			uniforms: { time, color: { value: new THREE.Color() }, alpha: { value: 1 } },
+			vertexShader: VS,
+			fragmentShader: `uniform float time; uniform vec3 color; uniform float alpha; varying vec3 vP; varying vec2 vUv;
+				${fragmentShader}`,
+			transparent: true,
+			depthWrite: false,
+			blending: THREE.AdditiveBlending,
+			side,
+			fog: false,
+		});
+	const basic = (color, opacity = 1) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false });
+
+	// ---------- selection ----------
+	const ringGeometry = new THREE.RingGeometry(0.76, 1.02, 72, 1).rotateX(-Math.PI / 2),
+		columnGeometry = new THREE.CylinderGeometry(1, 1, 1, 48, 1, true).translate(0, 0.5, 0);
+	const RING_FS = `void main() {
+			float r = length(vP.xz), a = atan(vP.z, vP.x) / 6.28318 + 0.5;
+			float outer = smoothstep(0.95, 0.975, r) * (1.0 - smoothstep(0.995, 1.02, r));
+			float dash = step(0.45, fract(a * 16.0 - time * 0.35)) * smoothstep(0.78, 0.8, r) * (1.0 - smoothstep(0.85, 0.87, r));
+			float corner = step(0.9, abs(cos(a * 6.28318 * 2.0 + time * 0.6))) * smoothstep(0.88, 0.9, r) * (1.0 - smoothstep(0.93, 0.95, r));
+			gl_FragColor = vec4(color * (outer * 0.9 + dash * 0.5 + corner) * alpha * 1.3, 1.0);
+			#include <colorspace_fragment>
+		}`,
+		COLUMN_FS = `void main() {
+			float v = vUv.y;
+			float base = pow(1.0 - v, 2.5) * 0.2;
+			float scan = exp(-pow((v - fract(time * 0.5)) / 0.04, 2.0)) * 0.35 * (1.0 - v);
+			float lines = 0.7 + 0.3 * step(0.5, fract(v * 16.0 - time * 1.4));
+			gl_FragColor = vec4(color * (base + scan) * lines * alpha, 1.0);
+			#include <colorspace_fragment>
+		}`;
+	const selections = [];
+	function selection(i) {
+		if (!selections[i]) {
+			const ring = new THREE.Mesh(ringGeometry, shader(RING_FS)),
+				column = new THREE.Mesh(columnGeometry, shader(COLUMN_FS, THREE.DoubleSide)),
+				root = new THREE.Group();
+			ring.renderOrder = column.renderOrder = 9;
+			root.add(ring, column);
+			group.add(root);
+			selections[i] = { root, ring, column };
+		}
+		return selections[i];
+	}
+
+	// ---------- orders ----------
+	const MAX_DASHES = 700,
+		dashes = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), basic("#ffffff", 0.7), MAX_DASHES);
+	dashes.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(MAX_DASHES * 3), 3);
+	dashes.frustumCulled = false;
+	dashes.renderOrder = 9;
+	group.add(dashes);
+	const diamondGeometry = new THREE.OctahedronGeometry(1, 0),
+		pulseGeometry = new THREE.RingGeometry(0.86, 1, 48).rotateX(-Math.PI / 2),
+		markers = [];
+	function marker(i) {
+		if (!markers[i]) {
+			const root = new THREE.Group(),
+				diamond = new THREE.Mesh(diamondGeometry, basic("#ffffff", 0.55)),
+				edges = new THREE.LineSegments(new THREE.EdgesGeometry(diamondGeometry), new THREE.LineBasicMaterial({ color: "#ffffff", transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false })),
+				pulse = new THREE.Mesh(pulseGeometry, basic("#ffffff", 0.8));
+			diamond.add(edges);
+			root.add(diamond, pulse);
+			group.add(root);
+			markers[i] = { root, diamond, edges, pulse };
+		}
+		return markers[i];
+	}
+	const reticleGeometry = new THREE.BoxGeometry(1, 1, 1),
+		reticles = [];
+	function reticle(i) {
+		if (!reticles[i]) {
+			const root = new THREE.Group(),
+				turn = new THREE.Group(),
+				material = basic("#ff5a4a", 0.95);
+			for (let k = 0; k < 4; k++) {
+				const corner = new THREE.Group();
+				corner.rotation.y = (k / 4) * Math.PI * 2;
+				const a = new THREE.Mesh(reticleGeometry, material),
+					b = new THREE.Mesh(reticleGeometry, material);
+				a.scale.set(0.34, 0.04, 0.06);
+				a.position.set(0.83, 0, 0.42);
+				b.scale.set(0.06, 0.04, 0.34);
+				b.position.set(1, 0, 0.25);
+				corner.add(a, b);
+				turn.add(corner);
+			}
+			root.add(turn);
+			group.add(root);
+			reticles[i] = { root, turn, material };
+		}
+		return reticles[i];
+	}
+
+	// ---------- relays ----------
+	const beamGeometry = new THREE.CylinderGeometry(1, 1, 1, 10, 1, true).translate(0, 0.5, 0),
+		BEAM_FS = `void main() {
+			float v = vUv.y;
+			float pulse = pow(fract(v * 5.0 - time * 1.6), 8.0);
+			float ends = smoothstep(0.0, 0.08, v) * smoothstep(1.0, 0.92, v);
+			gl_FragColor = vec4(color * (0.35 + 1.4 * pulse) * ends * alpha, 1.0);
+			#include <colorspace_fragment>
+		}`,
+		beams = [];
+	function beam(i) {
+		if (!beams[i]) {
+			const m = new THREE.Mesh(beamGeometry, shader(BEAM_FS, THREE.DoubleSide));
+			m.renderOrder = 9;
+			group.add(m);
+			beams[i] = m;
+		}
+		return beams[i];
+	}
+	const bursts = [],
+		burstMeshes = [],
+		owners = new Map(),
+		pillarGeometry = new THREE.CylinderGeometry(1, 1, 1, 32, 1, true).translate(0, 0.5, 0),
+		PILLAR_FS = `void main() {
+			gl_FragColor = vec4(color * pow(1.0 - vUv.y, 1.6) * alpha, 1.0);
+			#include <colorspace_fragment>
+		}`;
+	function burstMesh(i) {
+		if (!burstMeshes[i]) {
+			const ring = new THREE.Mesh(pulseGeometry, basic("#ffffff", 1)),
+				pillar = new THREE.Mesh(pillarGeometry, shader(PILLAR_FS, THREE.DoubleSide));
+			group.add(ring, pillar);
+			burstMeshes[i] = { ring, pillar };
+		}
+		return burstMeshes[i];
+	}
+
+	const Y = new THREE.Vector3(0, 1, 0),
+		from = new THREE.Vector3(),
+		to = new THREE.Vector3(),
+		dir = new THREE.Vector3(),
+		matrix = new THREE.Matrix4(),
+		quat = new THREE.Quaternion(),
+		scale = new THREE.Vector3(),
+		at = new THREE.Vector3(),
+		tint = new THREE.Color();
+	const COLORS = { move: new THREE.Color("#8dffc8"), attackMove: new THREE.Color("#ffb070"), attack: new THREE.Color("#ff5a4a") };
+
+	return {
+		group,
+		// One frame: selected (a Set of ids), hidden(e), colorOf(team), space (the orbital battle), hover
+		// (the ships' height), viewer.
+		update(game, { clock, selected, hidden, colorOf, space, hover = 34, types }) {
+			time.value = clock;
+			const ground = (x, y) => (space ? 2 : heightAt(x, y));
+			let si = 0,
+				di = 0,
+				mi = 0,
+				ri = 0;
+			const targets = new Map();
+			for (const id of selected) {
+				const e = game.entities.find((u) => u.id === id);
+				if (!e || e.hp <= 0 || hidden(e)) continue;
+				const s = types[e.type];
+				if (!s) continue;
+				const g = ground(e.x, e.y),
+					r = s.radius + 6,
+					sel = selection(si++),
+					c = colorOf(e.team);
+				sel.root.visible = true;
+				sel.root.position.set(e.x, g + 2.5, e.y);
+				sel.ring.scale.setScalar(r);
+				sel.ring.material.uniforms.color.value.set(c);
+				sel.column.material.uniforms.color.value.set(c);
+				// The column: up to the hull of a ship or an aircraft, a short glow for the rest.
+				const h = s.ship ? hover + s.radius * 0.6 : s.flying ? 92 : !s.speed ? Math.min(70, r * 0.9) : r * 1.2 + 8;
+				sel.column.scale.set(r * 0.98, h, r * 0.98);
+				// Orders: where it goes (the end of its path, or the order's point), or its target.
+				const o = e.order;
+				if (!o || !s.speed) continue;
+				let kind = null,
+					tx,
+					ty,
+					target = null;
+				if (o.kind === "attack" && o.targetId) {
+					target = game.entities.find((u) => u.id === o.targetId && u.hp > 0);
+					if (!target || hidden(target)) continue;
+					kind = "attack";
+					tx = target.x;
+					ty = target.y;
+				} else if ((o.kind === "move" || o.kind === "attackMove") && Number.isFinite(o.x)) {
+					kind = o.kind;
+					tx = o.x;
+					ty = o.y;
+				} else continue;
+				const dx = tx - e.x,
+					dy = ty - e.y,
+					L = Math.hypot(dx, dy);
+				if (L < 20) continue;
+				const ux = dx / L,
+					uy = dy / L,
+					color = COLORS[kind],
+					ang = -Math.atan2(uy, ux),
+					end = L - (target ? types[target.type].radius + 14 : 14);
+				// Dashes flowing towards the goal.
+				for (let d = r + ((clock * 40) % 24); d < end && di < MAX_DASHES; d += 24) {
+					const x = e.x + ux * d,
+						y = e.y + uy * d;
+					matrix.compose(at.set(x, ground(x, y) + 3, y), quat.setFromAxisAngle(Y, ang), scale.set(11, 1, 2.2));
+					dashes.setMatrixAt(di, matrix);
+					dashes.setColorAt(di++, color);
+				}
+				const key = kind === "attack" ? "t" + target.id : `${kind}|${Math.round(tx / 20)}|${Math.round(ty / 20)}`;
+				if (!targets.has(key)) targets.set(key, { kind, x: tx, y: ty, target });
+			}
+			for (let i = si; i < selections.length; i++) selections[i].root.visible = false;
+			dashes.count = di;
+			dashes.instanceMatrix.needsUpdate = true;
+			if (dashes.instanceColor) dashes.instanceColor.needsUpdate = true;
+			// Markers at the goals, reticles round the targets.
+			for (const t of targets.values()) {
+				if (t.kind === "attack") {
+					const rt = reticle(ri++),
+						R = types[t.target.type].radius + 12,
+						pulse = 1 + 0.12 * Math.sin(clock * 6);
+					rt.root.visible = true;
+					rt.root.position.set(t.x, ground(t.x, t.y) + (types[t.target.type].ship ? hover : 4), t.y);
+					rt.root.scale.setScalar(R * pulse);
+					rt.turn.rotation.y = clock * 1.2;
+					continue;
+				}
+				const mk = marker(mi++),
+					g = ground(t.x, t.y),
+					color = COLORS[t.kind],
+					k = (clock * 1.1) % 1;
+				mk.root.visible = true;
+				mk.root.position.set(t.x, g, t.y);
+				mk.diamond.position.y = 20 + Math.sin(clock * 3) * 3;
+				mk.diamond.rotation.y = clock * 1.5;
+				mk.diamond.scale.set(5, 8, 5);
+				mk.diamond.material.color.copy(color);
+				mk.edges.material.color.copy(color);
+				mk.pulse.position.y = 3;
+				mk.pulse.scale.setScalar(8 + k * 22);
+				mk.pulse.material.color.copy(color);
+				mk.pulse.material.opacity = (1 - k) * 0.8;
+			}
+			for (let i = mi; i < markers.length; i++) markers[i].root.visible = false;
+			for (let i = ri; i < reticles.length; i++) reticles[i].root.visible = false;
+
+			// Relays: beams from the units taking one to its top; a burst when it changes hands.
+			let bi = 0;
+			for (const n of game.nodes || []) {
+				const prev = owners.get(n);
+				owners.set(n, n.owner);
+				if (prev !== undefined && prev !== n.owner && n.owner >= 0) bursts.push({ x: n.x, y: n.y, t: clock, color: colorOf(n.owner) });
+				if (!(n.capturing >= 0) || !(n.progress > 0) || hidden({ x: n.x, y: n.y, team: -1 })) continue;
+				const top = space ? 2 + 72 : heightAt(n.x, n.y) + 46,
+					c = colorOf(n.capturing);
+				for (const e of game.entities) {
+					const s = types[e.type];
+					if (bi >= 24 || !s?.speed || e.hp <= 0 || Math.hypot(e.x - n.x, e.y - n.y) > 100) continue;
+					if (!(e.team === n.capturing || game.allied?.(n.capturing, e.team)) || hidden(e)) continue;
+					from.set(e.x, ground(e.x, e.y) + (s.ship ? hover : s.flying ? 90 : 12), e.y);
+					to.set(n.x, top, n.y);
+					dir.subVectors(to, from);
+					const len = dir.length();
+					if (len < 5) continue;
+					const b = beam(bi++);
+					b.visible = true;
+					b.position.copy(from);
+					b.quaternion.setFromUnitVectors(Y, dir.normalize());
+					b.scale.set(1.3, len, 1.3);
+					b.material.uniforms.color.value.set(c);
+					b.material.uniforms.alpha.value = 0.6 + 0.4 * n.progress;
+				}
+			}
+			for (let i = bi; i < beams.length; i++) beams[i].visible = false;
+			for (let i = bursts.length - 1; i >= 0; i--) if (clock - bursts[i].t > 1.6) bursts.splice(i, 1);
+			bursts.forEach((b, i) => {
+				const m = burstMesh(i),
+					k = (clock - b.t) / 1.6,
+					g = ground(b.x, b.y);
+				m.ring.visible = m.pillar.visible = true;
+				m.ring.position.set(b.x, g + 4, b.y);
+				m.ring.scale.setScalar(20 + k * 220);
+				m.ring.material.color.set(b.color);
+				m.ring.material.opacity = Math.pow(1 - k, 1.5);
+				m.pillar.position.set(b.x, g, b.y);
+				m.pillar.scale.set(16 + k * 10, 320, 16 + k * 10);
+				m.pillar.material.uniforms.color.value.set(b.color);
+				m.pillar.material.uniforms.alpha.value = Math.pow(1 - k, 2) * 0.9;
+			});
+			for (let i = bursts.length; i < burstMeshes.length; i++) burstMeshes[i].ring.visible = burstMeshes[i].pillar.visible = false;
 		},
 	};
 }
@@ -65305,12 +66276,15 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		terrain = new THREE.Group();
 	world.add(terrain);
 	scene.add(world);
+	// Holograms of the interface: selection, orders, relay beams (0.144.3, webgl3d/holo-3d.js).
+	const holo = createHolo3D(THREE, { world, heightAt: (x, y) => heightAt(x, y) });
 	let game = null,
 		heights = null,
 		tiles = [],
 		groundClock = GROUND_EVERY,
 		timeOfDay = null,
-		clock = 0;
+		clock = 0,
+		frameDt = 0;
 	const terrainHeight = createTerrainHeight(),
 		relief3d = createRelief3D({ RISE });
 	// Water, night lights, weather and particles (webgl3d/scene-fx-3d.js).
@@ -65567,6 +66541,62 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		buildNebula();
 	}
 
+	// The mist of the fog of war (0.144.2): three layers of drifting murk draped over the ground (12, 30 and
+	// 54 above it, following the hills, so they never cut into a slope) — thick and billowing over the
+	// unknown, a thin haze over what was seen before, rolling thicker along the edge of sight; units and
+	// trees stand in it and loom out of it. Read from the fog-of-war map; not in space.
+	let mist = null;
+	const mistColor = { value: new THREE.Color() };
+	function buildMist() {
+		if (mist) {
+			world.remove(mist);
+			mist.traverse((o) => o.geometry?.dispose());
+		}
+		mist = new THREE.Group();
+		mist.visible = !spaceMap();
+		const ground = fx.ground,
+			geometry = new THREE.PlaneGeometry(game.W, game.H, Math.ceil(game.W / 28), Math.ceil(game.H / 28)).rotateX(-Math.PI / 2).translate(game.W / 2, 0, game.H / 2);
+		[12, 30, 54].forEach((lift, layer) => {
+			const m = new THREE.Mesh(
+				geometry,
+				new THREE.ShaderMaterial({
+					uniforms: { heightMap: ground.heightMap, heightInfo: ground.heightInfo, fogMap: fogUniforms.fogMap, fogSize: fogUniforms.fogSize, fogOn: fogUniforms.fogOn, fogTime: fogUniforms.fogTime, mistColor, lift: { value: lift }, layer: { value: layer } },
+					vertexShader: `uniform sampler2D heightMap; uniform vec4 heightInfo; uniform float lift; varying vec2 vXZ;
+						float groundAt(vec2 p) { return texture2D(heightMap, (p / heightInfo.z + 0.5) / heightInfo.xy).r; }
+						void main() {
+							vec3 p = position;
+							vXZ = p.xz;
+							p.y = groundAt(p.xz) + lift;
+							gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
+						}`,
+					fragmentShader: `uniform sampler2D fogMap; uniform vec2 fogSize; uniform float fogOn; uniform float fogTime; uniform vec3 mistColor; uniform float layer; varying vec2 vXZ;
+						${FOG_NOISE}
+						void main() {
+							float seen = texture2D(fogMap, vXZ / fogSize).r;
+							float hide = (1.0 - smoothstep(0.12, 0.42, seen)) + (1.0 - smoothstep(0.45, 0.85, seen)) * 0.18;
+							float edge = smoothstep(0.08, 0.28, seen) * (1.0 - smoothstep(0.3, 0.6, seen));
+							vec2 q = vXZ * 0.0042 + vec2(fogTime * 0.012, fogTime * 0.007) * (1.0 + layer * 0.6) + layer * 7.3;
+							float n = fwNoise(q) * 0.55 + fwNoise(q * 2.3 + 3.1) * 0.3 + fwNoise(q * 5.1 - fogTime * 0.02) * 0.15;
+							float billow = smoothstep(0.28, 0.78, n);
+							float a = clamp((hide * 0.4 + edge * 0.35) * billow, 0.0, 0.55) * (1.0 - layer * 0.25) * fogOn;
+							// Fade at the map's edge.
+							vec2 m = min(vXZ, fogSize - vXZ);
+							a *= smoothstep(0.0, 120.0, min(m.x, m.y));
+							gl_FragColor = vec4(mistColor * (0.8 + 0.4 * n), a);
+							#include <colorspace_fragment>
+						}`,
+					transparent: true,
+					depthWrite: false,
+					fog: false,
+				}),
+			);
+			m.renderOrder = 2 + layer;
+			m.frustumCulled = false;
+			mist.add(m);
+		});
+		world.add(mist);
+	}
+
 	// Space (0.131): the nebula clouds over the gas fields — soft glowing sprites at a few heights, violet
 	// and blue, added light (they brighten what is behind them); none on other maps.
 	let nebula = null,
@@ -65623,7 +66653,8 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			for (let k = 0; k < 12; k++) {
 				const a = k * 2.4 + i,
 					d = k ? R * (0.3 + ((k * 37) % 10) / 16) : 0,
-					m = new THREE.SpriteMaterial({ map: k % 2 ? cloudTexture : nebulaTexture, color: new THREE.Color(k % 3 === 1 ? "#4f86e6" : k % 3 === 2 ? "#c05ad8" : "#8a46e0"), transparent: true, opacity: k % 2 ? 0.12 : 0.04, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }),
+					// The map's nebula colours (look, space-rules.js), violet and blue by default.
+					m = new THREE.SpriteMaterial({ map: k % 2 ? cloudTexture : nebulaTexture, color: new THREE.Color((RTS.MISSIONS[game.missionId].look?.nebula?.[0] || ["#8a46e0", "#4f86e6", "#c05ad8"])[k % 3]), transparent: true, opacity: k % 2 ? 0.12 : 0.04, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }),
 					sprite = new THREE.Sprite(m),
 					size = R * (0.9 + ((k * 53) % 9) / 10);
 				sprite.position.set(f.x + Math.cos(a) * d, -60 + ((k * 29) % 170), f.y + Math.sin(a) * d);
@@ -65649,7 +66680,25 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		const dust = new THREE.BufferGeometry();
 		dust.setAttribute("position", new THREE.BufferAttribute(pos, 3));
 		dust.setAttribute("color", new THREE.BufferAttribute(col, 3));
-		nebula.add(new THREE.Points(dust, new THREE.PointsMaterial({ size: 3.2, map: nebulaTexture, vertexColors: true, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true, fog: false })));
+		// The dust parts before the ships (0.144.1): every speck within a ship's reach is pushed out of the
+		// way (dustShips: the ships near the view, xyz and reach), so a bubble of clear space travels with each
+		// ship and the dust closes behind it.
+		const dustMaterial = new THREE.PointsMaterial({ size: 3.2, map: nebulaTexture, vertexColors: true, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true, fog: false });
+		dustMaterial.onBeforeCompile = (shader) => {
+			shader.uniforms.dustShips = dustShips;
+			shader.vertexShader = shader.vertexShader.replace("#include <common>", "#include <common>\nuniform vec4 dustShips[16];").replace(
+				"#include <begin_vertex>",
+				`#include <begin_vertex>
+				for (int i = 0; i < 16; i++) {
+					vec4 sh = dustShips[i];
+					if (sh.w <= 0.0) break;
+					vec3 d = transformed - sh.xyz;
+					float l = length(d);
+					if (l < sh.w) transformed += d / max(l, 0.001) * (sh.w - l) * 0.8;
+				}`,
+			);
+		};
+		nebula.add(new THREE.Points(dust, dustMaterial));
 		world.add(nebula);
 	}
 
@@ -66181,7 +67230,7 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		decal.receiveShadow = true;
 		group.add(decal);
 		world.add(group);
-		r = { group, decal, plinth: null, key: null, model: null };
+		r = { group, decal, plinth: null, key: null, model: null, bornAt: game.time > 3 ? game.time : -1 };
 		records.set(e.id, r);
 		return r;
 	}
@@ -66403,7 +67452,23 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			built = e.constructionLeft > 0 ? Math.max(0.08, 1 - e.constructionLeft / (s.construction || s.build || 10)) : 1;
 		// The orbital station charges between strikes (0…1).
 		const charge = e.type === "uplink" && e.strikeReady ? Math.max(0, Math.min(1, 1 - (e.strikeReady - game.time) / (RTS.FACTION_FX?.strike?.cooldown || 60))) : 1;
-		r.model.update(e, { time: clock, moving, aim, recoil, built, working: working.has(e.id), charge });
+		// Afterburner (0.144.1): from the ship's motion as the simulation moves it — speeding up from a
+		// stop, hard turns — flaring at once and dying away in about a second.
+		let boost = 0;
+		if (s.ship) {
+			const m = (r.motion ||= { t: game.time, x: e.x, y: e.y, a: e.angle || 0, v: 0, boost: 0 }),
+				dtg = game.time - m.t;
+			if (dtg > 0.02) {
+				const a = e.angle || 0,
+					v = Math.hypot(e.x - m.x, e.y - m.y) / dtg,
+					turn = Math.abs(Math.atan2(Math.sin(a - m.a), Math.cos(a - m.a))) / dtg;
+				m.boost = Math.max(m.boost, Math.min(1, Math.max(0, (v - m.v) / dtg / ((s.speed || 100) * 1.5)) + Math.max(0, (turn - 0.6) / 2.5)));
+				Object.assign(m, { t: game.time, x: e.x, y: e.y, a, v });
+			}
+			m.boost = Math.max(0, m.boost - frameDt * 1.2);
+			boost = m.boost;
+		}
+		r.model.update(e, { time: clock, moving, aim, recoil, built, working: working.has(e.id), charge, boost });
 		// Under construction: the building rises out of the ground inside a scaffold.
 		r.model.root.scale.set(1, built, 1);
 		if (s.flying) r.model.root.position.y = 90;
@@ -66413,6 +67478,7 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		else if (e.type === "worker" && spaceMap()) r.model.root.position.y = DRONE_HOVER;
 		// Stations of the orbital battle float on their platforms (webgl3d/ships-3d.js).
 		else if (building) r.model.root.position.y = stationLift(e, s);
+		warpIn(e, r, s);
 		if (building && built < 1) {
 			if (!r.scaffold) {
 				r.scaffold = models3d.scenery("scaffold", s.radius);
@@ -66808,12 +67874,6 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 				ground = heightAt(e.x, e.y),
 				top = !s.speed ? (options.models && models3d.has(e) ? 62 : buildingHeight(s) + 14) + stationLift(e, s) : s.flying ? 110 : s.ship ? 50 + s.radius : e.type === "worker" && spaceMap() ? 46 : 30,
 				isSelected = selected.has(e.id);
-			if (isSelected) {
-				const ring = pooled(rings, ri++, () => new THREE.Mesh(ringGeometry, new THREE.MeshBasicMaterial({ color: "#8dffc8", transparent: true, opacity: 0.9, depthWrite: false })));
-				ring.visible = true;
-				ring.scale.setScalar(s.radius + 6);
-				ring.position.set(e.x, ground + 3, e.y);
-			}
 			if (isSelected || e.hp < e.maxHp) {
 				const bar = pooled(bars, bi++, () => {
 					const root = new THREE.Group(),
@@ -66891,7 +67951,11 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 					}
 				} else if (!impactsSeen.has(ef)) {
 					impactsSeen.add(ef);
-					fx.shot("impact", ef.tx, toY, ef.ty, ef.rocket || bomb, { air: ef.airTarget });
+					// Space (0.144.1): a shot that gets through to the hull (no shield left) strikes sparks and
+					// flakes of plating off it; no dust kicked up in the void.
+					const hull = spaceMap() ? hullHit(ef) : null;
+					if (hull) fx.shot("hull", ef.tx, toY, ef.ty, ef.rocket || bomb, hull);
+					else fx.shot("impact", ef.tx, toY, ef.ty, ef.rocket || bomb, { air: ef.airTarget || spaceMap() });
 				}
 			} else if (ef.kind === "shieldHit" && ef.ship) {
 				// A ship's shield in space: a bubble round it, flaring where the shot struck, fading.
@@ -67105,19 +68169,22 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 	// sunset, both are faint in the blue hour (where the light changes over), then the cool moonlight
 	// from its own, lower direction. The sky's colours (webgl3d/sky-3d.js) tint the ambient light and
 	// the distance haze; twilight warms the ambient from the horizon.
-	const MOON_LIGHT = new THREE.Color("#a3b8e6"),
-		NIGHT_DEEP = new THREE.Color("#1c2a4e"),
-		NIGHT_AMBIENT = new THREE.Color("#2b3d66"),
+	const MOON_LIGHT = new THREE.Color("#b4c7ee"),
+		NIGHT_DEEP = new THREE.Color("#26385f"),
+		NIGHT_AMBIENT = new THREE.Color("#3a5282"),
 		DAY_AMBIENT = new THREE.Color("#bcd4e6"),
 		DAY_GROUND = new THREE.Color("#3a3226"),
-		NIGHT_GROUND = new THREE.Color("#141922"),
-		skyState = { e: 1, sunDir: new THREE.Vector3(), moonDir: new THREE.Vector3(), zenith: new THREE.Color(), horizon: new THREE.Color(), sunlight: new THREE.Color() };
+		NIGHT_GROUND = new THREE.Color("#1d2532"),
+		GOLDEN = new THREE.Color("#ffae5e"),
+		GOLDEN_TINT = new THREE.Color(1.08, 0.98, 0.84),
+		skyState = { e: 1, golden: 0, sunDir: new THREE.Vector3(), moonDir: new THREE.Vector3(), zenith: new THREE.Color(), horizon: new THREE.Color(), sunlight: new THREE.Color() };
 	const smooth = (a, b, x) => {
 		const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
 		return t * t * (3 - 2 * t);
 	};
 	const SPACE_LIGHT = { zenith: new THREE.Color("#02040a"), horizon: new THREE.Color("#070b1a"), sun: new THREE.Color("#fff3e2"), ambient: new THREE.Color("#7f92c4"), bounce: new THREE.Color("#5a4232") };
-	const SOLAR_GLOW = new THREE.Color("#ffc070"),
+	const SUN_TMP = new THREE.Color(),
+		SOLAR_GLOW = new THREE.Color("#ffc070"),
 		PLANET_GLOW = new THREE.Color("#ff9a5c"),
 		PLANET_FROM = new THREE.Vector3(0.15, -0.85, -0.5).normalize();
 	const spaceMap = () => !!RTS.MISSIONS[game?.missionId]?.space,
@@ -67138,17 +68205,33 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		skyState.moonPhase = (dayIndex * 0.125 + 0.62) % 1;
 		const full = 0.5 - 0.5 * Math.cos(skyState.moonPhase * Math.PI * 2);
 		const sunI = 2.45 * smooth(-0.12, 0.3, elevation),
-			moonI = 0.55 * (0.25 + 0.75 * full) * smooth(-0.05, -0.3, elevation),
+			// Night (0.147.1): a brighter moon and sky light, so the board reads at night without the lamps.
+			// Snow and ice throw the moonlight back (0.147.3): ice maps are brighter at night; the dark basalt
+			// of the ash worlds swallows it, so there the moon is stronger too, or the ground goes black (0.147.4).
+			// The cooled black lava of the magma worlds is far darker still and needs much more moonlight (0.147.6),
+			// and so does the black-green moss of the glowing thicket (0.147.7).
+			biome = RTS.MISSIONS[game?.missionId]?.biome,
+			theme = RTS.MISSIONS[game?.missionId]?.theme,
+			snowNight = theme === "magma" ? 12 : theme === "lumen" ? 8 : biome === "ice" ? 1 : biome === "ash" ? 2.2 : biome === "dust" ? 0.8 : 0,
+			moonI = 1.3 * (1 + 0.35 * snowNight) * (0.45 + 0.55 * full) * smooth(-0.05, -0.3, elevation),
 			bySun = sunI >= moonI,
 			// Moonlight from the moon's side but higher than its disk in the sky: a low light would throw
 			// shadows of the hills across half the map.
-			dir = bySun ? new THREE.Vector3(-across, Math.max(0.12, elevation), 0.45).normalize() : new THREE.Vector3(skyState.moonDir.x, 0.75, skyState.moonDir.z).normalize();
+			// The low sun of dawn and dusk (0.144.2) throws longer shadows than before (down to 0.07).
+			dir = bySun ? new THREE.Vector3(-across, Math.max(0.07, elevation), 0.45).normalize() : new THREE.Vector3(skyState.moonDir.x, 0.75, skyState.moonDir.z).normalize();
 		sun.color.copy(bySun ? colors.sunlight : MOON_LIGHT);
 		sun.intensity = Math.max(0.18, bySun ? sunI : moonI);
+		// The golden hour (0.144.2): with the sun just over the horizon its light turns gold and a little
+		// stronger; the picture is warmed in the grade (cinematic).
+		skyState.golden = bySun ? smooth(-0.06, 0.04, elevation) * (1 - smooth(0.12, 0.3, elevation)) : 0;
+		if (skyState.golden > 0) {
+			sun.color.lerp(GOLDEN, skyState.golden * 0.35);
+			sun.intensity *= 1 + skyState.golden * 0.15;
+		}
 		// Ambient: night blue → day sky, warmed by the horizon in the twilight; the ground bounce darkens.
 		const twilight = Math.max(0, 1 - Math.abs(elevation + 0.02) / 0.2);
 		// At night the sky glows with the moon: deep blue and dim at the new moon, silvery at the full.
-		hemi.intensity = 0.3 + 0.14 * full + day * (0.68 - 0.14 * full) + twilight * 0.12;
+		hemi.intensity = 0.6 + 0.14 * full + 0.14 * snowNight * (1 - day) + day * (0.38 - 0.14 * full) + twilight * 0.12;
 		hemi.color.copy(NIGHT_DEEP).lerp(NIGHT_AMBIENT, full).lerp(DAY_AMBIENT, day).lerp(colors.horizon, twilight * 0.4);
 		hemi.groundColor.copy(NIGHT_GROUND).lerp(DAY_GROUND, day);
 		// Distance haze and the clear colour: the horizon, a little towards the zenith.
@@ -67159,10 +68242,12 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		if (spaceMap()) {
 			skyState.zenith.copy(SPACE_LIGHT.zenith);
 			skyState.horizon.copy(SPACE_LIGHT.horizon);
-			skyState.sunlight.copy(SPACE_LIGHT.sun);
+			// The map's own sun (0.143): white-blue, golden from an accretion disk, red from a dwarf.
+			const spaceSun = (RTS.MISSIONS[game?.missionId]?.look || {}).sun;
+			skyState.sunlight.copy(spaceSun ? SUN_TMP.set(spaceSun) : SPACE_LIGHT.sun);
 			dir.set(-0.62, 0.58, 0.52).normalize();
 			skyState.sunDir.copy(dir);
-			sun.color.copy(SPACE_LIGHT.sun);
+			sun.color.copy(skyState.sunlight);
 			// Vacuum: a hard sun, little ambient light — deep shadows on the hulls.
 			sun.intensity = 3.1;
 			hemi.color.copy(SPACE_LIGHT.ambient);
@@ -67216,7 +68301,8 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		}
 		// Space: the gas giant below throws a warm glow up onto the undersides of ships and stations.
 		if (spaceMap()) {
-			sun2.color.copy(PLANET_GLOW);
+			const glow = (RTS.MISSIONS[game?.missionId]?.look || {}).glow;
+			sun2.color.copy(glow ? SUN_TMP.set(glow) : PLANET_GLOW);
 			sun2.intensity = 0.75;
 			sun2.target.position.set(rig.x, 0, rig.y);
 			sun2.position.copy(sun2.target.position).addScaledVector(PLANET_FROM, 2500);
@@ -67227,9 +68313,207 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		}
 		sky.update({ camera, time: clock, ...skyState, aurora, haze, hazeColor: HAZE[state.kind] || HAZE.rain, cover, flash: state.flash || 0, flashColor: FLASH });
 		sunFx.update({ camera, imageRays: quality.cinema && quality.atmo, sunDir: skyState.sunDir, sunColor: skyState.sunlight, e: skyState.e, haze, mist: groundWeather.mistLevel.value, focus: rig, span: Math.max(1600, Math.min(4200, rig.distance * 2.2)) });
-		sky.clouds(clock, options.cloudShadows === false || spaceMap() ? 0 : 0.4 * (1 - haze * 0.6));
+		// Cloud shadows are a thing of the sun: by moonlight they nearly vanish (0.147.4).
+		sky.clouds(clock, options.cloudShadows === false || spaceMap() ? 0 : 0.4 * (1 - haze * 0.6) * (0.15 + 0.85 * smooth(-0.12, 0.15, skyState.e)));
 		sky.mesh.visible = !spaceMap();
 		space3d.update({ camera, time: clock, sun: skyState.sunDir });
+	}
+
+	// Arrival from hyperspace (0.144): a ship that appears during the battle (built, a raider, a
+	// reinforcement — not the forces at the start, not fighters launched from a carrier) drops out of
+	// hyperspace: a blue-white flash where it arrives, and the ship shoots in from far behind along its
+	// heading, stretched by its speed, with a streak of light behind it, braking hard to a stop (1.1 s).
+	const WARP_TIME = 1.1,
+		warpStreakMaterial = new THREE.MeshBasicMaterial({
+			map: (() => {
+				const c = document.createElement("canvas");
+				c.width = 128;
+				c.height = 16;
+				const x = c.getContext("2d"),
+					g = x.createLinearGradient(0, 0, 128, 0);
+				g.addColorStop(0, "rgba(120,170,255,0)");
+				g.addColorStop(0.75, "rgba(170,210,255,0.7)");
+				g.addColorStop(1, "rgba(255,255,255,1)");
+				x.fillStyle = g;
+				x.fillRect(0, 0, 128, 16);
+				const v = x.createLinearGradient(0, 0, 0, 16);
+				v.addColorStop(0, "rgba(0,0,0,1)");
+				v.addColorStop(0.5, "rgba(0,0,0,0)");
+				v.addColorStop(1, "rgba(0,0,0,1)");
+				x.globalCompositeOperation = "destination-out";
+				x.fillStyle = v;
+				x.fillRect(0, 0, 128, 16);
+				return new THREE.CanvasTexture(c);
+			})(),
+			transparent: true,
+			blending: THREE.AdditiveBlending,
+			depthWrite: false,
+			side: THREE.DoubleSide,
+			fog: false,
+		}),
+		warpStreakGeometry = (() => {
+			const a = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2),
+				b = new THREE.PlaneGeometry(1, 1);
+			const g = new THREE.BufferGeometry();
+			const pos = [...a.attributes.position.array, ...b.attributes.position.array],
+				uv = [...a.attributes.uv.array, ...b.attributes.uv.array],
+				idx = [...a.index.array, ...b.index.array.map((i) => i + 4)];
+			g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+			g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+			g.setIndex(idx);
+			return g;
+		})();
+	function warpIn(e, r, s) {
+		if (!s.ship || e.type === "fighter") return;
+		// Only a ship that has just appeared (not one first seen coming out of the fog of war).
+		if (r.warp === undefined) r.warp = r.bornAt >= 0 && game.time - r.bornAt < 0.5 ? 0 : 1;
+		if (r.warp >= 1) {
+			if (r.warpFx) {
+				r.warpFx.streak.visible = r.warpFx.glare.visible = false;
+				r.model.root.position.x = 0;
+			}
+			return;
+		}
+		r.warp = Math.min(1, r.warp + frameDt / WARP_TIME);
+		if (!r.warpFx) {
+			const streak = new THREE.Mesh(warpStreakGeometry, warpStreakMaterial),
+				glare = new THREE.Sprite(new THREE.SpriteMaterial({ map: glareTexture, color: "#bfe0ff", blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, fog: false }));
+			streak.renderOrder = glare.renderOrder = 8;
+			r.group.add(streak, glare);
+			r.warpFx = { streak, glare };
+		}
+		const t = r.warp,
+			ease = 1 - Math.pow(1 - t, 3),
+			hover = r.model.root.position.y,
+			back = (1 - ease) * 900,
+			R = s.radius;
+		r.model.root.position.x = -back;
+		r.model.root.scale.x = 1 + (1 - ease) * 2.2;
+		const len = R * 2 + back * 1.4,
+			{ streak, glare } = r.warpFx;
+		streak.visible = t < 0.92;
+		streak.position.set(-back - len / 2 + R * 0.5, hover, 0);
+		streak.scale.set(len, R * 0.5, R * 0.5);
+		glare.visible = t < 0.45;
+		glare.position.set(0, hover, 0);
+		glare.scale.setScalar(R * (2.5 + t * 9));
+		glare.material.opacity = Math.pow(1 - t / 0.45, 2) * 0.9;
+	}
+
+	// Units pushing through the grass near the view (0.144.2): the nearest 16 on the ground, their reach
+	// growing with their size (scatter-3d.js bends the plants away).
+	function plantPushers() {
+		if (spaceMap() || !game) return [];
+		const list = [];
+		for (const e of game.entities) {
+			const s = TYPES[e.type];
+			if (!s?.speed || s.flying || s.ship || e.hp <= 0 || hidden(e)) continue;
+			const d = Math.hypot(e.x - rig.x, e.y - rig.y);
+			if (d < rig.distance * 1.3) list.push([e.x, e.y, s.radius * 1.5 + 6, 1, d]);
+		}
+		return list.sort((a, b) => a[4] - b[4]).slice(0, 16);
+	}
+
+	// Ships near the view for the parting dust (buildNebula): up to 16, their reach growing with their size.
+	const dustShips = { value: Array.from({ length: 16 }, () => new THREE.Vector4()) };
+	function updateDustShips() {
+		let n = 0;
+		if (spaceMap() && game) {
+			const span = rig.distance * 1.4,
+				hover = RTS.SPACE?.hover ?? 34;
+			for (const e of game.entities) {
+				const s = TYPES[e.type];
+				if (n >= 16 || !s?.ship || e.hp <= 0 || hidden(e) || Math.abs(e.x - rig.x) > span || Math.abs(e.y - rig.y) > span) continue;
+				dustShips.value[n++].set(e.x, hover, e.y, s.radius * 2.4 + 18);
+			}
+		}
+		for (let i = n; i < 16; i++) dustShips.value[i].set(0, 0, 0, 0);
+	}
+
+	// The ship or station a shot struck, if its shield is down: the way back towards the shooter.
+	function hullHit(ef) {
+		let best = null,
+			bestD = 8;
+		for (const e of game.entities) {
+			if (e.hp <= 0 || e.team === ef.team) continue;
+			const d = Math.hypot(e.x - ef.tx, e.y - ef.ty);
+			if (d < bestD) {
+				bestD = d;
+				best = e;
+			}
+		}
+		if (!best || (best.shield || 0) > 0) return null;
+		const dx = ef.x - ef.tx,
+			dz = ef.y - ef.ty,
+			l = Math.hypot(dx, dz) || 1;
+		return { dx: dx / l, dz: dz / l };
+	}
+
+	// Heat haze sources of the frame (0.144): explosions (strongest at the start), burning buildings and
+	// vehicles, lava near the view, the engines of the big ships in space — up to 16, the strongest, as
+	// [x, y, radius, strength] on the screen for the post pass.
+	const HEAT_TMP = new THREE.Vector3();
+	function heatSources() {
+		if (!quality.haze || !game) return [];
+		const out = [],
+			tanHalf = Math.tan((camera.fov * Math.PI) / 360),
+			span = rig.distance * 1.6,
+			space = spaceMap();
+		const add = (x, h, y, radius, strength) => {
+			if (strength <= 0.02 || Math.abs(x - rig.x) > span || Math.abs(y - rig.y) > span) return;
+			HEAT_TMP.set(x, h, y);
+			const dist = HEAT_TMP.distanceTo(camera.position);
+			HEAT_TMP.project(camera);
+			if (HEAT_TMP.z > 1 || Math.abs(HEAT_TMP.x) > 1.4 || Math.abs(HEAT_TMP.y) > 1.4) return;
+			const r = radius / (2 * dist * tanHalf);
+			if (r < 0.01) return;
+			out.push([HEAT_TMP.x * 0.5 + 0.5, HEAT_TMP.y * 0.5 + 0.5, Math.min(0.45, r), strength]);
+		};
+		for (const ef of game.effects) {
+			if (ef.kind !== "explosion" || (options.fog && !game.isVisible(ef.x, ef.y))) continue;
+			const k = 1 - ef.life / ef.maxLife,
+				size = ef.size || 40,
+				base = ef.space ? ef.lift : heightAt(ef.x, ef.y) + (ef.air ? 90 : 0);
+			add(ef.x, base + size * (ef.space ? 0 : 0.6), ef.y, size * (1.2 + k * 0.8), Math.max(0, 1 - k) * Math.min(1, size / 45));
+		}
+		for (const e of game.entities) {
+			const s = TYPES[e.type];
+			if (!s || e.hp <= 0 || e.constructionLeft > 0 || e.team === 2 || hidden(e)) continue;
+			const f = e.hp / e.maxHp,
+				building = !s.speed;
+			if (!space && !s.flying && (building ? f < 0.3 : s.radius >= 16 && f < 0.2)) add(e.x, heightAt(e.x, e.y) + (building ? Math.min(60, s.radius * 0.8) : 16) + s.radius * 0.5, e.y, s.radius * 1.5, 0.55);
+			// Engines of the big ships (lancer, cruiser, carrier) while they fly.
+			else if (space && s.ship && s.radius >= 18 && (e.path?.length || e.order?.kind === "move" || e.order?.kind === "attackMove")) {
+				const c = Math.cos(e.angle || 0),
+					sn = Math.sin(e.angle || 0);
+				add(e.x - c * s.radius * 1.3, RTS.SPACE?.hover ?? 34, e.y - sn * s.radius * 1.3, s.radius * 0.9, 0.35);
+			}
+		}
+		if (!space)
+			for (const w of game.waters || [])
+				if (w.kind === "lava") add(w.x, heightAt(w.x, w.y) + 20, w.y, Math.max(w.rx, w.ry) * 0.9, 0.3);
+		return out.sort((a, b) => b[2] * b[3] - a[2] * a[3]).slice(0, 16);
+	}
+
+	// The camera shakes at big blasts (0.144): a short tremor, stronger the bigger the blast and the
+	// nearer the view, dying away in half a second (settings: "Wstrząs kamery").
+	const shake = { amp: 0, seen: new WeakSet() };
+	function shakeCamera(dt) {
+		for (const ef of game.effects) {
+			if (ef.kind !== "explosion" || shake.seen.has(ef)) continue;
+			shake.seen.add(ef);
+			const size = ef.size || 40;
+			if (size < 45 || (options.fog && !game.isVisible(ef.x, ef.y))) continue;
+			const near = Math.max(0, 1 - Math.hypot(ef.x - rig.x, ef.y - rig.y) / (rig.distance * 1.5));
+			shake.amp = Math.min(1, Math.max(shake.amp, near * Math.min(1, (size - 35) / 80)));
+		}
+		shake.amp *= Math.exp(-dt * 6);
+		if (!quality.shake || shake.amp < 0.003) return;
+		const a = shake.amp * rig.distance * 0.006;
+		camera.position.x += Math.sin(clock * 53) * a;
+		camera.position.y += Math.sin(clock * 61 + 1) * a * 0.6;
+		camera.position.z += Math.sin(clock * 47 + 2) * a;
+		camera.rotateZ(Math.sin(clock * 37) * shake.amp * 0.004);
 	}
 
 	function placeCamera() {
@@ -67310,7 +68594,7 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		const o = typeof SceneFX !== "undefined" ? SceneFX.options : {},
 			level = { high: 0, medium: 1, low: 2 },
 			terrainLevel = level[o.terrain] ?? 0,
-			key = [o.terrain, o.particles, o.shadows, o.lights, o.water, o.scars, o.relief, o.flashes, o.cinema, o.ao, o.bloom, o.pbr, o.reflect, o.atmo, o.surface, o.dof].join("|");
+			key = [o.terrain, o.particles, o.shadows, o.lights, o.water, o.scars, o.relief, o.flashes, o.cinema, o.ao, o.bloom, o.pbr, o.reflect, o.atmo, o.surface, o.dof, o.haze, o.shake].join("|");
 		if (key === qualityKey) return;
 		const first = qualityKey === null,
 			reliefChanged = !first && quality.relief !== (o.relief !== false),
@@ -67335,6 +68619,9 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			surface: o.surface !== false,
 			pbr: o.pbr !== false,
 			dof: o.dof !== false,
+			// Heat haze (0.144, a post pass of the cinematic image) and the camera shaking at big blasts.
+			haze: o.cinema !== false && o.haze !== false,
+			shake: o.shake !== false,
 		});
 		models3d.setSurface(quality.surface);
 		groundWeather.pbrOn.value = o.pbr !== false && !spaceMap() ? 1 : 0;
@@ -67390,8 +68677,9 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			g = GRADES[m.theme] || GRADES[m.biome] || GRADES.dust;
 		grade.lightTint.setRGB(...g.light).lerp(NIGHT_LIGHT, night);
 		grade.shadowTint.setRGB(...g.shadow).lerp(NIGHT_SHADOW, night);
-		grade.saturation = g.saturation * (1 - 0.18 * night);
-		grade.exposure = 1.22 + 0.35 * night;
+		grade.saturation = g.saturation * (1 - 0.18 * night) * (1 + (skyState.golden || 0) * 0.12);
+		if (!spaceMap()) grade.lightTint.lerp(GOLDEN_TINT, (skyState.golden || 0) * 0.5);
+		grade.exposure = 1.22 + 0.65 * night;
 		overlayUniforms.overlayLinear.value = 1;
 		const haze = weatherState.haze || 0;
 		atmo.sunColor.copy(skyState.sunlight).multiplyScalar(smooth(-0.05, 0.2, skyState.e) * 1.2);
@@ -67407,7 +68695,8 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		});
 		post.render(scene, camera, { ...grade, atmosphere: quality.atmo ? atmo : null, ao: quality.ao, bloom: quality.bloom, aoRadius: Math.max(18, Math.min(40, rig.distance * 0.03)), aoStrength: 1.3, aoFade: rig.distance * 2, bloomStrength: spaceMap() ? 0.5 : 0.3 + 0.15 * night,
 			// Depth of field (tilt-shift) in space: strongest close in (a miniature), gentle zoomed out.
-			dof: quality.dof && spaceMap() ? 0.15 + 0.35 * smooth(2600, 900, rig.distance) : 0, view: globalThis.post3dView || 0 });
+			dof: quality.dof && spaceMap() ? 0.15 + 0.35 * smooth(2600, 900, rig.distance) : 0, view: globalThis.post3dView || 0,
+			heat: heatSources(), time: clock });
 	}
 
 	// Reflections in the water (0.127): the scene seen from under the surface of the flat water nearest the
@@ -67532,6 +68821,7 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			buildFog();
 			buildTerrain();
 			fx.setGame(game, heights);
+			buildMist();
 			life.setGame(game);
 			scatter.setGame(game, spaceMap() ? 0 : quality.scatter);
 			objectives.setGame(game);
@@ -67543,6 +68833,7 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			const started = performance.now();
 			applyQuality(this);
 			clock += dt;
+			frameDt = dt;
 			if ((groundClock -= dt) <= 0) {
 				groundClock = GROUND_EVERY;
 				refreshTiles();
@@ -67568,6 +68859,7 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 				}
 			collapse(dt);
 			syncMarks();
+			holo.update(game, { clock, selected, hidden, space: spaceMap(), hover: RTS.SPACE?.hover ?? 34, types: TYPES, colorOf: (team) => game.colorFor?.(team) || COLORS[team] || "#8dffc8" });
 			syncSigns();
 			gasView = labelView();
 			scatter.update(game);
@@ -67584,6 +68876,10 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 				day = light(Math.sin(a), Math.cos(a));
 			}
 			placeCamera();
+			shakeCamera(dt);
+			// The mist of the fog of war takes the colour of the haze, a little lighter, dark at night.
+			mistColor.value.copy(scene.fog.color).lerp(hemi.color, 0.25);
+			updateDustShips();
 			const night = sunOverride?.night ?? 1 - day;
 			// Space: the lights of hulls and stations burn as at night against the dark.
 			models3d.setNight(spaceMap() ? 0.8 : night);
@@ -67606,7 +68902,7 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 				quality,
 			});
 			weatherLight(weatherState);
-			scatter.tick(clock, weatherState);
+			scatter.tick(clock, weatherState, plantPushers());
 			groundWeather.wetness.value = weatherState.wetness || 0;
 			groundWeather.snowCover.value = weatherState.snowCover || 0;
 			groundWeather.rainLevel.value = weatherState.kind === "rain" ? weatherState.intensity || 0 : 0;

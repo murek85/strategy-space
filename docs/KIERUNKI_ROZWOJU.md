@@ -11,7 +11,7 @@ Największy potencjał: połączyć te systemy w czytelne decyzje o rozwoju i sp
 
 ## 1. Drzewo technologii i etapy rozwoju
 
-Aktualizacja 2026-09-24: [pierwsza wersja drzewa](DRZEWO_ROZWOJU.md) jest wdrożona dla obecnych zależności, ze zlecaniem badań i produkcji. Dwa pierwsze poziomy wdrożono: [Przyczółek i Kolonia](POZIOMY_CENTRUM.md). Trzeci poziom i doktryny pozostają propozycjami.
+Aktualizacja 2026-09-24: [pierwsza wersja drzewa](DRZEWO_ROZWOJU.md) jest wdrożona dla obecnych zależności, ze zlecaniem badań i produkcji. Dwa pierwsze poziomy wdrożono: [Przyczółek i Kolonia](POZIOMY_CENTRUM.md). Trzeci poziom (Twierdza) i doktryny frakcji wdrożono w 0.147 — [opis](POZIOMY_CENTRUM.md#poziom-iii--twierdza-i-doktryny-frakcji-0147).
 
 Proponowane trzy poziomy centrum dowodzenia: Przyczółek → Kolonia → Twierdza planetarna. To propozycja zmiany progresji, nie obecny warunek produkcji.
 

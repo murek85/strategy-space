@@ -131,6 +131,12 @@ function buildNature() {
 	add("wyspa · Lumeria", models.scenery("island", "lumen", 60, 1), -300, 950, undefined, 90);
 	add("wyspa · Aerion", models.scenery("island", "skyfall", 70, 2), 0, 950, undefined, 90);
 	[14, 24, 40].forEach((size, i) => add(`wrak · ${size}`, models.scenery("wreck", size, i + 5), 250 + i * 80, 950, { id: i, life: 20 }));
+	// Space deposits (orbit): ore, gas, crystals — full and half-empty.
+	["ore", "gas", "crystal"].forEach((kind, k) => [6, 3].forEach((n, i) => add(`kosmos · ${kind} · ${n}/6`, models.scenery("deposit", kind, n, true), -260 + k * 180, 2750 + i * 140)));
+	// The relay in space: a relay satellite (owned and neutral).
+	add("Przekaźnik · kosmos", models.scenery("relay", "#9ae5cb", false, null, true), 400, 2800, { progress: 0.5, capturing: 0 });
+	// Space: hulks of warships ("Cmentarzysko Floty") — a long one broken in two, short prows and sterns.
+	[[820, 100, 1], [360, 80, 2], [360, 80, 5], [300, 80, 3], [220, 90, 9]].forEach(([w, h, seed], i) => add(`kadłub · ${w}`, models.scenery("obstacle", "hulk", w, h, "hulk", seed), i ? -700 + i * 420 : 0, i ? 2450 : 2250));
 	// Act III: the Heart of the Swarm (chapter IX), a nest (chapter VIII), the orbital station, the Peak.
 	const gate = (id) => ({ id, type: "hq", team: 1, faction: "swarm", x: 0, y: 0, hp: 1, maxHp: 1, angle: 0 });
 	models.setMission("colony9");
@@ -176,6 +182,8 @@ $("night").onclick = () => $("night").classList.toggle("on", (night = night ? 0 
 // Orbit camera; click a model to fly to it.
 const cam = { yaw: 2.2, pitch: 0.5, distance: 1100, target: new THREE.Vector3(0, 0, 0), goal: new THREE.Vector3(0, 0, 0), goalDistance: 1100 };
 let drag = null;
+// For a quick look from the console: galleryCam.goal.set(x, y, z), galleryCam.goalDistance = d.
+window.galleryCam = cam;
 renderer.domElement.addEventListener("pointerdown", (e) => (drag = { x: e.clientX, y: e.clientY, moved: 0 }));
 renderer.domElement.addEventListener("pointermove", (e) => {
 	if (!drag) return;

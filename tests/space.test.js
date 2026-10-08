@@ -279,3 +279,37 @@ test("storm warnings in space speak of what the storm does, not of movement", ()
 	const warning = notes.find((n) => n.startsWith("OSTRZEŻENIE"));
 	assert.ok(warning && !/Ruch/.test(warning), warning);
 });
+
+test("three more maps in space, each its own world: layout, look and storms", () => {
+	const ids = ["glacis", "abyss", "graveyard"];
+	const looks = new Set();
+	for (const id of ids) {
+		const m = MISSIONS[id];
+		assert.ok(m && m.space && !m.campaign && m.look && m.description.length > 80, id);
+		looks.add(m.look.blackHole ? "void" : m.look.planet);
+		for (const size of ["small", "medium", "large"]) {
+			const g = new Game(7, id);
+			g.configureSkirmish({ size, players: 4 });
+			const hqs = g.entities.filter((e) => e.type === "hq"),
+				reach = g.reachable(hqs[0]);
+			for (const o of [...g.ores, ...g.gasFields, ...g.crystalFields]) {
+				assert.equal(g.blocked(o.x, o.y, 10), false, id + " deposit free");
+				assert.ok(reach(o), id + " deposit reachable");
+			}
+			for (const hq of hqs) assert.ok(reach(hq), id + " bases connected");
+			assert.ok(g.entities.some((e) => e.type === "pirateBase"), id + " pirates");
+		}
+		// Only its own storms come.
+		const g = new Game(7, id);
+		g.configureSkirmish({ size: "medium", players: 2 });
+		const kinds = new Set();
+		for (let t = 0; t < 2000; t += 5) {
+			g.time = t;
+			kinds.add(g.weather.kind);
+		}
+		assert.deepEqual([...kinds].sort(), [...m.storms].sort(), id);
+	}
+	assert.equal(looks.size, 3, "three different worlds");
+	assert.ok(new Game(7, "graveyard").obstacles.some((o) => o.kind === "hulk"));
+	assert.equal(new Game(7, "abyss").weather.name, "Rozbłysk dysku");
+});

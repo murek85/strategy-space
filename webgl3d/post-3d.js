@@ -236,7 +236,25 @@ export function createPost3D(THREE, renderer) {
 		uniform float vignette; uniform float aspect; uniform float grade; uniform float view;
 		uniform sampler2D tDepth; uniform sampler2D tRays; uniform mat4 projInv; uniform mat4 camWorld; uniform vec3 camPos;
 		uniform float atmoOn; uniform vec3 sunDir; uniform vec3 sunColor; uniform vec3 hazeColor; uniform float fogBase; uniform float fogDensity; uniform float fogFalloff; uniform float raysOn;
+		uniform vec4 heat[16]; uniform float heatTime;
 		varying vec2 vUv;
+		// Heat haze (0.144): the air shimmers over explosions, fires, lava and engines — the picture is
+		// shifted by small ripples climbing up the screen, strongest in the middle of each source (x, y its
+		// centre on screen, z its radius in screen heights, w its strength).
+		vec2 heatShift(vec2 uv) {
+			vec2 off = vec2(0.0);
+			for (int i = 0; i < 16; i++) {
+				vec4 h = heat[i];
+				if (h.w <= 0.0) break;
+				vec2 d = (uv - h.xy) * vec2(aspect, 1.0);
+				float f = smoothstep(1.0, 0.15, length(d) / h.z) * h.w;
+				if (f <= 0.001) continue;
+				float ph = uv.y / h.z * 22.0 - heatTime * 7.0,
+					px = uv.x * aspect / h.z * 9.0 + heatTime * 2.1;
+				off += vec2(sin(ph + 1.6 * sin(px)), cos(ph * 0.83 + px * 0.5)) * f * h.z * 0.03;
+			}
+			return off;
+		}
 		// ACES filmic, the fit by Stephen Hill (input and output in linear sRGB primaries).
 		vec3 aces(vec3 c) {
 			const mat3 i = mat3(0.59719, 0.07600, 0.02840, 0.35458, 0.90834, 0.13383, 0.04823, 0.01566, 0.83777);
@@ -251,7 +269,7 @@ export function createPost3D(THREE, renderer) {
 			// Diagnostics (window.post3dView): 1 = the occlusion alone, 2 = the bloom alone.
 			if (view > 2.5) { vec4 r = texture2D(tColor, vUv); bool bad = any(isnan(r)) || any(isinf(r)); float l = max(r.r, max(r.g, r.b)); gl_FragColor = vec4(bad ? vec3(0.0, 0.0, 1.0) : l > 8.0 ? vec3(1.0, 0.0, 0.0) : l < 0.0 ? vec3(0.0, 1.0, 0.0) : vec3(min(l, 1.0) * 0.3), 1.0); return; }
 			if (view > 0.5) { gl_FragColor = vec4(view < 1.5 ? vec3(texture2D(tAo, vUv).r) : srgb(min(texture2D(tBloom, vUv).rgb, 1.0)), 1.0); return; }
-			vec3 c = texture2D(tColor, vUv).rgb;
+			vec3 c = texture2D(tColor, heat[0].w > 0.0 ? vUv + heatShift(vUv) : vUv).rgb;
 			if (any(isnan(c)) || any(isinf(c))) c = vec3(0.0);
 			c = min(c, vec3(64.0));
 			if (aoOn > 0.5) c *= texture2D(tAo, vUv).r;
@@ -315,6 +333,8 @@ export function createPost3D(THREE, renderer) {
 			fogDensity: { value: 0 },
 			fogFalloff: { value: 0.01 },
 			raysOn: { value: 0 },
+			heat: { value: Array.from({ length: 16 }, () => new THREE.Vector4()) },
+			heatTime: { value: 0 },
 		},
 	);
 
@@ -475,6 +495,10 @@ export function createPost3D(THREE, renderer) {
 			u.vignette.value = s.vignette ?? 0.28;
 			u.grade.value = s.grade ?? 1;
 			u.view.value = s.view || 0;
+			// Heat sources: [x, y, radius, strength] × up to 16 (s.heat), the rest switched off.
+			const hs = s.heat || [];
+			u.heat.value.forEach((v, i) => (i < hs.length ? v.fromArray(hs[i]) : v.set(0, 0, 0, 0)));
+			u.heatTime.value = s.time || 0;
 			u.aspect.value = width / height;
 			pass(finish, null);
 			renderer.autoClear = autoClear;

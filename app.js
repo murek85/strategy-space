@@ -108,6 +108,8 @@
 			me = g.humans?.[0] ?? 0;
 		if (g.entities.some((e) => e.type === "hq" && e.hp > 0 && e.team !== me && e.team !== 2 && !g.allied?.(me, e.team) && g.factionFor?.(e.team)?.key === "swarm")) return "game:hive";
 		if (m.theme === "derelict") return "game:wreck";
+		// Space (0.145): themes in the manner of "Interstellar", one for each world.
+		if (m.space) return { glacis: "game:glacis", abyss: "game:void", graveyard: "game:requiem" }[g.missionId] || "game:orbit";
 		if (m.theme === "lumen" || m.theme === "skyfall" || m.theme === "space") return "game:lumen";
 		if (m.theme === "magma" || g.missionId === "colony6") return "game:forge";
 		return "game:" + (m.sunny ? "sun" : m.biome);
@@ -527,7 +529,7 @@
 		}
 		if (es.length === 1 && es[0].type === "hq" && es[0].team === (game.viewer ?? 0))
 			$("selection-detail").textContent =
-				`Centrum ${game.centerLevel()} — ${game.centerLevel() === 2 ? "Kolonia" : "Przyczółek · rozbudowa w BADANIA / F2"}${game.research?.kind === "colony" ? " · rozbudowa " + Math.floor(100 * (1 - game.research.left / game.research.total)) + "%" : ""}`;
+				`Centrum ${game.centerLevel()} — ${["", "Przyczółek · rozbudowa w BADANIA / F2", "Kolonia", "Twierdza"][game.centerLevel()]}${game.doctrineOf?.(game.viewer ?? 0) ? " · " + game.doctrineOf(game.viewer ?? 0).name.replace("Doktryna: ", "doktryna ") : ""}${["colony", "fortress"].includes(game.research?.kind) ? " · rozbudowa " + Math.floor(100 * (1 - game.research.left / game.research.total)) + "%" : ""}`;
 		if ($("army-formation")) {
 			for (const button of $("army-formation").querySelectorAll("button"))
 				button.setAttribute("aria-checked", String(button.dataset.formation === (game.formation || "line")));
@@ -1310,6 +1312,8 @@
 	}
 	// The loading screen (loading-screen.js) over the start of a mission: shown first, the mission built two frames
 	// later (so the screen is painted), held until the board has drawn its first frames.
+	// The world the loading screen arrives at, for a map in space (its look, space-rules.js).
+	const spaceWorld = (m) => (m.look?.blackHole ? "spaceVoid" : m.look?.planet === "ice" ? "spaceIce" : m.look?.planet === "lava" ? "spaceLava" : "space");
 	function launchWithScreen(missionId = "horizon", scenario = null, prepared = null) {
 		if (typeof LoadingScreen === "undefined" || prepared) return restart(missionId, scenario, prepared);
 		const m = MISSIONS[missionId] || {},
@@ -1318,7 +1322,7 @@
 				title: m.name,
 				planet: m.planet,
 				// The orbital battle arrives at the gas giant (loading-screen.js "space").
-				biome: m.space ? "space" : m.biome,
+				biome: m.space ? spaceWorld(m) : m.biome,
 				reduced: !!menu?.reduced,
 			});
 		requestAnimationFrame(() =>
@@ -1336,7 +1340,7 @@
 		const ok = loadGame(key);
 		if (ok && typeof LoadingScreen !== "undefined") {
 			const m = MISSIONS[game.missionId] || {},
-				screen = LoadingScreen.show({ eyebrow: "WCZYTANY ZAPIS · " + timeLabel(game.time), title: m.name, planet: m.planet, biome: m.space ? "space" : m.biome, reduced: !!menu?.reduced, minTime: 1.2 });
+				screen = LoadingScreen.show({ eyebrow: "WCZYTANY ZAPIS · " + timeLabel(game.time), title: m.name, planet: m.planet, biome: m.space ? spaceWorld(m) : m.biome, reduced: !!menu?.reduced, minTime: 1.2 });
 			afterFrames(3, () => screen.done());
 		}
 		return ok;
@@ -1526,6 +1530,13 @@
 	// The field of each research, shown as a tag on its card.
 	const RESEARCH_FIELDS = {
 		colony: "KOLONIA",
+		fortress: "TWIERDZA",
+		doctrineMobility: "DOKTRYNA",
+		doctrineBridgehead: "DOKTRYNA",
+		doctrineBarrage: "DOKTRYNA",
+		doctrineShields: "DOKTRYNA",
+		doctrineTide: "DOKTRYNA",
+		doctrineCarapace: "DOKTRYNA",
 		meteorology: "POGODA",
 		meteorShield: "ORBITA",
 		guidance: "POGODA",
@@ -1725,6 +1736,14 @@
 			"Ⅱ",
 			"",
 		]);
+		// Centre level III and the doctrines of the side's faction (doctrine-rules.js), after the Colony.
+		if (RESEARCH.fortress)
+			groups.research.splice(
+				1,
+				0,
+				["fortress", RESEARCH.fortress.name, RESEARCH.fortress.description, "Ⅲ", ""],
+				...(game.doctrines?.(game.viewer ?? 0) || []).map((d) => [d.id, d.name.replace("Doktryna: ", "Doktryna · "), d.effect, "✪", ""]),
+			);
 		groups.build.push([
 			"battery",
 			"Akumulator energii",
@@ -1830,6 +1849,13 @@
 		document.querySelectorAll("[data-research]").forEach(
 			(b) =>
 				(b.onclick = () => {
+					const r = RESEARCH[b.dataset.research];
+					// A doctrine is final: say so before it starts.
+					if (r?.doctrine && !window.confirm(`${r.name}
+
+${r.description}
+
+Przyjąć tę doktrynę?`)) return;
 					act("startResearch", b.dataset.research);
 					updateHud();
 				}),

@@ -1,6 +1,6 @@
 # Plan rozwoju prototypu
 
-Aktualizacja: 2026-10-07. Aktualna wersja: 0.142.2.
+Aktualizacja: 2026-10-08. Aktualna wersja: 0.147.7.
 
 Ten plik jest punktem wejścia do dokumentacji: opisuje bieżący stan, otwarte kierunki i historię wersji. Instrukcja gry i sterowanie: [README](../README.md).
 
@@ -43,9 +43,8 @@ Wpis nie oznacza zlecenia realizacji ani terminu.
 
 | Kierunek | Źródło | Status |
 |---|---|---|
-| Poziom III centrum (Twierdza) i doktryny frakcji | [Kierunki §1](KIERUNKI_ROZWOJU.md) | Propozycja, po ocenie tempa rozgrywki |
+| Twierdza i doktryny dalej: doktryny w rękach AI, balans kosztów i efektów po rozgrywkach, specjalistyczne lotnictwo i osłony dla poziomu III | [Poziomy centrum](POZIOMY_CENTRUM.md) | Propozycja |
 | AI dalej: budynki wsparcia, moduły i jednostki specjalne w rękach AI; strojenie dowódcy w kampanii z rozgrywek (mgła wojny dla AI — wdrożona w 0.129) | [AI przeciwnika](AI_PRZECIWNIKA.md), [Etap E](ETAP_E_WSPARCIE_I_MODULY.md) | Propozycja |
-| WAL-01: skały blokujące ostrzał | Archiwum poniżej | Propozycja |
 | DOW-01 dalej: patrol i rozkaz eskorty | [Pomysły](POMYSLY.md) | Propozycja |
 | Bohaterowie | [Pomysły](POMYSLY.md) | Propozycja |
 | Scenariusze dalej: edytor map, wyzwania z ziarnem i tabele wyników; balans Ekspedycji, Króla wzgórza i Przetrwania | [Kierunki §9](KIERUNKI_ROZWOJU.md), [Etap F](ETAP_F.md) | Propozycja |
@@ -246,6 +245,29 @@ Przy każdym kolejnym etapie należy uruchomić pełny zestaw, nie tylko testy u
 | 0.142 | Burza słoneczna i deszcz asteroid na zmianę z jonową; badanie osłon przeciwmeteorytowych — [opis](BITWA_NA_ORBICIE.md) |
 | 0.142.1 | Ostrzeżenia burz w kosmosie opisują ich skutki, bez wzmianki o ruchu — [opis](BITWA_NA_ORBICIE.md) |
 | 0.142.2 | Łagodniejsza głębia ostrości w kosmosie — [opis](BITWA_NA_ORBICIE.md) |
+| 0.143 | Trzy nowe mapy w kosmosie: Pierścienie Glacjalis, Wrota Pustki, Cmentarzysko Floty — [opis](BITWA_NA_ORBICIE.md) |
+| 0.143.1 | Nowy model wraków okrętów na Cmentarzysku Floty; wraki nie obracają się — [opis](BITWA_NA_ORBICIE.md) |
+| 0.143.2 | Czarna dziura Erebus w stylu Gargantui — [opis](BITWA_NA_ORBICIE.md) |
+| 0.143.3 | Lodowy olbrzym Glacjalis przewrócony jak Uran, z otwartymi pierścieniami — [opis](BITWA_NA_ORBICIE.md) |
+| 0.143.4 | Wulkaniczny księżyc Pyros jak Io, z pióropuszami wulkanów — [opis](BITWA_NA_ORBICIE.md) |
+| 0.143.5 | Większy Pyros, delikatniejsze pióropusze — [opis](BITWA_NA_ORBICIE.md) |
+| 0.143.6 | Pyros w pierwotnej wielkości, bez pióropuszy — [opis](BITWA_NA_ORBICIE.md) |
+| 0.143.7 | Nowe modele złóż w kosmosie: mgławica, asteroida rudy, kryształy — [opis](BITWA_NA_ORBICIE.md) |
+| 0.143.8 | Przekaźnik w kosmosie jako satelita przekaźnikowy — [opis](BITWA_NA_ORBICIE.md) |
+| 0.144 | Efekty walki: falowanie powietrza, wstrząs kamery, błysk wybuchu, stopnie uszkodzeń, przylot z nadprzestrzeni — [opis](RENDERER_3D.md) |
+| 0.144.1 | Kosmos w ruchu: dopalacze, pył rozstępujący się przed statkami, trafienia w kadłub, animowane planety — [opis](RENDERER_3D.md) |
+| 0.144.2 | Żywe planety: roślinność reagująca na ruch, kurz spod pojazdów, mgła wojny, świt i zmierzch — [opis](RENDERER_3D.md) |
+| 0.144.3 | Hologramy dowodzenia: zaznaczenie, linie i znaczniki rozkazów, celownik ataku, wiązki i rozbłysk przekaźnika — [opis](RENDERER_3D.md) |
+| 0.145 | Muzyka kosmosu: cztery motywy w duchu „Interstellar” — [opis](AUDIO.md) |
+| 0.146 | WAL-01: skały blokują ostrzał bezpośredni; wybór celu na czystej linii, obchodzenie skały przy rozkazie ataku — [opis](#wal-01--skały-blokujące-ostrzał) |
+| 0.147 | Centrum III — Twierdza i doktryny frakcji (po dwie, wybór ostateczny) — [opis](POZIOMY_CENTRUM.md) |
+| 0.147.1 | Jaśniejsze noce na mapach naziemnych, przejrzystsze burze piaskowe — [opis](RENDERER_3D.md) |
+| 0.147.2 | Przejrzystsza śnieżyca i ulewa — [opis](RENDERER_3D.md) |
+| 0.147.3 | Jaśniejsze noce na mapach lodowych — [opis](RENDERER_3D.md) |
+| 0.147.4 | Czytelne noce na mapach popielnych; bez cieni chmur w świetle księżyca — [opis](RENDERER_3D.md) |
+| 0.147.5 | Jaśniejsze noce na mapach pustynnych — [opis](RENDERER_3D.md) |
+| 0.147.6 | Czytelne noce na mapach magmowych — [opis](RENDERER_3D.md) |
+| 0.147.7 | Noce w kampanii sprawdzone; czytelny nocą Świetlisty Gąszcz — [opis](RENDERER_3D.md) |
 
 Wersja 0.7 nie ma osobnych notatek w dokumentacji.
 
@@ -272,7 +294,11 @@ Cel: zwiększyć znaczenie ustawienia oddziałów bez przebudowy strategicznego 
 
 #### WAL-01 — Skały blokujące ostrzał
 
-Status: propozycja.
+Status: zrealizowane w 0.146.
+
+Realizacja (`engine.js`): `lineOfFire(strzelec, cel)` — odcinek przecinający prostokąt skały (`crossesRect`, przeszkody bez rodzaju lub `rock`, `outcrop`, `spire`, `mesa`, zwężone o 12 z każdej strony) blokuje strzał; bez blokady: artyleria i granatnicy (ogień łukiem), strzelec lub cel latający, inne przeszkody (wraki, ruiny, gaje; asteroidy i wraki w kosmosie). Wybór celu: cel za skałą liczy się jak 400 dalej; cel zasłonięty porzucany (poza rozkazem ataku). W zasięgu, ale za skałą — bez strzału; z rozkazem ataku jednostka idzie do celu (ścieżka omija skałę) i przy ścięciu narożnika ślizga się wzdłuż przeszkody; komunikat dla gracza raz na 8 s. Testy: `tests/line-of-fire.test.js` (cel za skałą bez obrażeń, obejście i ostrzał, to samo dla przeciwnika, wyjątki i muśnięcie krawędzi, wybór celu na czystej linii).
+
+Pierwotna specyfikacja:
 
 - Przed oddaniem strzału sprawdzamy odcinek między strzelcem a celem.
 - Skały blokują broń bezpośrednią obu stron; sam zasięg przestaje wystarczać.

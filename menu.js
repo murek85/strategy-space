@@ -11,6 +11,10 @@ const MUSIC_THEMES = [
 	["game:hive", "Ul"],
 	["game:lumen", "Gąszcz"],
 	["game:forge", "Kuźnia"],
+	["game:orbit", "Kosmos — Orbita"],
+	["game:glacis", "Kosmos — Pierścienie"],
+	["game:void", "Kosmos — Horyzont zdarzeń"],
+	["game:requiem", "Kosmos — Requiem floty"],
 ];
 const MUSIC_MOODS = [
 	["explore", "Eksploracja"],
@@ -268,6 +272,8 @@ class CommandMenu {
 								["atmo", "Atmosfera 3D: mgła w dolinach, smugi słońca"],
 								["surface", "Detale modeli 3D: płyty pancerza, starte krawędzie, kurz"],
 								["dof", "Głębia ostrości 3D w kosmosie (ostry środek, miękkie brzegi kadru)"],
+								["haze", "Falowanie gorącego powietrza 3D (wybuchy, pożary, lawa, silniki)"],
+								["shake", "Wstrząs kamery przy dużych wybuchach"],
 							]
 								.map(([key, label]) => `<label class="menu-setting"><input type="checkbox" id="visual-${key}" class="webgl-effect"> ${label}</label>`)
 								.join("")}`
@@ -298,6 +304,29 @@ class CommandMenu {
 				body;
 		if (screen === "news")
 			body =
+				"<h2>0.147.7 / Noce w kampanii</h2><p>Świetlisty Gąszcz jest nocą czytelny — mech ma fakturę, a świecące rośliny nadal się odcinają.</p>" +
+				"<h2>0.147.6 / Noce na magmie</h2><p>Na mapach magmowych czarna lawa jest nocą czytelna w świetle księżyca.</p>" +
+				"<h2>0.147.5 / Noce na pustyni</h2><p>Na mapach pustynnych piasek odbija światło księżyca — noce są tam jaśniejsze.</p>" +
+				"<h2>0.147.4 / Noce na popiele</h2><p>Na mapach popielnych ciemny bazalt jest nocą czytelny; cienie chmur nie kładą się w świetle księżyca.</p>" +
+				"<h2>0.147.3 / Jasne noce na lodzie</h2><p>Na mapach lodowych śnieg odbija światło księżyca — noce są tam jaśniejsze.</p>" +
+				"<h2>0.147.2 / Przejrzystsze burze</h2><p>Śnieżyca i ulewa mniej zasłaniają planszę — mniej mgły, cieńsze ściany śniegu; burze nadal widać i czuć.</p>" +
+				"<h2>0.147.1 / Jaśniejsze noce</h2><p>Mapy nocą są czytelniejsze w świetle księżyca, a burze piaskowe mniej zasłaniają planszę.</p>" +
+				"<h2>0.147 / Twierdza i doktryny</h2><p>Trzeci poziom centrum — Twierdza: wytrzymalsze centrum, +4 metalu/s i wybór jednej z dwóch doktryn frakcji (ostateczny). Kolonie: mobilność albo fortyfikacja przyczółków; Dominium: ciężki ostrzał albo silniejsze osłony; Rój: nawała albo pancerz chitynowy.</p>" +
+				"<h2>0.146 / Skały blokują ostrzał</h2><p>Skała między strzelcem a celem zatrzymuje broń bezpośrednią obu stron. Jednostki wybierają cele na czystej linii, a z rozkazem ataku obchodzą skałę. Artyleria, granatnicy i lotnictwo strzelają ponad nią.</p>" +
+				"<h2>0.145 / Muzyka kosmosu</h2><p>Cztery motywy dla map w kosmosie w duchu „Interstellar”: Orbita, Pierścienie, Horyzont zdarzeń i Requiem floty — organy, tykający zegar, fortepian, narastające warstwy i nagła cisza; w bitwie gnające ostinato organów. Posłuchasz ich w Ustawieniach.</p>" +
+				"<h2>0.144.3 / Hologramy dowodzenia</h2><p>Holograficzne zaznaczenie, płynące linie rozkazów ze znacznikami celu, czerwony celownik ataku, wiązki energii przy przejmowaniu przekaźnika i rozbłysk po przejęciu.</p>" +
+				"<h2>0.144.2 / Żywe planety</h2><p>Trawa kładzie się pod pojazdami, wybuchy przewracają drzewa, pojazdy wzbijają kurz, błoto i śnieg, mgła wojny kłębi się nad nieznanym terenem, a świt i zmierzch mają złote światło i długie cienie.</p>" +
+				"<h2>0.144.1 / Kosmos w ruchu</h2><p>Dopalacze przy ruszaniu i skrętach, pył rozstępujący się przed statkami, iskry i odpryski przy trafieniach w kadłub, płynące pasy gazowego olbrzyma i wybuchające jeziora lawy.</p>" +
+				"<h2>0.144 / Efekty walki</h2><p>Falowanie gorącego powietrza nad ogniem i wybuchami, wstrząs kamery i fala pyłu przy dużych wybuchach, biały błysk na początku wybuchu, iskry i ulatujący gaz z uszkodzonych maszyn, przylot statków z nadprzestrzeni. Falowanie i wstrząs wyłączysz w ustawieniach grafiki.</p>" +
+				"<h2>0.143.8 / Przekaźniki w kosmosie</h2><p>Przekaźnik na orbicie to duży satelita: obracający się pierścień, skrzydła paneli słonecznych, antena paraboliczna i światła w kolorze właściciela.</p>" +
+				"<h2>0.143.7 / Surowce w kosmosie</h2><p>Mgławica to wir świecącego gazu z jasnym jądrem, asteroida rudy ma bryłki metalu i świecące żyły, kryształy wyrastają z rozłupanej asteroidy na wszystkie strony.</p>" +
+				"<h2>0.143.6 / Pyros</h2><p>Wulkaniczny księżyc wrócił do pierwotnej wielkości; pióropusze wulkanów usunięte.</p>" +
+				"<h2>0.143.5 / Większy Pyros</h2><p>Wulkaniczny księżyc na Cmentarzysku Floty jest większy, a pióropusze wulkanów delikatniejsze.</p>" +
+				"<h2>0.143.4 / Wulkaniczny księżyc</h2><p>Pyros jak Io: siarkowe równiny, kaldery z jeziorami lawy, potoki lawy i pióropusze wulkanów na krawędzi tarczy.</p>" +
+				"<h2>0.143.3 / Lodowy olbrzym</h2><p>Glacjalis przewrócony na bok jak Uran, z pierścieniami otwartymi wokół niego, chmurami metanowymi i ciemną burzą — nie zasłania już planszy.</p>" +
+				"<h2>0.143.2 / Gargantua</h2><p>Czarna dziura na Wrotach Pustki jak w „Interstellar”: cień, pierścień fotonowy, dysk przecinający horyzont i jego obraz zagięty nad i pod nim.</p>" +
+				"<h2>0.143.1 / Wraki okrętów</h2><p>Wraki na Cmentarzysku Floty to teraz prawdziwe okręty: przełamane kadłuby, nadbudówki, wieże, dysze i żarzące się przełomy. Nie obracają się już jak asteroidy.</p>" +
+				"<h2>0.143 / Trzy nowe mapy w kosmosie</h2><p>Pierścienie Glacjalis (lodowy olbrzym), Wrota Pustki (czarna dziura) i Cmentarzysko Floty (wulkaniczny księżyc i wraki okrętów) — każda z własnym niebem, światłem, przeszkodami i burzami.</p>" +
 				"<h2>0.142.2 / Łagodniejsza głębia</h2><p>Głębia ostrości w kosmosie mniej rozmywa dalsze partie planszy.</p>" +
 				"<h2>0.142.1 / Ostrzeżenia burz</h2><p>Ostrzeżenia przed burzami w kosmosie opisują ich prawdziwe skutki zamiast ograniczenia ruchu.</p>" +
 				"<h2>0.142 / Burze kosmiczne</h2><p>Na orbicie po burzy jonowej przychodzą burza słoneczna (wyczerpuje osłony) i deszcz asteroid (uderzenia odłamków, gdy trwa dłużej). Nowe badanie: osłony przeciwmeteorytowe.</p>" +
@@ -512,7 +541,7 @@ class CommandMenu {
 		queueMicrotask(() => ranges.forEach(fill));
 		if (screen === "knowledge") KnowledgeBase.mount(this.root);
 		this.root.querySelector(".menu-footer span").textContent =
-			"PROTOTYP 0.142.2 · ZAPIS LOKALNY";
+			"PROTOTYP 0.147.7 · ZAPIS LOKALNY";
 		if (
 			screen === "scenarios" ||
 			(screen === "briefing" &&
@@ -854,7 +883,7 @@ class CommandMenu {
 					el.value = SceneFX.options[key];
 					el.onchange = () => SceneFX.set(key, el.value);
 				}
-				for (const key of ["flashes", "metrics", "lights", "shadows", "bloom", "water", "volume", "scars", "relief", "tilt", "cinema", "ao", "pbr", "reflect", "atmo", "surface", "dof"]) {
+				for (const key of ["flashes", "metrics", "lights", "shadows", "bloom", "water", "volume", "scars", "relief", "tilt", "cinema", "ao", "pbr", "reflect", "atmo", "surface", "dof", "haze", "shake"]) {
 					const el = this.root.querySelector("#visual-" + key);
 					el.checked = SceneFX.options[key];
 					el.onchange = () => SceneFX.set(key, el.checked);
@@ -870,7 +899,7 @@ class CommandMenu {
 						// volume light and the 2.5D tilt belong to the PixiJS renderer only, the cinematic image and the ambient
 						// occlusion to the 3D board; bloom serves both.
 						const only2d = ["visual-volume", "visual-tilt"],
-							only3d = ["visual-cinema", "visual-ao", "visual-pbr", "visual-reflect", "visual-atmo", "visual-surface", "visual-dof"];
+							only3d = ["visual-cinema", "visual-ao", "visual-pbr", "visual-reflect", "visual-atmo", "visual-surface", "visual-dof", "visual-haze", "visual-shake"];
 						for (const box of this.root.querySelectorAll(".webgl-effect")) box.disabled = !gpu || (s.mode === "three" && only2d.includes(box.id)) || (SceneFX.options.renderer !== "three" && only3d.includes(box.id)) || (s.mode === "canvas" && !!s.note);
 						status.textContent = s.note || (name[s.mode] ? `Aktywny: ${name[s.mode]}.` : gpu ? `${name[SceneFX.options.renderer]} uruchomi się razem z planszą.` : "Aktywny: Canvas 2D.");
 					};

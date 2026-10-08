@@ -26,6 +26,9 @@
 			surface: true,
 			// Depth of field (tilt-shift) of the 3D board in space.
 			dof: true,
+			// Heat haze over fires, blasts, lava and engines; the camera shaking at big blasts (0.144).
+			haze: true,
+			shake: true,
 		},
 		RENDERERS = ["three", "webgpu", "webgl", "canvas"],
 		options = { ...defaults };
@@ -36,7 +39,7 @@
 		for (const key of ["terrain", "particles"])
 			if (["low", "medium", "high"].includes(saved[key]))
 				options[key] = saved[key];
-		for (const key of ["flashes", "metrics", "lights", "shadows", "bloom", "water", "volume", "scars", "relief", "tilt", "cinema", "ao", "pbr", "reflect", "atmo", "surface", "dof"])
+		for (const key of ["flashes", "metrics", "lights", "shadows", "bloom", "water", "volume", "scars", "relief", "tilt", "cinema", "ao", "pbr", "reflect", "atmo", "surface", "dof", "haze", "shake"])
 			if (typeof saved[key] === "boolean") options[key] = saved[key];
 		if (RENDERERS.includes(saved.renderer)) options.renderer = saved.renderer;
 	} catch {}

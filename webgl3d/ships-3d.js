@@ -65,8 +65,12 @@ export function createShips3D(THREE, { tools, group }) {
 				frame.position.y = Math.sin(t * 1.1) * 1.4;
 				frame.rotation.x = Math.sin(t * 0.6) * 0.05 + (i.moving ? Math.sin(t * 0.35) * 0.06 : 0);
 				frame.rotation.z = Math.sin(t * 0.8) * 0.025;
-				const thrust = i.moving ? 1 + 0.15 * Math.sin(i.time * 40 + e.id) : 0.35;
-				for (const [p, len] of parts.plumes) p.scale.set(len * thrust, 1, 1);
+				// Afterburner (0.144.1, i.boost 0…1 from the renderer: speeding up from a stop, hard turns): the
+				// flames grow longer and wider and flicker faster; cruising they burn steady.
+				const boost = i.boost || 0,
+					thrust = i.moving || boost > 0.05 ? (1 + 0.15 * Math.sin(i.time * (40 + boost * 30) + e.id)) * (1 + boost * 1.6) : 0.35,
+					wide = 1 + boost * 0.5;
+				for (const [p, len] of parts.plumes) p.scale.set(len * thrust, wide, wide);
 				for (const g of parts.turrets) g.rotation.y = -i.aim;
 				if (parts.strobe) parts.strobe.visible = (i.time * 1.1 + e.id * 0.37) % 1 < 0.1;
 				// The carrier's deck lights run towards the bow in sequence (a landing guide).

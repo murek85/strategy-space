@@ -35,13 +35,22 @@ const SpaceArt = (() => {
 	const planetOf = (g) => ({ x: g.W * 0.38, y: g.H * 2.05, r: g.H * 1.32 });
 
 	// ---- the ground: deep space, painted once into the terrain ----
+	// The map's world (0.143): planet kind, rocks, colours (RTS.MISSIONS[id].look, space-rules.js).
+	const lookOf = (g) => RTS.MISSIONS[g.missionId]?.look || {};
+	const hexA = (hex, a) => {
+		const v = parseInt(hex.slice(1), 16);
+		return `rgba(${(v >> 16) & 255},${(v >> 8) & 255},${v & 255},${a})`;
+	};
 	function ground(c, g) {
 		const rand = seeded(9091),
-			n = (g.W * g.H) / (3360 * 2160);
+			n = (g.W * g.H) / (3360 * 2160),
+			look = lookOf(g),
+			kind = look.planet || "gas",
+			tint = { ice: ["#04090f", "#08131e", "#0c1c2a"], lava: ["#0c0605", "#170b08", "#221009"], none: ["#070407", "#100810", "#180a12"] }[look.blackHole ? "none" : kind] || ["#05070f", "#090d1c", "#0c1226"];
 		const sky = c.createLinearGradient(0, 0, g.W * 0.3, g.H);
-		sky.addColorStop(0, "#05070f");
-		sky.addColorStop(0.55, "#090d1c");
-		sky.addColorStop(1, "#0c1226");
+		sky.addColorStop(0, tint[0]);
+		sky.addColorStop(0.55, tint[1]);
+		sky.addColorStop(1, tint[2]);
 		c.fillStyle = sky;
 		c.fillRect(0, 0, g.W, g.H);
 		// Faint galactic band and dust.
@@ -57,7 +66,7 @@ const SpaceArt = (() => {
 			for (let k = 0; k < 6; k++) {
 				const a = rand() * TAU,
 					d = rand() * 160;
-				glowDot(c, f.x + Math.cos(a) * d, f.y + Math.sin(a) * d, 150 + rand() * 160, k % 2 ? "rgba(168,84,214,.22)" : "rgba(80,150,230,.16)");
+				glowDot(c, f.x + Math.cos(a) * d, f.y + Math.sin(a) * d, 150 + rand() * 160, look.nebula ? hexA(look.nebula[0][k % 3], k % 2 ? 0.22 : 0.16) : k % 2 ? "rgba(168,84,214,.22)" : "rgba(80,150,230,.16)");
 			}
 		// Stars: many dim ones, some bright with a halo.
 		for (let i = 0; i < 2600 * n; i++) {
@@ -114,19 +123,59 @@ const SpaceArt = (() => {
 				c.stroke();
 			}
 		c.restore();
-		// The gas giant: banded disc, a dark night side, a blue rim of atmosphere.
-		const p = planetOf(g);
+		// A black hole instead of a planet: its glow, the accretion disk (an ellipse, hot inside), the dark
+		// horizon and the photon ring.
+		if (look.blackHole) {
+			const b = { x: g.W * 0.68, y: g.H * 0.3, r: Math.min(g.W, g.H) * 0.09 };
+			glowDot(c, b.x, b.y, b.r * 7, "rgba(255,110,50,.22)");
+			c.save();
+			c.translate(b.x, b.y);
+			c.scale(1, 0.32);
+			for (let i = 12; i >= 0; i--) {
+				const t = i / 12;
+				c.strokeStyle = t < 0.3 ? `rgba(255,240,210,${(0.5 - t).toFixed(2)})` : `rgba(255,${Math.round(150 - t * 100)},${Math.round(60 - t * 40)},${(0.45 * (1 - t)).toFixed(2)})`;
+				c.lineWidth = b.r * 0.32;
+				c.beginPath();
+				c.arc(0, 0, b.r * (1.6 + t * 4), 0, TAU);
+				c.stroke();
+			}
+			c.restore();
+			c.fillStyle = "#000";
+			c.beginPath();
+			c.arc(b.x, b.y, b.r, 0, TAU);
+			c.fill();
+			c.strokeStyle = "rgba(255,225,190,.9)";
+			c.lineWidth = 3;
+			c.beginPath();
+			c.arc(b.x, b.y, b.r * 1.08, 0, TAU);
+			c.stroke();
+			// The far side of the disk bent over the horizon.
+			c.strokeStyle = "rgba(255,170,90,.55)";
+			c.lineWidth = b.r * 0.25;
+			c.beginPath();
+			c.arc(b.x, b.y, b.r * 1.5, Math.PI * 1.08, Math.PI * 1.92);
+			c.stroke();
+			return;
+		}
+		// The planet: banded gas giant, pale ice giant, or a volcanic moon with glowing cracks; a dark night
+		// side and a rim of atmosphere in the world's colour.
+		const p = planetOf(g),
+			PAL = {
+				gas: { body: ["#c49a6c", "#7a5a44"], bands: ["#d9b384", "#a8784e", "#e6caa0", "#8c6248", "#c79a6a", "#b5865a"], rim: [140, 200, 255], ring: [214, 196, 170] },
+				ice: { body: ["#cfe6f2", "#86b2c8"], bands: ["#e6f4fb", "#a8cfe0", "#f2fbff", "#90bcd2", "#d0e8f4", "#b6d8e8"], rim: [170, 230, 255], ring: [220, 238, 250] },
+				lava: { body: ["#3a2420", "#161010"], bands: [], rim: [255, 130, 60], ring: [0, 0, 0] },
+			}[kind];
 		c.save();
 		c.beginPath();
 		c.arc(p.x, p.y, p.r, 0, TAU);
 		c.clip();
 		const body = c.createLinearGradient(0, p.y - p.r, 0, p.y - p.r * 0.6);
-		body.addColorStop(0, "#c49a6c");
-		body.addColorStop(1, "#7a5a44");
+		body.addColorStop(0, PAL.body[0]);
+		body.addColorStop(1, PAL.body[1]);
 		c.fillStyle = body;
 		c.fillRect(p.x - p.r, p.y - p.r, 2 * p.r, 2 * p.r);
-		const bands = ["#d9b384", "#a8784e", "#e6caa0", "#8c6248", "#c79a6a", "#b5865a"];
-		for (let i = 0; i < 26; i++) {
+		const bands = PAL.bands;
+		for (let i = 0; i < (bands.length ? 26 : 0); i++) {
 			const y = p.y - p.r + i * 46 + rand() * 20,
 				h = 14 + rand() * 30;
 			c.globalAlpha = 0.35 + rand() * 0.3;
@@ -139,15 +188,36 @@ const SpaceArt = (() => {
 			c.fill();
 		}
 		c.globalAlpha = 1;
-		// A storm eye.
-		glowDot(c, p.x + p.r * 0.3, p.y - p.r + 260, 90, "rgba(214,120,80,.5)");
+		// A storm eye (gas giant only).
+		if (kind === "gas") glowDot(c, p.x + p.r * 0.3, p.y - p.r + 260, 90, "rgba(214,120,80,.5)");
+		// The volcanic moon: cracks of lava across the crust, glowing.
+		if (kind === "lava") {
+			c.lineCap = "round";
+			for (let i = 0; i < 40; i++) {
+				let x = p.x + (rand() - 0.5) * p.r * 1.6,
+					y = p.y - p.r + rand() * 700,
+					a = rand() * TAU;
+				c.strokeStyle = `rgba(255,${Math.round(110 + rand() * 80)},40,${(0.5 + rand() * 0.4).toFixed(2)})`;
+				c.lineWidth = 1.5 + rand() * 3;
+				c.beginPath();
+				c.moveTo(x, y);
+				for (let k = 0; k < 8; k++) {
+					a += (rand() - 0.5) * 1.4;
+					x += Math.cos(a) * 28;
+					y += Math.sin(a) * 28;
+					c.lineTo(x, y);
+				}
+				c.stroke();
+				glowDot(c, x, y, 18, "rgba(255,120,40,.35)");
+			}
+		}
 		// Swirls: spiral storms and eddies along the band edges.
 		c.lineCap = "round";
-		for (let i = 0; i < 14; i++) {
+		for (let i = 0; i < (kind === "lava" ? 0 : 14); i++) {
 			const sx = p.x + (rand() - 0.5) * p.r * 1.4,
 				sy = p.y - p.r + 60 + rand() * 520,
 				R = 18 + rand() * (i ? 40 : 70);
-			c.strokeStyle = i % 3 ? "rgba(240,214,170,.35)" : "rgba(120,74,52,.4)";
+			c.strokeStyle = kind === "ice" ? (i % 3 ? "rgba(245,252,255,.35)" : "rgba(110,150,180,.35)") : i % 3 ? "rgba(240,214,170,.35)" : "rgba(120,74,52,.4)";
 			c.lineWidth = 2 + rand() * 3;
 			c.beginPath();
 			for (let k = 0; k <= 30; k++) {
@@ -170,18 +240,22 @@ const SpaceArt = (() => {
 		// Atmosphere rim: a ring only (inside its inner edge a radial gradient would take the first colour).
 		const rim = c.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r * 1.05),
 			at = (k) => k / 1.05;
-		rim.addColorStop(0, "rgba(140,200,255,0)");
-		rim.addColorStop(at(0.97), "rgba(140,200,255,0)");
-		rim.addColorStop(at(1), "rgba(150,210,255,.55)");
-		rim.addColorStop(at(1.015), "rgba(90,150,230,.22)");
-		rim.addColorStop(1, "rgba(60,110,200,0)");
+		const [rr, rg, rb] = PAL.rim;
+		rim.addColorStop(0, `rgba(${rr},${rg},${rb},0)`);
+		rim.addColorStop(at(0.97), `rgba(${rr},${rg},${rb},0)`);
+		rim.addColorStop(at(1), `rgba(${rr},${rg},${rb},.55)`);
+		rim.addColorStop(at(1.015), `rgba(${rr},${rg},${rb},.22)`);
+		rim.addColorStop(1, `rgba(${rr},${rg},${rb},0)`);
 		c.fillStyle = rim;
 		c.beginPath();
 		c.arc(p.x, p.y, p.r * 1.05, 0, TAU);
 		c.fill();
 		// Rings: bands of ice and dust round the planet with gaps between them; the planet's shadow falls
 		// across them on its night side (east).
-		const RINGS = [[1.12, 0.035, "rgba(214,196,170,.16)"], [1.16, 0.02, "rgba(230,214,190,.22)"], [1.19, 0.045, "rgba(190,172,150,.14)"], [1.255, 0.012, "rgba(220,206,186,.18)"]];
+		if (!look.rings && kind !== "gas") return;
+		const [qr, qg, qb] = PAL.ring,
+			near = look.rings === "near" ? 1.6 : 1,
+			RINGS = [[1.12, 0.035 * near, `rgba(${qr},${qg},${qb},${0.16 * near})`], [1.16, 0.02 * near, `rgba(${qr},${qg},${qb},${0.22 * near})`], [1.19, 0.045 * near, `rgba(${qr},${qg},${qb},${0.14 * near})`], [1.255, 0.012 * near, `rgba(${qr},${qg},${qb},${0.18 * near})`]];
 		for (const [k, w, color] of RINGS) {
 			c.strokeStyle = color;
 			c.lineWidth = p.r * w;
@@ -210,6 +284,38 @@ const SpaceArt = (() => {
 		c.restore();
 	}
 	// ---- asteroid fields: a cluster of tumbling rocks (the 3D board builds them in 3D) ----
+	// Stone of the asteroids by the map's look: mixed rock, ice, dark basalt (the 2D board, set per terrain).
+	const STONE = { rock: ["#4a4846", "#6b6660", "#2e2c2c", "#6c665e"], ice: ["#8fa6b6", "#c4d6e2", "#5f7484", "#d8e8f2"], dark: ["#2c2928", "#4a4542", "#1a1817", "#46403c"], hulk: ["#3e3836", "#5a524e", "#241f1d", "#5e5650"] };
+	let stone = "rock";
+	// A dead warship's hulk along the long side of its field: hull, torn ribs, plates, red lights.
+	function hulk(c, o, rand, time = 0) {
+		const long = o.w >= o.h,
+			L = (long ? o.w : o.h) * 0.95,
+			B = (long ? o.h : o.w) * 0.8;
+		c.save();
+		c.translate(o.x + o.w / 2, o.y + o.h / 2);
+		if (!long) c.rotate(Math.PI / 2);
+		c.fillStyle = "rgba(0,0,0,.35)";
+		c.fillRect(-L / 2 + 12, -B / 2 + 16, L, B);
+		poly(c, [[L * 0.5, -B * 0.25], [L * 0.42, -B * 0.5], [-L * 0.3, -B * 0.5], [-L * 0.36, -B * 0.3], [-L * 0.33, B * 0.4], [-L * 0.25, B * 0.5], [L * 0.42, B * 0.5], [L * 0.5, B * 0.25]], "#4a4440", "#2a2624");
+		c.strokeStyle = "#3e3834";
+		c.lineWidth = 3;
+		for (let i = 0; i < 6; i++) {
+			const x = -L * 0.36 - i * 10;
+			c.beginPath();
+			c.moveTo(x, -B * 0.45);
+			c.lineTo(x - 3, B * 0.45);
+			c.stroke();
+		}
+		for (let i = 0; i < 8; i++) {
+			c.fillStyle = i % 3 ? "#5c5652" : "#2a1e1a";
+			c.fillRect(-L * 0.25 + i * L * 0.08, -B * 0.3 + rand() * B * 0.3, L * 0.06, B * 0.25);
+		}
+		c.fillStyle = "#2e2a28";
+		c.fillRect(L * 0.02, -B * 0.15, B * 0.6, B * 0.3);
+		for (let i = 0; i < 4; i++) glowDot(c, (-0.3 + i * 0.2) * L, (i % 2 ? 1 : -1) * B * 0.38, 7, "rgba(255,60,40,.8)");
+		c.restore();
+	}
 	function asteroid(c, x, y, r, rand) {
 		const pts = [];
 		for (let k = 0; k < 9; k++) {
@@ -221,10 +327,11 @@ const SpaceArt = (() => {
 		c.beginPath();
 		c.ellipse(x + r * 0.35, y + r * 0.45, r, r * 0.8, 0, 0, TAU);
 		c.fill();
-		poly(c, pts, "#4a4846", "#6b6660");
+		const [mid, edge, dark, lit] = STONE[stone] || STONE.rock;
+		poly(c, pts, mid, edge);
 		// Lit side (the sun from the north-west) and craters.
-		poly(c, pts.slice(3, 8).map(([px, py]) => [px + (x - px) * 0.25, py + (y - py) * 0.25]).concat([[x, y]]), "#2e2c2c");
-		poly(c, pts.slice(0, 2).concat(pts.slice(7)).map(([px, py]) => [px + (x - px) * 0.2, py + (y - py) * 0.2]).concat([[x, y]]), "#6c665e");
+		poly(c, pts.slice(3, 8).map(([px, py]) => [px + (x - px) * 0.25, py + (y - py) * 0.25]).concat([[x, y]]), dark);
+		poly(c, pts.slice(0, 2).concat(pts.slice(7)).map(([px, py]) => [px + (x - px) * 0.2, py + (y - py) * 0.2]).concat([[x, y]]), lit);
 		for (let k = 0; k < 3; k++) {
 			c.fillStyle = "rgba(20,18,18,.5)";
 			c.beginPath();
@@ -233,6 +340,7 @@ const SpaceArt = (() => {
 		}
 	}
 	function field(c, o, rand) {
+		if (o.kind === "hulk") return hulk(c, o, rand);
 		const cx = o.x + o.w / 2,
 			cy = o.y + o.h / 2,
 			count = Math.max(4, Math.round((o.w * o.h) / 3200));
@@ -250,6 +358,7 @@ const SpaceArt = (() => {
 		if (!space(g)) return;
 		ground(c, g);
 		if (RTS.bareGround) return;
+		stone = lookOf(g).rocks === "hulk" ? "dark" : lookOf(g).rocks || "rock";
 		const rand = seeded(5150);
 		for (const o of g.obstacles) field(c, o, rand);
 	}

@@ -34,14 +34,14 @@ export function createSpace3D(THREE) {
 		backLight = new THREE.Vector3(0.5, -0.2, -0.84).normalize();
 
 	// ---- the sky sphere: stars, Milky Way, nebulae, the sun (follows the camera, behind everything) ----
-	const skyUniforms = { sunDir: { value: sunDir }, time: { value: 0 } };
+	const skyUniforms = { sunDir: { value: sunDir }, time: { value: 0 }, neb1a: { value: new THREE.Color(0.4, 0.07, 0.3) }, neb1b: { value: new THREE.Color(0.85, 0.3, 0.42) }, neb2a: { value: new THREE.Color(0.04, 0.18, 0.38) }, neb2b: { value: new THREE.Color(0.18, 0.65, 0.8) } };
 	const sky = new THREE.Mesh(
 		new THREE.SphereGeometry(1, 64, 32),
 		new THREE.ShaderMaterial({
 			uniforms: skyUniforms,
 			vertexShader: `varying vec3 vDir;
 				void main() { vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-			fragmentShader: `varying vec3 vDir; uniform vec3 sunDir; uniform float time;
+			fragmentShader: `varying vec3 vDir; uniform vec3 sunDir; uniform float time; uniform vec3 neb1a; uniform vec3 neb1b; uniform vec3 neb2a; uniform vec3 neb2b;
 				${SPACE_NOISE}
 				vec3 hash3(vec3 p) { return fract(sin(vec3(dot(p, vec3(127.1, 311.7, 74.7)), dot(p, vec3(269.5, 183.3, 246.1)), dot(p, vec3(113.5, 271.9, 124.6)))) * 43758.5453); }
 				// A layer of stars: one candidate per cell of a 3D grid on the direction.
@@ -67,8 +67,8 @@ export function createSpace3D(THREE) {
 					float n1 = smoothstep(0.5, 0.85, sFbm(d * 2.2 + vec3(3.0, 1.0, 7.0))) * smoothstep(0.2, 0.9, dot(d, normalize(vec3(-0.6, -0.3, -0.75))));
 					float n2 = smoothstep(0.52, 0.86, sFbm(d * 2.6 + vec3(9.0, 4.0, 2.0))) * smoothstep(0.1, 0.9, dot(d, normalize(vec3(0.7, -0.2, 0.68))));
 					float fil = sFbm(d * 9.0);
-					col += n1 * mix(vec3(0.4, 0.07, 0.3), vec3(0.85, 0.3, 0.42), fil) * 0.28;
-					col += n2 * mix(vec3(0.04, 0.18, 0.38), vec3(0.18, 0.65, 0.8), fil) * 0.28;
+					col += n1 * mix(neb1a, neb1b, fil) * 0.28;
+					col += n2 * mix(neb2a, neb2b, fil) * 0.28;
 					// Stars: many faint, fewer bright, a few big; tinted by a hash.
 					float s = stars(d, 180.0, 0.35, 0.09) * 0.5 + stars(d, 90.0, 0.18, 0.08) + stars(d, 34.0, 0.08, 0.06) * 2.2;
 					s *= 1.0 + band * 1.5;
@@ -91,7 +91,23 @@ export function createSpace3D(THREE) {
 	group.add(sky);
 
 	// ---- the gas giant ----
-	const planetUniforms = { sunDir: { value: backLight }, time: { value: 0 }, radius: { value: 1 } };
+	// The light on the planet, its rings and moon (backLight by default; per map in setGame).
+	const planetLight = backLight.clone(),
+		ICE_LIGHT = new THREE.Vector3(-0.65, 0.2, 0.45).normalize();
+	const planetUniforms = {
+		sunDir: { value: planetLight },
+		time: { value: 0 },
+		radius: { value: 1 },
+		// Kind (0 gas giant, 1 ice giant, 2 volcanic moon), its four colours, the contrast of its bands and
+		// the colour of its limb (0.143).
+		kind: { value: 0 },
+		c0: { value: new THREE.Color(0.33, 0.2, 0.14) },
+		c1: { value: new THREE.Color(0.55, 0.3, 0.18) },
+		c2: { value: new THREE.Color(0.78, 0.55, 0.33) },
+		c3: { value: new THREE.Color(0.93, 0.83, 0.66) },
+		bandAmp: { value: 1 },
+		atmo: { value: new THREE.Color(0.45, 0.7, 1.0) },
+	};
 	const planet = new THREE.Mesh(
 		new THREE.SphereGeometry(1, 160, 96),
 		new THREE.ShaderMaterial({
@@ -105,16 +121,23 @@ export function createSpace3D(THREE) {
 					gl_Position = projectionMatrix * viewMatrix * w;
 				}`,
 			fragmentShader: `varying vec3 vObj; varying vec3 vNormal; varying vec3 vWorld; uniform vec3 sunDir; uniform float time;
+				uniform float kind; uniform vec3 c0; uniform vec3 c1; uniform vec3 c2; uniform vec3 c3; uniform float bandAmp; uniform vec3 atmo;
 				${SPACE_NOISE}
 				void main() {
 					vec3 p = normalize(vObj);
 					float lat = p.y;
+					// Jets (0.144.1): each band of the gas giant drifts at its own speed, its neighbours the other
+					// way, so the eddies and the great storm travel along them and shear at the band edges.
+					if (kind < 0.5) {
+						float ang = time * ((smoothstep(-0.35, 0.35, sin(lat * 7.0)) - 0.5) * 0.02 + 0.006);
+						p = vec3(cos(ang) * p.x - sin(ang) * p.z, p.y, sin(ang) * p.x + cos(ang) * p.z);
+					}
 					// Bands warped by turbulence; slow drift of the jets.
 					float turb = sFbm(p * 6.0 + vec3(0.0, 0.0, time * 0.004));
 					float wob = sFbm(vec3(p.x * 2.0, lat * 18.0, p.z * 2.0) + time * 0.002);
 					float b = lat * 9.0 + turb * 1.4 + wob * 0.8;
-					float bands = 0.5 + 0.5 * sin(b * 3.1) * 0.7 + 0.5 * sin(b * 7.3 + 1.3) * 0.3;
-					vec3 cream = vec3(0.93, 0.83, 0.66), ochre = vec3(0.78, 0.55, 0.33), rust = vec3(0.55, 0.3, 0.18), umber = vec3(0.33, 0.2, 0.14);
+					float bands = 0.5 + (0.5 * sin(b * 3.1) * 0.7 + 0.5 * sin(b * 7.3 + 1.3) * 0.3) * bandAmp;
+					vec3 cream = c3, ochre = c2, rust = c1, umber = c0;
 					vec3 col = mix(mix(umber, rust, smoothstep(0.1, 0.4, bands)), mix(ochre, cream, smoothstep(0.6, 0.9, bands)), smoothstep(0.3, 0.7, bands));
 					// Fine streaks along the bands.
 					col *= 0.85 + 0.3 * sFbm(vec3(p.x * 30.0, lat * 160.0, p.z * 30.0));
@@ -125,7 +148,51 @@ export function createSpace3D(THREE) {
 					vec3 q = p - c;
 					float spot = length(vec2(dot(q, normalize(cross(c, vec3(0, 1, 0)))) * 0.75, q.y * 1.6));
 					float swirl = sin(atan(q.y, dot(q, normalize(cross(c, vec3(0, 1, 0))))) * 3.0 + spot * 40.0 - time * 0.05);
-					col = mix(col, mix(vec3(0.72, 0.28, 0.16), vec3(0.95, 0.6, 0.42), 0.5 + 0.5 * swirl), smoothstep(0.16, 0.06, spot) * step(0.0, dot(p, c)));
+					if (kind < 0.5) col = mix(col, mix(vec3(0.72, 0.28, 0.16), vec3(0.95, 0.6, 0.42), 0.5 + 0.5 * swirl), smoothstep(0.16, 0.06, spot) * step(0.0, dot(p, c)));
+					// Ice giant: soft bands under high white haze, bright polar caps.
+					// Ice giant (0.143.3, Uranus and Neptune): its pole turned towards the battle — soft haze bands
+					// round it, a bright polar hood with a collar of cloud, white methane clouds drawn out along
+					// the bands, a dark storm with bright clouds riding its edge.
+					if (kind > 0.5 && kind < 1.5) {
+						col = mix(col, vec3(0.82, 0.95, 1.0), smoothstep(0.62, 0.92, lat) * 0.55);
+						col = mix(col, vec3(0.9, 0.98, 1.0), exp(-pow((lat - 0.55) / 0.035, 2.0)) * 0.4);
+						float lon = atan(p.z, p.x);
+						float streaks = smoothstep(0.68, 0.84, sFbm(vec3(lon * 3.0 + time * 0.01, lat * 46.0, 1.0)));
+						col = mix(col, vec3(0.96, 1.0, 1.0), streaks * 0.65 * smoothstep(0.75, 0.1, abs(lat)));
+						// The dark storm drifts round the planet with its band (0.144.1).
+						float ia = time * 0.012;
+						vec3 sc = normalize(vec3(0.75 * cos(ia) - 0.6 * sin(ia), 0.25, 0.75 * sin(ia) + 0.6 * cos(ia))), sq = p - sc;
+						float sd = length(vec2(dot(sq, normalize(cross(sc, vec3(0, 1, 0)))) * 0.7, sq.y * 1.5));
+						float side = step(0.0, dot(p, sc));
+						col = mix(col, vec3(0.06, 0.2, 0.42), smoothstep(0.11, 0.05, sd) * side);
+						col = mix(col, vec3(0.95, 1.0, 1.0), exp(-pow((sd - 0.125) / 0.012, 2.0)) * smoothstep(0.0, 0.05, sq.y) * side * 0.8);
+					}
+					// Volcanic moon: dark crust in plates, no bands.
+					float cracks = 0.0;
+					if (kind > 1.5) {
+						// Volcanic moon (0.143.4, like Io): dark basalt and plains of sulphur, yellow and ochre, pale
+						// patches of frost; calderas — black rims round glowing lakes of lava; a few long lava flows
+						// in some regions only. The lava glows on the day side too, brightest at night.
+						float crust = sFbm(p * 4.0);
+						float sulphur = smoothstep(0.42, 0.62, sFbm(p * 2.6 + 5.0));
+						col = mix(c0, c1, smoothstep(0.3, 0.7, crust));
+						col = mix(col, mix(vec3(0.5, 0.24, 0.04), vec3(0.78, 0.55, 0.1), sFbm(p * 9.0)), sulphur * 0.85);
+						col = mix(col, vec3(0.7, 0.66, 0.55), smoothstep(0.72, 0.86, sFbm(p * 6.0 + 2.0)) * 0.3);
+						col *= (0.75 + 0.5 * sFbm(p * 24.0)) * 0.32;
+						float lakeN = sFbm(p * 3.2 + 17.0);
+						float lake = smoothstep(0.65, 0.69, lakeN);
+						float rim = smoothstep(0.58, 0.65, lakeN) * (1.0 - lake);
+						col = mix(col, vec3(0.05, 0.03, 0.03), clamp(rim * 0.85 + lake, 0.0, 1.0));
+						float vein = abs(sFbm(p * 5.0 + 11.0) - 0.5);
+						float region = smoothstep(0.5, 0.62, sFbm(p * 1.8 + 3.0));
+						col = mix(col, vec3(0.08, 0.04, 0.03), smoothstep(0.03, 0.0, vein) * region * 0.7);
+						cracks = lake * (0.7 + 0.3 * sFbm(p * 30.0 + time * 0.05)) + smoothstep(0.012, 0.0, vein) * region * 0.7;
+						cracks *= 0.85 + 0.15 * sin(time * 0.7 + lakeN * 30.0);
+						// Eruptions (0.144.1): lake after lake flares up white-hot for a moment, the ground round it
+						// glowing too.
+						float erupt = pow(max(0.0, sin(time * 0.45 + lakeN * 53.0)), 14.0);
+						cracks += (lake * 2.2 + rim * 0.6) * erupt;
+					}
 					// Light: a soft terminator, a dim blue night side; the limb glows and scatters the light.
 					vec3 n = normalize(vNormal), v = normalize(cameraPosition - vWorld);
 					float ndl = dot(n, sunDir);
@@ -136,15 +203,17 @@ export function createSpace3D(THREE) {
 					vec3 cell = floor(p * 26.0);
 					float flash = step(0.996, sHash(cell + floor(time * 2.5))) * (0.5 + 0.5 * sin(time * 40.0 + sHash(cell) * 9.0));
 					float spotL = smoothstep(0.5, 0.0, length(fract(p * 26.0) - 0.5));
-					lit += vec3(0.55, 0.65, 1.0) * flash * spotL * (1.0 - day) * 0.8;
+					lit += vec3(0.55, 0.65, 1.0) * flash * spotL * (1.0 - day) * 0.8 * (1.0 - step(1.5, kind));
 					// Aurorae: curtains of green and violet round the poles, rippling, on the night side.
 					float polar = smoothstep(0.72, 0.84, abs(lat)) * smoothstep(0.97, 0.88, abs(lat));
 					float curtain = 0.5 + 0.5 * sin(atan(p.z, p.x) * 22.0 + sFbm(p * 8.0 + time * 0.03) * 6.0 + time * 0.2);
 					// Seen only edge-on, near the limb (the curtains rise above the clouds).
 					float edgeOn = pow(1.0 - max(0.0, dot(normalize(vNormal), normalize(cameraPosition - vWorld))), 3.0);
-					lit += mix(vec3(0.15, 1.0, 0.55), vec3(0.6, 0.3, 1.0), smoothstep(0.82, 0.93, abs(lat))) * polar * curtain * (1.0 - day) * edgeOn * 0.35;
+					lit += mix(vec3(0.15, 1.0, 0.55), vec3(0.6, 0.3, 1.0), smoothstep(0.82, 0.93, abs(lat))) * polar * curtain * (1.0 - day) * edgeOn * 0.35 * (1.0 - step(1.5, kind));
+					// Lava glowing in the cracks of the volcanic moon, brightest on its night side.
+					lit += mix(c3, c2, 0.5) * cracks * (1.2 - day * 0.75);
 					float fres = pow(1.0 - max(0.0, dot(n, v)), 3.0);
-					lit += vec3(0.45, 0.7, 1.0) * fres * (0.05 + 1.2 * smoothstep(-0.25, 0.4, ndl));
+					lit += atmo * fres * (0.05 + 1.2 * smoothstep(-0.25, 0.4, ndl));
 					// Twilight band: warm scattering along the terminator.
 					lit += vec3(1.0, 0.45, 0.2) * exp(-ndl * ndl / 0.01) * 0.25;
 					gl_FragColor = vec4(lit, 1.0);
@@ -158,15 +227,15 @@ export function createSpace3D(THREE) {
 	const halo = new THREE.Mesh(
 		new THREE.SphereGeometry(1.045, 96, 64),
 		new THREE.ShaderMaterial({
-			uniforms: { sunDir: { value: backLight } },
+			uniforms: { sunDir: { value: planetLight }, haloColor: planetUniforms.atmo },
 			vertexShader: `varying vec3 vNormal; varying vec3 vWorld;
 				void main() { vNormal = normalize(mat3(modelMatrix) * normal); vec4 w = modelMatrix * vec4(position, 1.0); vWorld = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
-			fragmentShader: `varying vec3 vNormal; varying vec3 vWorld; uniform vec3 sunDir;
+			fragmentShader: `varying vec3 vNormal; varying vec3 vWorld; uniform vec3 sunDir; uniform vec3 haloColor;
 				void main() {
 					vec3 n = normalize(vNormal), v = normalize(cameraPosition - vWorld);
 					float rim = pow(1.0 - abs(dot(n, v)), 5.0);
 					float lit = smoothstep(-0.35, 0.5, dot(n, sunDir));
-					gl_FragColor = vec4(vec3(0.35, 0.62, 1.0) * rim * (0.2 + 1.6 * lit), rim);
+					gl_FragColor = vec4(haloColor * 0.8 * rim * (0.2 + 1.6 * lit), rim);
 				}`,
 			side: THREE.BackSide,
 			transparent: true,
@@ -182,30 +251,33 @@ export function createSpace3D(THREE) {
 		RING_OUT = 2.05;
 	const ringGeo = new THREE.RingGeometry(RING_IN, RING_OUT, 256, 1);
 	ringGeo.rotateX(-Math.PI / 2);
-	const ringUniforms = { sunDir: { value: backLight }, planetCentre: { value: new THREE.Vector3() }, planetRadius: { value: 1 } };
+	const ringUniforms = { sunDir: { value: planetLight }, planetCentre: { value: new THREE.Vector3() }, planetRadius: { value: 1 }, ringA: { value: new THREE.Color(0.62, 0.55, 0.47) }, ringB: { value: new THREE.Color(0.95, 0.9, 0.82) }, ringAlpha: { value: 0.6 } };
 	const rings = new THREE.Mesh(
 		ringGeo,
 		new THREE.ShaderMaterial({
 			uniforms: ringUniforms,
 			vertexShader: `varying vec3 vLocal; varying vec3 vWorld;
 				void main() { vLocal = position; vec4 w = modelMatrix * vec4(position, 1.0); vWorld = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
-			fragmentShader: `varying vec3 vLocal; varying vec3 vWorld; uniform vec3 sunDir; uniform vec3 planetCentre; uniform float planetRadius;
+			fragmentShader: `varying vec3 vLocal; varying vec3 vWorld; uniform vec3 sunDir; uniform vec3 planetCentre; uniform float planetRadius; uniform vec3 ringA; uniform vec3 ringB; uniform float ringAlpha;
 				${SPACE_NOISE}
 				void main() {
 					float r = length(vLocal.xz);
 					float t = (r - ${RING_IN.toFixed(2)}) / ${(RING_OUT - RING_IN).toFixed(2)};
 					// Bands and gaps: layered ripples, a wide dark gap, thin bright ringlets.
-					float d = 0.55 + 0.25 * sin(r * 160.0) + 0.2 * sin(r * 61.0 + 1.0) + 0.25 * (sNoise(vec3(r * 90.0, 0.0, 0.0)) - 0.5);
+					// Ripples finer than a pixel fade out (no shimmer when the rings are small on screen).
+					float px = fwidth(r);
+					float fine = 1.0 - smoothstep(0.004, 0.012, px), mid = 1.0 - smoothstep(0.01, 0.03, px);
+					float d = 0.55 + 0.25 * sin(r * 160.0) * fine + 0.2 * sin(r * 61.0 + 1.0) * mid + 0.25 * (sNoise(vec3(r * 90.0, 0.0, 0.0)) - 0.5) * fine;
 					d *= smoothstep(0.0, 0.08, t) * smoothstep(1.0, 0.85, t);
 					d *= 1.0 - 0.9 * smoothstep(0.035, 0.0, abs(t - 0.58));
 					d *= 1.0 - 0.6 * smoothstep(0.02, 0.0, abs(t - 0.22));
 					d += smoothstep(0.006, 0.0, abs(t - 0.74)) * 0.6;
-					vec3 col = mix(vec3(0.62, 0.55, 0.47), vec3(0.95, 0.9, 0.82), sNoise(vec3(r * 40.0, 2.0, 0.0)));
+					vec3 col = mix(ringA, ringB, sNoise(vec3(r * 40.0, 2.0, 0.0)));
 					// The planet's shadow: does the way to the sun pass through the planet?
 					vec3 o = vWorld - planetCentre;
 					float bb = dot(o, sunDir), cc = dot(o, o) - planetRadius * planetRadius;
 					float shadow = (bb < 0.0 && bb * bb - cc > 0.0) ? 0.08 : 1.0;
-					gl_FragColor = vec4(col * (0.25 + 1.0 * shadow), clamp(d, 0.0, 1.0) * 0.6);
+					gl_FragColor = vec4(col * (0.25 + 1.0 * shadow), clamp(d, 0.0, 1.0) * ringAlpha);
 					#include <colorspace_fragment>
 				}`,
 			side: THREE.DoubleSide,
@@ -215,6 +287,91 @@ export function createSpace3D(THREE) {
 		}),
 	);
 	group.add(rings);
+
+	// ---- the black hole (0.143, the map "Wrota Pustki"; 0.143.2 Gargantua as in Interstellar): one
+	// picture facing the camera, drawn whole in a shader so it reads right from every angle — the black
+	// shadow of the horizon, a thin photon ring hugging it, the accretion disk seen almost edge-on as a
+	// bright band across the shadow, and the image of the disk's far side bent by gravity into a halo
+	// over the top (wide) and under the bottom (thin). The disk swirls, white-hot inside, deep red outside,
+	// brighter on the side turning towards the camera (Doppler); the stars behind are lensed into a ring.
+	// Units: the horizon's shadow has radius 1, the picture spans ±7. ----
+	let openRings = false,
+		ringsAligned = false;
+	const blackHole = new THREE.Group();
+	blackHole.visible = false;
+	const holeUniforms = { time: skyUniforms.time };
+	{
+		const picture = new THREE.Mesh(
+			new THREE.PlaneGeometry(14, 14),
+			new THREE.ShaderMaterial({
+				uniforms: holeUniforms,
+				vertexShader: `varying vec2 vP; void main() { vP = position.xy; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+				fragmentShader: `varying vec2 vP; uniform float time;
+					${SPACE_NOISE}
+					// Colour of the gas by heat: deep red, orange, gold, white.
+					vec3 heatCol(float h) {
+						vec3 c = mix(vec3(0.28, 0.02, 0.0), vec3(0.95, 0.28, 0.04), smoothstep(0.0, 0.5, h));
+						c = mix(c, vec3(1.0, 0.62, 0.22), smoothstep(0.5, 0.85, h));
+						return mix(c, vec3(1.0, 0.9, 0.7), smoothstep(0.93, 1.0, h));
+					}
+					// The disk at radius rd (horizon radii) and angle a: brightness, and its heat.
+					float diskAt(float rd, float a, out float heat) {
+						float t = (rd - 1.55) / (5.8 - 1.55);
+						float spin = a - time * 0.25 / max(rd, 1.0);
+						float sw = sFbm(vec3(cos(spin) * rd * 1.7, sin(spin) * rd * 1.7, rd * 2.4));
+						float lanes = 0.78 + 0.22 * sin(rd * 13.0 + sw * 7.0);
+						heat = clamp(0.95 - t * 1.1 + (sw - 0.5) * 0.4, 0.0, 1.0);
+						return smoothstep(0.0, 0.05, t) * smoothstep(1.0, 0.4, t) * (0.5 + 0.5 * sw) * lanes;
+					}
+					void main() {
+						vec2 p = vP;
+						float r = length(p);
+						float shadow = 1.0 - smoothstep(0.97, 1.0, r);
+						vec3 col = vec3(0.0);
+						// The far side of the disk, bent over the top and under the bottom of the shadow.
+						float up = p.y / max(r, 0.001);
+						float band = mix(0.16, 1.0, smoothstep(-0.5, 0.9, up));
+						float u = (r - 1.05) / band;
+						if (u > 0.0 && u < 1.0) {
+							float h;
+							float d = diskAt(1.55 + u * 4.2, atan(p.y, p.x) * 1.3 + 2.0, h);
+							float dop = 1.0 + 0.5 * (-p.x / r);
+							col += heatCol(h) * d * (0.45 + 1.5 * h * h) * dop * smoothstep(0.0, 0.1, u) * (1.0 - u * 0.6);
+						}
+						// The photon ring: a thin, sharp line of light just outside the shadow.
+						col += vec3(1.0, 0.78, 0.5) * exp(-pow((r - 1.025) / 0.014, 2.0)) * 1.3;
+						// The disk itself, almost edge-on; its far half (above the middle) hides behind the shadow,
+						// its near half crosses in front of it.
+						vec2 q = vec2(p.x, p.y / 0.075);
+						float rd = length(q), hd;
+						float dd = diskAt(rd, atan(q.y, q.x), hd);
+						float front = step(p.y, 0.0);
+						float seen = max(front, 1.0 - shadow);
+						float dopD = 1.0 + 0.6 * (-q.x / max(rd, 0.001));
+						vec3 disk = heatCol(hd) * dd * (0.45 + 1.7 * hd * hd) * dopD * seen;
+						float cover = clamp(dd * 1.6, 0.0, 1.0) * front;
+						col = col * (1.0 - cover * shadow) + disk;
+						// A warm haze round it all, and the stars behind bent into a faint ring (the Einstein ring).
+						col += vec3(1.0, 0.36, 0.1) * 0.08 * exp(-max(r - 1.0, 0.0) * 0.8) * (1.0 - shadow);
+						float ring = exp(-pow((r - 2.6) / 0.5, 2.0)) * step(0.985, sHash(vec3(floor(vec2(atan(p.y, p.x) * 60.0, r * 18.0)), 3.0)));
+						col += vec3(0.75, 0.82, 1.0) * ring * 0.6;
+						// Fade the edge of the picture.
+						col *= smoothstep(7.0, 5.5, r);
+						// Premultiplied: the shadow blocks what lies behind, the light adds.
+						gl_FragColor = vec4(col, shadow * (1.0 - cover));
+					}`,
+				transparent: true,
+				blending: THREE.CustomBlending,
+				blendSrc: THREE.OneFactor,
+				blendDst: THREE.OneMinusSrcAlphaFactor,
+				depthWrite: false,
+				fog: false,
+			}),
+		);
+		blackHole.add(picture);
+		blackHole.userData.picture = picture;
+	}
+	group.add(blackHole);
 
 	// ---- a moon: grey, cratered, lit like the planet ----
 	const moon = new THREE.Mesh(
@@ -704,20 +861,64 @@ export function createSpace3D(THREE) {
 			if (!space) return;
 			// Ahead of the default camera (north) and far below: the planet rises over the far edge of the
 			// view while the battle itself floats over dark space; the rings arc steeply behind it.
-			const R = 6500,
-				centre = new THREE.Vector3(game.W * 0.3, -9500, -8500);
+			// The map's world (0.143): `look` from the mission — gas giant (default), ice giant with rings near
+			// the battle, volcanic moon, or a black hole instead of a planet; colours of sky, nebulae, rings.
+			const look = RTS.MISSIONS[game.missionId].look || {},
+				kind = look.planet || "gas";
+			const PAL = {
+				gas: { c: ["#54331f", "#8c4d2e", "#c78c54", "#edd4a8"], amp: 1, atmo: "#73b3ff", rings: ["#9e8c78", "#f2e6d1"], ringAlpha: 0.6 },
+				ice: { c: ["#24607e", "#3a88a8", "#68b8cf", "#b4e4ee"], amp: 0.35, atmo: "#8fe0ff", rings: ["#8aa6b8", "#eef8ff"], ringAlpha: 0.75 },
+				lava: { c: ["#1c1614", "#4a3a2c", "#ff7a1e", "#ffd070"], amp: 0, atmo: "#a8481e", rings: ["#000000", "#000000"], ringAlpha: 0 },
+			}[kind === "none" ? "gas" : kind];
+			planet.visible = kind !== "none";
+			planetUniforms.kind.value = kind === "ice" ? 1 : kind === "lava" ? 2 : 0;
+			["c0", "c1", "c2", "c3"].forEach((k, i) => planetUniforms[k].value.set(PAL.c[i]));
+			planetUniforms.bandAmp.value = PAL.amp;
+			planetUniforms.atmo.value.set(PAL.atmo);
+			ringUniforms.ringA.value.set(PAL.rings[0]);
+			ringUniforms.ringB.value.set(PAL.rings[1]);
+			ringUniforms.ringAlpha.value = PAL.ringAlpha;
+			// The ice giant (0.143.3) sits far off beyond the board's corner, tipped over like Uranus: its pole
+			// and its rings turned almost towards the battle, the rings open round it like a target (set on the
+			// first frame, from the camera, in update).
+			const R = kind === "ice" ? 1450 : kind === "lava" ? 4200 : 6500,
+				centre = kind === "ice" ? new THREE.Vector3(game.W * 0.2, -9800, -11000) : kind === "lava" ? new THREE.Vector3(game.W * 0.15, -9000, -10500) : new THREE.Vector3(game.W * 0.3, -9500, -8500);
+			// The ice giant is lit from the side (a bright half-disc of ice); the others from behind.
+			planetLight.copy(kind === "ice" || kind === "lava" ? ICE_LIGHT : backLight);
 			planet.position.copy(centre);
 			planet.scale.setScalar(R);
 			planet.rotation.set(0.08, 0.6, -0.12);
 			planetUniforms.radius.value = R;
+			rings.visible = !!look.rings && kind !== "none";
 			rings.position.copy(centre);
 			rings.scale.setScalar(R);
-			// Tilted so the half towards the battle dives down and the far half rises behind the planet.
+			// Far rings: tilted so the half towards the battle dives down and the far half rises behind the
+			// planet; open rings (the ice giant): turned towards the camera in update.
 			rings.rotation.set(1.0, 0.35, 0.2);
+			openRings = look.rings === "near";
+			ringsAligned = false;
 			ringUniforms.planetCentre.value.copy(centre);
 			ringUniforms.planetRadius.value = R;
+			moon.visible = kind === "gas" || kind === "ice";
 			moon.position.set(game.W * 1.35, -2500, -15000);
 			moon.scale.setScalar(650);
+			blackHole.visible = !!look.blackHole;
+			blackHole.position.set(game.W * 0.76, -9500, -8000);
+			blackHole.scale.setScalar(1150);
+			// Sky nebulae in the map's colours.
+			const sky2 = look.sky || [["#661230", "#d94d6b"], ["#0a2e61", "#2ea6cc"]];
+			skyUniforms.neb1a.value.set(sky2[0][0]);
+			skyUniforms.neb1b.value.set(sky2[0][1]);
+			skyUniforms.neb2a.value.set(sky2[1][0]);
+			skyUniforms.neb2b.value.set(sky2[1][1]);
+			// What else floats about.
+			derelict.visible = drones.visible = look.derelict !== false;
+			for (const w of welds) w.userData.off = look.derelict === false;
+			comet.visible = look.comet !== false;
+			convoyShips.visible = glows.visible = look.convoys !== false;
+			iceChunks.visible = look.ice !== false;
+			// The rocks of the deep field take the map's stone: ice, dark basalt, or the default.
+			debris.material.color.set(look.rocks === "ice" ? "#a9bccb" : look.rocks === "dark" ? "#3a3634" : look.rocks === "hulk" ? "#5a4e48" : "#77706a");
 			buildDeep(game);
 			derelict.position.set(game.W * 0.9, -2300, game.H * 0.15);
 			derelict.scale.setScalar(620);
@@ -728,8 +929,9 @@ export function createSpace3D(THREE) {
 				c.material?.dispose();
 				if (c.isPoints) c.geometry.dispose();
 			}
-			buildNebula(new THREE.Vector3(game.W * 1.6, -2000, -26000), new THREE.Vector3(9000, 4500, 5000), ["#c050d8", "#6a4ae0", "#e0607a"], 777);
-			buildNebula(new THREE.Vector3(game.W * 0.7, -21000, game.H * 2.2), new THREE.Vector3(12000, 3500, 9000), ["#3fa0d8", "#2f6ad0", "#58d0c0"], 991);
+			const neb = look.nebula || [["#c050d8", "#6a4ae0", "#e0607a"], ["#3fa0d8", "#2f6ad0", "#58d0c0"]];
+			buildNebula(new THREE.Vector3(game.W * 1.6, -2000, -26000), new THREE.Vector3(9000, 4500, 5000), neb[0], 777);
+			buildNebula(new THREE.Vector3(game.W * 0.7, -21000, game.H * 2.2), new THREE.Vector3(12000, 3500, 9000), neb[1], 991);
 			let sd = 5151;
 			const r = () => (sd = (Math.imul(sd, 1664525) + 1013904223) >>> 0) / 4294967296;
 			ice = Array.from({ length: ICE }, () => ({ x: r() * game.W * 1.2, z: r() * game.H * 1.2, W: game.W * 1.2, H: game.H * 1.2, y: -140 + r() * 260, vx: 4 + r() * 8, vz: (r() - 0.5) * 5, s: 3 + r() * 7, rx: r() * 6, ry: r() * 6, spin: (r() - 0.5) * 0.4 }));
@@ -743,8 +945,22 @@ export function createSpace3D(THREE) {
 			planetUniforms.time.value = time;
 			updateDeep(time);
 			derelict.rotation.y = 0.5 + time * 0.006;
+			// The volcanic moon turns slowly, its lava lakes coming round (0.144.1).
+			if (planetUniforms.kind.value > 1.5) planet.rotation.y = 0.6 + time * 0.008;
 			derelictLamps.forEach((l, i) => (l.visible = (time * 0.7 + i * 0.37) % 1 < 0.15));
 			updateSurroundings(time);
+			if (blackHole.visible) blackHole.userData.picture.quaternion.copy(camera.quaternion);
+			if (openRings && !ringsAligned) {
+				// The axis towards the camera, tipped 0.6 rad aside so the rings open as a slightly flat ellipse.
+				ringsAligned = true;
+				const axis = camera.position.clone().sub(planet.position).normalize(),
+					side = new THREE.Vector3().crossVectors(axis, new THREE.Vector3(0, 1, 0)).normalize();
+				axis.applyAxisAngle(side, 0.6);
+				const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), axis);
+				planet.quaternion.copy(q);
+				rings.quaternion.copy(q);
+			}
+			if (welds[0]?.userData.off) for (const w of welds) w.visible = false;
 			sky.position.copy(camera.position);
 			sky.scale.setScalar(camera.far * 0.9);
 			// The streak sits on the sun, fades out as it leaves the view.

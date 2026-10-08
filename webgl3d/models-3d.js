@@ -260,6 +260,17 @@ export function createModels3D(THREE) {
 			stem: std("#cfc6b0", { roughness: 0.8, metalness: 0 }),
 		};
 	glowing.push([prop.egg, prop.egg.emissiveIntensity]);
+	const HULK = {
+		plate: std("#8a827a", { roughness: 0.62, metalness: 0.2 }),
+		plate2: std("#a49a90", { roughness: 0.55, metalness: 0.22 }),
+		dark: std("#4a4440", { roughness: 0.6, metalness: 0.25 }),
+		rib: std("#625a54", { roughness: 0.75, metalness: 0.25 }),
+		burnt: std("#2a1e1a", { roughness: 0.95, metalness: 0.1 }),
+		light: std("#ff3a22", { emissive: "#ff2a12", emissiveIntensity: 1.4 }),
+		ember: std("#3a1408", { emissive: "#ff5a12", emissiveIntensity: 1.8, roughness: 1 }),
+		window: std("#40301c", { emissive: "#ffc878", emissiveIntensity: 1.1 }),
+	};
+	for (const m of [HULK.light, HULK.ember, HULK.window]) glowing.push([m, m.emissiveIntensity]);
 	const ASTEROID = std("#5e5853", { roughness: 0.95, metalness: 0.05 }),
 		ASTEROID_DARK = std("#3b3734", { roughness: 1, metalness: 0.05 }),
 		ASTEROID_ICE = std("#9fb0bc", { roughness: 0.55, metalness: 0.05 });
@@ -320,7 +331,139 @@ export function createModels3D(THREE) {
 					edge = Math.hypot(x / rx, z / rz),
 					s = small * (n ? 0.07 + rnd(n + 9) * 0.13 : 0.24) * (1 - edge * 0.4),
 					y = 26 + rnd(n + 40) * 70 + (1 - edge) * 20;
-				rockPart(root, n % 4 === 3 ? ASTEROID_ICE : n % 2 ? ASTEROID : ASTEROID_DARK, [s * (1 + rnd(n + 3) * 0.6), s * (0.8 + rnd(n + 4) * 0.5), s * (0.9 + rnd(n + 5) * 0.4)], [x, y, z], n * 7 + seed);
+				// The map's stone (biome holds the look's rocks in space): ice fields, dark basalt, or mixed rock.
+				const m = biome === "ice" ? (n % 3 ? ASTEROID_ICE : ASTEROID) : biome === "dark" ? (n % 3 ? ASTEROID_DARK : ASTEROID) : n % 4 === 3 ? ASTEROID_ICE : n % 2 ? ASTEROID : ASTEROID_DARK;
+				rockPart(root, m, [s * (1 + rnd(n + 3) * 0.6), s * (0.8 + rnd(n + 4) * 0.5), s * (0.9 + rnd(n + 5) * 0.4)], [x, y, z], n * 7 + seed);
+			}
+		} else if (kind === "hulk") {
+			// The hulk of a dead warship (0.143, "Cmentarzysko Floty"), floating along the long side of its
+			// field. A shaped hull (a faceted section, a long tapering prow); long wrecks broken in two with the
+			// prow bent away, short ones a prow or a stern torn off. On the stern the engine block with dead
+			// nozzles and the stepped tower with its bridge; turrets turned every which way, armour seams, holes
+			// torn in the plating, bare frames and glowing breaches at the torn ends, a few windows and red
+			// lights still lit, debris drifting from the break.
+			const { box, cyl, pipe, mesh, loftGeo } = detail.tools,
+				long = w >= h,
+				L = (long ? w : h) * 0.98,
+				W = Math.min((long ? h : w) * 0.85, L * 0.17, 82),
+				H = W * 0.6,
+				ship = group(root, [0, 34 + rnd(3) * 14, 0]);
+			ship.rotation.order = "YXZ";
+			ship.rotation.y = (long ? 0 : Math.PI / 2) + (rnd(4) > 0.5 ? Math.PI : 0);
+			ship.rotation.x = (rnd(2) - 0.5) * 0.35;
+			ship.rotation.z = (rnd(1) - 0.5) * 0.1;
+			const key = `${Math.round(L)}x${Math.round(W)}`;
+			// The hull's section at x: a narrow deck, wide shoulders, sloping sides, a keel; `s` scales it,
+			// `top` lowers the deck (the prow).
+			const ring = (x, s, top = 1) => [
+				[x, H * 0.5 * s * top, W * 0.2 * s],
+				[x, H * 0.3 * s * top, W * 0.5 * s],
+				[x, -H * 0.12 * s, W * 0.44 * s],
+				[x, -H * 0.5 * s, W * 0.14 * s],
+				[x, -H * 0.5 * s, -W * 0.14 * s],
+				[x, -H * 0.12 * s, -W * 0.44 * s],
+				[x, H * 0.3 * s * top, -W * 0.5 * s],
+				[x, H * 0.5 * s * top, -W * 0.2 * s],
+			];
+			const hullOf = (parent, name, rings) => mesh(parent, loftGeo(`hulk-${name}-${key}`, rings), HULK.plate);
+			let n = 10;
+			// Armour seams across the deck and along the sides, scorched holes torn in the plating.
+			const plating = (parent, x0, x1) => {
+				for (let x = x0 + W * 0.3; x < x1 - W * 0.2; x += W * 0.55) box(parent, HULK.dark, [W * 0.03, H * 0.03, W * 0.42], [x, H * 0.5, 0], null, 0);
+				for (const z of [-1, 1]) box(parent, HULK.dark, [x1 - x0, H * 0.04, W * 0.04], [(x0 + x1) / 2, H * 0.1, z * W * 0.47], [z * 0.25, 0, 0], 0);
+				// Big armour panels along the sides, in two shades, a few missing (dark hollows).
+				for (let x = x0 + W * 0.1, k = 0; x < x1 - W * 0.6; x += W * 0.62, k++)
+					for (const z of [-1, 1]) {
+						const gone = rnd(n++) > 0.85;
+						box(parent, gone ? HULK.burnt : k % 2 ? HULK.plate2 : HULK.plate, [W * 0.56, H * 0.36, W * 0.03], [x + W * 0.28, H * 0.09, z * (W * 0.48 - (gone ? W * 0.02 : 0))], [z * 0.24, 0, 0], 0);
+					}
+				for (let i = 0; i < 3; i++) {
+					const x = x0 + (x1 - x0) * (0.2 + rnd(n++) * 0.6),
+						side = rnd(n++) > 0.5 ? 1 : -1;
+					box(parent, HULK.burnt, [W * (0.25 + rnd(n++) * 0.25), H * 0.3, W * 0.05], [x, H * 0.05, side * W * 0.465], [side * 0.25, 0, 0], 0);
+					box(parent, HULK.ember, [W * 0.1, H * 0.08, W * 0.03], [x, H * 0.02, side * W * 0.48], [side * 0.25, 0, 0], 0);
+				}
+				box(parent, HULK.burnt, [W * 0.35, H * 0.03, W * 0.3], [x0 + (x1 - x0) * (0.3 + rnd(n++) * 0.4), H * 0.505, 0], null, 0);
+			};
+			const turret = (parent, x, r) => {
+				const t = group(parent, [x, H * 0.5, 0]);
+				t.rotation.y = rnd(n++) * Math.PI * 2;
+				t.rotation.z = (rnd(n++) - 0.5) * 0.3;
+				cyl(t, HULK.dark, r, r * 0.4, [0, r * 0.2, 0], { segs: 10, top: r * 0.85 });
+				box(t, HULK.plate, [r * 1.4, r * 0.5, r * 1.1], [0, r * 0.62, 0], null, r * 0.12);
+				for (const z of [-1, 1]) box(t, HULK.rib, [r * 1.8, r * 0.14, r * 0.14], [r * 1.45, r * 0.68, z * r * 0.28], [0, 0, rnd(n++) * 0.25], 0);
+			};
+			// A torn end at x (`dir` pointing out of the hull): bare frames, pipes sticking out, a breach glowing.
+			const torn = (parent, x, dir) => {
+				box(parent, HULK.ember, [W * 0.04, H * 0.62, W * 0.72], [x - dir * W * 0.03, -H * 0.02, 0], null, 0);
+				for (let i = 0; i < 5; i++) {
+					const s2 = 0.92 - i * 0.1,
+						fx = x + dir * W * (0.1 + i * 0.14),
+						frame = [
+							[[W * 0.04, H * 0.06, W * 0.8 * s2], H * 0.42 * s2, 0],
+							[[W * 0.04, H * 0.06, W * 0.4 * s2], -H * 0.45 * s2, 0],
+							[[W * 0.04, H * 0.8 * s2, W * 0.06], 0, W * 0.42 * s2],
+							[[W * 0.04, H * 0.8 * s2, W * 0.06], 0, -W * 0.42 * s2],
+						];
+					for (const [size, py, pz] of frame) if (rnd(n++) > 0.18 * i) box(parent, HULK.rib, size, [fx, py, pz], [(rnd(n++) - 0.5) * 0.3, 0, 0], 0);
+				}
+				pipe(parent, HULK.rib, [x, H * 0.3, W * 0.3], [x + dir * W * 0.9, H * 0.4, W * 0.42], W * 0.025, 5);
+				pipe(parent, HULK.rib, [x, -H * 0.25, -W * 0.25], [x + dir * W * 0.75, -H * 0.4, -W * 0.38], W * 0.025, 5);
+				for (let i = 0; i < 6; i++) {
+					const f = i % 2 ? box(parent, HULK.plate, [W * 0.18, H * 0.03, W * 0.14], [0, 0, 0], null, 0) : rockPart(parent, HULK.burnt, [W * 0.07, W * 0.04, W * 0.06], [0, 0, 0], i + seed);
+					f.position.set(x + dir * W * (0.6 + rnd(n++) * 1.4), (rnd(n++) - 0.5) * H * 1.6, (rnd(n++) - 0.5) * W * 1.4);
+					f.rotation.set(rnd(n++) * 3, rnd(n++) * 3, rnd(n++) * 3);
+				}
+			};
+			// The prow: from x0, `len` long, pointing +x.
+			const prow = (parent, x0, len, name) => {
+				hullOf(parent, name, [ring(x0, 1), ring(x0 + len * 0.5, 1), ring(x0 + len * 0.82, 0.74, 0.85), ring(x0 + len, 0.16, 0.5)]);
+				box(parent, HULK.dark, [len * 0.5, H * 0.08, W * 0.08], [x0 + len * 0.62, -H * 0.42, 0], null, 0);
+				plating(parent, x0, x0 + len * 0.6);
+				if (len > W * 2.2) turret(parent, x0 + len * 0.3, W * 0.17);
+				if (len > W * 3.5) turret(parent, x0 + len * 0.12, W * 0.13);
+			};
+			// The stern: from x0 (its end, the engines) to x1, pointing +x.
+			const stern = (parent, x0, x1, name) => {
+				const len = x1 - x0;
+				hullOf(parent, name, [ring(x0, 0.84, 0.9), ring(x0 + W * 0.35, 1), ring(x1, 1)]);
+				// Engine block and nozzles, cold and dark, a last glow deep inside the big one.
+				box(parent, HULK.dark, [W * 0.25, H * 0.7, W * 0.85], [x0 - W * 0.08, 0, 0], null, W * 0.03);
+				for (const [z, y, r] of [[0, 0, 0.2], [W * 0.27, -H * 0.05, 0.13], [-W * 0.27, -H * 0.05, 0.13]]) {
+					cyl(parent, HULK.rib, W * r * 0.8, W * 0.3, [x0 - W * 0.33, y, z], { axis: "x", segs: 12, top: W * r });
+					cyl(parent, r > 0.15 ? HULK.ember : HULK.burnt, W * r * 0.62, W * 0.02, [x0 - W * 0.48, y, z], { axis: "x", segs: 12 });
+				}
+				// The tower: stepped blocks, the bridge with a few windows lit, a mast with a red light.
+				const tx = x0 + Math.min(len * 0.32, W * 1.4),
+					tilt = (rnd(n++) - 0.5) * 0.12;
+				box(parent, HULK.plate, [W * 0.85, H * 0.28, W * 0.5], [tx, H * 0.62, 0], [tilt, 0, 0], W * 0.04);
+				box(parent, HULK.dark, [W * 0.55, H * 0.26, W * 0.4], [tx - W * 0.08, H * 0.88, 0], [tilt, 0, 0], W * 0.04);
+				box(parent, HULK.plate2, [W * 0.32, H * 0.16, W * 0.62], [tx + W * 0.04, H * 1.07, 0], [tilt, 0, 0], W * 0.03);
+				for (let i = 0; i < 5; i++) if (rnd(n++) > 0.4) box(parent, HULK.window, [W * 0.02, H * 0.05, W * 0.07], [tx + W * 0.205, H * 1.08, (i - 2) * W * 0.11], null, 0);
+				const mast = [tx - W * 0.22 + tilt * W, H * 1.6, (rnd(n++) - 0.5) * W * 0.3];
+				pipe(parent, HULK.rib, [tx - W * 0.16, H * 1.12, 0], mast, W * 0.02, 5);
+				box(parent, HULK.light, [W * 0.04, W * 0.04, W * 0.04], mast, null, 0);
+				plating(parent, x0 + W * 0.3, x1);
+				if (len > W * 2.6) turret(parent, tx + W * 1.1, W * 0.17);
+				if (len > W * 3.6) turret(parent, x1 - W * 0.5, W * 0.15);
+				for (const z of [-1, 1]) box(parent, HULK.light, [W * 0.035, W * 0.035, W * 0.035], [x0 + W * 0.4, H * 0.3, z * W * 0.5], null, 0);
+			};
+			if (L > W * 7) {
+				// Broken in two: the stern as it was, the prow bent away past a gap full of debris.
+				const brk = -L * 0.08 + (rnd(5) - 0.5) * L * 0.1,
+					gap = W * 0.9;
+				stern(ship, -L / 2, brk - gap / 2, "s");
+				torn(ship, brk - gap / 2, 1);
+				const front = group(ship, [brk + gap / 2, (rnd(6) - 0.5) * H * 0.6, 0]);
+				front.rotation.set((rnd(7) - 0.5) * 0.5, (rnd(8) - 0.5) * 0.3, (rnd(9) - 0.5) * 0.2);
+				prow(front, 0, L / 2 - brk - gap / 2, "p");
+				torn(front, 0, -1);
+			} else if (rnd(5) > 0.5) {
+				prow(ship, -L / 2 + W * 0.3, L - W * 0.3, "p");
+				torn(ship, -L / 2 + W * 0.3, -1);
+			} else {
+				stern(ship, -L / 2 + W * 0.3, L / 2 - W * 0.3, "s");
+				torn(ship, L / 2 - W * 0.3, 1);
 			}
 		} else {
 			// Mesa: a few boulders on the plateau. Rock and outcrop: a tight pile of big boulders over most of
@@ -441,38 +584,77 @@ export function createModels3D(THREE) {
 		}
 		return { root, update() {} };
 	}
-	// ---- Space (the orbital battle, 0.132): deposits float over the plane of the battle ----
+	// ---- Space (the orbital battle, 0.132; 0.143.7 richer): deposits float over the plane of the battle ----
 	const SPACE_DEP = {
-		gas: std("#b27aee", { emissive: "#8a48d8", emissiveIntensity: 1.3, roughness: 0.4, transparent: true, opacity: 0.5 }),
-		gasBlue: std("#7aa8f0", { emissive: "#3f70d8", emissiveIntensity: 1.1, roughness: 0.4, transparent: true, opacity: 0.38 }),
 		gasCore: std("#f2dcff", { emissive: "#e0b8ff", emissiveIntensity: 2.2, roughness: 0.3 }),
+		gasHalo: std("#e0c0ff", { emissive: "#c890ff", emissiveIntensity: 1.4, roughness: 1, transparent: true, opacity: 0.2, flatShading: false, depthWrite: false }),
+		gasPuff: std("#b27aee", { emissive: "#8a48d8", emissiveIntensity: 1.0, roughness: 1, transparent: true, opacity: 0.15, flatShading: false, depthWrite: false }),
+		gasPuffBlue: std("#7aa8f0", { emissive: "#3f70d8", emissiveIntensity: 0.9, roughness: 1, transparent: true, opacity: 0.13, flatShading: false, depthWrite: false }),
+		spark: std("#ffffff", { emissive: "#f0e0ff", emissiveIntensity: 2.4 }),
 		ice: std("#c6d6e2", { roughness: 0.45, metalness: 0.05 }),
-		buoy: std("#a9b4b8", { roughness: 0.4, metalness: 0.65 }),
-		panel: std("#1f3a5c", { roughness: 0.25, metalness: 0.55, emissive: "#0a1a30", emissiveIntensity: 0.4 }),
-		strut: std("#2c3437", { roughness: 0.5, metalness: 0.75 }),
+		oreRock: std("#4c4540", { roughness: 0.92, metalness: 0.08 }),
+		oreDark: std("#2f2a27", { roughness: 0.95, metalness: 0.05 }),
+		metal: std("#c98a42", { roughness: 0.28, metalness: 0.95, emissive: "#5a3010", emissiveIntensity: 0.3 }),
+		vein: std("#ffc060", { roughness: 0.3, metalness: 0.7, emissive: "#ff9a2a", emissiveIntensity: 0.9 }),
+		crystal: std("#ffd060", { emissive: "#ff9a1a", emissiveIntensity: 1.1, roughness: 0.12, metalness: 0.1, transparent: true, opacity: 0.9 }),
+		buoy: std("#c4ccd0", { roughness: 0.45, metalness: 0.3 }),
+		panel: std("#24476e", { roughness: 0.25, metalness: 0.4, emissive: "#0c2240", emissiveIntensity: 0.5 }),
+		strut: std("#4a5458", { roughness: 0.5, metalness: 0.4 }),
 	};
-	glowing.push([SPACE_DEP.gas, SPACE_DEP.gas.emissiveIntensity], [SPACE_DEP.gasBlue, SPACE_DEP.gasBlue.emissiveIntensity], [SPACE_DEP.gasCore, SPACE_DEP.gasCore.emissiveIntensity]);
-	// Ore: a cluster of asteroids with metal veins and nuggets; gas: a glowing nebula pocket with a bright
-	// heart and drifting ice; crystals: a small asteroid bristling with golden shards. Fewer and smaller
-	// as the deposit empties (stage n: 0 exhausted … 6 full).
+	for (const m of ["gasCore", "gasHalo", "gasPuff", "gasPuffBlue", "spark", "metal", "vein", "crystal"]) glowing.push([SPACE_DEP[m], SPACE_DEP[m].emissiveIntensity]);
+	// Ore: a big asteroid of dark stone set with nuggets of copper-gold metal and glowing veins, a train of
+	// smaller chunks round it; gas: a pocket of nebula — a bright knot with a halo and two spiral arms of
+	// soft glowing gas round it, sparks and ice caught in the swirl (the wider cloud: buildNebula,
+	// three-renderer.js); crystals: a geode asteroid split open, clusters of glowing amber crystal bursting
+	// out of it on every side, a soft glow round them. Fewer and smaller as the deposit empties (stage n:
+	// 0 exhausted … 6 full).
 	function spaceDeposit(kind, n) {
 		const root = new THREE.Group(),
 			k = n ? 0.55 + (n / 6) * 0.45 : 0.35,
-			H = 30;
+			H = 30,
+			{ mesh, sphereGeo } = detail.tools;
 		if (kind === "ore") {
 			const rocks = [[0, 0, 0, 15], [-22, 6, 8, 8], [20, -4, 10, 7], [8, 14, -18, 6], [-12, -6, -16, 5], [26, 10, -10, 4]].slice(0, n ? 1 + Math.ceil(n * 0.8) : 4);
 			rocks.forEach(([x, y, z, s], i) => {
-				const r = s * (n ? k : 0.5);
-				rockPart(root, i % 2 ? DEP.oreDark : DEP.ore, [r * 1.2, r, r * 1.05], [x * k, H + y, z * k], i * 5 + 2);
-				if (n && s >= 7)
-					for (let j = 0; j < 3; j++) part(root, "octa", DEP.vein, [r * 0.25, r * 0.32, r * 0.2], [x * k + (j - 1) * r * 0.4, H + y + r * 0.75, z * k + (j % 2 ? 1 : -1) * r * 0.25], [j, i + j, 0.4]);
+				const r = s * (n ? k : 0.5),
+					c = [x * k, H + y, z * k];
+				rockPart(root, i % 2 ? SPACE_DEP.oreDark : SPACE_DEP.oreRock, [r * 1.25, r, r * 1.05], c, i * 5 + 2);
+				if (!n) return;
+				// Nuggets of metal breaking the surface, spread over the rock, more on the big ones.
+				const count = s >= 12 ? 10 : s >= 7 ? 4 : 2;
+				for (let j = 0; j < count; j++) {
+					const a = j * 2.39 + i,
+						b = Math.acos(1 - (2 * (j + 0.5)) / count),
+						ns = r * (0.16 + ((j * 7) % 5) * 0.035);
+					rockPart(root, j % 3 ? SPACE_DEP.metal : SPACE_DEP.vein, [ns * 1.3, ns, ns * 1.1], [c[0] + Math.sin(b) * Math.cos(a) * r * 1.1, c[1] + Math.cos(b) * r * 0.9, c[2] + Math.sin(b) * Math.sin(a) * r * 0.98], j + i * 11);
+				}
 			});
+			// Gravel and flakes of metal trailing round the big rock.
+			if (n)
+				for (let i = 0; i < 10; i++) {
+					const a = i * 0.63,
+						d = 25 + (i % 3) * 5;
+					rockPart(root, i % 4 ? SPACE_DEP.oreDark : SPACE_DEP.metal, [1.3 + (i % 2), 1, 1.2], [Math.cos(a) * d * k, H - 4 + Math.sin(i * 1.7) * 5, Math.sin(a) * d * k * 0.6], i + 31);
+				}
 		} else if (kind === "gas") {
 			if (n) {
-				part(root, "sphere", SPACE_DEP.gas, [26 * k, 18 * k, 24 * k], [0, H, 0]);
-				part(root, "sphere", SPACE_DEP.gasBlue, [20 * k, 14 * k, 18 * k], [-12 * k, H + 4, 8 * k]);
-				part(root, "sphere", SPACE_DEP.gas, [14 * k, 10 * k, 14 * k], [14 * k, H - 3, -10 * k]);
-				part(root, "sphere", SPACE_DEP.gasCore, [6 * k, 6 * k, 6 * k], [0, H, 0]);
+				mesh(root, sphereGeo(1, 16, 12), SPACE_DEP.gasCore, [0, H, 0]).scale.setScalar(4.5 * k);
+				mesh(root, sphereGeo(1, 20, 14), SPACE_DEP.gasHalo, [0, H, 0]).scale.setScalar(8 * k);
+				// Two spiral arms of soft puffs, larger and fainter outwards.
+				for (const arm of [0, Math.PI])
+					for (let j = 0; j < 12; j++) {
+						const t = j / 11,
+							a = arm + t * 3.4,
+							d = (7 + t * 36) * k,
+							s = (4 + t * 10) * k;
+						mesh(root, sphereGeo(1, 14, 10), j % 3 === 2 ? SPACE_DEP.gasPuffBlue : SPACE_DEP.gasPuff, [Math.cos(a) * d, H + Math.sin(t * 6 + arm) * 3, Math.sin(a) * d * 0.85]).scale.set(s * 1.3, s * 0.6, s);
+					}
+				// Sparks: new stars lighting up in the cloud.
+				for (let i = 0; i < 8; i++) {
+					const a = i * 2.1,
+						d = (10 + (i % 4) * 8) * k;
+					mesh(root, sphereGeo(1, 6, 4), SPACE_DEP.spark, [Math.cos(a) * d, H + ((i * 5) % 7) - 3, Math.sin(a) * d]).scale.setScalar(0.5 + (i % 3) * 0.25);
+				}
 			}
 			// Ice and dust caught in the cloud.
 			for (let i = 0; i < 7; i++) {
@@ -481,36 +663,77 @@ export function createModels3D(THREE) {
 				rockPart(root, SPACE_DEP.ice, [1.6 + (i % 2), 1.3, 1.5], [Math.cos(a) * d, H - 8 + (i % 4) * 5, Math.sin(a) * d], i + 11);
 			}
 		} else {
-			rockPart(root, DEP.oreDark, [11, 8, 10], [0, H - 4, 0], 7);
+			rockPart(root, SPACE_DEP.oreDark, [14, 10, 13], [0, H - 2, 0], 7);
 			if (n) {
-				const shards = [[0, 0, 14, 4, 0], [-6, 4, 11, 3, -0.4], [6, -3, 10, 3, 0.4], [-3, -7, 8, 2.5, 0.25], [7, 6, 7, 2.5, -0.3], [-8, -3, 6, 2, 0.6], [2, 8, 6, 2, -0.5]];
-				shards.slice(0, n + 1).forEach(([x, z, h, w, lean], i) => {
-					const g = natureKit.crystals(root, DEP.crystal, [x, z], h * k + w, w, lean, i + 1);
-					g.position.y += H + 2;
+				// [tilt from up, turn round, height, width]: the biggest on top, the rest round the sides.
+				const clusters = [[0, 0, 14, 4], [0.9, 0.4, 11, 3.2], [0.85, 2.5, 10, 3], [1.2, 4.3, 9, 2.6], [1.0, 1.5, 8, 2.4], [1.35, 3.4, 7, 2.2], [1.5, 5.4, 6, 2], [0.7, 5.9, 6, 2]];
+				clusters.slice(0, n + 2).forEach(([tilt, turn, h, w], i) => {
+					const pivot = group(root, [0, H - 2, 0]);
+					pivot.rotation.set(0, turn, tilt);
+					const g = natureKit.crystals(pivot, SPACE_DEP.crystal, [0, 0], (h * k + w) * 1.5, w * 1.5, 0, i + 1);
+					g.position.y = 7.5;
 				});
 			}
 		}
 		return { root, update() {} };
 	}
-	// The relay in space: a buoy over the plane — a hexagonal core, a ring in the owner's colour, solar
-	// panels on two arms, antennae and a beacon; the ring and panels turn (returned as the "dish").
+	// The relay in space (0.143.8): a relay satellite over the plane — a hexagonal core with radiator fins
+	// and a band of the owner's colour, an outer ring on four spokes with a light strip and pods, long wings
+	// of solar panels with their cells, a mast with a dish that sweeps round, whip antennae, a beacon on top
+	// and a light underneath. The ring and the dish turn (returned as the "dish"); the wings stay.
 	function buoy(root, light) {
-		const b = group(root, [0, 44, 0]),
+		const b = group(root, [0, 50, 0]),
 			turn = group(b);
-		const { mesh, cyl, ball, box, pipe, torusGeo } = detail.tools;
-		cyl(b, SPACE_DEP.buoy, 7, 12, [0, 0, 0], { segs: 6 });
-		cyl(b, SPACE_DEP.strut, 4, 5, [0, -8, 0], { segs: 6, top: 6 });
-		ball(b, light, 2.6, [0, -11.5, 0]);
-		mesh(turn, torusGeo(15, 1.8, 24, "y"), light);
-		mesh(turn, torusGeo(15, 0.7, 24, "y"), SPACE_DEP.strut, [0, -1.6, 0]);
-		for (const side of [-1, 1]) {
-			pipe(turn, SPACE_DEP.strut, [side * 7, 0, 0], [side * 22, 0, 0], 0.7, 6);
-			box(turn, SPACE_DEP.panel, [16, 0.6, 10], [side * 31, 0, 0], null, 0.2);
-			for (let k = -1; k <= 1; k++) box(turn, SPACE_DEP.strut, [0.4, 0.8, 10.2], [side * 31 + k * 5, 0, 0], null, 0.05);
+		const { mesh, cyl, ball, box, pipe, torusGeo, latheGeo } = detail.tools;
+		// Core: the hex body, collars, the cone underneath with its light.
+		cyl(b, SPACE_DEP.buoy, 8, 16, [0, 0, 0], { segs: 6 });
+		cyl(b, SPACE_DEP.strut, 9.6, 2.4, [0, 8.6, 0], { segs: 6 });
+		cyl(b, SPACE_DEP.strut, 9.6, 2.4, [0, -8.6, 0], { segs: 6 });
+		cyl(b, SPACE_DEP.buoy, 4, 8, [0, -13.5, 0], { segs: 6, top: 7 });
+		ball(b, light, 3, [0, -18.5, 0]);
+		mesh(b, torusGeo(8.6, 1, 24, "y"), light, [0, 2.5, 0]);
+		// Radiator fins between the wings.
+		for (const a of [Math.PI / 2, -Math.PI / 2]) {
+			const fin = group(b, [Math.cos(a) * 8, 0, Math.sin(a) * 8]);
+			fin.rotation.y = -a;
+			box(fin, SPACE_DEP.panel, [12, 12, 0.5], [6, 0, 0], null, 0.1);
+			for (let k = -2; k <= 2; k++) box(fin, SPACE_DEP.strut, [12, 0.5, 0.7], [6, k * 2.5, 0], null, 0.05);
 		}
-		pipe(b, SPACE_DEP.strut, [0, 6, 0], [0, 22, 0], 0.5, 5);
-		pipe(b, SPACE_DEP.strut, [0, 6, 0], [7, 18, 4], 0.35, 5);
-		ball(b, light, 1.6, [0, 23, 0]);
+		// Wings: a truss out each side, two panels with frames and cells.
+		for (const side of [-1, 1]) {
+			pipe(b, SPACE_DEP.strut, [side * 8, 0, 0], [side * 66, 0, 0], 0.9, 6);
+			pipe(b, SPACE_DEP.strut, [side * 8, 1.6, 0], [side * 30, 0, 0], 0.4, 5);
+			for (const x of [37, 57]) {
+				box(b, SPACE_DEP.panel, [18, 0.6, 14], [side * x, 0, 0], null, 0.2);
+				box(b, SPACE_DEP.strut, [18.6, 0.8, 0.6], [side * x, 0, 7], null, 0.05);
+				box(b, SPACE_DEP.strut, [18.6, 0.8, 0.6], [side * x, 0, -7], null, 0.05);
+				for (let k = -2; k <= 2; k++) box(b, SPACE_DEP.strut, [0.35, 0.75, 14], [side * x + k * 3.6, 0, 0], null, 0.05);
+				box(b, SPACE_DEP.strut, [18, 0.75, 0.3], [side * x, 0, 0], null, 0.05);
+			}
+		}
+		// The outer ring on four spokes, its light strip, pods.
+		mesh(turn, torusGeo(24, 2.2, 40, "y"), SPACE_DEP.buoy);
+		mesh(turn, torusGeo(24, 0.9, 40, "y"), light, [0, 1.6, 0]);
+		for (let i = 0; i < 4; i++) {
+			const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+			pipe(turn, SPACE_DEP.strut, [Math.cos(a) * 9, 0, Math.sin(a) * 9], [Math.cos(a) * 22.5, 0, Math.sin(a) * 22.5], 0.8, 6);
+			const pod = group(turn, [Math.cos(a) * 24, 0, Math.sin(a) * 24]);
+			pod.rotation.y = -a;
+			box(pod, SPACE_DEP.buoy, [5, 4.4, 6], [0, 0, 0], null, 0.6);
+			ball(pod, light, 0.9, [2.6, 0, 0]);
+		}
+		// The mast and the dish sweeping round, the feed horn at its focus.
+		pipe(turn, SPACE_DEP.strut, [0, 9.8, 0], [0, 20, 0], 1.1, 6);
+		const dish = group(turn, [0, 22, 0]);
+		dish.rotation.z = -0.9;
+		mesh(dish, latheGeo([[0, 0], [3, 0.35], [6, 1.4], [9, 3.3], [9.6, 3.9], [9.2, 4.1], [6, 2.0], [3, 0.95], [0, 0.6]], 24), SPACE_DEP.buoy);
+		pipe(dish, SPACE_DEP.strut, [0, 0.6, 0], [0, 7, 0], 0.4, 5);
+		for (const a of [0, 2.1, 4.2]) pipe(dish, SPACE_DEP.strut, [Math.cos(a) * 8.5, 3.4, Math.sin(a) * 8.5], [0, 7, 0], 0.25, 4);
+		ball(dish, light, 0.9, [0, 7.4, 0]);
+		// Whip antennae and the beacon on top.
+		pipe(b, SPACE_DEP.strut, [4, 9.8, 3], [6, 24, 5], 0.3, 4);
+		pipe(b, SPACE_DEP.strut, [-4, 9.8, -3], [-5, 20, -6], 0.3, 4);
+		ball(b, light, 1.4, [6, 24.5, 5]);
 		return turn;
 	}
 	// Relay: a hexagonal plinth, a tripod mast with a dish, a light in the owner's colour and a capture
@@ -551,7 +774,7 @@ export function createModels3D(THREE) {
 			// Parts lying on the ground: the renderer sets their height to the terrain under them.
 			ground,
 			update(node, i) {
-				dish.rotation.y = i.time * 0.6;
+				dish.rotation.y = i.time * (space ? 0.25 : 0.6);
 				if (jammer) jammer.rotation.y = i.time * 0.7;
 				machine?.(node, i);
 				const shown = Math.round((node.progress || 0) * SEGMENTS),

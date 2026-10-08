@@ -1,4 +1,30 @@
-# Centrum dowodzenia — Przyczółek i Kolonia
+# Centrum dowodzenia — Przyczółek, Kolonia i Twierdza
+
+## Poziom III — Twierdza i doktryny frakcji (0.147)
+
+Wdrożono 2026-10-08 na życzenie użytkownika. Zasady w `doctrine-rules.js` (łańcuch modułów po `network-rules.js`, przed `space-rules.js`).
+
+**Twierdza** — badanie „Centrum III — Twierdza” w centrum dowodzenia: 600 metalu, 150 gazu, 100 kryształów, 45 s przy pełnej mocy. Wymaga poziomu II (Kolonia) i stojącego laboratorium. Efekt: centrum o 50% wytrzymalsze (raz, znacznik `fortress` na budynku, więc wczytanie zapisu nie powtarza premii), +4 metalu/s do dochodu pasywnego, `centerLevel()` = 3 i wybór doktryny. Twierdza niczego wcześniej dostępnego nie blokuje — obecna zawartość, kampania i AI bez zmian.
+
+**Doktryny** — badania w centrum po Twierdzy: 450 metalu, 150 gazu, 150 kryształów, 40 s. Dwie dla każdej frakcji (bez frakcji scenariusza, np. w kampanii — doktryny Kolonii); jedną można przyjąć. Wybór jest ostateczny: w trakcie przyjmowania jednej druga jest zablokowana („Trwa przyjmowanie”), po ukończeniu — na stałe („Wybrano już”); anulowanie w trakcie zwraca koszt i odblokowuje drugą. Interfejs pyta o potwierdzenie przed rozpoczęciem.
+
+| Frakcja | Doktryna | Efekt | Kiedy dobra |
+|---|---|---|---|
+| Wolne Kolonie | Logistyka mobilna | jednostki naziemne +15% szybkości, produkcja o 25% szybsza | wojna manewrowa, szybkie uzupełnianie strat |
+| | Fortyfikacja przyczółków | jednostki w promieniu 220 od własnych budynków i przekaźników −20% obrażeń; wieże obronne +25% obrażeń | utrzymywanie przekaźników i placówek; nic poza zasięgiem |
+| Dominium | Ciężki ostrzał | pojazdy, okręty i budynki obronne +20% obrażeń | pancerne natarcie; piechota bez premii |
+| | Silniejsze osłony | wszystkie jednostki i budynki −15% obrażeń | długie starcia, obrona |
+| Rój | Nawała | produkcja o 30% szybsza, jednostki +10% szybkości | masa i tempo |
+| | Pancerz chitynowy | jednostki i budynki −17% obrażeń (jak +20% wytrzymałości) | wytrzymałe fale, kolosy |
+
+- Efekty liczy `damage()` (atakujący — Ciężki ostrzał, wieże Fortyfikacji; cel — osłony, pancerz, utrzymywanie terenu), `movementFactor()` i `productionRate()` (nowy punkt zaczepienia w `engine.js`, kolejka produkcji w `sideTick`). Doktryna należy do strony gracza (`upgradeOf(drużyna, id)`), zapisywana z jej ulepszeniami; przeciwnik komputerowy nie przyjmuje doktryn.
+- Ukończone badanie zgłasza swój efekt (`RESEARCH[...].done` — nowe pole, czytane przez silnik przed dotychczasową listą komunikatów).
+- Interfejs: karty „Centrum III — Twierdza” i dwie doktryny frakcji w BADANIACH (pola TWIERDZA / DOKTRYNA), drzewo rozwoju F2 → Gospodarka (gałąź centrum: Kolonia → Twierdza → doktryny), zaznaczenie centrum („Centrum 3 — Twierdza · doktryna …”), napis nad centrum „III · TWIERDZA”, baza wiedzy.
+- Testy: `tests/doctrine.test.js` (wymagania i koszty Twierdzy, jednorazowa premia wytrzymałości i dochód, zapis; blokady doktryn — przed Twierdzą, innej frakcji, wykluczanie w toku i po ukończeniu, anulowanie; efekty wszystkich sześciu doktryn); `tests/development.test.js` — badania frakcyjne (doktryny) w drzewie tylko dla swojej frakcji, jak jednostki.
+- Dalej (propozycje): doktryny w rękach AI, balans po rozgrywkach, specjalistyczne lotnictwo i zaawansowane osłony jako zawartość poziomu III.
+
+---
+
 
 Aktualizacja 2026-09-24: cały [etap A](ETAP_A_ROZWOJ_KOLONII.md) jest ukończony, wraz z technologiami i misją Próba kolonii. Poniżej opis pierwotnego podetapu.
 

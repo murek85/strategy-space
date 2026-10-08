@@ -18,6 +18,33 @@
 			ny = (y - w.y) / (w.ry + pad);
 		return Math.hypot(nx, ny) < waterRadius(w, Math.atan2(ny, nx));
 	}
+	// Does the segment a→b pass through the open box |x - cx| < hx, |y - cy| < hy (in the box's own frame, turned by
+	// angle)? The exact test for routes past rocks and walls: sampling missed segments that cut a padded corner.
+	function segmentCrossesBox(a, b, cx, cy, hx, hy, angle = 0) {
+		const c = Math.cos(angle),
+			s = Math.sin(angle),
+			ax = (a.x - cx) * c + (a.y - cy) * s,
+			ay = -(a.x - cx) * s + (a.y - cy) * c,
+			dx = (b.x - a.x) * c + (b.y - a.y) * s,
+			dy = -(b.x - a.x) * s + (b.y - a.y) * c;
+		let t0 = 0,
+			t1 = 1;
+		for (const [p, d, h] of [
+			[ax, dx, hx],
+			[ay, dy, hy],
+		]) {
+			if (Math.abs(d) < 1e-9) {
+				if (Math.abs(p) >= h) return false;
+				continue;
+			}
+			const u = (-h - p) / d,
+				v = (h - p) / d;
+			t0 = Math.max(t0, Math.min(u, v));
+			t1 = Math.min(t1, Math.max(u, v));
+			if (t0 >= t1) return false;
+		}
+		return true;
+	}
 	const TYPES = {
 		trooper: {
 			name: "Piechota",
@@ -365,6 +392,43 @@
 		{ id: 3, x: 1120, y: 490, amount: 3000 },
 	];
 	const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+	// WAL-01 (0.146): rocks block direct fire. Rock obstacles (no kind, rock, outcrop, spire, mesa) stand in the
+	// way; wrecks, ruins, groves and the like, and the asteroids and hulks of space, do not. Artillery and
+	// grenades fly over in an arc; shots of and at aircraft pass above.
+	const FIRE_BLOCKERS = new Set(["rock", "outcrop", "spire", "mesa"]),
+		INDIRECT_FIRE = new Set(["artillery", "grenadier"]);
+	// Does the segment a→b cross the rectangle r shrunk by `inset` on every side (Liang–Barsky clipping)?
+	function crossesRect(a, b, r, inset) {
+		const x0 = r.x + inset,
+			x1 = r.x + r.w - inset,
+			y0 = r.y + inset,
+			y1 = r.y + r.h - inset;
+		if (x0 >= x1 || y0 >= y1) return false;
+		const dx = b.x - a.x,
+			dy = b.y - a.y;
+		let t0 = 0,
+			t1 = 1;
+		for (const [p, q] of [
+			[-dx, a.x - x0],
+			[dx, x1 - a.x],
+			[-dy, a.y - y0],
+			[dy, y1 - a.y],
+		]) {
+			if (p === 0) {
+				if (q < 0) return false;
+				continue;
+			}
+			const t = q / p;
+			if (p < 0) {
+				if (t > t1) return false;
+				if (t > t0) t0 = t;
+			} else {
+				if (t < t0) return false;
+				if (t < t1) t1 = t;
+			}
+		}
+		return t0 <= t1;
+	}
 	// Saves before map sizes (version < 7) always used the medium map.
 	const mapW = (state) =>
 		Number.isInteger(state?.W) &&
@@ -2029,7 +2093,47 @@
 				)
 			);
 		}
-		clearLine(a, b) {
+		// The margin a route keeps from rocks, walls and water: the classic 22, or more for a ground unit wider than that,
+		// so that its own step check (radius + 2) never blocks a segment the route found clear.
+		routePad(a) {
+			const t = TYPES[a?.type];
+			return t?.speed && !t.flying ? Math.max(22, t.radius + 3) : 22;
+		}
+		clearLine(a, b, pad = 22) {
+			// Rocks and walls exactly; a box the segment starts in is left to the sampling below (the old behaviour), so a
+			// unit standing within the margin can still leave it.
+			const inside = (x, y, hx, hy, angle = 0) => {
+				const c = Math.cos(angle),
+					s = Math.sin(angle);
+				return (
+					Math.abs((a.x - x) * c + (a.y - y) * s) < hx &&
+					Math.abs(-(a.x - x) * s + (a.y - y) * c) < hy
+				);
+			};
+			for (const r of this.obstacles) {
+				const x = r.x + r.w / 2,
+					y = r.y + r.h / 2,
+					hx = r.w / 2 + pad,
+					hy = r.h / 2 + pad;
+				if (!inside(x, y, hx, hy) && segmentCrossesBox(a, b, x, y, hx, hy))
+					return false;
+			}
+			for (const e of this.entities)
+				if (
+					e.hp > 0 &&
+					!e.constructionLeft &&
+					["wall", "gate"].includes(e.type) &&
+					!e.open
+				) {
+					const hx = TYPES[e.type].radius + pad,
+						hy = (e.type === "wall" ? 24 : 12) + pad,
+						angle = e.wallAngle || 0;
+					if (
+						!inside(e.x, e.y, hx, hy, angle) &&
+						segmentCrossesBox(a, b, e.x, e.y, hx, hy, angle)
+					)
+						return false;
+				}
 			const d = dist(a, b),
 				steps = Math.ceil(d / 20);
 			for (let i = 1; i <= steps; i++)
@@ -2037,23 +2141,25 @@
 					this.blocked(
 						a.x + ((b.x - a.x) * i) / steps,
 						a.y + ((b.y - a.y) * i) / steps,
+						pad,
 					)
 				)
 					return false;
 			return true;
 		}
 		pathTo(a, b) {
-			const goal = {
-				x: clamp(b.x, 30, this.W - 30),
-				y: clamp(b.y, 30, this.H - 30),
-			};
-			if (this.blocked(goal.x, goal.y)) {
+			const pad = this.routePad(a),
+				goal = {
+					x: clamp(b.x, 30, this.W - 30),
+					y: clamp(b.y, 30, this.H - 30),
+				};
+			if (this.blocked(goal.x, goal.y, pad)) {
 				let found = false;
 				for (let radius = 40; radius < 400 && !found; radius += 40)
 					for (let k = 0; k < 16; k++) {
 						const x = goal.x + Math.cos((k * Math.PI) / 8) * radius,
 							y = goal.y + Math.sin((k * Math.PI) / 8) * radius;
-						if (!this.blocked(x, y)) {
+						if (!this.blocked(x, y, pad)) {
 							goal.x = x;
 							goal.y = y;
 							found = true;
@@ -2061,7 +2167,7 @@
 						}
 					}
 			}
-			if (this.clearLine(a, goal)) return [goal];
+			if (this.clearLine(a, goal, pad)) return [goal];
 			const cols = this.W / CELL,
 				rows = this.H / CELL;
 			const sx = clamp(Math.floor(a.x / CELL), 0, cols - 1),
@@ -2079,7 +2185,7 @@
 				passable = new Uint8Array(cols * rows),
 				open = (x, y, k) => {
 					if (k === end) return true;
-					if (!passable[k]) passable[k] = this.blocked((x + 0.5) * CELL, (y + 0.5) * CELL) ? 2 : 1;
+					if (!passable[k]) passable[k] = this.blocked((x + 0.5) * CELL, (y + 0.5) * CELL, pad) ? 2 : 1;
 					return passable[k] === 1;
 				};
 			// Binary heap ordered by f = g + h, ties broken by insertion order.
@@ -2148,7 +2254,7 @@
 					let from = a;
 					while (path.length) {
 						let j = path.length - 1;
-						while (j > 0 && !this.clearLine(from, path[j])) j--;
+						while (j > 0 && !this.clearLine(from, path[j], pad)) j--;
 						from = path[j];
 						smooth.push(from);
 						path.splice(0, j + 1);
@@ -2501,6 +2607,13 @@
 				multiplier *= 0.7;
 			return TYPES[attacker.type].damage * multiplier;
 		}
+		// WAL-01: a clear line of fire from the shooter to the target — no rock across it (shrunk by 12 at every
+		// side, so a shot grazing a rock's edge passes). Indirect fire and aircraft are never blocked.
+		lineOfFire(e, target) {
+			const s = TYPES[e.type];
+			if (!s || s.flying || TYPES[target.type]?.flying || INDIRECT_FIRE.has(e.type)) return true;
+			return !this.obstacles.some((r) => FIRE_BLOCKERS.has(r.kind || "rock") && crossesRect(e, target, r, 12));
+		}
 		cover(target) {
 			const nearRect = this.obstacles.some(
 				(r) =>
@@ -2683,7 +2796,8 @@
 				const b = this.get(q.producerId);
 				if (!this.isProducer(b) || b.constructionLeft) continue;
 				working.add(b.id);
-				q.left -= dt * (q.type === "worker" ? 1 : this.power.factor);
+				// productionRate: a doctrine's faster production (doctrine-rules.js), 1 otherwise.
+				q.left -= dt * (q.type === "worker" ? 1 : this.power.factor) * (this.productionRate?.() || 1);
 				if (q.left <= 0) {
 					const point = this.pathTo(b, {
 						x: b.x + TYPES[b.type].radius + 40,
@@ -2708,7 +2822,9 @@
 				if (this.research.left <= 0) {
 					this.upgrades[this.research.kind] = true;
 					this.notify(
-						[
+						// A research may say itself what its completion brings (`done`).
+						RESEARCH[this.research.kind].done ||
+						([
 							"extraction",
 							"assembly",
 							"infantryTraining",
@@ -2727,7 +2843,7 @@
 										? "Ładowność robotów zwiększona do 60."
 										: this.research.kind === "weapons"
 											? "Broń ulepszona: +25% obrażeń."
-											: "Pancerz ulepszony: −20% otrzymywanych obrażeń.",
+											: "Pancerz ulepszony: −20% otrzymywanych obrażeń."),
 						"research",
 					);
 					this.research = null;
@@ -2851,7 +2967,8 @@
 				)
 					target = null;
 				const peaceful = e.order?.kind === "move" || !s.damage;
-				if (!peaceful && (!target || dist(e, target) > s.range + 90)) {
+				// A new target when there is none, it ran off, or (WAL-01) a rock hides it — unless ordered to attack it.
+				if (!peaceful && (!target || dist(e, target) > s.range + 90 || (e.order?.kind !== "attack" && !this.lineOfFire(e, target)))) {
 					let best = Infinity;
 					target = null;
 					for (const other of this.entities)
@@ -2862,8 +2979,11 @@
 							this.isVisibleTo(e.team, other.x, other.y)
 						) {
 							const d = dist(e, other);
-							if (d < s.range + 65 && d < best) {
-								best = d;
+							if (d >= s.range + 65) continue;
+							// WAL-01: one in the clear before one behind a rock.
+							const score = d + (this.lineOfFire(e, other) ? 0 : 400);
+							if (score < best) {
+								best = score;
 								target = other;
 							}
 						}
@@ -2877,10 +2997,20 @@
 				)
 					target = null;
 				e.target = target?.id || null;
-				if (
-					target &&
-					dist(e, target) <= s.range + TYPES[target.type].radius * 0.4
-				) {
+				const inRange =
+						target &&
+						dist(e, target) <= s.range + TYPES[target.type].radius * 0.4,
+					clear = inRange && this.lineOfFire(e, target);
+				// WAL-01: in range but behind a rock — no shot; a unit ordered to attack goes round it (below), and
+				// the player is told why (once in a while, not for every unit).
+				if (inRange && !clear && e.order?.kind === "attack" && this.isHuman(e.team) && e.noLine !== target.id) {
+					e.noLine = target.id;
+					if (!(this.time - (this.noLineNotified ?? -1e9) < 8)) {
+						this.noLineNotified = this.time;
+						this.as(e.team, () => this.notify(s.speed ? "Cel za skałą — jednostki obchodzą przeszkodę, by mieć czystą linię strzału." : "Cel za skałą — brak linii strzału."));
+					}
+				}
+				if (clear) {
 					e.angle = Math.atan2(target.y - e.y, target.x - e.x);
 					if (e.cooldown <= 0) {
 						e.cooldown = s.cooldown;
@@ -2963,11 +3093,18 @@
 							const nx = e.x + ((p.x - e.x) / d) * step,
 								ny = e.y + ((p.y - e.y) / d) * step;
 							e.angle = Math.atan2(p.y - e.y, p.x - e.x);
+							// Where the step cuts the corner of a rock or a wall (a waypoint is taken a few pixels early,
+							// so the unit's line is not quite the route's), the unit slides along it on one axis;
+							// otherwise it could stop there for good.
 							if (
 								s.flying ||
 								!this.blocked(nx, ny, s.radius + 2)
 							) {
 								e.x = nx;
+								e.y = ny;
+							} else if (!this.blocked(nx, e.y, s.radius + 2)) {
+								e.x = nx;
+							} else if (!this.blocked(e.x, ny, s.radius + 2)) {
 								e.y = ny;
 							} else if (e.repath <= 0) {
 								e.path = this.pathTo(e, target || e.order || p);

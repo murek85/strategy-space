@@ -1594,6 +1594,7 @@
 			require("./campaign-choices.js")(RTS);
 			require("./trade-rules.js")(RTS);
 			require("./network-rules.js")(RTS);
+			require("./doctrine-rules.js")(RTS);
 			require("./space-rules.js")(RTS);
 		};
 	} else install(root.RTS);

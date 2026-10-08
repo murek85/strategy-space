@@ -467,9 +467,7 @@ function createCanvasRenderer(canvas, mini) {
 			ctx.textAlign = "center";
 			ctx.fillText(
 				e.team === (game.viewer ?? 0)
-					? game.centerLevel() === 2
-						? "II · KOLONIA"
-						: "I · PRZYCZÓŁEK"
+					? ["", "I · PRZYCZÓŁEK", "II · KOLONIA", "III · TWIERDZA"][game.centerLevel()] || "I · PRZYCZÓŁEK"
 					: "II",
 				0,
 				-90,

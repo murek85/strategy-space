@@ -295,7 +295,8 @@ gl_FragColor.a *= smoothstep(0.0, ${reach.toFixed(1)}, vSoftWorld.y - softGround
 				float n = sNoise(q) * 0.55 + sNoise(q * 2.4 + 4.1) * 0.3 + sNoise(q * 5.3 - 2.3) * 0.15;
 				float body = smoothstep(0.3, 0.72, n) * (1.0 - smoothstep(0.2, 1.0, vUv.y)) * smoothstep(0.0, 0.08, vUv.y) * (1.0 - smoothstep(0.5, 1.0, abs(vUv.x - 0.5) * 2.0));
 				vec3 col = mix(vec3(0.82, 0.87, 0.93), vec3(0.97, 0.98, 1.0), vUv.y + n * 0.3);
-				gl_FragColor = vec4(col, vAlpha * body * ${lowness > 0.5 ? "0.5" : "0.42"});
+				// (0.147.2: thinner — the board stays readable in the blizzard.)
+				gl_FragColor = vec4(col, vAlpha * body * ${lowness > 0.5 ? "0.4" : "0.3"});
 			}`,
 		);
 	const snowCurtains = snowVeil(260, 0),
@@ -449,7 +450,8 @@ gl_FragColor.a *= smoothstep(0.0, ${reach.toFixed(1)}, vSoftWorld.y - softGround
 			float n = dNoise(q) * 0.55 + dNoise(q * 2.3 + 4.1) * 0.3 + dNoise(q * 5.1 - 2.3) * 0.15;
 			float body = smoothstep(0.32, 0.72, n) * (1.0 - smoothstep(0.25, 1.0, vUv.y)) * smoothstep(0.0, 0.08, vUv.y) * (1.0 - smoothstep(0.55, 1.0, abs(vUv.x - 0.5) * 2.0));
 			vec3 col = mix(vec3(0.76, 0.62, 0.44), vec3(0.92, 0.82, 0.64), vUv.y + n * 0.3);
-			gl_FragColor = vec4(col, vAlpha * body * 0.22);
+			// (0.147.1: thinner — the board stays readable in the storm.)
+			gl_FragColor = vec4(col, vAlpha * body * 0.15);
 		}`,
 	);
 
@@ -542,7 +544,8 @@ gl_FragColor.a *= smoothstep(0.0, ${reach.toFixed(1)}, vSoftWorld.y - softGround
 		show(curtains, kind === "sand", 1);
 		show(sheets, kind === "rain");
 		// Mist: in rain and snow, and a little at night everywhere (its own amount, not the weather's).
-		const mistAmount = Math.max(mistLevel, kind === "rain" ? k * 0.8 : kind === "snow" ? k * 0.6 : 0);
+		// Ground mist of a storm (0.147.2: lighter in rain and snow, the board stays readable).
+		const mistAmount = Math.max(mistLevel, kind === "rain" ? k * 0.6 : kind === "snow" ? k * 0.45 : 0);
 		mist.mesh.visible = mistAmount > 0.03;
 		mist.mesh.geometry.instanceCount = mist.mesh.visible ? Math.floor(mist.count * density) : 0;
 		mistIntensity.value = mistAmount;
@@ -578,7 +581,7 @@ gl_FragColor.a *= smoothstep(0.0, ${reach.toFixed(1)}, vSoftWorld.y - softGround
 		// A blizzard's haze breathes with the gusts (towards a whiteout, never hiding the units in view).
 		// Solar storm: slow surges of light (flares), handled by the renderer as a warm glow.
 		const solar = kind === "solar" ? k * (0.55 + 0.45 * Math.pow(Math.max(0, Math.sin(time * 0.45)), 3)) : 0;
-		return { kind, intensity: k, solar, flash: kind === "ion" ? ionFlash : kind === "solar" || kind === "meteor" ? 0 : flash, haze: kind === "ion" || kind === "solar" || kind === "meteor" ? 0 : kind === "sand" ? k * 0.7 : kind === "snow" ? k * (0.45 + 0.15 * gust) : k * 0.35, wetness, snowCover, sandCover, strike: struck };
+		return { kind, intensity: k, solar, flash: kind === "ion" ? ionFlash : kind === "solar" || kind === "meteor" ? 0 : flash, haze: kind === "ion" || kind === "solar" || kind === "meteor" ? 0 : kind === "sand" ? k * 0.45 : kind === "snow" ? k * (0.3 + 0.12 * gust) : k * 0.25, wetness, snowCover, sandCover, strike: struck };
 	}
 	return {
 		setTerrain,

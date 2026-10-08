@@ -1,4 +1,53 @@
-# Renderer 3D (wersje 0.52–0.96, 0.125–0.138)
+# Renderer 3D (wersje 0.52–0.96, 0.125–0.147.7)
+
+## Noce na popiele (wersja 0.147.4, 2026-10-08)
+
+- `light` (`three-renderer.js`): współczynnik nocny biomu (`snowNight`) — lód 1, popiół 2,2 (ciemny bazalt), pustynia 0,8 (od 0.147.5), motyw `lumen` 8 (od 0.147.7, czarnozielony mech `#15291f`), motyw `magma` 12 (od 0.147.6 — zastygła lawa ma kolor bazowy `#221716`, a tone mapping spłaszcza jasność, więc mniejsze wartości prawie nic nie zmieniały): księżyc × (1 + 0,35 × współczynnik), niebo nocą + 0,14 × współczynnik × (1 − dzień).
+- `weatherLight`: siła cieni chmur × (0,15 + 0,85 × `smooth(−0,12; 0,15; wysokość słońca)`) — przy świetle księżyca prawie bez cieni.
+- Kontrast nocą między terenem widzianym a widzianym wcześniej to mgła wojny (przyciemnienie `0,25 + 0,75 × widoczność`), bez zmian.
+
+## Jasne noce na lodzie (wersja 0.147.3, 2026-10-08)
+
+- `light` (`three-renderer.js`): na mapach o biomie `ice` (`snowNight`) księżyc × 1,35, a niebo nocą (`hemi`) + 0,14 × (1 − dzień) — śnieg odbija światło księżyca.
+
+## Przejrzystsza śnieżyca i ulewa (wersja 0.147.2, 2026-10-08)
+
+- `weather-3d.js`: mgła burzy (haze) — śnieg `siła × (0,3 + 0,12 × poryw)` (było 0,45 + 0,15), deszcz `0,25 × siła` (było 0,35); ściany nawiewanego śniegu (`snowVeil`) — krycie 0,3 (było 0,42), niskie zamiecie 0,4 (było 0,5); mgła przyziemna burzy — deszcz `0,6 × siła` (było 0,8), śnieg `0,45 × siła` (było 0,6).
+
+## Jaśniejsze noce, przejrzystsze burze piaskowe (wersja 0.147.1, 2026-10-08)
+
+- Noc (`light`, `three-renderer.js`): księżyc `1,3 × (0,45 + 0,55 × pełnia)` (było `0,55 × (0,25 + 0,75 × pełnia)`), kolor `#b4c7ee`; niebo nocą `hemi` 0,6 + 0,14 × pełnia (było 0,3), kolory `NIGHT_DEEP` `#26385f`, `NIGHT_AMBIENT` `#3a5282`, `NIGHT_GROUND` `#1d2532`; ekspozycja obrazu kinowego `1,22 + 0,65 × noc` (było 0,35).
+- Burza piaskowa (`weather-3d.js`): mgła burzy `0,45 × siła` (było 0,7), kłęby pyłu przy ziemi z kryciem 0,15 (było 0,22).
+
+## Hologramy dowodzenia (wersja 0.144.3, 2026-10-08)
+
+- Nowy moduł `webgl3d/holo-3d.js` (`createHolo3D`, w liście modułów `tools/build-3d.js` przed `three-renderer.js`), wywoływany co klatkę po `syncMarks` z `selected`, `hidden`, `colorOf`, `space`, `hover`, `TYPES`. Wszystko addytywne, bez zapisu głębi.
+- Zaznaczenie (zastępuje dawny płaski pierścień): pierścień `RingGeometry(0.76, 1.02)` z shaderem (linia zewnętrzna, 16 kresek biegnących wokół, 4 klamry) i otwarty walec (gradient ku górze, linia skanu `fract(czas × 0,5)`, poziome prążki) — wysokość: statek do kadłuba (unoszenie + 0,6 × promień), lotnictwo 92, budynek do 70, reszta 1,2 × promień + 8; kolor drużyny.
+- Rozkazy (`move`, `attackMove` — punkt rozkazu; `attack` — cel): kreski (`InstancedMesh`, do 700) co 24 j. od jednostki do celu, przesuwane z czasem (40 j/s); znacznik celu (jeden na punkt, zaokrąglone do 20 j.): ośmiościan z krawędziami nad punktem (bujanie, obrót) i pulsujący pierścień; atak — obracający się, pulsujący celownik z 4 narożników wokół celu. Kolory: ruch `#8dffc8`, ruch z atakiem `#ffb070`, atak `#ff5a4a`.
+- Przekaźniki: przy `capturing ≥ 0` i `progress > 0` wiązka (otwarty walec, impulsy `pow(fract(v × 5 − czas × 1,6), 8)`) od każdej jednostki przejmującej strony (lub sojuszniczej) w promieniu 100 do szczytu przekaźnika (teren + 46, w kosmosie 74), do 24 wiązek; zmiana właściciela — pierścień rosnący 20 → 240 i słup światła (gradient) przez 1,6 s.
+
+## Żywe planety (wersja 0.144.2, 2026-10-08)
+
+- Roślinność (`scatter-3d.js`): uniform `pushers[16]` (xz, zasięg, siła) w shaderze roślin (`windy`) — rośliny o skali instancji < 20 (bez drzew) w zasięgu są spłaszczane (wysokość × (1 − 0,75 f)) i rozchylane (xz × (1 + 0,5 f)); `three-renderer.js` `plantPushers()` — 16 najbliższych jednostek naziemnych (zasięg 1,5 × promień + 6), przekazywane w `scatter.tick`. Kratery (`blasts`, w `update`): drzewa w zasięgu 1,6 × rozmiar + 14 padają od krateru (obrót 1,35 rad wokół osi poziomej) i zostają; drobne rośliny w 55% tego zasięgu znikają.
+- Kurz spod pojazdów (`vehicleDust`, `scene-fx-3d.js`): pojazdy naziemne o promieniu ≥ 9 jadące szybciej niż 8 j/s (prędkość z ruchu w symulacji); sucho — pył w kolorze gruntu (`SOIL`), deszcz (> 0,25) — grudki błota (cząstki stałe, spadają), śnieg/lód — biała zawierucha i grudki; częstość × prędkość × rozmiar. Z opcją „Ślady i dym” (`scars`).
+- Mgła wojny (`buildMist`, `three-renderer.js`): trzy siatki na całą mapę (oczko 28) podniesione w shaderze wierzchołków nad teren o 12/30/54 (mapa wysokości z `fx.ground`), przezroczystość z mapy mgły wojny (nieznane ~0,4, widziane wcześniej ~0,07, pas granicy widoczności 0,35) × kłęby szumu dryfujące z czasem, wygaszenie przy krawędzi mapy; kolor `mistColor` = mgła sceny zmieszana z otoczeniem. Nie w kosmosie.
+- Świt i zmierzch (`light`, `sky-3d.js`): kierunek słońca do wysokości 0,07 (było 0,12) — dłuższe cienie; `skyState.golden` (słońce od −0,06 do 0,3 nad horyzontem) — światło słońca ku `#ffae5e` (35%) i × 1,15, w gradacji tint świateł ku ciepłemu (50%) i nasycenie × 1,12; paleta nieba: różowy pas przed wschodem, głębszy fioletowy zenit, gorętszy horyzont.
+
+## Kosmos w ruchu (wersja 0.144.1, 2026-10-08)
+
+- Dopalacze: `syncModel` liczy dla statku `boost` (0…1) z ruchu w symulacji — przyspieszenie (Δprędkość / Δt / 1,5 × prędkość typu) i skręt (powyżej 0,6 rad/s, pełny przy 3,1) — skok od razu, zanik 1,2/s; `ships-3d.js` (`ship().update`): płomienie × (1 + 1,6 × boost) wzdłuż, × (1 + 0,5 × boost) wszerz, migotanie szybsze.
+- Pył: materiał punktów pyłu (`buildNebula`) z `onBeforeCompile`: uniform `dustShips[16]` (xyz, zasięg = 2,4 × promień + 18) — drobina w zasięgu przesunięta od statku o 0,8 × (zasięg − odległość); `updateDustShips()` co klatkę (statki widoczne w pobliżu widoku).
+- Trafienia w kadłub: przy trafieniu w kosmosie `hullHit(ef)` szuka trafionego (najbliższy obcy w promieniu 8 od celu strzału); bez osłony — `fx.shot("hull", …, { dx, dz })` (`scene-fx-3d.js`): błysk, 10–18 iskier w stożku ku strzelającemu, 3–5 odprysków poszycia (cząstki stałe), żarzący się ślad 0,7–1,1 s, światło iskier. Inne trafienia w kosmosie bez pyłu (`air`).
+- Planety (`space-3d.js`): gazowy olbrzym — punkt próbkowania obracany wokół osi o kąt czas × prędkość pasa (±0,01 rad/s na zmianę co pas, + 0,006), więc wiry i wielka burza płyną z pasami; lodowy olbrzym — ciemna burza okrąża planetę (0,012 rad/s); wulkaniczny księżyc — obrót 0,008 rad/s i erupcje jezior lawy (`pow(sin(czas × 0,45 + szum × 53), 14)`, jezioro × 2,2, obrzeże × 0,6).
+
+## Efekty walki (wersja 0.144, 2026-10-08)
+
+- Falowanie gorącego powietrza (`post-3d.js`, przebieg `finish`): `heatShift(uv)` przesuwa próbkę obrazu o zmarszczki wędrujące w górę ekranu (częstotliwość względem promienia źródła, przesunięcie do 0,03 × promień); uniformy `heat[16]` (x, y, promień w wysokościach ekranu, siła) i `heatTime`. Źródła zbiera `heatSources()` (`three-renderer.js`): wybuchy (siła 1 − k, promień 1,2–2 × rozmiar), płonące budynki (< 30%) i duże pojazdy (< 20%) na planecie (0,55), lawa w pobliżu widoku (0,3), w kosmosie silniki okrętów o promieniu ≥ 18 w ruchu (0,35); rzutowane kamerą, 16 najsilniejszych (promień × siła). Tylko z obrazem kinowym i opcją `haze`.
+- Wstrząs kamery (`shakeCamera`): nowy wybuch o rozmiarze ≥ 45 podbija amplitudę `near × (rozmiar − 35)/80` (near — bliskość ogniska widoku w promieniu 1,5 × odległości kamery); zanik `exp(−6 t)`; przesunięcie kamery o amplitudę × 0,006 × odległość i lekki przechył. Opcja `shake`. Fala uderzeniowa na planecie (`scene-fx-3d.js`): przy wybuchu ≥ 45 dodatkowy pierścień 22 obłoków jasnego pyłu (prędkość 170–240 × skala).
+- Światło wybuchów (`nightLights`): pierwsze 10% życia wybuchu — biały błysk (`#fff0d8`), moc × (1 + 2 × hot), zasięg + 2,5 × rozmiar; iskry uszkodzeń dają światło `#c8dcff` na 0,15 s.
+- Stopnie uszkodzeń (`damageSparks`, `scene-fx-3d.js`): jednostki i budynki o promieniu ≥ 9 poniżej 75% — snopy 6–12 iskier (na planecie spadają) z rozdartych miejsc (`spotOf`), częstość 0,3–1,6/s na miejsce; w kosmosie poniżej 50% blady strumień gazu; dym na planecie już od pojazdów o promieniu ≥ 10 (poniżej 35%).
+- Przylot z nadprzestrzeni (`warpIn`): statek (`ship`, bez myśliwców), którego rekord powstał po 3. sekundzie gry i najwyżej 0,5 s przed pierwszym pokazaniem; przez 1,1 s model cofnięty o (1 − ease) × 900 wzdłuż kursu i rozciągnięty × (1 + 2,2 × (1 − ease)), smuga (`warpStreakGeometry` — dwie skrzyżowane płaszczyzny z gradientem) i błysk (`glareTexture`, `#bfe0ff`).
+- Ustawienia grafiki (`scene-fx.js`, `menu.js`): `haze` — „Falowanie gorącego powietrza 3D”, `shake` — „Wstrząs kamery przy dużych wybuchach”.
 
 ## Pogoda na modelach (wersja 0.138.3, 2026-10-08)
 
@@ -56,6 +105,7 @@
 ## Kosmos — bitwa na orbicie (wersja 0.130, 2026-10-07)
 
 - Mapy z `space: true` ([Bitwa na orbicie](BITWA_NA_ORBICIE.md)): płaska płaszczyzna bitwy (`relief-3d.js`, `webgl/terrain-height.js`), teren bez ziarna PBR, mapy normalnych i cieni (malowany kosmos z `space-art.js`), bez rozrzuconych drobiazgów (`scatter-3d.js`), zwierząt i ptaków (`scene-life-3d.js`).
+- Wygląd mapy w kosmosie (0.143): `look` misji ustawia w `space-3d.js` rodzaj planety (`planetUniforms.kind`: gaz / lód — od 0.143.3 przewrócony jak Uran, z pierścieniami zwróconymi ku kamerze / lawa — od 0.143.4 jak Io (siarka, kaldery, potoki lawy), kolory `c0`–`c3`, `atmo`), pierścienie (`ringA`/`ringB`/`ringAlpha`, `near`/`far`), kolory mgławic nieba (`neb1a`…`neb2b`), czarną dziurę (grupa `blackHole`; od 0.143.2 jeden obraz w shaderze zwrócony do kamery — cień, pierścień fotonowy, dysk i jego zagięty obraz), widoczność komety, konwojów, wraku i lodu; `three-renderer.js` — barwę słońca (`look.sun`) i poświaty (`look.glow`) oraz kolory obłoków `buildNebula`. Kamienie przeszkód biorą `look.rocks`; wraki okrętów to `models3d.scenery("obstacle", "hulk", …)` (od 0.143.1 kadłub z `loftGeo`, przełamany, z nadbudówką i dyszami; w `scene-life-3d.js` nie obracają się jak asteroidy).
 - Asteroidy: przeszkody w kosmosie budowane jako `models3d.scenery("obstacle", "asteroids", …)` — skupisko kamieni na wysokości 26–116 j., powoli obracane wokół środka pola.
 - Światło (`three-renderer.js`, `light`): twarde białe słońce z boku, niebieskie światło otoczenia, ciepłe odbicie od planety, czarne tło i mgła; gradacja `space`; bez mgły wysokościowej i promieni w obrazie kinowym. Niebo (`sky-3d.js`, świat `space`): zawsze gwiazdy, bez chmur, księżyc Kharona.
 - Statki (`webgl3d/ships-3d.js`, w `BUILDERS` modeli): korweta, fregata, niszczyciel (`lancer`), krążownik; unoszą się `RTS.SPACE.hover` nad płaszczyzną (`syncModel`, kalkomania i pasek zdrowia wyżej).

@@ -567,18 +567,64 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 		if (night > 0.05)
 			for (const m of miners)
 				if (m.resource !== "gas") lights.point(m.x, m.y, heightAt(m.x, m.y) + 10, { color: m.resource === "crystal" ? "#ffd98a" : "#ffb35c", power: night * (110 + Math.random() * 120), range: 90 });
-		// Explosions light the ground and the models around them for a moment, by day too.
+		// Explosions light the ground and the models around them for a moment, by day too: a white-hot
+		// flash at first (0.144), stronger and wider, then the orange of the fire.
 		for (const ef of game.effects) {
 			if (ef.kind !== "explosion" || hidden({ x: ef.x, y: ef.y, team: -1 })) continue;
 			const k = 1 - ef.life / ef.maxLife,
 				f = Math.max(0, 1 - k / 0.55),
+				hot = Math.max(0, 1 - k / 0.1),
 				size = ef.size || 40;
-			if (f > 0) lights.point(ef.x, ef.y, ef.space ? ef.lift : heightAt(ef.x, ef.y) + (ef.air ? 90 : size * 0.4), { color: "#ffb35c", power: f * f * size * (25 + night * 15), range: size * 5 + 80 });
+			if (f > 0) lights.point(ef.x, ef.y, ef.space ? ef.lift : heightAt(ef.x, ef.y) + (ef.air ? 90 : size * 0.4), { color: hot > 0.3 ? "#fff0d8" : "#ffb35c", power: f * f * size * (25 + night * 15) * (1 + hot * 2), range: size * (5 + hot * 2.5) + 80 });
 		}
+		// Sparks of damaged machines flash blue-white for an instant (0.144).
+		for (const l of sparkLights) lights.point(l.x, l.y, l.h, { color: "#c8dcff", power: 90 * (1 + night * 2), range: 80 });
 		lights.end(focus, span, true);
 		pools.visible = pools.count > 0;
 		pools.instanceMatrix.needsUpdate = true;
 		pools.instanceColor.needsUpdate = true;
+	}
+	// What vehicles throw up behind them (0.144.2): on dry ground a trail of dust (pale sand on the desert,
+	// grey ash, the planet's soil), in the rain mud — dark clods flung up and falling back — and on snow or ice
+	// a white spray; more the faster and the bigger the vehicle. Ground vehicles moving near the view only.
+	const lastGround = new Map();
+	function vehicleDust(game, dt, hidden, focus, span) {
+		if (RTS.MISSIONS[game.missionId]?.space) return;
+		const wet = weatherNow.kind === "rain" && weatherNow.intensity > 0.25,
+			snowy = biomeNow === "ice" || (weatherNow.kind === "snow" && weatherNow.intensity > 0.3),
+			soil = SOIL[biomeNow] || SOIL.dust,
+			seen = new Set();
+		for (const e of game.entities) {
+			const s = TYPES[e.type];
+			if (!s?.speed || s.flying || s.ship || s.radius < 9 || e.hp <= 0 || hidden(e) || Math.abs(e.x - focus.x) > span || Math.abs(e.y - focus.y) > span) continue;
+			seen.add(e.id);
+			const was = lastGround.get(e.id);
+			lastGround.set(e.id, { x: e.x, y: e.y, t: game.time });
+			if (!was || game.time <= was.t) {
+				if (was) lastGround.set(e.id, was);
+				continue;
+			}
+			const v = Math.hypot(e.x - was.x, e.y - was.y) / (game.time - was.t);
+			if (v < 8) continue;
+			const c = Math.cos(e.angle || 0),
+				sn = Math.sin(e.angle || 0),
+				r = s.radius,
+				k = Math.min(1.5, v / 60) * (r / 14),
+				x = e.x - c * r * 0.85,
+				z = e.y - sn * r * 0.85,
+				g = heightAt(x, z);
+			if (Math.random() > dt * 14 * k * density) continue;
+			const side = rand(-0.6, 0.6) * r;
+			if (wet)
+				for (let i = 0; i < 3; i++)
+					smoke.spawn({ x: x - sn * side, y: g + 2, z: z + c * side, vx: -c * rand(10, 30) + rand(-12, 12), vy: rand(30, 70), vz: -sn * rand(10, 30) + rand(-12, 12), lift: -300, life: 0, max: rand(0.4, 0.7), s0: rand(1.4, 2.6), s1: 1.2, r: 0.2, g: 0.16, b: 0.12, a: 1, style: 1 });
+			else if (snowy) {
+				smoke.spawn({ x: x - sn * side, y: g + 3, z: z + c * side, vx: -c * rand(14, 30), vy: rand(16, 34), vz: -sn * rand(14, 30), lift: -60, drag: 1.2, life: 0, max: rand(0.7, 1.2), s0: r * 0.35, s1: r * 1.3, r: 0.94, g: 0.96, b: 1, a: 0.45 });
+				for (let i = 0; i < 2; i++) smoke.spawn({ x, y: g + 3, z, vx: -c * rand(20, 40) + rand(-10, 10), vy: rand(30, 60), vz: -sn * rand(20, 40) + rand(-10, 10), lift: -200, life: 0, max: rand(0.4, 0.7), s0: rand(1, 1.8), s1: 0.8, r: 0.95, g: 0.97, b: 1, a: 1, style: 1 });
+			} else
+				smoke.spawn({ x: x - sn * side, y: g + 3, z: z + c * side, vx: -c * rand(6, 16) + rand(-4, 4), vy: rand(6, 16), vz: -sn * rand(6, 16) + rand(-4, 4), drag: 0.9, life: 0, max: rand(1.4, 2.4), s0: r * 0.45, s1: r * (1.8 + k), r: soil[0], g: soil[1], b: soil[2], a: 0.42 });
+		}
+		for (const id of lastGround.keys()) if (!seen.has(id)) lastGround.delete(id);
 	}
 	// Engine trails of aircraft in the air: a short glowing streak at the nozzle and a pale vapour trail
 	// thinning out behind (only flying units that move, near the view).
@@ -816,6 +862,47 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 			}
 		}
 	}
+	// Stages of damage (0.144): the harder it is hit, the more it shows. Below 75 % now and then a burst of
+	// sparks from a torn spot (a short circuit), with a flash lighting its surroundings for an instant; the
+	// worse, the more often. Below 50 % smoke on a planet (damageAndExplosions) or, in space, a pale jet of
+	// gas venting from a torn line; below 30 % (buildings) / 20 % (big vehicles) the fires of burnFires.
+	const sparkLights = [];
+	function damageSparks(game, dt, hidden) {
+		const space = !!RTS.MISSIONS[game.missionId]?.space;
+		for (const e of game.entities) {
+			if (e.hp <= 0 || e.constructionLeft > 0 || e.team === 2) continue;
+			const s = TYPES[e.type];
+			if (!s || s.flying || s.radius < 9) continue;
+			const f = e.hp / e.maxHp;
+			if (f >= 0.75 || hidden(e)) continue;
+			const building = !s.speed,
+				hurt = (0.75 - f) / 0.75,
+				base = heightAt(e.x, e.y) + (space ? (building ? s.radius * 0.8 + 10 : s.ship ? 34 : 22) : 0),
+				top = building ? Math.min(60, s.radius * 0.8) : s.ship ? 6 : 14,
+				n = building ? 3 : 2;
+			for (let i = 0; i < n; i++) {
+				if (Math.random() > dt * (0.3 + hurt * 1.3) * density) continue;
+				const [ox, oy, oz] = spotOf(e, i + 7, n, s.radius, top),
+					x = e.x + ox,
+					y = base + oy,
+					z = e.y + oz;
+				for (let j = 0, count = 6 + Math.round(Math.random() * 6); j < count; j++) {
+					const a = rand(0, TAU),
+						sp = rand(30, 90);
+					fire.spawn({ x, y, z, vx: Math.cos(a) * sp, vy: space ? rand(-50, 50) : rand(20, 70), vz: Math.sin(a) * sp, lift: space ? 0 : -260, drag: space ? 0.4 : 0.2, life: 0, max: rand(0.25, 0.6), s0: rand(1, 1.8), s1: 0.3, r: 1, g: rand(0.8, 0.95), b: rand(0.5, 0.75), a: 1 });
+				}
+				fire.spawn({ x, y, z, vx: 0, vy: 0, vz: 0, lift: 0, life: 0, max: 0.08, s0: 7, s1: 3, r: 0.85, g: 0.9, b: 1, a: 0.9, style: 2 });
+				sparkLights.push({ x, y: z, h: y, t: clockNow });
+			}
+			if (space && f < 0.5 && Math.random() < dt * 8 * density) {
+				const [ox, oy, oz] = spotOf(e, 11, 1, s.radius, top),
+					a = e.id * 1.7 + Math.sin(clockNow * 0.7 + e.id) * 0.3,
+					sp = rand(30, 50);
+				smoke.spawn({ x: e.x + ox, y: base + oy, z: e.y + oz, vx: Math.cos(a) * sp, vy: rand(-4, 4), vz: Math.sin(a) * sp, lift: 0, drag: 0.6, life: 0, max: rand(0.8, 1.4), s0: s.radius * 0.12, s1: s.radius * 0.5, r: 0.85, g: 0.9, b: 1, a: 0.25 });
+			}
+		}
+		while (sparkLights.length && clockNow - sparkLights[0].t > 0.15) sparkLights.shift();
+	}
 	// Burning debris of explosions: chunks flying on their arcs (straight in space), each leaving a trail of
 	// small flames and, on a planet, smoke behind it; they burn out or hit the ground.
 	const burners = [];
@@ -859,7 +946,7 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 				if (!s || s.flying || e.team === 2) continue;
 				const f = e.hp / e.maxHp,
 					building = !s.speed,
-					vehicle = s.speed && s.radius >= 16;
+					vehicle = s.speed && s.radius >= 10;
 				if (!(building ? f < 0.5 : vehicle && f < 0.35)) continue;
 				const ground = heightAt(e.x, e.y),
 					top = building ? Math.min(60, s.radius * 0.8) : 18;
@@ -873,7 +960,10 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 				// (The flames themselves come every frame from steady fire spots: burnFires below.)
 			}
 		}
-		if (scars) burnFires(game, dt, hidden);
+		if (scars) {
+			burnFires(game, dt, hidden);
+			damageSparks(game, dt, hidden);
+		}
 		// Fresh craters smoulder: thin smoke curling up and now and then a spark, for about 25 s.
 		for (const k of game.craters || []) {
 			const age = game.time - k.born;
@@ -955,6 +1045,14 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 					const a = (i / n(12)) * TAU + rand(-0.2, 0.2),
 						sp = rand(70, 130) * scale;
 					smoke.spawn({ x: ef.x + Math.cos(a) * size * 0.2, y: ground + 4, z: ef.y + Math.sin(a) * size * 0.2, vx: Math.cos(a) * sp, vy: rand(3, 10), vz: Math.sin(a) * sp, drag: 2.2, life: 0, max: rand(1.1, 1.8), s0: size * 0.25, s1: size * 0.9, r: 0.56, g: 0.49, b: 0.4, a: 0.42 });
+				}
+			// The shock wave of a big blast (0.144): a second, faster ring of pale dust racing out low over the
+			// ground, thinning as it goes.
+			if (!ef.air && size >= 45)
+				for (let i = 0, m = n(22); i < m; i++) {
+					const a = (i / m) * TAU + rand(-0.1, 0.1),
+						sp = rand(170, 240) * scale;
+					smoke.spawn({ x: ef.x + Math.cos(a) * size * 0.3, y: ground + 3, z: ef.y + Math.sin(a) * size * 0.3, vx: Math.cos(a) * sp, vy: rand(1, 5), vz: Math.sin(a) * sp, drag: 1.6, life: 0, max: rand(0.9, 1.4), s0: size * 0.3, s1: size * 1.2, r: 0.62, g: 0.56, b: 0.47, a: 0.3 });
 				}
 		}
 	}
@@ -1153,6 +1251,30 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 			fire.spawn({ x, y, z, vx: 0, vy: 0, vz: 0, life: 0, max: 0.06, s0: 6, s1: 3, r: 1, g: 0.7, b: 0.35, a: 0.9 });
 			return;
 		}
+		if (what === "hull") {
+			// A shot through a ship's dropped shield (0.144.1): a white-hot flash on the hull, a spray of sparks
+			// back towards the shooter, flakes of plating tumbling away, a glowing scorch cooling for a moment,
+			// and a flash of light round it.
+			const dx = opts.dx || 0,
+				dz = opts.dz || 0;
+			fire.spawn({ x, y, z, vx: 0, vy: 0, vz: 0, lift: 0, life: 0, max: 0.1, s0: rocket ? 18 : 10, s1: 4, r: 1, g: 0.95, b: 0.8, a: 1, style: 2 });
+			for (let i = 0; i < Math.ceil((rocket ? 18 : 10) * density); i++) {
+				const ax = dx + rand(-0.7, 0.7),
+					ay = rand(-0.6, 0.6),
+					az = dz + rand(-0.7, 0.7),
+					l = Math.hypot(ax, ay, az) || 1,
+					sp = rand(60, 160);
+				fire.spawn({ x, y, z, vx: (ax / l) * sp, vy: (ay / l) * sp, vz: (az / l) * sp, lift: 0, drag: 0.6, life: 0, max: rand(0.2, 0.5), s0: rand(1.4, 2.6), s1: 0.4, r: 1, g: rand(0.75, 0.95), b: rand(0.45, 0.7), a: 1 });
+			}
+			for (let i = 0; i < (rocket ? 5 : 3); i++) {
+				const sp = rand(15, 45),
+					c = rand(0.28, 0.4);
+				smoke.spawn({ x, y, z, vx: (dx + rand(-1, 1)) * sp, vy: rand(-12, 12), vz: (dz + rand(-1, 1)) * sp, lift: 0, drag: 0.1, life: 0, max: rand(1.2, 2.2), s0: rand(1.4, 2.4), s1: rand(1, 1.6), r: c, g: c * 1.02, b: c * 1.1, a: 1, style: 1 });
+			}
+			fire.spawn({ x, y, z, vx: 0, vy: 0, vz: 0, lift: 0, life: 0, max: rocket ? 1.1 : 0.7, s0: rocket ? 7 : 4.5, s1: 1.5, r: 1, g: 0.45, b: 0.12, a: 0.85, style: 2 });
+			sparkLights.push({ x, y: z, h: y, t: clockNow });
+			return;
+		}
 		// An impact: a flash, sparks flying off, a kick of dust (on the ground); a rocket blows up in a small
 		// ball of fire and smoke.
 		const air = opts.air,
@@ -1193,6 +1315,8 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 	}
 	return {
 		water: { group: waterGroup, uniforms: waterUniforms, levelNear: waterLevelNear },
+		// The height map of the ground (texture and size), for effects draped over it.
+		ground: weather3d.ground,
 		setGame(game, heights) {
 			if (heights) weather3d.setTerrain(heights);
 			weather3d.reset();
@@ -1232,6 +1356,7 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 			findMiners(game, hidden, focus, span, working);
 			nightLights(game, quality.lights === false ? 0 : night, hidden, focus, span);
 			airTrails(game, dt, hidden, focus, span);
+			if (quality.scars !== false) vehicleDust(game, dt, hidden, focus, span);
 			damageAndExplosions(game, dt, hidden, quality.scars !== false);
 			updateBurners(dt);
 			mapEffects(game, dt, focus, span, night, (x, y) => !hidden({ x, y, team: -1 }), gasFlow);

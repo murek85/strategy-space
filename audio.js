@@ -16,6 +16,24 @@
 		// "Kuźnia" — magma and the Hefajstos complex: a furnace drone, the anvil keeping time, heavy metal.
 		"game:forge": { bpm: 84, root: 58.27, scale: [0, 1, 3, 5, 6, 8, 10], bed: "drone", call: "flute", callOctave: 24, callBar: 3, braam: 0, anvil: true },
 	};
+	// The space themes (0.145), in the manner of the "Interstellar" score — by its means, not its melodies:
+	// a pipe organ turning one small arpeggio over and over above slow chords, the clock ticking the beat,
+	// a lone piano, layers gathering every eight bars to a full organ and a sudden silence; in battle the
+	// organ drives an ostinato in sixteenths over drums and blasts. Chords: [step from the root, quality]
+	// (m minor, M major, s sus2) — one a bar, or one every two bars (hold).
+	const SPACE_MUSIC = {
+		// "Orbita" (Kharon): the organ's turning figure in A minor, hopeful and sad, the clock, the piano.
+		"game:orbit": { bpm: 72, root: 110, prog: [[0, "m"], [0, "m"], [-4, "M"], [-4, "M"], [3, "M"], [3, "M"], [-2, "M"], [-2, "M"]], hold: 1, lead: "organ", top: "piano" },
+		// "Pierścienie" (Glacjalis): glassy — the figure on piano and bells high up, sus chords, the organ only as
+		// the layers gather.
+		"game:glacis": { bpm: 66, root: 123.47, prog: [[0, "s"], [0, "s"], [5, "M"], [5, "s"], [-3, "m"], [-3, "m"], [2, "s"], [7, "s"]], hold: 1, lead: "piano", top: "bell", high: 12 },
+		// "Horyzont zdarzeń" (Wrota Pustki): slow and vast — long organ chords like a gravity well, the clock
+		// louder than anything, a far piano echoing, silence in between.
+		"game:void": { bpm: 48, root: 55, prog: [[0, "m"], [-1, "M"], [-5, "M"], [-3, "m"]], hold: 2, lead: "chords", top: "piano", deep: true },
+		// "Requiem floty" (Cmentarzysko Floty): a chorale for the dead fleet — choir and organ in D minor, the
+		// clock, low brass far off.
+		"game:requiem": { bpm: 56, root: 73.42, prog: [[0, "m"], [-2, "M"], [-4, "M"], [-5, "M"], [0, "m"], [3, "M"], [-7, "m"], [-5, "M"]], hold: 1, lead: "chorale", top: "flute" },
+	};
 	class GameAudio {
 		constructor({ contextFactory, storage } = {}) {
 			this.contextFactory =
@@ -809,7 +827,7 @@
 				sun = mode === "game:sun",
 				// Menu and ice: the organ and the clock; desert, dawn and ash: the drums and the voice.
 				// One step is an eighth: the menu at 70 beats a minute, the ice 60, the ash front 100, the dawn 75, the desert 66.
-				beat = 30 / (EERIE[mode]?.bpm || (menu ? 70 : ice ? 60 : ash ? 100 : sun ? 75 : 66)),
+				beat = 30 / (EERIE[mode]?.bpm || SPACE_MUSIC[mode]?.bpm || (menu ? 70 : ice ? 60 : ash ? 100 : sun ? 75 : 66)),
 				meter = 8,
 				bar = Math.floor(step / meter),
 				pulse = step % meter;
@@ -818,6 +836,7 @@
 				soft = { explore: 0.85, develop: 0.95, tension: 0.9, battle: 1, recovery: 0.75 }[mood] || 0.85;
 			const play = (kind, root, n, duration, level, pan = 0, delay = 0) => this.instrument(kind, hz(root, n), t + delay, duration, level * soft, pan);
 			if (EERIE[mode]) return this.eerieStep(mode, step, t, mood, soft, beat);
+			if (SPACE_MUSIC[mode]) return this.spaceStep(mode, step, t, mood, soft, beat);
 			if (menu || ice) {
 				// "Distant light": a minor organ figure in eighths turning over a slow progression (8 bars), layers
 				// entering phrase by phrase (32 bars), the clock ticking under it.
@@ -943,6 +962,74 @@
 			}
 			// Recovery: a long, low flute and the choir.
 			if (mood === "recovery" && !pulse && bar % 2 === 0) play("flute", deg(2) + 12, beat * 6, 0.016, -0.2);
+			return beat;
+		}
+		// The space themes (SPACE_MUSIC): see above. Layers by phrase (8 bars, a cycle of 32): 0 — the pedal, the
+		// clock and the figure, soft; 1 — strings and the piano; 2 — the choir, the figure doubled an octave up;
+		// 3 — the full organ, a blast at the end, then the last half bar cut to silence but one piano note.
+		spaceStep(mode, step, t, mood, soft, beat) {
+			const S = SPACE_MUSIC[mode],
+				meter = 8,
+				bar = Math.floor(step / meter),
+				pulse = step % meter,
+				phrase = Math.floor(bar / 8) % 4,
+				[r, q] = S.prog[Math.floor(bar / S.hold) % S.prog.length],
+				chord = q === "m" ? [0, 3, 7] : q === "s" ? [0, 2, 7] : [0, 4, 7],
+				base = S.root * 2 ** (r / 12),
+				hz = (n) => base * 2 ** (n / 12),
+				play = (kind, n, duration, level, pan = 0, delay = 0) => this.instrument(kind, hz(n), t + delay, duration, level * soft, pan),
+				high = S.high || 0,
+				battle = mood === "battle",
+				tension = mood === "tension";
+			// The cut: the end of a cycle falls silent, a single piano note left hanging.
+			if (!battle && bar % 32 === 31 && pulse >= 4) {
+				if (pulse === 4) play("piano", chord[1] + 24 + high, beat * 8, 0.03, 0.2);
+				return beat;
+			}
+			// The clock: on the beat (quarters); in the tension and the fight every eighth.
+			if (pulse % 2 === 0 || tension || battle) this.instrument("tick", pulse % 4 ? 2600 : 3300, t, 0.05, (S.deep ? 0.04 : 0.028) * soft, pulse % 4 ? 0.35 : -0.35);
+			// The pedal and the chord (each chord change).
+			if (!pulse && bar % S.hold === 0) {
+				const long = beat * meter * S.hold + 0.5;
+				play("organ", -12, long, S.deep ? 0.03 : 0.022);
+				if (S.deep) play("drone", -12, long, 0.03);
+				if (S.lead === "chords" || S.lead === "chorale" || phrase >= 3 || battle) chord.forEach((n, k) => play("organ", n + (k ? 12 : 0), long, (S.lead === "chorale" ? 0.012 : 0.014) * (phrase >= 3 ? 1.3 : 1), (k - 1) * 0.4));
+				if (phrase >= 1 || S.lead === "chorale") chord.forEach((n, k) => play("strings", n + 12 + high, long, 0.011 * (phrase >= 2 ? 1.4 : 1), (k - 1) * 0.5));
+				if (phrase >= 2 || S.lead === "chorale" || mood === "recovery") play(S.lead === "chorale" ? "chant" : "choir", chord[1] + 12, long, 0.012, 0.2);
+			}
+			// The figure: one small arpeggio turning (root, fifth, octave, third above), every eighth.
+			const arp = [chord[0], chord[2], 12 + chord[0], 12 + chord[1]],
+				order = [0, 1, 2, 3, 2, 1, 2, 1],
+				fig = arp[order[pulse]] + 12 + high;
+			if (battle) {
+				// "No time for caution": the organ in sixteenths, accented, the strings with it, drums, blasts.
+				play("organ", fig, beat * 0.45, pulse % 4 ? 0.014 : 0.02, -0.25);
+				play("organ", arp[order[(pulse + 3) % 8]] + 12 + high, beat * 0.45, 0.012, 0.25, beat / 2);
+				if (pulse % 2 === 0) play("strings", fig + 12, beat * 0.9, 0.012, 0.3);
+				if ([0, 3, 6].includes(pulse)) play("taiko", -12, 1.1, 0.07, pulse % 2 ? 0.3 : -0.3);
+				if (!pulse && bar % 2 === 0) play("braam", -12, beat * 6, 0.04);
+				if (pulse === 4) play("chant", chord[0], beat * 4, 0.02);
+				return beat;
+			}
+			if (S.lead === "organ" || S.lead === "piano") {
+				const lead = S.lead === "piano" ? "piano" : "organ",
+					level = (lead === "piano" ? 0.026 : 0.012) * [0.7, 0.85, 1, 1.15][phrase];
+				play(lead, fig, beat * (lead === "piano" ? 2.5 : 0.95), level, pulse % 2 ? 0.25 : -0.25);
+				if (phrase >= 2) play(lead === "piano" ? "bell" : "organ", fig + 12, beat * 0.9, level * 0.5, pulse % 2 ? -0.3 : 0.3);
+				if (S.lead === "piano" && phrase >= 2 && pulse % 4 === 0) play("organ", fig, beat * 1.8, 0.008, 0);
+			}
+			// The far piano (and the theme's top voice): one note, echoed twice, fading.
+			if (pulse === 2 && bar % (S.deep ? 4 : 2) === 1) {
+				const n = arp[(bar >> 1) % 4] + 24 + high;
+				play(S.top, n, beat * 6, S.top === "flute" ? 0.016 : 0.024, 0.3);
+				play(S.top, n, beat * 6, 0.012, -0.3, beat * 1.5);
+				play(S.top, n, beat * 6, 0.006, 0.3, beat * 3);
+			}
+			// The end of the cycle's last full phrase: a blast.
+			if (phrase === 3 && bar % 8 === 6 && !pulse) play("braam", -12, beat * 10, 0.03);
+			// Moods: work (a slow pluck under it), tension (a low organ pulse), recovery (the choir only, quiet).
+			if (mood === "develop" && pulse % 4 === 1) play("pluck", chord[pulse % 3] + 12, beat * 1.5, 0.02, -0.3);
+			if (tension && pulse % 2 === 1) play("organ", chord[0] - 12, beat * 0.5, 0.016);
 			return beat;
 		}
 		scheduleMusic() {

@@ -314,3 +314,30 @@ test("four eerie themes: their own instruments, tempo and harmony; moods change 
 	assert.equal(new Set(sets).size, 4, sets.join(" | "));
 	assert.equal(new Set(seqs).size, 4);
 });
+test("four space themes in the manner of Interstellar: organ figure, clock, piano; a driving battle", () => {
+	const sets = [],
+		seqs = [];
+	for (const mode of ["game:orbit", "game:glacis", "game:void", "game:requiem"]) {
+		const a = new GameAudio(),
+			notes = [];
+		a.musicMode = mode;
+		a.instrument = (...n) => notes.push(n);
+		let t = 0;
+		// A whole cycle of layers (32 bars), with its silent cut at the end.
+		for (let step = 0; step < 256; step++) t += a.musicStep(step, t);
+		const kinds = new Set(notes.map((n) => n[0]));
+		assert.ok(kinds.size >= 4, mode + " " + [...kinds]);
+		for (const kind of ["organ", "tick"]) assert.ok(kinds.has(kind), mode + " " + kind);
+		assert.ok(notes.every((n) => n.slice(1).every(Number.isFinite) && n[2] >= 0 && n[3] > 0 && n[4] > 0 && n[1] > 20), mode);
+		sets.push([...kinds].sort().join());
+		seqs.push(JSON.stringify(notes.slice(0, 200)));
+		const b = new GameAudio(),
+			fight = [];
+		b.previewMusic(mode, "battle");
+		b.instrument = (...n) => fight.push(n[0]);
+		for (let step = 0; step < 32; step++) b.musicStep(step, step);
+		for (const kind of ["organ", "taiko", "braam", "tick"]) assert.ok(fight.includes(kind), mode + " battle " + kind);
+	}
+	assert.equal(new Set(seqs).size, 4);
+	assert.ok(new Set(sets).size >= 3, sets.join(" | "));
+});

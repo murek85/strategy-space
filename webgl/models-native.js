@@ -196,7 +196,7 @@ function createNativeModels(options) {
 			c.fillStyle = color;
 			c.font = "bold 13px Segoe UI";
 			c.textAlign = "center";
-			c.fillText(e.team === (game.viewer ?? 0) ? (game.centerLevel() === 2 ? "II · KOLONIA" : "I · PRZYCZÓŁEK") : "II", 0, -90);
+			c.fillText(e.team === (game.viewer ?? 0) ? (["", "I · PRZYCZÓŁEK", "II · KOLONIA", "III · TWIERDZA"][game.centerLevel()] || "I · PRZYCZÓŁEK") : "II", 0, -90);
 			c.restore();
 		}
 		PlanetArt.damage(c, e, time);

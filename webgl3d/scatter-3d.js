@@ -18,15 +18,18 @@ export function createScatter3D(THREE, { world, heightAt, fogged }) {
 	world.add(group);
 
 	// ---------- wind (shared by every swaying material) ----------
-	const wind = { time: { value: 0 }, power: { value: 0.3 } };
+	const wind = { time: { value: 0 }, power: { value: 0.3 } },
+		// Units pushing through the plants (0.144.2): xz, reach, strength — up to 16 near the view.
+		pushers = { value: Array.from({ length: 16 }, () => new THREE.Vector4()) };
 	function windy(material) {
 		const before = material.onBeforeCompile;
 		material.onBeforeCompile = (shader, renderer) => {
 			before?.call(material, shader, renderer);
 			shader.uniforms.windTime = wind.time;
 			shader.uniforms.windPower = wind.power;
+			shader.uniforms.pushers = pushers;
 			shader.vertexShader = shader.vertexShader
-				.replace("#include <common>", "#include <common>\nuniform float windTime;\nuniform float windPower;")
+				.replace("#include <common>", "#include <common>\nuniform float windTime;\nuniform float windPower;\nuniform vec4 pushers[16];")
 				.replace(
 					"#include <begin_vertex>",
 					`#include <begin_vertex>
@@ -38,7 +41,22 @@ export function createScatter3D(THREE, { world, heightAt, fogged }) {
 					float gust = sin(windTime * 1.6 + root.x * 0.031 + root.y * 0.023) + 0.45 * sin(windTime * 3.3 + root.x * 0.07 - root.y * 0.05);
 					float bend = position.y * position.y * windPower;
 					transformed.x += gust * bend * 0.22;
-					transformed.z += gust * bend * 0.09;`,
+					transformed.z += gust * bend * 0.09;
+					// Grass, reeds, ferns and shrubs bow and spread under a vehicle or a soldier pushing through
+					// (not the trees).
+					#ifdef USE_INSTANCING
+					if (length(instanceMatrix[1].xyz) < 20.0)
+						for (int i = 0; i < 16; i++) {
+							vec4 pu = pushers[i];
+							if (pu.z <= 0.0) break;
+							float d = length(root - pu.xy);
+							if (d < pu.z) {
+								float f = (1.0 - d / pu.z) * pu.w;
+								transformed.y *= 1.0 - f * 0.75;
+								transformed.xz *= 1.0 + f * 0.5;
+							}
+						}
+					#endif`,
 				);
 		};
 		return material;
@@ -538,12 +556,55 @@ export function createScatter3D(THREE, { world, heightAt, fogged }) {
 			});
 			mesh.count = spots.length;
 			group.add(mesh);
-			batches.push({ mesh, spots });
+			batches.push({ mesh, spots, tree: shape === "tree" });
 		}
 	}
 	// Hides what lies under buildings (zero scale), re-checked when the buildings change.
 	const hidden = new THREE.Matrix4().makeScale(0, 0, 0);
+	// Blasts (0.144.2): trees within a crater's reach fall away from it and stay down; the small plants in
+	// the crater itself are gone.
+	const cratersDone = new WeakSet(),
+		fallQ = new THREE.Quaternion(),
+		turnQ = new THREE.Quaternion(),
+		fallAxis = new THREE.Vector3(),
+		fp = new THREE.Vector3(),
+		fs = new THREE.Vector3();
+	function blasts(game) {
+		let changed = false;
+		for (const k of game.craters || []) {
+			if (cratersDone.has(k)) continue;
+			cratersDone.add(k);
+			const reach = (k.size || 20) * 1.6 + 14;
+			for (const b of batches)
+				for (const o of b.spots) {
+					if (o.fallen || o.gone) continue;
+					const dx = o.x - k.x,
+						dy = o.y - k.y,
+						d = Math.hypot(dx, dy);
+					if (d > reach) continue;
+					if (b.tree) {
+						const a = Math.atan2(dy, dx);
+						fallAxis.set(Math.sin(a), 0, -Math.cos(a));
+						o.matrix.decompose(fp, turnQ, fs);
+						fallQ.setFromAxisAngle(fallAxis, 1.35 + (o.tilt - 0.5) * 0.3).multiply(turnQ);
+						o.matrix = new THREE.Matrix4().compose(fp.setY(fp.y - o.size * 0.08), fallQ, fs);
+						o.fallen = true;
+					} else if (d < reach * 0.55) {
+						o.matrix = hidden;
+						o.gone = true;
+					}
+					changed = true;
+				}
+		}
+		if (!changed) return;
+		for (const { mesh, spots } of batches) {
+			spots.forEach((o, i) => mesh.setMatrixAt(i, o.matrix));
+			mesh.instanceMatrix.needsUpdate = true;
+		}
+		buildingsKey = null;
+	}
 	function update(game) {
+		blasts(game);
 		const buildings = game.entities.filter((e) => e.hp > 0 && !RTS.TYPES[e.type]?.speed);
 		const key = buildings.map((b) => b.id).join(",");
 		if (key === buildingsKey) return;
@@ -555,8 +616,9 @@ export function createScatter3D(THREE, { world, heightAt, fogged }) {
 		}
 	}
 	// Each frame: the wind (time, and how hard it blows: a breeze, a gale in storms).
-	function tick(time, weather = {}) {
+	function tick(time, weather = {}, push = []) {
 		wind.time.value = time;
+		for (let i = 0; i < 16; i++) (i < push.length ? pushers.value[i].fromArray(push[i]) : pushers.value[i].set(0, 0, 0, 0));
 		const storm = weather.kind ? weather.intensity || 0 : 0;
 		wind.power.value += (0.3 + storm * (weather.kind === "snow" ? 0.6 : 1.2) - wind.power.value) * 0.05;
 	}

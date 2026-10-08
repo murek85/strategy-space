@@ -32,6 +32,7 @@ import { createRelief3D } from "./relief-3d.js";
 import { createSunFx3D } from "./sun-fx-3d.js";
 import { createPost3D } from "./post-3d.js";
 import { createSpace3D } from "./space-3d.js";
+import { createHolo3D } from "./holo-3d.js";
 
 export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 	const { TYPES } = RTS;
@@ -94,12 +95,15 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		terrain = new THREE.Group();
 	world.add(terrain);
 	scene.add(world);
+	// Holograms of the interface: selection, orders, relay beams (0.144.3, webgl3d/holo-3d.js).
+	const holo = createHolo3D(THREE, { world, heightAt: (x, y) => heightAt(x, y) });
 	let game = null,
 		heights = null,
 		tiles = [],
 		groundClock = GROUND_EVERY,
 		timeOfDay = null,
-		clock = 0;
+		clock = 0,
+		frameDt = 0;
 	const terrainHeight = createTerrainHeight(),
 		relief3d = createRelief3D({ RISE });
 	// Water, night lights, weather and particles (webgl3d/scene-fx-3d.js).
@@ -356,6 +360,62 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		buildNebula();
 	}
 
+	// The mist of the fog of war (0.144.2): three layers of drifting murk draped over the ground (12, 30 and
+	// 54 above it, following the hills, so they never cut into a slope) — thick and billowing over the
+	// unknown, a thin haze over what was seen before, rolling thicker along the edge of sight; units and
+	// trees stand in it and loom out of it. Read from the fog-of-war map; not in space.
+	let mist = null;
+	const mistColor = { value: new THREE.Color() };
+	function buildMist() {
+		if (mist) {
+			world.remove(mist);
+			mist.traverse((o) => o.geometry?.dispose());
+		}
+		mist = new THREE.Group();
+		mist.visible = !spaceMap();
+		const ground = fx.ground,
+			geometry = new THREE.PlaneGeometry(game.W, game.H, Math.ceil(game.W / 28), Math.ceil(game.H / 28)).rotateX(-Math.PI / 2).translate(game.W / 2, 0, game.H / 2);
+		[12, 30, 54].forEach((lift, layer) => {
+			const m = new THREE.Mesh(
+				geometry,
+				new THREE.ShaderMaterial({
+					uniforms: { heightMap: ground.heightMap, heightInfo: ground.heightInfo, fogMap: fogUniforms.fogMap, fogSize: fogUniforms.fogSize, fogOn: fogUniforms.fogOn, fogTime: fogUniforms.fogTime, mistColor, lift: { value: lift }, layer: { value: layer } },
+					vertexShader: `uniform sampler2D heightMap; uniform vec4 heightInfo; uniform float lift; varying vec2 vXZ;
+						float groundAt(vec2 p) { return texture2D(heightMap, (p / heightInfo.z + 0.5) / heightInfo.xy).r; }
+						void main() {
+							vec3 p = position;
+							vXZ = p.xz;
+							p.y = groundAt(p.xz) + lift;
+							gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
+						}`,
+					fragmentShader: `uniform sampler2D fogMap; uniform vec2 fogSize; uniform float fogOn; uniform float fogTime; uniform vec3 mistColor; uniform float layer; varying vec2 vXZ;
+						${FOG_NOISE}
+						void main() {
+							float seen = texture2D(fogMap, vXZ / fogSize).r;
+							float hide = (1.0 - smoothstep(0.12, 0.42, seen)) + (1.0 - smoothstep(0.45, 0.85, seen)) * 0.18;
+							float edge = smoothstep(0.08, 0.28, seen) * (1.0 - smoothstep(0.3, 0.6, seen));
+							vec2 q = vXZ * 0.0042 + vec2(fogTime * 0.012, fogTime * 0.007) * (1.0 + layer * 0.6) + layer * 7.3;
+							float n = fwNoise(q) * 0.55 + fwNoise(q * 2.3 + 3.1) * 0.3 + fwNoise(q * 5.1 - fogTime * 0.02) * 0.15;
+							float billow = smoothstep(0.28, 0.78, n);
+							float a = clamp((hide * 0.4 + edge * 0.35) * billow, 0.0, 0.55) * (1.0 - layer * 0.25) * fogOn;
+							// Fade at the map's edge.
+							vec2 m = min(vXZ, fogSize - vXZ);
+							a *= smoothstep(0.0, 120.0, min(m.x, m.y));
+							gl_FragColor = vec4(mistColor * (0.8 + 0.4 * n), a);
+							#include <colorspace_fragment>
+						}`,
+					transparent: true,
+					depthWrite: false,
+					fog: false,
+				}),
+			);
+			m.renderOrder = 2 + layer;
+			m.frustumCulled = false;
+			mist.add(m);
+		});
+		world.add(mist);
+	}
+
 	// Space (0.131): the nebula clouds over the gas fields — soft glowing sprites at a few heights, violet
 	// and blue, added light (they brighten what is behind them); none on other maps.
 	let nebula = null,
@@ -412,7 +472,8 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			for (let k = 0; k < 12; k++) {
 				const a = k * 2.4 + i,
 					d = k ? R * (0.3 + ((k * 37) % 10) / 16) : 0,
-					m = new THREE.SpriteMaterial({ map: k % 2 ? cloudTexture : nebulaTexture, color: new THREE.Color(k % 3 === 1 ? "#4f86e6" : k % 3 === 2 ? "#c05ad8" : "#8a46e0"), transparent: true, opacity: k % 2 ? 0.12 : 0.04, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }),
+					// The map's nebula colours (look, space-rules.js), violet and blue by default.
+					m = new THREE.SpriteMaterial({ map: k % 2 ? cloudTexture : nebulaTexture, color: new THREE.Color((RTS.MISSIONS[game.missionId].look?.nebula?.[0] || ["#8a46e0", "#4f86e6", "#c05ad8"])[k % 3]), transparent: true, opacity: k % 2 ? 0.12 : 0.04, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }),
 					sprite = new THREE.Sprite(m),
 					size = R * (0.9 + ((k * 53) % 9) / 10);
 				sprite.position.set(f.x + Math.cos(a) * d, -60 + ((k * 29) % 170), f.y + Math.sin(a) * d);
@@ -438,7 +499,25 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		const dust = new THREE.BufferGeometry();
 		dust.setAttribute("position", new THREE.BufferAttribute(pos, 3));
 		dust.setAttribute("color", new THREE.BufferAttribute(col, 3));
-		nebula.add(new THREE.Points(dust, new THREE.PointsMaterial({ size: 3.2, map: nebulaTexture, vertexColors: true, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true, fog: false })));
+		// The dust parts before the ships (0.144.1): every speck within a ship's reach is pushed out of the
+		// way (dustShips: the ships near the view, xyz and reach), so a bubble of clear space travels with each
+		// ship and the dust closes behind it.
+		const dustMaterial = new THREE.PointsMaterial({ size: 3.2, map: nebulaTexture, vertexColors: true, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true, fog: false });
+		dustMaterial.onBeforeCompile = (shader) => {
+			shader.uniforms.dustShips = dustShips;
+			shader.vertexShader = shader.vertexShader.replace("#include <common>", "#include <common>\nuniform vec4 dustShips[16];").replace(
+				"#include <begin_vertex>",
+				`#include <begin_vertex>
+				for (int i = 0; i < 16; i++) {
+					vec4 sh = dustShips[i];
+					if (sh.w <= 0.0) break;
+					vec3 d = transformed - sh.xyz;
+					float l = length(d);
+					if (l < sh.w) transformed += d / max(l, 0.001) * (sh.w - l) * 0.8;
+				}`,
+			);
+		};
+		nebula.add(new THREE.Points(dust, dustMaterial));
 		world.add(nebula);
 	}
 
@@ -970,7 +1049,7 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		decal.receiveShadow = true;
 		group.add(decal);
 		world.add(group);
-		r = { group, decal, plinth: null, key: null, model: null };
+		r = { group, decal, plinth: null, key: null, model: null, bornAt: game.time > 3 ? game.time : -1 };
 		records.set(e.id, r);
 		return r;
 	}
@@ -1192,7 +1271,23 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			built = e.constructionLeft > 0 ? Math.max(0.08, 1 - e.constructionLeft / (s.construction || s.build || 10)) : 1;
 		// The orbital station charges between strikes (0…1).
 		const charge = e.type === "uplink" && e.strikeReady ? Math.max(0, Math.min(1, 1 - (e.strikeReady - game.time) / (RTS.FACTION_FX?.strike?.cooldown || 60))) : 1;
-		r.model.update(e, { time: clock, moving, aim, recoil, built, working: working.has(e.id), charge });
+		// Afterburner (0.144.1): from the ship's motion as the simulation moves it — speeding up from a
+		// stop, hard turns — flaring at once and dying away in about a second.
+		let boost = 0;
+		if (s.ship) {
+			const m = (r.motion ||= { t: game.time, x: e.x, y: e.y, a: e.angle || 0, v: 0, boost: 0 }),
+				dtg = game.time - m.t;
+			if (dtg > 0.02) {
+				const a = e.angle || 0,
+					v = Math.hypot(e.x - m.x, e.y - m.y) / dtg,
+					turn = Math.abs(Math.atan2(Math.sin(a - m.a), Math.cos(a - m.a))) / dtg;
+				m.boost = Math.max(m.boost, Math.min(1, Math.max(0, (v - m.v) / dtg / ((s.speed || 100) * 1.5)) + Math.max(0, (turn - 0.6) / 2.5)));
+				Object.assign(m, { t: game.time, x: e.x, y: e.y, a, v });
+			}
+			m.boost = Math.max(0, m.boost - frameDt * 1.2);
+			boost = m.boost;
+		}
+		r.model.update(e, { time: clock, moving, aim, recoil, built, working: working.has(e.id), charge, boost });
 		// Under construction: the building rises out of the ground inside a scaffold.
 		r.model.root.scale.set(1, built, 1);
 		if (s.flying) r.model.root.position.y = 90;
@@ -1202,6 +1297,7 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		else if (e.type === "worker" && spaceMap()) r.model.root.position.y = DRONE_HOVER;
 		// Stations of the orbital battle float on their platforms (webgl3d/ships-3d.js).
 		else if (building) r.model.root.position.y = stationLift(e, s);
+		warpIn(e, r, s);
 		if (building && built < 1) {
 			if (!r.scaffold) {
 				r.scaffold = models3d.scenery("scaffold", s.radius);
@@ -1597,12 +1693,6 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 				ground = heightAt(e.x, e.y),
 				top = !s.speed ? (options.models && models3d.has(e) ? 62 : buildingHeight(s) + 14) + stationLift(e, s) : s.flying ? 110 : s.ship ? 50 + s.radius : e.type === "worker" && spaceMap() ? 46 : 30,
 				isSelected = selected.has(e.id);
-			if (isSelected) {
-				const ring = pooled(rings, ri++, () => new THREE.Mesh(ringGeometry, new THREE.MeshBasicMaterial({ color: "#8dffc8", transparent: true, opacity: 0.9, depthWrite: false })));
-				ring.visible = true;
-				ring.scale.setScalar(s.radius + 6);
-				ring.position.set(e.x, ground + 3, e.y);
-			}
 			if (isSelected || e.hp < e.maxHp) {
 				const bar = pooled(bars, bi++, () => {
 					const root = new THREE.Group(),
@@ -1680,7 +1770,11 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 					}
 				} else if (!impactsSeen.has(ef)) {
 					impactsSeen.add(ef);
-					fx.shot("impact", ef.tx, toY, ef.ty, ef.rocket || bomb, { air: ef.airTarget });
+					// Space (0.144.1): a shot that gets through to the hull (no shield left) strikes sparks and
+					// flakes of plating off it; no dust kicked up in the void.
+					const hull = spaceMap() ? hullHit(ef) : null;
+					if (hull) fx.shot("hull", ef.tx, toY, ef.ty, ef.rocket || bomb, hull);
+					else fx.shot("impact", ef.tx, toY, ef.ty, ef.rocket || bomb, { air: ef.airTarget || spaceMap() });
 				}
 			} else if (ef.kind === "shieldHit" && ef.ship) {
 				// A ship's shield in space: a bubble round it, flaring where the shot struck, fading.
@@ -1894,19 +1988,22 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 	// sunset, both are faint in the blue hour (where the light changes over), then the cool moonlight
 	// from its own, lower direction. The sky's colours (webgl3d/sky-3d.js) tint the ambient light and
 	// the distance haze; twilight warms the ambient from the horizon.
-	const MOON_LIGHT = new THREE.Color("#a3b8e6"),
-		NIGHT_DEEP = new THREE.Color("#1c2a4e"),
-		NIGHT_AMBIENT = new THREE.Color("#2b3d66"),
+	const MOON_LIGHT = new THREE.Color("#b4c7ee"),
+		NIGHT_DEEP = new THREE.Color("#26385f"),
+		NIGHT_AMBIENT = new THREE.Color("#3a5282"),
 		DAY_AMBIENT = new THREE.Color("#bcd4e6"),
 		DAY_GROUND = new THREE.Color("#3a3226"),
-		NIGHT_GROUND = new THREE.Color("#141922"),
-		skyState = { e: 1, sunDir: new THREE.Vector3(), moonDir: new THREE.Vector3(), zenith: new THREE.Color(), horizon: new THREE.Color(), sunlight: new THREE.Color() };
+		NIGHT_GROUND = new THREE.Color("#1d2532"),
+		GOLDEN = new THREE.Color("#ffae5e"),
+		GOLDEN_TINT = new THREE.Color(1.08, 0.98, 0.84),
+		skyState = { e: 1, golden: 0, sunDir: new THREE.Vector3(), moonDir: new THREE.Vector3(), zenith: new THREE.Color(), horizon: new THREE.Color(), sunlight: new THREE.Color() };
 	const smooth = (a, b, x) => {
 		const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
 		return t * t * (3 - 2 * t);
 	};
 	const SPACE_LIGHT = { zenith: new THREE.Color("#02040a"), horizon: new THREE.Color("#070b1a"), sun: new THREE.Color("#fff3e2"), ambient: new THREE.Color("#7f92c4"), bounce: new THREE.Color("#5a4232") };
-	const SOLAR_GLOW = new THREE.Color("#ffc070"),
+	const SUN_TMP = new THREE.Color(),
+		SOLAR_GLOW = new THREE.Color("#ffc070"),
 		PLANET_GLOW = new THREE.Color("#ff9a5c"),
 		PLANET_FROM = new THREE.Vector3(0.15, -0.85, -0.5).normalize();
 	const spaceMap = () => !!RTS.MISSIONS[game?.missionId]?.space,
@@ -1927,17 +2024,33 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		skyState.moonPhase = (dayIndex * 0.125 + 0.62) % 1;
 		const full = 0.5 - 0.5 * Math.cos(skyState.moonPhase * Math.PI * 2);
 		const sunI = 2.45 * smooth(-0.12, 0.3, elevation),
-			moonI = 0.55 * (0.25 + 0.75 * full) * smooth(-0.05, -0.3, elevation),
+			// Night (0.147.1): a brighter moon and sky light, so the board reads at night without the lamps.
+			// Snow and ice throw the moonlight back (0.147.3): ice maps are brighter at night; the dark basalt
+			// of the ash worlds swallows it, so there the moon is stronger too, or the ground goes black (0.147.4).
+			// The cooled black lava of the magma worlds is far darker still and needs much more moonlight (0.147.6),
+			// and so does the black-green moss of the glowing thicket (0.147.7).
+			biome = RTS.MISSIONS[game?.missionId]?.biome,
+			theme = RTS.MISSIONS[game?.missionId]?.theme,
+			snowNight = theme === "magma" ? 12 : theme === "lumen" ? 8 : biome === "ice" ? 1 : biome === "ash" ? 2.2 : biome === "dust" ? 0.8 : 0,
+			moonI = 1.3 * (1 + 0.35 * snowNight) * (0.45 + 0.55 * full) * smooth(-0.05, -0.3, elevation),
 			bySun = sunI >= moonI,
 			// Moonlight from the moon's side but higher than its disk in the sky: a low light would throw
 			// shadows of the hills across half the map.
-			dir = bySun ? new THREE.Vector3(-across, Math.max(0.12, elevation), 0.45).normalize() : new THREE.Vector3(skyState.moonDir.x, 0.75, skyState.moonDir.z).normalize();
+			// The low sun of dawn and dusk (0.144.2) throws longer shadows than before (down to 0.07).
+			dir = bySun ? new THREE.Vector3(-across, Math.max(0.07, elevation), 0.45).normalize() : new THREE.Vector3(skyState.moonDir.x, 0.75, skyState.moonDir.z).normalize();
 		sun.color.copy(bySun ? colors.sunlight : MOON_LIGHT);
 		sun.intensity = Math.max(0.18, bySun ? sunI : moonI);
+		// The golden hour (0.144.2): with the sun just over the horizon its light turns gold and a little
+		// stronger; the picture is warmed in the grade (cinematic).
+		skyState.golden = bySun ? smooth(-0.06, 0.04, elevation) * (1 - smooth(0.12, 0.3, elevation)) : 0;
+		if (skyState.golden > 0) {
+			sun.color.lerp(GOLDEN, skyState.golden * 0.35);
+			sun.intensity *= 1 + skyState.golden * 0.15;
+		}
 		// Ambient: night blue → day sky, warmed by the horizon in the twilight; the ground bounce darkens.
 		const twilight = Math.max(0, 1 - Math.abs(elevation + 0.02) / 0.2);
 		// At night the sky glows with the moon: deep blue and dim at the new moon, silvery at the full.
-		hemi.intensity = 0.3 + 0.14 * full + day * (0.68 - 0.14 * full) + twilight * 0.12;
+		hemi.intensity = 0.6 + 0.14 * full + 0.14 * snowNight * (1 - day) + day * (0.38 - 0.14 * full) + twilight * 0.12;
 		hemi.color.copy(NIGHT_DEEP).lerp(NIGHT_AMBIENT, full).lerp(DAY_AMBIENT, day).lerp(colors.horizon, twilight * 0.4);
 		hemi.groundColor.copy(NIGHT_GROUND).lerp(DAY_GROUND, day);
 		// Distance haze and the clear colour: the horizon, a little towards the zenith.
@@ -1948,10 +2061,12 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		if (spaceMap()) {
 			skyState.zenith.copy(SPACE_LIGHT.zenith);
 			skyState.horizon.copy(SPACE_LIGHT.horizon);
-			skyState.sunlight.copy(SPACE_LIGHT.sun);
+			// The map's own sun (0.143): white-blue, golden from an accretion disk, red from a dwarf.
+			const spaceSun = (RTS.MISSIONS[game?.missionId]?.look || {}).sun;
+			skyState.sunlight.copy(spaceSun ? SUN_TMP.set(spaceSun) : SPACE_LIGHT.sun);
 			dir.set(-0.62, 0.58, 0.52).normalize();
 			skyState.sunDir.copy(dir);
-			sun.color.copy(SPACE_LIGHT.sun);
+			sun.color.copy(skyState.sunlight);
 			// Vacuum: a hard sun, little ambient light — deep shadows on the hulls.
 			sun.intensity = 3.1;
 			hemi.color.copy(SPACE_LIGHT.ambient);
@@ -2005,7 +2120,8 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		}
 		// Space: the gas giant below throws a warm glow up onto the undersides of ships and stations.
 		if (spaceMap()) {
-			sun2.color.copy(PLANET_GLOW);
+			const glow = (RTS.MISSIONS[game?.missionId]?.look || {}).glow;
+			sun2.color.copy(glow ? SUN_TMP.set(glow) : PLANET_GLOW);
 			sun2.intensity = 0.75;
 			sun2.target.position.set(rig.x, 0, rig.y);
 			sun2.position.copy(sun2.target.position).addScaledVector(PLANET_FROM, 2500);
@@ -2016,9 +2132,207 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		}
 		sky.update({ camera, time: clock, ...skyState, aurora, haze, hazeColor: HAZE[state.kind] || HAZE.rain, cover, flash: state.flash || 0, flashColor: FLASH });
 		sunFx.update({ camera, imageRays: quality.cinema && quality.atmo, sunDir: skyState.sunDir, sunColor: skyState.sunlight, e: skyState.e, haze, mist: groundWeather.mistLevel.value, focus: rig, span: Math.max(1600, Math.min(4200, rig.distance * 2.2)) });
-		sky.clouds(clock, options.cloudShadows === false || spaceMap() ? 0 : 0.4 * (1 - haze * 0.6));
+		// Cloud shadows are a thing of the sun: by moonlight they nearly vanish (0.147.4).
+		sky.clouds(clock, options.cloudShadows === false || spaceMap() ? 0 : 0.4 * (1 - haze * 0.6) * (0.15 + 0.85 * smooth(-0.12, 0.15, skyState.e)));
 		sky.mesh.visible = !spaceMap();
 		space3d.update({ camera, time: clock, sun: skyState.sunDir });
+	}
+
+	// Arrival from hyperspace (0.144): a ship that appears during the battle (built, a raider, a
+	// reinforcement — not the forces at the start, not fighters launched from a carrier) drops out of
+	// hyperspace: a blue-white flash where it arrives, and the ship shoots in from far behind along its
+	// heading, stretched by its speed, with a streak of light behind it, braking hard to a stop (1.1 s).
+	const WARP_TIME = 1.1,
+		warpStreakMaterial = new THREE.MeshBasicMaterial({
+			map: (() => {
+				const c = document.createElement("canvas");
+				c.width = 128;
+				c.height = 16;
+				const x = c.getContext("2d"),
+					g = x.createLinearGradient(0, 0, 128, 0);
+				g.addColorStop(0, "rgba(120,170,255,0)");
+				g.addColorStop(0.75, "rgba(170,210,255,0.7)");
+				g.addColorStop(1, "rgba(255,255,255,1)");
+				x.fillStyle = g;
+				x.fillRect(0, 0, 128, 16);
+				const v = x.createLinearGradient(0, 0, 0, 16);
+				v.addColorStop(0, "rgba(0,0,0,1)");
+				v.addColorStop(0.5, "rgba(0,0,0,0)");
+				v.addColorStop(1, "rgba(0,0,0,1)");
+				x.globalCompositeOperation = "destination-out";
+				x.fillStyle = v;
+				x.fillRect(0, 0, 128, 16);
+				return new THREE.CanvasTexture(c);
+			})(),
+			transparent: true,
+			blending: THREE.AdditiveBlending,
+			depthWrite: false,
+			side: THREE.DoubleSide,
+			fog: false,
+		}),
+		warpStreakGeometry = (() => {
+			const a = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2),
+				b = new THREE.PlaneGeometry(1, 1);
+			const g = new THREE.BufferGeometry();
+			const pos = [...a.attributes.position.array, ...b.attributes.position.array],
+				uv = [...a.attributes.uv.array, ...b.attributes.uv.array],
+				idx = [...a.index.array, ...b.index.array.map((i) => i + 4)];
+			g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+			g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+			g.setIndex(idx);
+			return g;
+		})();
+	function warpIn(e, r, s) {
+		if (!s.ship || e.type === "fighter") return;
+		// Only a ship that has just appeared (not one first seen coming out of the fog of war).
+		if (r.warp === undefined) r.warp = r.bornAt >= 0 && game.time - r.bornAt < 0.5 ? 0 : 1;
+		if (r.warp >= 1) {
+			if (r.warpFx) {
+				r.warpFx.streak.visible = r.warpFx.glare.visible = false;
+				r.model.root.position.x = 0;
+			}
+			return;
+		}
+		r.warp = Math.min(1, r.warp + frameDt / WARP_TIME);
+		if (!r.warpFx) {
+			const streak = new THREE.Mesh(warpStreakGeometry, warpStreakMaterial),
+				glare = new THREE.Sprite(new THREE.SpriteMaterial({ map: glareTexture, color: "#bfe0ff", blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, fog: false }));
+			streak.renderOrder = glare.renderOrder = 8;
+			r.group.add(streak, glare);
+			r.warpFx = { streak, glare };
+		}
+		const t = r.warp,
+			ease = 1 - Math.pow(1 - t, 3),
+			hover = r.model.root.position.y,
+			back = (1 - ease) * 900,
+			R = s.radius;
+		r.model.root.position.x = -back;
+		r.model.root.scale.x = 1 + (1 - ease) * 2.2;
+		const len = R * 2 + back * 1.4,
+			{ streak, glare } = r.warpFx;
+		streak.visible = t < 0.92;
+		streak.position.set(-back - len / 2 + R * 0.5, hover, 0);
+		streak.scale.set(len, R * 0.5, R * 0.5);
+		glare.visible = t < 0.45;
+		glare.position.set(0, hover, 0);
+		glare.scale.setScalar(R * (2.5 + t * 9));
+		glare.material.opacity = Math.pow(1 - t / 0.45, 2) * 0.9;
+	}
+
+	// Units pushing through the grass near the view (0.144.2): the nearest 16 on the ground, their reach
+	// growing with their size (scatter-3d.js bends the plants away).
+	function plantPushers() {
+		if (spaceMap() || !game) return [];
+		const list = [];
+		for (const e of game.entities) {
+			const s = TYPES[e.type];
+			if (!s?.speed || s.flying || s.ship || e.hp <= 0 || hidden(e)) continue;
+			const d = Math.hypot(e.x - rig.x, e.y - rig.y);
+			if (d < rig.distance * 1.3) list.push([e.x, e.y, s.radius * 1.5 + 6, 1, d]);
+		}
+		return list.sort((a, b) => a[4] - b[4]).slice(0, 16);
+	}
+
+	// Ships near the view for the parting dust (buildNebula): up to 16, their reach growing with their size.
+	const dustShips = { value: Array.from({ length: 16 }, () => new THREE.Vector4()) };
+	function updateDustShips() {
+		let n = 0;
+		if (spaceMap() && game) {
+			const span = rig.distance * 1.4,
+				hover = RTS.SPACE?.hover ?? 34;
+			for (const e of game.entities) {
+				const s = TYPES[e.type];
+				if (n >= 16 || !s?.ship || e.hp <= 0 || hidden(e) || Math.abs(e.x - rig.x) > span || Math.abs(e.y - rig.y) > span) continue;
+				dustShips.value[n++].set(e.x, hover, e.y, s.radius * 2.4 + 18);
+			}
+		}
+		for (let i = n; i < 16; i++) dustShips.value[i].set(0, 0, 0, 0);
+	}
+
+	// The ship or station a shot struck, if its shield is down: the way back towards the shooter.
+	function hullHit(ef) {
+		let best = null,
+			bestD = 8;
+		for (const e of game.entities) {
+			if (e.hp <= 0 || e.team === ef.team) continue;
+			const d = Math.hypot(e.x - ef.tx, e.y - ef.ty);
+			if (d < bestD) {
+				bestD = d;
+				best = e;
+			}
+		}
+		if (!best || (best.shield || 0) > 0) return null;
+		const dx = ef.x - ef.tx,
+			dz = ef.y - ef.ty,
+			l = Math.hypot(dx, dz) || 1;
+		return { dx: dx / l, dz: dz / l };
+	}
+
+	// Heat haze sources of the frame (0.144): explosions (strongest at the start), burning buildings and
+	// vehicles, lava near the view, the engines of the big ships in space — up to 16, the strongest, as
+	// [x, y, radius, strength] on the screen for the post pass.
+	const HEAT_TMP = new THREE.Vector3();
+	function heatSources() {
+		if (!quality.haze || !game) return [];
+		const out = [],
+			tanHalf = Math.tan((camera.fov * Math.PI) / 360),
+			span = rig.distance * 1.6,
+			space = spaceMap();
+		const add = (x, h, y, radius, strength) => {
+			if (strength <= 0.02 || Math.abs(x - rig.x) > span || Math.abs(y - rig.y) > span) return;
+			HEAT_TMP.set(x, h, y);
+			const dist = HEAT_TMP.distanceTo(camera.position);
+			HEAT_TMP.project(camera);
+			if (HEAT_TMP.z > 1 || Math.abs(HEAT_TMP.x) > 1.4 || Math.abs(HEAT_TMP.y) > 1.4) return;
+			const r = radius / (2 * dist * tanHalf);
+			if (r < 0.01) return;
+			out.push([HEAT_TMP.x * 0.5 + 0.5, HEAT_TMP.y * 0.5 + 0.5, Math.min(0.45, r), strength]);
+		};
+		for (const ef of game.effects) {
+			if (ef.kind !== "explosion" || (options.fog && !game.isVisible(ef.x, ef.y))) continue;
+			const k = 1 - ef.life / ef.maxLife,
+				size = ef.size || 40,
+				base = ef.space ? ef.lift : heightAt(ef.x, ef.y) + (ef.air ? 90 : 0);
+			add(ef.x, base + size * (ef.space ? 0 : 0.6), ef.y, size * (1.2 + k * 0.8), Math.max(0, 1 - k) * Math.min(1, size / 45));
+		}
+		for (const e of game.entities) {
+			const s = TYPES[e.type];
+			if (!s || e.hp <= 0 || e.constructionLeft > 0 || e.team === 2 || hidden(e)) continue;
+			const f = e.hp / e.maxHp,
+				building = !s.speed;
+			if (!space && !s.flying && (building ? f < 0.3 : s.radius >= 16 && f < 0.2)) add(e.x, heightAt(e.x, e.y) + (building ? Math.min(60, s.radius * 0.8) : 16) + s.radius * 0.5, e.y, s.radius * 1.5, 0.55);
+			// Engines of the big ships (lancer, cruiser, carrier) while they fly.
+			else if (space && s.ship && s.radius >= 18 && (e.path?.length || e.order?.kind === "move" || e.order?.kind === "attackMove")) {
+				const c = Math.cos(e.angle || 0),
+					sn = Math.sin(e.angle || 0);
+				add(e.x - c * s.radius * 1.3, RTS.SPACE?.hover ?? 34, e.y - sn * s.radius * 1.3, s.radius * 0.9, 0.35);
+			}
+		}
+		if (!space)
+			for (const w of game.waters || [])
+				if (w.kind === "lava") add(w.x, heightAt(w.x, w.y) + 20, w.y, Math.max(w.rx, w.ry) * 0.9, 0.3);
+		return out.sort((a, b) => b[2] * b[3] - a[2] * a[3]).slice(0, 16);
+	}
+
+	// The camera shakes at big blasts (0.144): a short tremor, stronger the bigger the blast and the
+	// nearer the view, dying away in half a second (settings: "Wstrząs kamery").
+	const shake = { amp: 0, seen: new WeakSet() };
+	function shakeCamera(dt) {
+		for (const ef of game.effects) {
+			if (ef.kind !== "explosion" || shake.seen.has(ef)) continue;
+			shake.seen.add(ef);
+			const size = ef.size || 40;
+			if (size < 45 || (options.fog && !game.isVisible(ef.x, ef.y))) continue;
+			const near = Math.max(0, 1 - Math.hypot(ef.x - rig.x, ef.y - rig.y) / (rig.distance * 1.5));
+			shake.amp = Math.min(1, Math.max(shake.amp, near * Math.min(1, (size - 35) / 80)));
+		}
+		shake.amp *= Math.exp(-dt * 6);
+		if (!quality.shake || shake.amp < 0.003) return;
+		const a = shake.amp * rig.distance * 0.006;
+		camera.position.x += Math.sin(clock * 53) * a;
+		camera.position.y += Math.sin(clock * 61 + 1) * a * 0.6;
+		camera.position.z += Math.sin(clock * 47 + 2) * a;
+		camera.rotateZ(Math.sin(clock * 37) * shake.amp * 0.004);
 	}
 
 	function placeCamera() {
@@ -2099,7 +2413,7 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		const o = typeof SceneFX !== "undefined" ? SceneFX.options : {},
 			level = { high: 0, medium: 1, low: 2 },
 			terrainLevel = level[o.terrain] ?? 0,
-			key = [o.terrain, o.particles, o.shadows, o.lights, o.water, o.scars, o.relief, o.flashes, o.cinema, o.ao, o.bloom, o.pbr, o.reflect, o.atmo, o.surface, o.dof].join("|");
+			key = [o.terrain, o.particles, o.shadows, o.lights, o.water, o.scars, o.relief, o.flashes, o.cinema, o.ao, o.bloom, o.pbr, o.reflect, o.atmo, o.surface, o.dof, o.haze, o.shake].join("|");
 		if (key === qualityKey) return;
 		const first = qualityKey === null,
 			reliefChanged = !first && quality.relief !== (o.relief !== false),
@@ -2124,6 +2438,9 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			surface: o.surface !== false,
 			pbr: o.pbr !== false,
 			dof: o.dof !== false,
+			// Heat haze (0.144, a post pass of the cinematic image) and the camera shaking at big blasts.
+			haze: o.cinema !== false && o.haze !== false,
+			shake: o.shake !== false,
 		});
 		models3d.setSurface(quality.surface);
 		groundWeather.pbrOn.value = o.pbr !== false && !spaceMap() ? 1 : 0;
@@ -2179,8 +2496,9 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			g = GRADES[m.theme] || GRADES[m.biome] || GRADES.dust;
 		grade.lightTint.setRGB(...g.light).lerp(NIGHT_LIGHT, night);
 		grade.shadowTint.setRGB(...g.shadow).lerp(NIGHT_SHADOW, night);
-		grade.saturation = g.saturation * (1 - 0.18 * night);
-		grade.exposure = 1.22 + 0.35 * night;
+		grade.saturation = g.saturation * (1 - 0.18 * night) * (1 + (skyState.golden || 0) * 0.12);
+		if (!spaceMap()) grade.lightTint.lerp(GOLDEN_TINT, (skyState.golden || 0) * 0.5);
+		grade.exposure = 1.22 + 0.65 * night;
 		overlayUniforms.overlayLinear.value = 1;
 		const haze = weatherState.haze || 0;
 		atmo.sunColor.copy(skyState.sunlight).multiplyScalar(smooth(-0.05, 0.2, skyState.e) * 1.2);
@@ -2196,7 +2514,8 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		});
 		post.render(scene, camera, { ...grade, atmosphere: quality.atmo ? atmo : null, ao: quality.ao, bloom: quality.bloom, aoRadius: Math.max(18, Math.min(40, rig.distance * 0.03)), aoStrength: 1.3, aoFade: rig.distance * 2, bloomStrength: spaceMap() ? 0.5 : 0.3 + 0.15 * night,
 			// Depth of field (tilt-shift) in space: strongest close in (a miniature), gentle zoomed out.
-			dof: quality.dof && spaceMap() ? 0.15 + 0.35 * smooth(2600, 900, rig.distance) : 0, view: globalThis.post3dView || 0 });
+			dof: quality.dof && spaceMap() ? 0.15 + 0.35 * smooth(2600, 900, rig.distance) : 0, view: globalThis.post3dView || 0,
+			heat: heatSources(), time: clock });
 	}
 
 	// Reflections in the water (0.127): the scene seen from under the surface of the flat water nearest the
@@ -2321,6 +2640,7 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			buildFog();
 			buildTerrain();
 			fx.setGame(game, heights);
+			buildMist();
 			life.setGame(game);
 			scatter.setGame(game, spaceMap() ? 0 : quality.scatter);
 			objectives.setGame(game);
@@ -2332,6 +2652,7 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			const started = performance.now();
 			applyQuality(this);
 			clock += dt;
+			frameDt = dt;
 			if ((groundClock -= dt) <= 0) {
 				groundClock = GROUND_EVERY;
 				refreshTiles();
@@ -2357,6 +2678,7 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 				}
 			collapse(dt);
 			syncMarks();
+			holo.update(game, { clock, selected, hidden, space: spaceMap(), hover: RTS.SPACE?.hover ?? 34, types: TYPES, colorOf: (team) => game.colorFor?.(team) || COLORS[team] || "#8dffc8" });
 			syncSigns();
 			gasView = labelView();
 			scatter.update(game);
@@ -2373,6 +2695,10 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 				day = light(Math.sin(a), Math.cos(a));
 			}
 			placeCamera();
+			shakeCamera(dt);
+			// The mist of the fog of war takes the colour of the haze, a little lighter, dark at night.
+			mistColor.value.copy(scene.fog.color).lerp(hemi.color, 0.25);
+			updateDustShips();
 			const night = sunOverride?.night ?? 1 - day;
 			// Space: the lights of hulls and stations burn as at night against the dark.
 			models3d.setNight(spaceMap() ? 0.8 : night);
@@ -2395,7 +2721,7 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 				quality,
 			});
 			weatherLight(weatherState);
-			scatter.tick(clock, weatherState);
+			scatter.tick(clock, weatherState, plantPushers());
 			groundWeather.wetness.value = weatherState.wetness || 0;
 			groundWeather.snowCover.value = weatherState.snowCover || 0;
 			groundWeather.rainLevel.value = weatherState.kind === "rain" ? weatherState.intensity || 0 : 0;

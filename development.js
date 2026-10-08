@@ -66,7 +66,8 @@
 			r = (id) => "research:" + id;
 		if (tab === "economy")
 			return [
-				{ root: b("hq"), leaves: [u("worker"), r("colony")] },
+				// Centre levels II and III, and the doctrines of the side's faction (doctrine-rules.js).
+				{ root: b("hq"), leaves: [u("worker"), r("colony"), ...(root.RTS?.RESEARCH?.fortress ? [r("fortress"), ...(game.doctrines?.(game.viewer ?? 0) || []).map((d) => r(d.id))] : [])] },
 				{ root: b("depot"), leaves: [r("cargo"), r("extraction")] },
 				{ root: b("extractor"), leaves: [] },
 				{ root: b("workshop"), leaves: [] },
@@ -177,11 +178,13 @@
 				...data,
 				...game.researchStatus(id),
 				requires:
-					["extraction", "assembly", "infantryTraining"].includes(
+					["extraction", "assembly", "infantryTraining", "fortress"].includes(
 						id,
 					) && game.centerLevel() < 2
 						? "research:colony"
-						: "building:" + game.researchStatus(id).required,
+						: s.doctrine && game.centerLevel() < 3
+							? "research:fortress"
+							: "building:" + game.researchStatus(id).required,
 			};
 		if (kind === "unit") {
 			data.requires = "building:" + game.productionType(id);
@@ -240,7 +243,8 @@
 					"Poziom " +
 					game.centerLevel() +
 					" — " +
-					(game.centerLevel() === 2 ? "Kolonia" : "Przyczółek");
+					(["", "Przyczółek", "Kolonia", "Twierdza"][game.centerLevel()] || "Przyczółek") +
+					(game.doctrineOf?.(game.viewer ?? 0) ? " · " + game.doctrineOf(game.viewer ?? 0).name.replace("Doktryna: ", "doktryna ") : "");
 			} else if (game.developmentRequirement(id)) {
 				data.requires = "research:colony";
 				data.reason = game.developmentRequirement(id);

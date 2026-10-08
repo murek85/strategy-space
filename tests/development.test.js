@@ -18,8 +18,9 @@ test("tree includes all studies and constructible buildings without wildlife", (
 		const keys = ["economy", "infrastructure", "army"].flatMap((t) =>
 			Tree.groups(g, t).flatMap((b) => [b.root, ...b.leaves]),
 		);
-		for (const id of Object.keys(RTS.RESEARCH))
-			assert.ok(keys.includes("research:" + id), id);
+		// A faction's own research (the doctrines) only for that faction, like its units.
+		for (const [id, r] of Object.entries(RTS.RESEARCH))
+			assert.equal(keys.includes("research:" + id), !r.faction || r.faction === faction, faction + " " + id);
 		for (const [id, s] of Object.entries(RTS.TYPES)) {
 			const own = !s.faction || s.faction === faction;
 			if (s.construction) assert.equal(keys.includes("building:" + id), own, faction + " " + id);

@@ -1,5 +1,21 @@
 # Dźwięk i muzyka
 
+## Wersja 0.145 — muzyka kosmosu (2026-10-08)
+
+Na życzenie użytkownika cztery motywy dla map w kosmosie w stylu filmu „Interstellar” — środkami partytury (organy piszczałkowe, zegar, fortepian, narastanie warstw, nagła cisza), bez cytowania melodii. Partytura w `audio.js` (`SPACE_MUSIC`, `spaceStep`), wybór w grze — `musicModeFor(game)` w `app.js` (mapy z `space: true`; wcześniej grał „Gąszcz”).
+
+| Motyw (tryb) | Mapa | Tempo, tonacja | Charakter |
+|---|---|---|---|
+| Orbita (`game:orbit`) | Orbita Kharona (i każda inna kosmiczna) | 72/min, a-moll; akordy co takt: a–a–F–F–C–C–G–G | figura organów (pryma, kwinta, oktawa, tercja; kolejność 0-1-2-3-2-1-2-1) co ósemkę, fortepian z echem co 2 takty |
+| Pierścienie (`game:glacis`) | Pierścienie Glacjalis | 66/min, H, akordy sus2 i dur/moll | figura na fortepianie (oktawę wyżej), od 3. frazy dzwony i ciche organy, dzwony z echem |
+| Horyzont zdarzeń (`game:void`) | Wrota Pustki | 48/min, A1, akord co 2 takty | bez figury — długie akordy organów, dron oktawę pod pedałem, zegar głośniejszy, fortepian z echem co 4 takty |
+| Requiem floty (`game:requiem`) | Cmentarzysko Floty | 56/min, d-moll | chorał: organy w akordach, smyczki i niski chór (`chant`) od początku, flet z echem |
+
+- Warstwy (fraza = 8 taktów, cykl 32): 0 — pedał organów, zegar na ćwierćnuty, figura cicho; 1 — smyczki (akord oktawę wyżej) i fortepian; 2 — chór, figura podwojona oktawę wyżej; 3 — pełne organy (akord), „braam” w 7. takcie frazy. Ostatnie pół taktu cyklu: cisza i jedna zawieszona nuta fortepianu.
+- Nastroje: rozbudowa — szarpane nuty akordu; napięcie — zegar co ósemkę, niski puls organów; bitwa („bez czasu na ostrożność”) — organy w szesnastkach (dwa głosy, akcent na mocnych), smyczki z figurą, taiko na 1, 4 i 7 ósemce, „braam” co 2 takty, chorał, zegar co ósemkę, bez ciszy na końcu cyklu; wytchnienie — chór.
+- Odsłuch muzyki w Ustawieniach: cztery nowe pozycje „Kosmos — …”.
+- Test: `tests/audio.test.js` — każdy motyw co najmniej 4 instrumenty (w tym organy i zegar), poprawne nuty (wszystkie powyżej 20 Hz) przez pełny cykl 32 taktów, różne przebiegi; w bitwie organy, taiko, „braam” i zegar. `npm test` 305/305; w przeglądarce odsłuch wszystkich czterech (eksploracja i bitwa) bez błędów.
+
 ## Wersja 0.105 — cztery niepokojące motywy (2026-10-07)
 
 Na życzenie użytkownika cztery nowe motywy w klimacie filmowym, z nutą „Obcego” (atmosfera, środki — bez cytowania melodii). Partytura w `audio.js` (`EERIE`, `eerieStep`), wybór motywu w grze — `musicModeFor(game)` w `app.js`.

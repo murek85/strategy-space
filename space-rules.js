@@ -146,6 +146,129 @@
 		FRONTIER_MAPS.orbit = MAP;
 		MISSIONS.orbit = { ...MAP.mission, objective: "Zniszcz stację dowodzenia wroga." };
 
+		// Three more maps in space (0.143), each in a world of its own: its own layout, obstacles, look of
+		// the sky and the planet (or none), light and storms. `look` drives the 2D and 3D art.
+		// A band of blocks along a line through (cx, cy) in direction (dx, dy), from `a` to `b` along it, a block
+		// every `step`, leaving out the stretches round the given positions (lanes through it).
+		const band = (cx, cy, dx, dy, a, b, step, w, h, gaps = []) => {
+			const l = Math.hypot(dx, dy),
+				out = [];
+			for (let t = a; t <= b; t += step) if (gaps.every((g) => Math.abs(t - g) > step * 0.8)) out.push([Math.round(cx + (dx / l) * t), Math.round(cy + (dy / l) * t), w, h]);
+			return out;
+		};
+		// Blocks round a circle, leaving gaps at the given angles (degrees).
+		const ringOf = (cx, cy, r, count, size, gaps = []) => {
+			const out = [];
+			for (let i = 0; i < count; i++) {
+				const deg = (i / count) * 360;
+				if (gaps.some((g) => Math.abs(((deg - g + 540) % 360) - 180) < 360 / count)) continue;
+				const a = (deg * Math.PI) / 180;
+				out.push([Math.round(cx + Math.cos(a) * r), Math.round(cy + Math.sin(a) * r), size, size]);
+			}
+			return out;
+		};
+		const MORE = {
+			// Ice: a pale ice giant with vast bright rings near the battle; diagonal bands of ice make the lanes.
+			glacis: {
+				mission: {
+					name: "Pierścienie Glacjalis",
+					planet: "Glacjalis · pierścienie",
+					biome: "ice",
+					theme: "space",
+					space: true,
+					mirror: "none",
+					weatherName: "Burza jonowa",
+					storms: ["ion", "meteor"],
+					stormNames: { meteor: "Deszcz lodowych odłamków" },
+					look: { planet: "ice", rocks: "ice", nebula: [["#58d8e8", "#3a8ad8", "#a8f0ff"], ["#3fa0d8", "#2f6ad0", "#7fe8d8"]], sky: [["#2a7a9a", "#7fd8f0"], ["#1a3a70", "#4a8ad0"]], sun: "#e8f4ff", glow: "#7fb8e8", rings: "near", comet: true, convoys: true, derelict: false, ice: true },
+					description:
+						"Lodowy olbrzym Glacjalis, przewrócony na bok jak Uran, otacza tarcza lśniących pierścieni z lodu. Pola lodowych brył układają się w skośne pasma i wyznaczają skośne korytarze. Gaz wydobywa się z lodowych komet, kryształy rosną w szczelinach. Burze jonowe i deszcz lodowych odłamków.",
+				},
+				waters: () => [],
+				obstacles: () =>
+					block("asteroids", [
+						...band(1680, 1080, 1, -0.62, -900, 900, 190, 150, 110, [-520, 0, 520]),
+						...band(1180, 760, 1, -0.62, -600, 500, 190, 130, 100, [0, 320]),
+						...band(2180, 1400, 1, -0.62, -500, 600, 190, 130, 100, [-320, 0]),
+					]),
+				ores: [[1680, 1080, 6200], [1300, 1350, 4600], [2060, 810, 4600], [560, 1080, 4000], [2800, 1080, 4000]],
+				gasFields: [[1050, 1100, 2600], [2310, 1060, 2600], [1700, 540, 2200], [1660, 1620, 2200]],
+				crystalFields: [[1430, 560, 1600], [1930, 1600, 1600], [880, 700, 1200], [2480, 1460, 1200]],
+			},
+			// The void: a black hole with a burning accretion disk instead of a planet; a ring of debris round
+			// the middle with four ways in, the richest ore inside.
+			abyss: {
+				mission: {
+					name: "Wrota Pustki",
+					planet: "Czarna dziura Erebus",
+					biome: "ash",
+					theme: "space",
+					space: true,
+					mirror: "none",
+					weatherName: "Rozbłysk dysku",
+					storms: ["solar", "ion"],
+					stormNames: { solar: "Rozbłysk dysku" },
+					look: { planet: "none", blackHole: true, rocks: "dark", nebula: [["#a02838", "#601848", "#e05040"], ["#401060", "#702070", "#c03060"]], sky: [["#701828", "#e05040"], ["#301050", "#8030a0"]], sun: "#ffd8b0", glow: "#ff8a4a", rings: false, comet: false, convoys: false, derelict: true, ice: false },
+					description:
+						"Na skraju czarnej dziury Erebus płonie dysk akrecyjny, a światło gnie się wokół horyzontu zdarzeń. Pierścień gruzu otacza środek pola bitwy — cztery przejścia prowadzą do najbogatszych złóż w jego wnętrzu. Rozbłyski dysku wyczerpują osłony, burze jonowe zakłócają celowanie.",
+				},
+				waters: () => [],
+				obstacles: () =>
+					block("asteroids", [
+						...ringOf(1680, 1080, 470, 16, 140, [0, 90, 180, 270]),
+						[900, 560, 120, 110],
+						[2460, 1600, 120, 110],
+						[900, 1600, 120, 110],
+						[2460, 560, 120, 110],
+						[1680, 260, 160, 100],
+						[1680, 1900, 160, 100],
+					]),
+				ores: [[1680, 1080, 7600], [1500, 940, 3000], [1860, 1220, 3000], [560, 1080, 4000], [2800, 1080, 4000]],
+				gasFields: [[1680, 600, 2400], [1680, 1560, 2400], [1180, 1080, 2400], [2180, 1080, 2400]],
+				crystalFields: [[1860, 940, 1600], [1500, 1220, 1600], [1100, 400, 1200], [2260, 1760, 1200]],
+			},
+			// The graveyard: hulks of a dead battle fleet over a volcanic moon under a red dwarf; the wrecks
+			// make a maze round a central yard.
+			graveyard: {
+				mission: {
+					name: "Cmentarzysko Floty",
+					planet: "Pyros · księżyc wulkaniczny",
+					biome: "ash",
+					theme: "space",
+					space: true,
+					mirror: "none",
+					weatherName: "Burza czerwonego karła",
+					storms: ["solar", "meteor"],
+					stormNames: { solar: "Burza czerwonego karła", meteor: "Deszcz odłamków kadłubów" },
+					look: { planet: "lava", rocks: "hulk", nebula: [["#c05020", "#803010", "#f08040"], ["#702818", "#a04020", "#e07030"]], sky: [["#803818", "#f09040"], ["#502010", "#c05030"]], sun: "#ff9a6a", glow: "#ff6a2a", rings: false, comet: true, convoys: false, derelict: false, ice: false },
+					description:
+						"Nad wulkanicznym księżycem Pyros, w czerwonym świetle karła, dryfują wraki floty poległej w dawnej bitwie. Ogromne kadłuby okrętów tworzą labirynt korytarzy wokół centralnego dziedzińca. Burze słoneczne czerwonego karła i deszcz odłamków z rozbitych kadłubów.",
+				},
+				waters: () => [],
+				obstacles: () =>
+					block("hulk", [
+						[1680, 640, 820, 100],
+						[1680, 1520, 820, 100],
+						[1080, 1080, 100, 460],
+						[2280, 1080, 100, 460],
+						[1180, 330, 360, 80],
+						[2180, 1830, 360, 80],
+						[760, 1080, 80, 300],
+						[2600, 1080, 80, 300],
+						[1680, 1080, 220, 90],
+					]),
+				ores: [[1680, 880, 5200], [1680, 1290, 5200], [1350, 1080, 4200], [2010, 1080, 4200], [560, 1080, 4000], [2800, 1080, 4000]],
+				gasFields: [[880, 640, 2400], [2480, 1520, 2400], [1680, 420, 2000], [1680, 1740, 2000]],
+				crystalFields: [[1350, 820, 1500], [2010, 1340, 1500], [2480, 640, 1200], [880, 1520, 1200]],
+			},
+		};
+		for (const [id, map] of Object.entries(MORE)) {
+			FRONTIER_MAPS[id] = map;
+			MISSIONS[id] = { ...map.mission, objective: "Zniszcz stację dowodzenia wroga." };
+		}
+		// The look of the first orbit (the gas giant Kharon) — the defaults of the art.
+		MISSIONS.orbit.look = { planet: "gas", rocks: "rock", rings: "far", comet: true, convoys: true, derelict: true, ice: true };
+
 		const old = {};
 		for (const k of ["configureMission", "configureSkirmish", "applyScenarioModifiers", "spawn", "productionType", "developmentRequirement", "enqueue", "damage", "applyDamage", "tick", "unitName", "entityName", "aiPickUnit", "canTarget", "population", "movementFactor", "serialize", "accuracy", "researchStatus", "stormEffects"]) old[k] = Game.prototype[k];
 		// Meteor shields: a research of the laboratory, on the orbit only.
@@ -204,8 +327,9 @@
 				if (!isSpace(this)) return w;
 				// The storm now (or the next one, between storms) by its number in the series.
 				const n = w.remaining > 0 ? w.cycle : w.cycle + 1,
-					kind = SPACE.storms[((n % SPACE.storms.length) + SPACE.storms.length) % SPACE.storms.length];
-				return { ...w, kind, name: SPACE[kind].name };
+					list = MISSIONS[this.missionId].storms || SPACE.storms,
+					kind = list[((n % list.length) + list.length) % list.length];
+				return { ...w, kind, name: MISSIONS[this.missionId].stormNames?.[kind] || SPACE[kind].name };
 			},
 		});
 		Object.defineProperty(Game.prototype, "night", {
