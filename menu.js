@@ -267,6 +267,7 @@ class CommandMenu {
 								["reflect", "Odbicia w wodzie 3D (brzegi, budynki, niebo)"],
 								["atmo", "Atmosfera 3D: mgła w dolinach, smugi słońca"],
 								["surface", "Detale modeli 3D: płyty pancerza, starte krawędzie, kurz"],
+								["dof", "Głębia ostrości 3D w kosmosie (ostry środek, miękkie brzegi kadru)"],
 							]
 								.map(([key, label]) => `<label class="menu-setting"><input type="checkbox" id="visual-${key}" class="webgl-effect"> ${label}</label>`)
 								.join("")}`
@@ -297,6 +298,32 @@ class CommandMenu {
 				body;
 		if (screen === "news")
 			body =
+				"<h2>0.142.2 / Łagodniejsza głębia</h2><p>Głębia ostrości w kosmosie mniej rozmywa dalsze partie planszy.</p>" +
+				"<h2>0.142.1 / Ostrzeżenia burz</h2><p>Ostrzeżenia przed burzami w kosmosie opisują ich prawdziwe skutki zamiast ograniczenia ruchu.</p>" +
+				"<h2>0.142 / Burze kosmiczne</h2><p>Na orbicie po burzy jonowej przychodzą burza słoneczna (wyczerpuje osłony) i deszcz asteroid (uderzenia odłamków, gdy trwa dłużej). Nowe badanie: osłony przeciwmeteorytowe.</p>" +
+				"<h2>0.141.2 / Silniki w ramionach</h2><p>Gondole na końcach ramion dokujących stacji świecą od spodu płomieniami małych silników.</p>" +
+				"<h2>0.141.1 / Napędy stacji</h2><p>Stacje w kosmosie mają pod platformą migoczące płomienie dysz i poświatę napędów.</p>" +
+				"<h2>0.141 / Piraci</h2><p>Na orbicie z kryjówek w asteroidach najeżdżają piraci — na gracza i na AI na zmianę. Nagrody w metalu za zniszczone okręty i kryjówki; liczba piratów z ustawienia fauny.</p>" +
+				"<h2>0.140 / Burza jonowa</h2><p>Na orbicie przechodzą burze jonowe: celność spada, osłony się nie odnawiają, statki nie zwalniają; kurtyny plazmy jak zorza, wyładowania i migocząca siatka. Prognoza z monitoringu pogody.</p>" +
+				"<h2>0.139 / Otoczenie orbity</h2><p>Wolumetryczne mgławice, lód z pierścieni dryfujący przez bitwę, kometa z warkoczami i drony naprawcze przy wraku stacji.</p>" +
+				"<h2>0.138.3 / Pogoda na modelach</h2><p>Śnieg, piasek i deszcz osiadają na pojazdach, piechocie, budynkach i zwierzętach: zaspy, pył w kolorze gruntu, mokre błyszczące kadłuby ze strużkami wody.</p>" +
+				"<h2>0.138.2 / Zamieć</h2><p>Śnieżyca to teraz zamieć: płatki i smugi śniegu pędzą z wiatrem, białe kurtyny zadymki, śnieg zmiatany przy ziemi i porywy aż ku białej ścianie.</p>" +
+				"<h2>0.138.1 / Miękka mgła burzy</h2><p>Pył, mgła i deszcz płynnie znikają przy gruncie — bez ostrych linii na zboczach.</p>" +
+				"<h2>0.138 / Płonące budynki</h2><p>Budynki płoną w stałych ogniskach: falujące języki ognia od żółtej podstawy po czerwony czubek, iskry i dym; ogień świeci także w dzień. W kosmosie z modułów tryskają strugi ognia i iskry.</p>" +
+				"<h2>0.137 / Ogień i wybuchy</h2><p>Kłębiaste kule ognia w barwach żaru przechodzące w sadzę, grona wybuchów, iskry-smugi, płonące odłamki z warkoczami dymu i dym podświetlony ogniem.</p>" +
+				"<h2>0.136 / Lotniskowiec</h2><p>Stocznia ciężka buduje lotniskowiec, który wypuszcza do 4 myśliwców atakujących wrogów wokół niego. Statki mogą już strzelać do celów latających.</p>" +
+				"<h2>0.135.3 / Rozpad stacji</h2><p>Zniszczone stacje w kosmosie pękają na pół razem z platformą i rozsypują się na odłamki — wolniej i ciężej niż statki.</p>" +
+				"<h2>0.135.2 / Rozpad statków</h2><p>Zniszczony statek pęka na pół — dziób i rufa odlatują, wirując, z żarem na krawędziach — a odłamki kadłuba rozlatują się w kosmos.</p>" +
+				"<h2>0.135.1 / Cienkie linie wysokości</h2><p>Linie od statków do płaszczyzny taktycznej to cienkie, przygaszone kreski zamiast białych kołków przy oddaleniu.</p>" +
+				"<h2>0.135 / Głębia ostrości</h2><p>W kosmosie ostry środek kadru i miękko rozmyte brzegi, mocniej przy zbliżeniu; anamorficzne smugi przy wybuchach. Głębię ostrości wyłączysz w ustawieniach grafiki.</p>" +
+				"<h2>0.134 / Głębia kosmosu</h2><p>Pod bitwą na orbicie: dalekie asteroidy, konwoje i wrak stacji; ciepłe światło planety na kadłubach, iluminatory, flara; bąble osłon, wybuchy w próżni, dryfujące wraki; zorze, pierścienie z drobin, linie wysokości statków.</p>" +
+				"<h2>0.133.1 / Gładkie smugi</h2><p>Smugi silników statków to teraz ciągła, miękka wstęga gasnąca za statkiem zamiast przerywanych kresek.</p>" +
+				"<h2>0.133 / Kosmos jak z filmu</h2><p>Na orbicie w 3D bitwa unosi się nad nocną stroną gazowego olbrzyma z pierścieniami i sierpem atmosfery, wśród gwiazd, Drogi Mlecznej i mgławic; płaszczyzna bitwy jest przezroczysta, z siatką taktyczną i ramką mapy.</p>" +
+				"<h2>0.132.1 / Dron górniczy</h2><p>Na orbicie robot to unoszący się dron górniczy z dyszami, chwytakami i wiązką górniczą; bez śladów gąsienic w kosmosie.</p>" +
+				"<h2>0.132 / Boje i kosmiczne surowce</h2><p>Na orbicie: przekaźniki jako unoszące się boje, asteroidy rudy, kieszenie mgławicy i odłamki kryształu; smugi silników, lasery, pył kosmiczny, pierścienie planety i odległe galaktyki.</p>" +
+				"<h2>0.131.1 / Raport bez pasków</h2><p>Okno zwycięstwa i porażki mieści się w całości — bez pasków przewijania, liczby w jednym rzędzie.</p>" +
+				"<h2>0.131 / Stacje i mgławice</h2><p>Budynki na orbicie stoją na unoszących się platformach. Mgławica chroni przed trafieniami, ale blokuje odnawianie osłon; asteroidy dają osłonę statkom tuż przy nich.</p>" +
+				"<h2>0.130 / Bitwa na orbicie</h2><p>Nowa mapa „Orbita Kharona”: walka w kosmosie nad gazowym olbrzymem, pas asteroid i statki z regenerującymi się osłonami — korwety, fregaty, niszczyciele i krążowniki ze stoczni.</p>" +
 				"<h2>0.129.5 / Karty dowodzenia</h2><p>Efekt najechania na kartę jednostki, budynku i badania nie wychodzi poza kartę, a jej podświetlona krawędź idzie po zaokrągleniach.</p>" +
 				"<h2>0.129.4 / Ostre napisy planszy</h2><p>Artefakt, Szczyt, odliczanie uderzenia orbitalnego i koszt muru w 3D — ostre karty nad miejscem zamiast rozmytych napisów na ziemi.</p>" +
 				"<h2>0.129.3 / Flaga zbiórki w 3D</h2><p>Punkt zbiórki na planszy 3D to stojący maszt z falującą flagą zamiast płaskiego rysunku na ziemi.</p>" +
@@ -485,7 +512,7 @@ class CommandMenu {
 		queueMicrotask(() => ranges.forEach(fill));
 		if (screen === "knowledge") KnowledgeBase.mount(this.root);
 		this.root.querySelector(".menu-footer span").textContent =
-			"PROTOTYP 0.129.5 · ZAPIS LOKALNY";
+			"PROTOTYP 0.142.2 · ZAPIS LOKALNY";
 		if (
 			screen === "scenarios" ||
 			(screen === "briefing" &&
@@ -827,7 +854,7 @@ class CommandMenu {
 					el.value = SceneFX.options[key];
 					el.onchange = () => SceneFX.set(key, el.value);
 				}
-				for (const key of ["flashes", "metrics", "lights", "shadows", "bloom", "water", "volume", "scars", "relief", "tilt", "cinema", "ao", "pbr", "reflect", "atmo", "surface"]) {
+				for (const key of ["flashes", "metrics", "lights", "shadows", "bloom", "water", "volume", "scars", "relief", "tilt", "cinema", "ao", "pbr", "reflect", "atmo", "surface", "dof"]) {
 					const el = this.root.querySelector("#visual-" + key);
 					el.checked = SceneFX.options[key];
 					el.onchange = () => SceneFX.set(key, el.checked);
@@ -843,7 +870,7 @@ class CommandMenu {
 						// volume light and the 2.5D tilt belong to the PixiJS renderer only, the cinematic image and the ambient
 						// occlusion to the 3D board; bloom serves both.
 						const only2d = ["visual-volume", "visual-tilt"],
-							only3d = ["visual-cinema", "visual-ao", "visual-pbr", "visual-reflect", "visual-atmo", "visual-surface"];
+							only3d = ["visual-cinema", "visual-ao", "visual-pbr", "visual-reflect", "visual-atmo", "visual-surface", "visual-dof"];
 						for (const box of this.root.querySelectorAll(".webgl-effect")) box.disabled = !gpu || (s.mode === "three" && only2d.includes(box.id)) || (SceneFX.options.renderer !== "three" && only3d.includes(box.id)) || (s.mode === "canvas" && !!s.note);
 						status.textContent = s.note || (name[s.mode] ? `Aktywny: ${name[s.mode]}.` : gpu ? `${name[SceneFX.options.renderer]} uruchomi się razem z planszą.` : "Aktywny: Canvas 2D.");
 					};

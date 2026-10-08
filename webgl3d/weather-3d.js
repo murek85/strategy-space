@@ -19,6 +19,8 @@ export function createWeather3D(THREE, { world, heightAt }) {
 			span: { value: 2000 },
 			wind: { value: new THREE.Vector2(0.35, 0.12) },
 			intensity: { value: 0 },
+			// Gusts of a blizzard (0 lull … 1 whiteout), a slow uneven pulse (update).
+			gust: { value: 0 },
 			heightMap: { value: null },
 			heightInfo: { value: heightInfo },
 		};
@@ -32,7 +34,7 @@ export function createWeather3D(THREE, { world, heightAt }) {
 		heightInfo.set(heights.cols, heights.rows, heights.cell, 0);
 	}
 	const COMMON = `
-		uniform float time; uniform vec2 focus; uniform float span; uniform vec2 wind; uniform float intensity;
+		uniform float time; uniform vec2 focus; uniform float span; uniform vec2 wind; uniform float intensity; uniform float gust;
 		uniform sampler2D heightMap; uniform vec4 heightInfo;
 		attribute vec4 seed;
 		float groundAt(vec2 p) { return texture2D(heightMap, (p / heightInfo.z + 0.5) / heightInfo.xy).r; }
@@ -40,7 +42,32 @@ export function createWeather3D(THREE, { world, heightAt }) {
 		vec2 inBox(vec2 unit, vec2 drift) { return focus - span * 0.5 + mod(unit * span + drift, span); }
 		float edgeFade(vec2 p) { vec2 rel = abs(p - focus) / span; return 1.0 - smoothstep(0.36, 0.5, max(rel.x, rel.y)); }
 	`;
-	function layer(count, geometry, vertex, fragment, uniforms = {}, blending = THREE.NormalBlending) {
+	// Soft particles (0.138.1): veils of dust, mist and rain are upright sheets — where one cuts into a slope
+	// it left a hard line along the ground. A layer that places its vertices in the world (pos) hands the
+	// point on to its pixels, and each pixel fades out as it nears the ground under it (the height map read
+	// with bilinear filtering by hand: the texture itself is nearest, which would show steps).
+	const SOFT_FRAGMENT = `
+		uniform sampler2D heightMap; uniform vec4 heightInfo; varying vec3 vSoftWorld;
+		float softGround(vec2 p) {
+			vec2 g = p / heightInfo.z, i = floor(g), f = g - i;
+			vec2 t = 1.0 / heightInfo.xy;
+			float a = texture2D(heightMap, (i + 0.5) * t).r, b = texture2D(heightMap, (i + vec2(1.5, 0.5)) * t).r;
+			float c = texture2D(heightMap, (i + vec2(0.5, 1.5)) * t).r, d = texture2D(heightMap, (i + 1.5) * t).r;
+			return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+		}
+	`;
+	function softened(vertex, fragment, reach) {
+		const place = "gl_Position = projectionMatrix * viewMatrix * vec4(pos, 1.0);";
+		if (!reach || !vertex.includes(place)) return [vertex, fragment];
+		return [
+			"varying vec3 vSoftWorld;\n" + vertex.replace(place, "vSoftWorld = pos;\n" + place),
+			SOFT_FRAGMENT + fragment.replace(/\}\s*$/, `
+gl_FragColor.a *= smoothstep(0.0, ${reach.toFixed(1)}, vSoftWorld.y - softGround(vSoftWorld.xz));
+}`),
+		];
+	}
+	function layer(count, geometry, vertex, fragment, uniforms = {}, blending = THREE.NormalBlending, soft = 26) {
+		[vertex, fragment] = softened(vertex, fragment, soft);
 		const g = new THREE.InstancedBufferGeometry();
 		g.index = geometry.index;
 		g.setAttribute("position", geometry.attributes.position);
@@ -211,7 +238,163 @@ export function createWeather3D(THREE, { world, heightAt }) {
 		}`;
 	const softDot = (color, strength) => `varying float vAlpha; varying vec2 vUv;
 		void main() { float d = length((vUv - 0.5) * 2.0); gl_FragColor = vec4(${color}, vAlpha * ${strength.toFixed(2)} * (1.0 - smoothstep(0.35, 1.0, d))); }`;
-	const snow = layer(7000, quad, billboard(65, 60, 460, 3.6, 1, 14), softDot("0.96, 0.98, 1.0", 0.9));
+	// A blizzard (0.138.2): the flakes are driven hard by the wind (slanting, many more), and above them
+	// come streaks of blown snow, rolling white curtains and snow swept low along the ground; gusts
+	// thicken it all now and then towards a whiteout.
+	const snow = layer(10000, quad, billboard(85, 230, 460, 2.4, 1.8, 10), softDot("0.96, 0.98, 1.0", 0.85));
+	// Streaks: snow racing along the wind at every height, stretched by its speed.
+	const snowStreaks = layer(
+		9000,
+		quad,
+		`varying float vAlpha; varying vec2 vUv;
+		void main() {
+			float s = 0.7 + 0.6 * seed.w;
+			vec2 dir = normalize(wind);
+			vec2 p = inBox(seed.xy, dir * time * 640.0 * s);
+			float y = fract(seed.z - time * 0.18 * s);
+			vec3 c = vec3(p.x, groundAt(p) + 4.0 + y * y * 300.0, p.y);
+			vec3 along = normalize(vec3(dir.x, -0.18, dir.y));
+			vec3 side = normalize(cross(along, normalize(cameraPosition - c)));
+			vec3 pos = c + along * (position.y - 0.5) * (24.0 + 20.0 * s) + side * position.x * 1.6;
+			vUv = uv;
+			float dist = distance(cameraPosition, c);
+			vAlpha = intensity * (0.55 + 0.45 * gust) * edgeFade(p) * smoothstep(70.0, 220.0, dist) * (1.0 - smoothstep(600.0, 1100.0, dist));
+			gl_Position = projectionMatrix * viewMatrix * vec4(pos, 1.0);
+		}`,
+		`varying float vAlpha; varying vec2 vUv;
+		void main() { float a = vAlpha * (1.0 - abs(vUv.x - 0.5) * 2.0) * sin(vUv.y * 3.14159); gl_FragColor = vec4(0.94, 0.97, 1.0, a * 0.7); }`,
+	);
+	// Curtains of blown snow rolling across the map with the wind (and, low and fast, snow swept along
+	// the ground): churning white sheets, densest in the gusts.
+	const snowVeil = (count, lowness) =>
+		layer(
+			count,
+			quad,
+			`varying float vAlpha; varying vec2 vUv; varying vec2 vSeed;
+			void main() {
+				float s = 0.7 + 0.6 * seed.w;
+				vec2 p = inBox(seed.xy, normalize(wind) * time * ${lowness > 0.5 ? "520.0" : "360.0"} * s);
+				float w = ${lowness > 0.5 ? "200.0 + 160.0" : "300.0 + 260.0"} * seed.w, h = ${lowness > 0.5 ? "26.0 + 30.0" : "140.0 + 140.0"} * seed.z;
+				vec3 c = vec3(p.x, groundAt(p) - h * 0.1, p.y);
+				vec3 right = normalize(vec3(viewMatrix[0][0], 0.0, viewMatrix[2][0]));
+				vec3 pos = c + right * position.x * w + vec3(0.0, position.y * h, 0.0);
+				vUv = uv;
+				vSeed = seed.xy * 40.0;
+				vAlpha = intensity * (0.45 + 0.55 * gust) * edgeFade(p) * smoothstep(110.0, 380.0, distance(cameraPosition, c));
+				gl_Position = projectionMatrix * viewMatrix * vec4(pos, 1.0);
+			}`,
+			`uniform float time; varying float vAlpha; varying vec2 vUv; varying vec2 vSeed;
+			float sHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+			float sNoise(vec2 p) {
+				vec2 i = floor(p), f = fract(p);
+				f = f * f * (3.0 - 2.0 * f);
+				return mix(mix(sHash(i), sHash(i + vec2(1.0, 0.0)), f.x), mix(sHash(i + vec2(0.0, 1.0)), sHash(i + vec2(1.0, 1.0)), f.x), f.y);
+			}
+			void main() {
+				vec2 q = vUv * vec2(3.2, 1.5) + vSeed + vec2(-time * ${lowness > 0.5 ? "0.9" : "0.45"}, time * 0.1);
+				float n = sNoise(q) * 0.55 + sNoise(q * 2.4 + 4.1) * 0.3 + sNoise(q * 5.3 - 2.3) * 0.15;
+				float body = smoothstep(0.3, 0.72, n) * (1.0 - smoothstep(0.2, 1.0, vUv.y)) * smoothstep(0.0, 0.08, vUv.y) * (1.0 - smoothstep(0.5, 1.0, abs(vUv.x - 0.5) * 2.0));
+				vec3 col = mix(vec3(0.82, 0.87, 0.93), vec3(0.97, 0.98, 1.0), vUv.y + n * 0.3);
+				gl_FragColor = vec4(col, vAlpha * body * ${lowness > 0.5 ? "0.5" : "0.42"});
+			}`,
+		);
+	const snowCurtains = snowVeil(260, 0),
+		snowDrift = snowVeil(260, 1);
+	// Solar storm (space, 0.142): the solar wind — fine golden streaks racing across the battle from the
+	// sun's side at every height, added light.
+	const solarWind = layer(
+		6000,
+		quad,
+		`varying float vAlpha; varying vec2 vUv;
+		void main() {
+			float s = 0.7 + 0.6 * seed.w;
+			vec2 dir = normalize(vec2(0.62, -0.52));
+			vec2 p = inBox(seed.xy, dir * time * 900.0 * s);
+			vec3 c = vec3(p.x, -120.0 + seed.z * 360.0, p.y);
+			vec3 along = normalize(vec3(dir.x, -0.35, dir.y));
+			vec3 side = normalize(cross(along, normalize(cameraPosition - c)));
+			vec3 pos = c + along * (position.y - 0.5) * (40.0 + 40.0 * s) + side * position.x * 1.4;
+			vUv = uv;
+			float dist = distance(cameraPosition, c);
+			vAlpha = intensity * smoothstep(80.0, 260.0, dist) * (1.0 - smoothstep(900.0, 1600.0, dist));
+			gl_Position = projectionMatrix * viewMatrix * vec4(pos, 1.0);
+		}`,
+		`varying float vAlpha; varying vec2 vUv;
+		void main() { float a = vAlpha * (1.0 - abs(vUv.x - 0.5) * 2.0) * sin(vUv.y * 3.14159) * vUv.y; gl_FragColor = vec4(vec3(1.0, 0.78, 0.4) * a * 0.9, 1.0); }`,
+		{},
+		THREE.AdditiveBlending,
+		0,
+	);
+	// Asteroid shower (space, 0.142): burning fragments falling steeply from high above, a white-hot head
+	// and a fiery tail behind it, each on its own fall (loops).
+	const meteors = layer(
+		260,
+		quad,
+		`varying float vAlpha; varying vec2 vUv;
+		void main() {
+			float s = 0.7 + 0.6 * seed.w;
+			float t = fract(seed.z + time * 0.35 * s);
+			vec2 base = focus + (seed.xy - 0.5) * span * 0.9;
+			vec3 dir = normalize(vec3(0.55, -1.0, 0.25));
+			vec3 c = vec3(base.x, 0.0, base.y) - dir * (1.0 - t) * 1400.0;
+			vec3 side = normalize(cross(dir, normalize(cameraPosition - c)));
+			float len = 70.0 + 60.0 * s;
+			vec3 pos = c - dir * (1.0 - position.y) * len + side * position.x * (5.0 + 4.0 * s);
+			vUv = uv;
+			vAlpha = intensity * smoothstep(0.0, 0.15, t) * (1.0 - smoothstep(0.92, 1.0, t)) * smoothstep(200.0, 500.0, distance(cameraPosition, c));
+			gl_Position = projectionMatrix * viewMatrix * vec4(pos, 1.0);
+		}`,
+		`varying float vAlpha; varying vec2 vUv;
+		void main() {
+			float across = 1.0 - abs(vUv.x - 0.5) * 2.0;
+			float head = smoothstep(0.75, 1.0, vUv.y);
+			vec3 col = mix(vec3(1.0, 0.35, 0.08), vec3(1.0, 0.95, 0.8), head);
+			float a = vAlpha * pow(across, 1.5 - head) * vUv.y * (0.5 + 1.5 * head);
+			gl_FragColor = vec4(col * a, 1.0);
+		}`,
+		{},
+		THREE.AdditiveBlending,
+		0,
+	);
+	// Ion storm (space, 0.140): curtains of ionised plasma — tall rippling ribbons of green, cyan and violet,
+	// streaked along their height like an aurora, flowing and flickering; they hang across the battle
+	// and below it. Added light.
+	const ionCurtains = layer(
+		70,
+		quad,
+		`varying float vAlpha; varying vec2 vUv; varying vec2 vSeed;
+		void main() {
+			vec2 p = focus + (seed.xy - 0.5) * span * 0.9 + vec2(sin(time * 0.05 + seed.z * 9.0), cos(time * 0.04 + seed.w * 7.0)) * 120.0;
+			float w = 500.0 + 500.0 * seed.w, h = 260.0 + 320.0 * seed.z;
+			vec3 c = vec3(p.x, -160.0 + seed.z * 120.0, p.y);
+			vec3 along = normalize(vec3(cos(seed.x * 6.28), 0.0, sin(seed.x * 6.28)));
+			float wave = sin(position.x * 6.0 + time * 0.6 + seed.y * 20.0) * 40.0;
+			vec3 pos = c + along * position.x * w + vec3(-along.z, 0.0, along.x) * wave + vec3(0.0, position.y * h, 0.0);
+			vUv = uv;
+			vSeed = seed.xy * 40.0 + seed.zw;
+			vAlpha = intensity * smoothstep(200.0, 700.0, distance(cameraPosition, c));
+			gl_Position = projectionMatrix * viewMatrix * vec4(pos, 1.0);
+		}`,
+		`uniform float time; varying float vAlpha; varying vec2 vUv; varying vec2 vSeed;
+		float iHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+		float iNoise(vec2 p) {
+			vec2 i = floor(p), f = fract(p);
+			f = f * f * (3.0 - 2.0 * f);
+			return mix(mix(iHash(i), iHash(i + vec2(1.0, 0.0)), f.x), mix(iHash(i + vec2(0.0, 1.0)), iHash(i + vec2(1.0, 1.0)), f.x), f.y);
+		}
+		void main() {
+			float rays = iNoise(vec2(vUv.x * 40.0 + vSeed.x, time * 0.8)) * 0.6 + iNoise(vec2(vUv.x * 110.0 - vSeed.y, time * 1.7)) * 0.4;
+			float flow = iNoise(vec2(vUv.x * 4.0 + time * 0.15 + vSeed.x, vUv.y * 2.0 - time * 0.3));
+			float body = smoothstep(0.35, 0.8, rays * 0.6 + flow * 0.6) * pow(1.0 - vUv.y, 0.6) * smoothstep(0.0, 0.25, vUv.y) * (1.0 - smoothstep(0.6, 1.0, abs(vUv.x - 0.5) * 2.0));
+			vec3 col = mix(vec3(0.2, 1.0, 0.65), vec3(0.65, 0.35, 1.0), smoothstep(0.25, 0.9, vUv.y + flow * 0.3));
+			col = mix(col, vec3(0.3, 0.85, 1.0), smoothstep(0.6, 0.9, rays) * 0.5);
+			float flicker = 0.75 + 0.25 * sin(time * 9.0 + vSeed.x * 3.0);
+			gl_FragColor = vec4(col * body * vAlpha * flicker * 0.55, 1.0);
+		}`,
+		{},
+		THREE.AdditiveBlending,
+		0,
+	);
 	// Sand: thin streaks of grains blown along the wind, low over the ground, hopping (saltation).
 	const sand = layer(
 		7000,
@@ -329,7 +512,8 @@ export function createWeather3D(THREE, { world, heightAt }) {
 	}
 
 	let wetness = 0,
-		snowCover = 0;
+		snowCover = 0,
+		sandCover = 0;
 	function update(game, time, dt, { focus, span, density = 1, flashes = true, mist: mistLevel = 0, mistTint }) {
 		const w = game.weather,
 			kind = w.kind,
@@ -338,6 +522,9 @@ export function createWeather3D(THREE, { world, heightAt }) {
 		shared.focus.value.set(focus.x, focus.y);
 		shared.span.value = span;
 		shared.intensity.value = Math.min(1, k * 1.2);
+		// Gusts: two slow waves together, so the blizzard swells and slackens unevenly.
+		const gust = Math.max(0, Math.min(1, 0.5 + 0.35 * Math.sin(time * 0.31) + 0.25 * Math.sin(time * 0.137 + 1.7)));
+		shared.gust.value = gust;
 		const show = (l, on, share = 1) => {
 			l.mesh.visible = on && k > 0.02;
 			l.mesh.geometry.instanceCount = l.mesh.visible ? Math.floor(l.count * k * density * share) : 0;
@@ -345,6 +532,12 @@ export function createWeather3D(THREE, { world, heightAt }) {
 		show(rain, kind === "rain");
 		show(splashes, kind === "rain");
 		show(snow, kind === "snow");
+		show(snowStreaks, kind === "snow");
+		show(snowCurtains, kind === "snow");
+		show(snowDrift, kind === "snow");
+		show(ionCurtains, kind === "ion");
+		show(solarWind, kind === "solar");
+		show(meteors, kind === "meteor");
 		show(sand, kind === "sand");
 		show(curtains, kind === "sand", 1);
 		show(sheets, kind === "rain");
@@ -357,10 +550,14 @@ export function createWeather3D(THREE, { world, heightAt }) {
 		// The ground gets wet in rain and white in snow, slowly, and recovers afterwards.
 		wetness = kind === "rain" && k > 0.05 ? Math.min(1, wetness + (dt * k) / 12) : Math.max(0, wetness - dt / 45);
 		snowCover = kind === "snow" && k > 0.05 ? Math.min(0.85, snowCover + (dt * k) / 35) : Math.max(0, snowCover - dt / 90);
+		// Sand settles on everything during a sand storm (faster than snow) and blows off slowly after.
+		sandCover = kind === "sand" && k > 0.05 ? Math.min(0.9, sandCover + (dt * k) / 22) : Math.max(0, sandCover - dt / 70);
 		// Lightning: same rhythm as the 2D sky (every 17 s of game time in a strong rainstorm).
 		// Several strokes in one strike: sharp pulses fading fast, the bolt shown during each.
 		const strike = time % 17,
 			on = flashes && kind === "rain" && k > 0.4 && strike < 1.3,
+			// Ion storm: discharges flare through the plasma now and then (a flash, no bolt).
+			ionFlash = kind === "ion" && flashes && k > 0.3 ? Math.max(0, Math.sin(time * 1.9) * Math.sin(time * 0.73 + 1.3) - 0.55) * 2.2 * k : 0,
 			pulse = (t0, peak) => (strike >= t0 ? peak * Math.exp(-(strike - t0) * 14) : 0),
 			flash = on ? Math.min(1, pulse(0, 1) + pulse(0.09, 0.7) + pulse(0.2, 0.45) + pulse(0.48, 0.9) + pulse(0.58, 0.5)) : 0,
 			cycle = Math.floor(time / 17);
@@ -378,7 +575,10 @@ export function createWeather3D(THREE, { world, heightAt }) {
 		flashLight.intensity = flash * 7;
 		skyFlash.intensity = flash * 2.4;
 		// Haze closes the distance, but a storm must not hide the units in view.
-		return { kind, intensity: k, flash, haze: kind === "sand" ? k * 0.7 : kind === "snow" ? k * 0.5 : k * 0.35, wetness, snowCover, strike: struck };
+		// A blizzard's haze breathes with the gusts (towards a whiteout, never hiding the units in view).
+		// Solar storm: slow surges of light (flares), handled by the renderer as a warm glow.
+		const solar = kind === "solar" ? k * (0.55 + 0.45 * Math.pow(Math.max(0, Math.sin(time * 0.45)), 3)) : 0;
+		return { kind, intensity: k, solar, flash: kind === "ion" ? ionFlash : kind === "solar" || kind === "meteor" ? 0 : flash, haze: kind === "ion" || kind === "solar" || kind === "meteor" ? 0 : kind === "sand" ? k * 0.7 : kind === "snow" ? k * (0.45 + 0.15 * gust) : k * 0.35, wetness, snowCover, sandCover, strike: struck };
 	}
 	return {
 		setTerrain,
@@ -386,7 +586,7 @@ export function createWeather3D(THREE, { world, heightAt }) {
 		// The height map texture and its size (cols, rows, cell), for other effects that lie on the ground.
 		ground: { heightMap: shared.heightMap, heightInfo: shared.heightInfo },
 		reset() {
-			wetness = snowCover = 0;
+			wetness = snowCover = sandCover = 0;
 			boltCycle = -1;
 		},
 	};

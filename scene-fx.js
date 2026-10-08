@@ -24,6 +24,8 @@
 			atmo: true,
 			// Surface detail of the 3D models (armour plates, worn edges, dust).
 			surface: true,
+			// Depth of field (tilt-shift) of the 3D board in space.
+			dof: true,
 		},
 		RENDERERS = ["three", "webgpu", "webgl", "canvas"],
 		options = { ...defaults };
@@ -34,7 +36,7 @@
 		for (const key of ["terrain", "particles"])
 			if (["low", "medium", "high"].includes(saved[key]))
 				options[key] = saved[key];
-		for (const key of ["flashes", "metrics", "lights", "shadows", "bloom", "water", "volume", "scars", "relief", "tilt", "cinema", "ao", "pbr", "reflect", "atmo", "surface"])
+		for (const key of ["flashes", "metrics", "lights", "shadows", "bloom", "water", "volume", "scars", "relief", "tilt", "cinema", "ao", "pbr", "reflect", "atmo", "surface", "dof"])
 			if (typeof saved[key] === "boolean") options[key] = saved[key];
 		if (RENDERERS.includes(saved.renderer)) options.renderer = saved.renderer;
 	} catch {}

@@ -1,4 +1,64 @@
-# Renderer 3D (wersje 0.52–0.96, 0.125–0.128)
+# Renderer 3D (wersje 0.52–0.96, 0.125–0.138)
+
+## Pogoda na modelach (wersja 0.138.3, 2026-10-08)
+
+- Wspólny materiał modeli (`PAINT` w `models-detail-3d.js`, wszystkie wypiekane modele: pojazdy, piechota, budynki, zwierzęta) ma blok `WEATHER_COAT` w układzie modelu: śnieg (`snowCover`) w zaspach od górnych ścian w dół, szerzej im grubszy, z poszarpaną krawędzią (szum), cienka warstwa na bokach; piasek (`sandCover`, nowy) — pył w kolorze gruntu planety (`soilColor`) na wszystkim, najgrubszy na wierzchu i nisko, z przygaszoną barwą, matowy; deszcz (`wetness`) — przyciemnienie, połysk, strużki spływające po bokach (szum przewijany zegarem `weatherClock`), krople połyskujące na wierzchu.
+- `weather-3d.js`: `sandCover` rośnie w burzy piaskowej (pełny po ok. 20 s) i opada po niej (ok. 70 s); `models3d.setWeather(śnieg, mokrość, piasek, zegar)`. Mgiełka śnieżycy przy porywach 0,45–0,6 × siła.
+
+## Zamieć (wersja 0.138.2, 2026-10-08)
+
+- `weather-3d.js`, śnieżyca: płatki (`snow`, 10 000) pędzą z wiatrem (230 zamiast 60, opad 85), mniejsze i rozciągnięte; `snowStreaks` (9000) — długie smugi śniegu wzdłuż wiatru, lekko w dół, na wysokości 4–300 j., tylko w średniej odległości od kamery; `snowCurtains` (260) — wysokie białe kurtyny zadymki z przewijanym szumem; `snowDrift` (260) — niskie (26–56 j.), szybkie pasma śniegu zmiatanego przy ziemi. Porywy (`gust`, wspólny uniform: dwie wolne fale) zagęszczają smugi i kurtyny i podnoszą mgiełkę śnieżycy (0,5–0,75 × siła). Wszystkie warstwy miękko zanikają przy gruncie (0.138.1).
+
+## Miękkie cząstki pogody (wersja 0.138.1, 2026-10-08)
+
+- `weather-3d.js`, `layer` → `softened`: warstwa, która ustawia wierzchołki w świecie (`pos`), przekazuje punkt do pikseli (`vSoftWorld`); piksel czyta wysokość terenu pod sobą z mapy wysokości z ręczną interpolacją dwuliniową (tekstura ma filtr „nearest” — byłyby schodki) i zanika na ostatnich 26 j. nad gruntem. Dotyczy kurtyn pyłu, mgły w zagłębieniach, zasłon deszczu i pozostałych warstw z `pos` — znikły ostre linie przecięcia z zboczami.
+
+## Płonące budynki (wersja 0.138, 2026-10-08)
+
+- `scene-fx-3d.js`, `burnFires` (co klatkę, przy włączonych uszkodzeniach): płonący budynek (< 30% PW) lub duży pojazd (< 20%) ma stałe ogniska (`spotOf`, z id — na dachu i krawędziach; budynek 2–6 według wielkości i stopnia zniszczenia, pojazd 1–2); z każdego co klatkę z prawdopodobieństwem buchają języki ognia (14–24 na s), żar u nasady, iskry i dym stylu 2 (podświetlony ogniem). „Zajadłość” rośnie z utratą wytrzymałości: więcej ognisk, większe płomienie, więcej iskier i dymu. W kosmosie (wysokość stacji/statku): krótkie strugi ognia w losowych kierunkach i iskry, bez dymu; dym z uszkodzeń w kosmosie wyłączony.
+- Język ognia (styl 1 cząstek ognia, czas `time` w materiale): dwie oktawy szumu przewijane w górę, kołyszący się i rwący czubek, szeroki u podstawy; barwa z „temperatury” (podstawa żółtobiała → pomarańcz → ciemna czerwień u szczytu, chłodniej z wiekiem cząstki).
+- Światło ognia na budynek i otoczenie także w dzień (0,35 + noc zamiast tylko nocą).
+
+## Ogień i wybuchy (wersja 0.137, 2026-10-08)
+
+- Kula ognia (`fireballMaterial` w `three-renderer.js`): wierzchołki wypychane szumem 3D zawijanym trzema innymi szumami (domain warping) — kłęby zwijają się zamiast być grudkowatą kulą; w pikselu drobna turbulencja; temperatura z wieku, szumu i kąta patrzenia, barwa z rampy żaru (`blackbody`: ciemna czerwień → czerwień → pomarańcz → żółty → biel) z jasnością w HDR (rdzeń dla bloomu, umiarkowanie — bez prześwietlenia); chłodne partie przechodzą w brunatną sadzę; erozja otwiera dziury od najcieńszych miejsc. Blask na starcie słabszy (0,3).
+- Grona wybuchów: w puli błysku dwie dodatkowe kule (`balls`), wybuchające 0,12 i 0,26 życia później obok pierwszej, mniejsze; większe wybuchy mają obie, małe żadnej.
+- Iskry-smugi: do 14 cienkich promieni na wybuch po łukach balistycznych (w kosmosie prosto), biało-żółte gasnące do pomarańczu, przez pierwsze 55% życia (w `tracers`).
+- `scene-fx-3d.js`: płonące odłamki (`burners`) — kilka na wybuch, lecą po łukach (w kosmosie prosto), zostawiają nieprzerwany ślad płomieni (cząstki rozłożone wzdłuż drogi z każdej klatki) i na planecie dym; dym z wybuchu i z odłamków ma styl 2 — młody żarzy się od spodu pomarańczem ognia.
+
+## Głębia ostrości i smugi wybuchów (wersja 0.135, 2026-10-08)
+
+- `post-3d.js`: przebieg `dof` (tilt-shift, cel `dofTarget`), ustawienia `dof` (siła), `dofFocus`, `dofBand`; wykończenie bierze kolor z niego, gdy siła > 0. `three-renderer.js`: siła z przybliżenia, tylko w kosmosie, przełącznik `quality.dof` (`SceneFX.options.dof`). Smuga anamorficzna przy wybuchach w kosmosie (`streak` w puli błysków).
+
+## Kosmos: głębia, światło, walka (wersja 0.134, 2026-10-08)
+
+- `space-3d.js`: pole dalekich asteroid i drobin, konwoje, wrak stacji, mgiełka głębi (`hazed`), zorze, drobiny pierścieni, flara obiektywu.
+- `three-renderer.js`: poświata planety (`sun2`), twarde światło, światła modeli jak nocą, bąbel osłony (`bubbles`), wybuch i fala uderzeniowa na wysokości (`ef.space`, `ef.lift`), dryfujące wraki (`collapse`), linie wysokości statków, wielowarstwowe mgławice.
+- `scene-fx-3d.js`: cząstki wybuchu w próżni. `ships-3d.js`: iluminatory, ładowanie działa niszczyciela.
+
+## Kosmos 3D (wersja 0.133, 2026-10-07)
+
+- Nowy moduł `webgl3d/space-3d.js` (w paczce przed `three-renderer.js`): gazowy olbrzym z atmosferą, pierścienie, księżyc, sfera gwiazd, Drogi Mlecznej i mgławic, smuga flary — [opis](BITWA_NA_ORBICIE.md).
+- `three-renderer.js` w kosmosie: teren przezroczysty (`spaceGround` w shaderze `fogged` — welon mgły, siatka taktyczna, ramka mapy, nakładka), bez `outskirts`, kopuła nieba ukryta, `camera.far` 60 000 i bez mgły odległości, bez cieni chmur, bloom 0,5.
+
+## Kosmos: boje, surowce, smugi, lasery, pył (wersja 0.132, 2026-10-07)
+
+- `models-3d.js`: `scenery("deposit", kind, n, space)` → `spaceDeposit` (asteroidy rudy, kieszeń mgławicy, odłamki kryształu, unoszące się 30 j.); `scenery("relay", …, space)` → boja (`buoy`, obracany pierścień z panelami jako „dish”). `scene-life-3d.js` przekazuje `space` i dopisuje je do kluczy modeli.
+- `three-renderer.js`: smugi silników statków (mapa `trails`, segmenty w tym samym instancjonowanym `tracers`), lasery statków (wysokość lotu, wiązka niszczyciela), pył kosmiczny jako `THREE.Points` w grupie mgławic, napisy złóż i boi wyżej.
+- `engine.js`: efekt strzału niesie `ship`, `shipTarget`, `lance` (tylko dla wyglądu).
+
+## Stacje i mgławice (wersja 0.131, 2026-10-07)
+
+- Budynki w kosmosie na platformach (`ships-3d.js`, `platform`; `models-3d.js` dokleja ją przy tworzeniu modelu, klucz wypieku z dopiskiem `|station`), uniesione przez `stationLift`; znaczniki wyżej o to samo.
+- `buildNebula`: obłoki mgławic jako sprite'y z dodawanym światłem nad złożami gazu (tylko w kosmosie, budowane z terenem).
+- `collapse`: ginące jednostki i budynki zaczynają od swojej wysokości (statki, stacje i lotnictwo nie skaczą na ziemię).
+
+## Kosmos — bitwa na orbicie (wersja 0.130, 2026-10-07)
+
+- Mapy z `space: true` ([Bitwa na orbicie](BITWA_NA_ORBICIE.md)): płaska płaszczyzna bitwy (`relief-3d.js`, `webgl/terrain-height.js`), teren bez ziarna PBR, mapy normalnych i cieni (malowany kosmos z `space-art.js`), bez rozrzuconych drobiazgów (`scatter-3d.js`), zwierząt i ptaków (`scene-life-3d.js`).
+- Asteroidy: przeszkody w kosmosie budowane jako `models3d.scenery("obstacle", "asteroids", …)` — skupisko kamieni na wysokości 26–116 j., powoli obracane wokół środka pola.
+- Światło (`three-renderer.js`, `light`): twarde białe słońce z boku, niebieskie światło otoczenia, ciepłe odbicie od planety, czarne tło i mgła; gradacja `space`; bez mgły wysokościowej i promieni w obrazie kinowym. Niebo (`sky-3d.js`, świat `space`): zawsze gwiazdy, bez chmur, księżyc Kharona.
+- Statki (`webgl3d/ships-3d.js`, w `BUILDERS` modeli): korweta, fregata, niszczyciel (`lancer`), krążownik; unoszą się `RTS.SPACE.hover` nad płaszczyzną (`syncModel`, kalkomania i pasek zdrowia wyżej).
 
 ## Detale modeli (wersja 0.128, 2026-10-07)
 
@@ -89,6 +149,7 @@ Data: 2026-09-30. Status: w grze jako Ustawienia → Renderer → „3D (Three.j
 | `webgl3d/three-game-renderer.js` | adapter do gry: kamera gry → kamera 3D, `toFlat`/`fromFlat`, nakładka interfejsu, warstwa ekranu, minimapa, słońce z gry |
 | `webgl3d/three-renderer.js` | teren, modele (instancing), tektury, światło, cienie, mgła, znaczniki, efekty |
 | `webgl3d/models-3d.js` | modele low-poly budowane w kodzie |
+| `webgl3d/ships-3d.js` | statki bitwy na orbicie: korweta, fregata, niszczyciel, krążownik (0.130) |
 | `webgl3d/scene-fx-3d.js` | woda, światła nocne, pogoda, dym i ogień (0.53), efekty map i strzałów (0.54) |
 | `webgl3d/scene-life-3d.js` | zwierzyna, ptaki, ryby, latające wyspy, wraki (0.54), przeszkody (0.56), złoża i przekaźniki (0.58) |
 | `webgl3d/weather-3d.js` | pogoda na karcie graficznej: deszcz z rozpryskami, śnieg, burza piaskowa, pioruny; mokry i zaśnieżony grunt (0.62) |

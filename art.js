@@ -752,9 +752,12 @@ const BoardArt = (() => {
 		}
 		c.restore();
 	}
+	// In space (the orbital battle) the deposits are asteroids, nebula pockets and crystal shards.
+	const inSpace = () => typeof currentGame === "function" && !!currentGame()?.space;
 	function resourceLabel(o, gas) {
+		const name = inSpace() ? (gas ? "MGŁAWICA" : "ASTEROIDA RUDY") : gas ? "GAZ" : "RUDA";
 		return {
-			text: o.amount ? `${gas ? "GAZ" : "RUDA"} · ${Math.floor(o.amount)}` : "WYCZERPANE",
+			text: o.amount ? `${name} · ${Math.floor(o.amount)}` : "WYCZERPANE",
 			color: o.amount ? (gas ? "#e1b6f4" : "#a1dfe4") : "#95a3a2",
 		};
 	}
@@ -763,7 +766,7 @@ const BoardArt = (() => {
 		return stage(o.amount, gas ? "gas" : "ore");
 	}
 	function crystalLabel(o) {
-		return { text: o.amount ? "KRYSZTAŁY · " + Math.floor(o.amount) : "WYCZERPANE", color: "#f4d989" };
+		return { text: o.amount ? (inSpace() ? "ODŁAMKI KRYSZTAŁU · " : "KRYSZTAŁY · ") + Math.floor(o.amount) : "WYCZERPANE", color: "#f4d989" };
 	}
 	function crystalLook(o) {
 		return stage(o.amount, "crystal");

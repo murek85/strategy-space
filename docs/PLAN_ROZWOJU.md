@@ -1,6 +1,6 @@
 # Plan rozwoju prototypu
 
-Aktualizacja: 2026-10-07. Aktualna wersja: 0.129.5.
+Aktualizacja: 2026-10-07. Aktualna wersja: 0.142.2.
 
 Ten plik jest punktem wejścia do dokumentacji: opisuje bieżący stan, otwarte kierunki i historię wersji. Instrukcja gry i sterowanie: [README](../README.md).
 
@@ -52,7 +52,7 @@ Wpis nie oznacza zlecenia realizacji ani terminu.
 | Kampania: nagrane głosy (dziś syntezowane, 0.101), balans aktów II–III | [Kampania — oprawa](KAMPANIA_OPRAWA.md) | Propozycja |
 | Oprawa: dźwięki leczenia, osłony i sabotażu; dalsza czytelność efektów walki (OPR-02) | [Etap E](ETAP_E_WSPARCIE_I_MODULY.md), [Pomysły](POMYSLY.md) | Propozycja |
 | Balans trzech frakcji, kosztów i dochodu pasywnego (BAL-01, GOS-03) | [Pomysły](POMYSLY.md), [Etap F](ETAP_F.md) | Wymaga rozgrywek porównawczych |
-| Bitwy kosmiczne i transport między planetami | [Pomysły](POMYSLY.md) | Kierunek na później |
+| Bitwy kosmiczne i transport między planetami | [Bitwa na orbicie](BITWA_NA_ORBICIE.md), [Pomysły](POMYSLY.md) | W toku: bitwa na orbicie (0.130–0.142); dalej desant z orbity, transport w kampanii |
 
 ## Testy
 
@@ -220,6 +220,32 @@ Przy każdym kolejnym etapie należy uruchomić pełny zestaw, nie tylko testy u
 | 0.129.3 | Flaga punktu zbiórki w 3D: maszt z falującą płachtą zamiast płaskiej flagi na ziemi — [opis](RENDERER_3D.md) |
 | 0.129.4 | Wszystkie napisy nakładki w 3D na ekranie: artefakt, szczyt, uderzenie orbitalne, koszt muru — [opis](RENDERER_3D.md) |
 | 0.129.5 | Karty paska dowodzenia: efekt najechania w obrysie karty, krawędź po zaokrągleniach — [opis](KAMPANIA_OPRAWA.md) |
+| 0.130 | Bitwa na orbicie I: mapa „Orbita Kharona”, statki z osłonami, stacje, flota AI, kosmos w 2D i 3D — [opis](BITWA_NA_ORBICIE.md) |
+| 0.131 | Bitwa na orbicie II: platformy stacji, mgławice (osłona, brak odnawiania osłon), osłona asteroid — [opis](BITWA_NA_ORBICIE.md) |
+| 0.131.1 | Raport zwycięstwa i porażki bez pasków przewijania, liczby w jednym rzędzie — [opis](KAMPANIA_OPRAWA.md) |
+| 0.132 | Bitwa na orbicie III: boje przekaźnikowe, kosmiczne surowce, smugi silników, lasery, pył, pierścienie planety — [opis](BITWA_NA_ORBICIE.md) |
+| 0.132.1 | Dron górniczy na orbicie (model 3D i 2D, wiązka górnicza), bez śladów gąsienic w kosmosie, gazowy olbrzym na ekranie ładowania — [opis](BITWA_NA_ORBICIE.md) |
+| 0.133 | Kosmos jak z filmu: przezroczysta płaszczyzna bitwy, gazowy olbrzym 3D z pierścieniami i księżycem pod bitwą, sfera gwiazd, Drogi Mlecznej i mgławic — [opis](BITWA_NA_ORBICIE.md) |
+| 0.133.1 | Smugi silników jako ciągła, miękka wstęga zamiast przerywanych odcinków — [opis](BITWA_NA_ORBICIE.md) |
+| 0.134 | Głębia, światło i walka w kosmosie: warstwy pod bitwą, konwoje, wrak stacji, poświata planety, iluminatory, flara, bąble osłon, wybuchy w próżni, wraki, zorze, linie wysokości — [opis](BITWA_NA_ORBICIE.md) |
+| 0.135 | Głębia ostrości (tilt-shift) w kosmosie z przełącznikiem w ustawieniach, anamorficzne smugi wybuchów — [opis](BITWA_NA_ORBICIE.md) |
+| 0.135.1 | Linie wysokości statków jako cienkie linie zamiast świecących „kołków” — [opis](BITWA_NA_ORBICIE.md) |
+| 0.135.2 | Rozpad zniszczonych statków na dwie połowy i odłamki — [opis](BITWA_NA_ORBICIE.md) |
+| 0.135.3 | Rozpad zniszczonych stacji w kosmosie (wolniej, więcej odłamków) — [opis](BITWA_NA_ORBICIE.md) |
+| 0.136 | Lotniskowiec z myśliwcami pokładowymi; statki strzelają do celów latających — [opis](BITWA_NA_ORBICIE.md) |
+| 0.137 | Realistyczny ogień i wybuchy: kula ognia z barwą żaru i sadzą, grona wybuchów, iskry-smugi, płonące odłamki, dym podświetlony ogniem — [opis](RENDERER_3D.md) |
+| 0.138 | Ogień płonących budynków: stałe ogniska, nowy kształt płomienia, iskry, dym podświetlony ogniem, światło w dzień; strugi ognia w kosmosie — [opis](RENDERER_3D.md) |
+| 0.138.1 | Miękkie cząstki pogody: kurtyny pyłu, mgły i deszczu bez ostrych linii przy terenie — [opis](RENDERER_3D.md) |
+| 0.138.2 | Zamieć: płatki i smugi śniegu z wiatrem, kurtyny zadymki, śnieg zmiatany przy ziemi, porywy — [opis](RENDERER_3D.md) |
+| 0.138.3 | Pogoda na modelach: śnieg, piasek i mokrość na pojazdach, piechocie, budynkach i zwierzętach — [opis](RENDERER_3D.md) |
+| 0.139 | Otoczenie orbity: wolumetryczne mgławice, lód z pierścieni, kometa, drony naprawcze — [opis](BITWA_NA_ORBICIE.md) |
+| 0.140 | Burza jonowa: pogoda kosmiczna z prognozą, celność, osłony bez odnawiania, kurtyny plazmy — [opis](BITWA_NA_ORBICIE.md) |
+| 0.141 | Piraci: kryjówki, załogi, najazdy na gracza i AI, nagrody — [opis](BITWA_NA_ORBICIE.md) |
+| 0.141.1 | Napędy pod stacjami: płomienie dysz i poświata spod platformy — [opis](BITWA_NA_ORBICIE.md) |
+| 0.141.2 | Silniki pod gondolami ramion dokujących stacji — [opis](BITWA_NA_ORBICIE.md) |
+| 0.142 | Burza słoneczna i deszcz asteroid na zmianę z jonową; badanie osłon przeciwmeteorytowych — [opis](BITWA_NA_ORBICIE.md) |
+| 0.142.1 | Ostrzeżenia burz w kosmosie opisują ich skutki, bez wzmianki o ruchu — [opis](BITWA_NA_ORBICIE.md) |
+| 0.142.2 | Łagodniejsza głębia ostrości w kosmosie — [opis](BITWA_NA_ORBICIE.md) |
 
 Wersja 0.7 nie ma osobnych notatek w dokumentacji.
 

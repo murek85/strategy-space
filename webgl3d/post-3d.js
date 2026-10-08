@@ -39,6 +39,7 @@ export function createPost3D(THREE, renderer) {
 		aoBlurTarget = null,
 		raysA = null,
 		raysB = null,
+		dofTarget = null,
 		samples = 4;
 	const mips = [];
 	const LEVELS = 5;
@@ -63,7 +64,43 @@ export function createPost3D(THREE, renderer) {
 		raysB?.dispose();
 		raysA = new THREE.WebGLRenderTarget(hw, hh, half);
 		raysB = raysA.clone();
+		dofTarget?.dispose();
+		dofTarget = new THREE.WebGLRenderTarget(width, height, half);
 	}
+
+	// ---------- depth of field (0.135): tilt-shift ----------
+	// A band round the focus line stays sharp; above and below it the picture blurs more and more (more
+	// above: that is the far side of the board), a disc of samples on a golden-angle spiral. The blur is
+	// in screen space on purpose: the interface layer lies on the see-through plane of the battle in
+	// space, so a blur by depth would smear the orders drawn there.
+	const dof = shader(
+		`uniform sampler2D tColor; uniform vec2 texel; uniform float strength; uniform float focus; uniform float band; uniform float aspect;
+		varying vec2 vUv;
+		void main() {
+			float dy = vUv.y - focus;
+			float k = smoothstep(band, band + 0.4, abs(dy)) * (dy > 0.0 ? 1.0 : 0.7);
+			vec2 e = abs(vUv - 0.5) * vec2(aspect, 1.0);
+			k = max(k, smoothstep(0.6, 1.0, length(e)) * 0.45) * strength;
+			vec3 c = texture2D(tColor, vUv).rgb;
+			if (k < 0.02) { gl_FragColor = vec4(c, 1.0); return; }
+			float radius = k * 5.0;
+			vec3 sum = c;
+			float w = 1.0;
+			for (int i = 1; i < 18; i++) {
+				float fi = float(i);
+				float r = sqrt(fi / 17.0) * radius;
+				float a = fi * 2.39996;
+				vec3 s = texture2D(tColor, vUv + vec2(cos(a), sin(a)) * r * texel).rgb;
+				s = min(s, vec3(32.0));
+				// Bright points weigh a little more: bokeh-like highlights.
+				float sw = 1.0 + max(0.0, dot(s, vec3(0.3, 0.55, 0.15)) - 1.0) * 0.4;
+				sum += s * sw;
+				w += sw;
+			}
+			gl_FragColor = vec4(sum / w, 1.0);
+		}`,
+		{ tColor: { value: null }, texel: { value: new THREE.Vector2() }, strength: { value: 0 }, focus: { value: 0.47 }, band: { value: 0.2 }, aspect: { value: 1 } },
+	);
 
 	// ---------- ambient occlusion ----------
 	const aoMaterial = shader(
@@ -397,6 +434,17 @@ export function createPost3D(THREE, renderer) {
 					pass(raysBlur, raysB);
 				}
 			}
+			let colour = sceneTarget.texture;
+			if ((s.dof || 0) > 0.01) {
+				dof.uniforms.tColor.value = sceneTarget.texture;
+				dof.uniforms.texel.value.set(1 / width, 1 / height);
+				dof.uniforms.strength.value = s.dof;
+				dof.uniforms.focus.value = s.dofFocus ?? 0.47;
+				dof.uniforms.band.value = s.dofBand ?? 0.2;
+				dof.uniforms.aspect.value = width / height;
+				pass(dof, dofTarget);
+				colour = dofTarget.texture;
+			}
 			const u = finish.uniforms;
 			u.tDepth.value = sceneTarget.depthTexture;
 			u.tRays.value = raysB.texture;
@@ -413,7 +461,7 @@ export function createPost3D(THREE, renderer) {
 				u.fogDensity.value = a.density;
 				u.fogFalloff.value = a.falloff;
 			}
-			u.tColor.value = sceneTarget.texture;
+			u.tColor.value = colour;
 			u.tAo.value = aoBlurTarget.texture;
 			u.tBloom.value = mips[0].texture;
 			u.aoOn.value = s.ao ? 1 : 0;
@@ -433,9 +481,9 @@ export function createPost3D(THREE, renderer) {
 		},
 		dispose() {
 			sceneTarget?.depthTexture?.dispose();
-			for (const t of [sceneTarget, aoTarget, aoBlurTarget, envTarget, raysA, raysB, ...mips]) t?.dispose();
+			for (const t of [sceneTarget, aoTarget, aoBlurTarget, envTarget, raysA, raysB, dofTarget, ...mips]) t?.dispose();
 			pmrem.dispose();
-			for (const m of [aoMaterial, aoBlur, bright, down, up, finish, raysMask, raysBlur]) m.dispose();
+			for (const m of [aoMaterial, aoBlur, bright, down, up, finish, raysMask, raysBlur, dof]) m.dispose();
 			tri.dispose();
 		},
 	};

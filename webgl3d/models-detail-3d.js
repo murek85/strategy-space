@@ -1817,6 +1817,38 @@ float mdNoise3(vec3 p) {
 	return mix(mix(mix(mdHash3(i), mdHash3(i + vec3(1, 0, 0)), f.x), mix(mdHash3(i + vec3(0, 1, 0)), mdHash3(i + vec3(1, 1, 0)), f.x), f.y),
 		mix(mix(mdHash3(i + vec3(0, 0, 1)), mdHash3(i + vec3(1, 0, 1)), f.x), mix(mdHash3(i + vec3(0, 1, 1)), mdHash3(i + vec3(1, 1, 1)), f.x), f.y), f.z);
 }`;
+// Weather on the models (0.138.3), in their own frame (it does not slide as they move); all models share it —
+// vehicles, infantry, buildings and animals:
+// - snow settles in drifts on upward faces, breaking up at its edge in patches, a thin crust on the sides
+//   as it thickens; a cool shade in the hollows of the drift;
+// - sand: a dusty film of the planet's soil over everything, heaped on upward faces and low down, dulling
+//   the paint (desaturated) and the shine;
+// - rain: the model darkens and shines, rivulets run down its sides, droplets glint on its top.
+const WEATHER_COAT = `
+float coatSnow = 0.0, coatSand = 0.0, coatRivulet = 0.0;
+if (vFinish.z < 0.5) {
+	float coatN = mdNoise3(vObjPos * 0.45) * 0.6 + mdNoise3(vObjPos * 1.7) * 0.4;
+	// Snow: from the top faces down, wider as it thickens, a broken edge.
+	float coatUp = vUp + (coatN - 0.5) * 0.45;
+	coatSnow = snowCover * smoothstep(0.55 - snowCover * 0.45, 0.85 - snowCover * 0.3, coatUp);
+	coatSnow = min(1.0, coatSnow * 1.5 + snowCover * 0.12 * smoothstep(-0.2, 0.3, vUp) * step(0.6, coatN));
+	vec3 snowColor = mix(vec3(0.74, 0.8, 0.9), vec3(0.95, 0.97, 1.0), smoothstep(0.3, 0.8, coatN));
+	// Sand: a film everywhere, heavier on the top and low on the model.
+	float coatLow = 1.0 - smoothstep(0.0, 6.0, vObjPos.y);
+	coatSand = sandCover * clamp(0.28 + 0.6 * smoothstep(0.2, 0.85, coatUp) + 0.35 * coatLow, 0.0, 1.0) * (0.75 + 0.4 * coatN);
+	vec3 sandColor = mix(soilColor * 1.15, soilColor * 1.45 + 0.05, coatN);
+	float coatGrey = dot(diffuseColor.rgb, vec3(0.3, 0.55, 0.15));
+	diffuseColor.rgb = mix(diffuseColor.rgb, vec3(coatGrey), sandCover * 0.35);
+	diffuseColor.rgb = mix(diffuseColor.rgb, sandColor, min(1.0, coatSand));
+	// Rain: darker, rivulets running down the sides, droplets on top.
+	float coatSide = 1.0 - smoothstep(0.35, 0.75, abs(vUp));
+	float coatRiv = mdNoise3(vec3(vObjPos.x * 1.8, vObjPos.y * 0.35 + weatherClock * 1.6, vObjPos.z * 1.8));
+	coatRivulet = wetness * coatSide * smoothstep(0.62, 0.78, coatRiv);
+	float coatDrops = wetness * smoothstep(0.6, 0.9, vUp) * step(0.82, mdNoise3(vObjPos * 4.0 + floor(weatherClock * 1.5)));
+	diffuseColor.rgb *= 1.0 - 0.32 * wetness - 0.18 * coatRivulet;
+	diffuseColor.rgb += coatDrops * 0.12;
+	diffuseColor.rgb = mix(diffuseColor.rgb, snowColor, coatSnow);
+}`;
 const SURFACE = `
 float mdWear = 0.0, mdLine = 0.0, mdGrime = 0.0;
 // Surface detail (0.128): armour plates with seams and slightly different shades, paint chipped off the
@@ -1930,6 +1962,8 @@ export function createBaker(THREE) {
 	// Weather on the models: snow settling on upward faces (roofs, hulls, turrets), a sheen when wet.
 	const snowCover = { value: 0 },
 		wetness = { value: 0 },
+		sandCover = { value: 0 },
+		weatherClock = { value: 0 },
 		// Surface detail of the models (stage 3 of the 3D graphics): on/off and the colour of the planet's dust.
 		surfaceOn = { value: 1 },
 		soilColor = { value: new THREE.Color(0.55, 0.45, 0.33) };
@@ -1940,6 +1974,8 @@ export function createBaker(THREE) {
 		shader.uniforms.windowScale = windowLight;
 		shader.uniforms.snowCover = snowCover;
 		shader.uniforms.wetness = wetness;
+		shader.uniforms.sandCover = sandCover;
+		shader.uniforms.weatherClock = weatherClock;
 		shader.uniforms.surfaceOn = surfaceOn;
 		shader.uniforms.soilColor = soilColor;
 		shader.vertexShader = shader.vertexShader
@@ -1950,9 +1986,9 @@ export function createBaker(THREE) {
 				"#include <defaultnormal_vertex>\n#ifdef USE_INSTANCING\nvUp = normalize(mat3(modelMatrix) * mat3(instanceMatrix) * objectNormal).y;\n#else\nvUp = normalize(mat3(modelMatrix) * objectNormal).y;\n#endif",
 			);
 		shader.fragmentShader = shader.fragmentShader
-			.replace("#include <common>", "#include <common>\nuniform float glowScale;\nuniform float windowScale;\nuniform float snowCover;\nuniform float wetness;\nuniform float surfaceOn;\nuniform vec3 soilColor;\nvarying vec3 vFinish;\nvarying vec3 vGlow;\nvarying float vUp;\nvarying vec3 vObjPos;\nvarying vec3 vObjN;\n" + SURFACE_COMMON)
-			.replace("#include <color_fragment>", "#include <color_fragment>\n" + SURFACE + "\nfloat modelSnow = snowCover * smoothstep(0.6, 0.9, vUp) * step(0.5, 1.0 - vFinish.z);\ndiffuseColor.rgb = mix(diffuseColor.rgb * (1.0 - 0.25 * wetness), vec3(0.9, 0.94, 0.98), min(1.0, modelSnow * 1.3));")
-			.replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\nroughnessFactor = mix(clamp(vFinish.x + mdGrime * 0.25 + mdLine * 0.1 - mdWear * 0.3, 0.05, 1.0), 0.6, min(1.0, modelSnow * 1.3)) * (1.0 - 0.45 * wetness);")
+			.replace("#include <common>", "#include <common>\nuniform float glowScale;\nuniform float windowScale;\nuniform float snowCover;\nuniform float wetness;\nuniform float sandCover;\nuniform float weatherClock;\nuniform float surfaceOn;\nuniform vec3 soilColor;\nvarying vec3 vFinish;\nvarying vec3 vGlow;\nvarying float vUp;\nvarying vec3 vObjPos;\nvarying vec3 vObjN;\n" + SURFACE_COMMON)
+			.replace("#include <color_fragment>", "#include <color_fragment>\n" + SURFACE + "\n" + WEATHER_COAT)
+			.replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\nroughnessFactor = clamp(vFinish.x + mdGrime * 0.25 + mdLine * 0.1 - mdWear * 0.3, 0.05, 1.0);\nroughnessFactor = mix(roughnessFactor * (1.0 - 0.55 * wetness - 0.3 * coatRivulet), 0.62, coatSnow);\nroughnessFactor = mix(roughnessFactor, 0.97, coatSand);")
 			.replace("#include <metalnessmap_fragment>", "#include <metalnessmap_fragment>\nmetalnessFactor = clamp(vFinish.y + mdWear * 0.45 - mdGrime * 0.2, 0.0, 1.0);")
 			.replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\ntotalEmissiveRadiance += vGlow * mix(glowScale, windowScale, step(0.5, vFinish.z));");
 	};
@@ -1998,9 +2034,11 @@ export function createBaker(THREE) {
 		surfaceOn.value = on ? 1 : 0;
 		if (soil) soilColor.value.copy(soil);
 	};
-	bakeModel.setWeather = (snow, wet) => {
+	bakeModel.setWeather = (snow, wet, sand = 0, time = 0) => {
 		snowCover.value = snow;
 		wetness.value = wet;
+		sandCover.value = sand;
+		weatherClock.value = time;
 	};
 	return bakeModel;
 }

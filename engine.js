@@ -640,6 +640,10 @@
 				duration,
 			};
 		}
+		// What a storm will do, for its warning (rule modules with other weather say their own).
+		stormEffects() {
+			return "Ruch i celność będą ograniczone.";
+		}
 		// Where a storm comes from: one of eight directions, fixed for each storm of a battle.
 		stormFront(cycle) {
 			const names = ["z północy", "z północnego wschodu", "ze wschodu", "z południowego wschodu", "z południa", "z południowego zachodu", "z zachodu", "z północnego zachodu"],
@@ -2592,7 +2596,7 @@
 				if (this.weatherWarning !== key) {
 					this.weatherWarning = key;
 					this.notify(
-						`OSTRZEŻENIE: ${forecast.name} ${outlook.from} za ${Math.ceil(forecast.until)} s. Ruch i celność będą ograniczone.`,
+						`OSTRZEŻENIE: ${forecast.name} ${outlook.from} za ${Math.ceil(forecast.until)} s. ${this.stormEffects(forecast)}`,
 						"alarm",
 					);
 				}
@@ -2898,6 +2902,11 @@
 							air: !!s.flying,
 							airTarget: !!TYPES[target.type].flying,
 							bomb: e.type === "bomber",
+							// Ships of the orbital battle fire lasers between their hover heights; the
+							// destroyer's spinal gun a long beam.
+							ship: !!s.ship,
+							shipTarget: !!TYPES[target.type].ship,
+							lance: e.type === "lancer",
 							life: 0.2,
 							maxLife: 0.2,
 						});

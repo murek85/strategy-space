@@ -7,7 +7,8 @@ test("each planet has threats away from starting bases, with persistent homes", 
 		const g = new Game(73, id);
 		if (!RTS.MISSIONS[id].campaign) g.configureSkirmish({ players: 4 });
 		const creatures = g.entities.filter((e) => TYPES[e.type].threat);
-		if (RTS.MISSIONS[id].training) {
+		// Training grounds and space (the orbital battle) have no wildlife.
+		if (RTS.MISSIONS[id].training || RTS.MISSIONS[id].space) {
 			assert.equal(creatures.length, 0, id);
 			continue;
 		}

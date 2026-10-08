@@ -287,67 +287,70 @@ function createCanvasRenderer(canvas, mini) {
 		glow.addColorStop(1, color + "00");
 		ctx.fillStyle = glow;
 		ctx.fillRect(-70, -70, 140, 140);
-		polygon(
-			ctx,
-			[
-				[-32, 0],
-				[-16, -27],
-				[16, -27],
-				[32, 0],
-				[16, 27],
-				[-16, 27],
-			],
-			"#1a252a",
-			color + "77",
-		);
-		polygon(
-			ctx,
-			[
-				[-13, 7],
-				[-13, -18],
-				[0, -37],
-				[13, -18],
-				[13, 7],
-				[0, 17],
-			],
-			"#4f6962",
-			color,
-		);
-		polygon(
-			ctx,
-			[
-				[0, -37],
-				[13, -18],
-				[13, 7],
-				[0, 17],
-			],
-			"#2f4946",
-			null,
-		);
-		ctx.strokeStyle = color;
-		ctx.lineWidth = 3;
-		ctx.beginPath();
-		ctx.moveTo(0, -29);
-		ctx.lineTo(0, 4);
-		ctx.stroke();
-		ctx.fillStyle = color;
-		ctx.shadowColor = color;
-		ctx.shadowBlur = 12;
-		ctx.fillRect(-3, -18, 6, 12);
-		ctx.shadowBlur = 0;
-		ctx.strokeStyle = "#a9bfb5";
-		ctx.lineWidth = 2;
-		ctx.beginPath();
-		ctx.moveTo(-19, 0);
-		ctx.lineTo(0, -45);
-		ctx.lineTo(19, 0);
-		ctx.stroke();
-		ctx.fillStyle = "#92a59a";
-		ctx.beginPath();
-		ctx.ellipse(0, -40, 21, 6, -0.25, 0, Math.PI * 2);
-		ctx.fill();
-		ctx.fillStyle = color;
-		ctx.fillRect(-4, -46, 8, 3);
+		// In space (the orbital battle) a relay buoy floats here instead of the ground station (space-art.js).
+		if (!(typeof SpaceArt !== "undefined" && SpaceArt.relay(ctx, game, color, game.time))) {
+			polygon(
+				ctx,
+				[
+					[-32, 0],
+					[-16, -27],
+					[16, -27],
+					[32, 0],
+					[16, 27],
+					[-16, 27],
+				],
+				"#1a252a",
+				color + "77",
+			);
+			polygon(
+				ctx,
+				[
+					[-13, 7],
+					[-13, -18],
+					[0, -37],
+					[13, -18],
+					[13, 7],
+					[0, 17],
+				],
+				"#4f6962",
+				color,
+			);
+			polygon(
+				ctx,
+				[
+					[0, -37],
+					[13, -18],
+					[13, 7],
+					[0, 17],
+				],
+				"#2f4946",
+				null,
+			);
+			ctx.strokeStyle = color;
+			ctx.lineWidth = 3;
+			ctx.beginPath();
+			ctx.moveTo(0, -29);
+			ctx.lineTo(0, 4);
+			ctx.stroke();
+			ctx.fillStyle = color;
+			ctx.shadowColor = color;
+			ctx.shadowBlur = 12;
+			ctx.fillRect(-3, -18, 6, 12);
+			ctx.shadowBlur = 0;
+			ctx.strokeStyle = "#a9bfb5";
+			ctx.lineWidth = 2;
+			ctx.beginPath();
+			ctx.moveTo(-19, 0);
+			ctx.lineTo(0, -45);
+			ctx.lineTo(19, 0);
+			ctx.stroke();
+			ctx.fillStyle = "#92a59a";
+			ctx.beginPath();
+			ctx.ellipse(0, -40, 21, 6, -0.25, 0, Math.PI * 2);
+			ctx.fill();
+			ctx.fillStyle = color;
+			ctx.fillRect(-4, -46, 8, 3);
+		}
 		if (n.progress > 0) {
 			ctx.lineWidth = 4;
 			ctx.strokeStyle = colors[n.capturing];

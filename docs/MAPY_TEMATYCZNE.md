@@ -15,6 +15,8 @@ Mapy są inspirowane klimatem filmów science fiction — bioluminescencyjne dż
 
 Każda mapa ma własną nazwę zjawiska pogodowego (Tropikalna ulewa, Burza w chmurach, Burza piaskowa, Burza wulkaniczna). Pogoda, fauna, drapieżniki i muzyka korzystają z bazowego biomu mapy (popiół lub pył). Na mapach jałowych (szczyty, pustynia, lawa) nie rośnie roślinność biomu; szczyty dostają własną trawę.
 
+Od wersji 0.130 dochodzi mapa w kosmosie **Orbita Kharona** (orbita gazowego olbrzyma Kharon; pas asteroid z trzema korytarzami; statki zamiast pojazdów) — opis w [Bitwa na orbicie](BITWA_NA_ORBICIE.md).
+
 ## Zasady terenu
 
 - Rzeki, rozpadliny i lawa to łańcuchy nakładających się owalnych obszarów (`waters` z polem `kind`: `glow`, `chasm`, `lava`). Blokują ruch naziemny jak jeziora; lotnictwo je przelatuje. Brody i mosty to celowe przerwy w łańcuchu.

@@ -335,6 +335,8 @@ export function createSky3D(THREE) {
 		lumen: { bodies: [[[-0.32, 0.3, -0.8], 0.03, "#b0eedc", "#5fa892", 0], [[0.52, 0.36, -0.58], 0.016, "#dccab2", "#9a8a74", 0]] },
 		dunesea: { bodies: [[[-0.7, 0.15, -0.66], 0.05, "#e2c9a4", "#b48f6a", 0]] },
 		frozenhive: { bodies: [[[0.3, 0.25, -0.85], 0.07, "#c4d8ec", "#7c93b0", 1]] },
+		// Space (the orbital battle): black sky full of stars, no clouds; Kharon's moon low over the edge.
+		space: { space: true, bodies: [[[0.55, 0.1, -0.83], 0.05, "#d2c4b4", "#6d5f52", 0]] },
 	};
 	let world = {};
 	const sun2Base = C("#000"),
@@ -405,6 +407,13 @@ export function createSky3D(THREE) {
 				const e2 = uniforms.sun2Dir.value.y;
 				uniforms.sun2Color.value.copy(sun2Base).multiplyScalar(Math.max(0, Math.min(1, (e2 + 0.04) / 0.08)) * (1 - haze * 0.8));
 			} else uniforms.sun2Color.value.setRGB(0, 0, 0);
+			if (world.space) {
+				uniforms.starVis.value = 1;
+				uniforms.moonVis.value = 0;
+				uniforms.cover.value = 0;
+				uniforms.aurora.value = 0;
+				uniforms.clear.value = 1;
+			}
 		},
 		// Cloud drift and the shadow they cast (0 none … 1 dark).
 		clouds(time, shadow) {

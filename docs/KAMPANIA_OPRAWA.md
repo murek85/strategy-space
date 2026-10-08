@@ -2,6 +2,10 @@
 
 Najnowsze zmiany na górze. Zakres: portrety i sceny łączności, wybory, głosy, intro, prologi i epilogi, ekrany końca i ładowania, menu, pauza, ekrany menu, interfejs gry, drzewo rozwoju, panel badań, ekran kampanii, odblokowanie do testów, filmy na pełnym ekranie.
 
+## Raport końca operacji bez pasków (wersja 0.131.1, 2026-10-07)
+
+- `style.css` (`.briefing.end-report`): karta ma wysokość obszaru planszy (nie okna), więc treść bywała o kilkadziesiąt pikseli wyższa i pokazywały się oba paski przewijania (pionowy zwężał kartę o piksel, stąd poziomy). Kafelki liczb w jednym rzędzie (`minmax(84px, 1fr)`), `overflow-x: hidden`, paski ukryte (`scrollbar-width: none`, `::-webkit-scrollbar`), przewijanie kółkiem zostaje.
+
 ## Wybór rozdziału z podglądem (wersja 0.122, 2026-10-07)
 
 Mapa galaktyki na ekranie kampanii jest wyłączona (wersje 0.118–0.121); klasa `GalaxyMap.Map` zostaje w `galaxy-map.js`, ale menu jej nie używa.

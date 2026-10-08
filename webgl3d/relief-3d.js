@@ -45,6 +45,8 @@ export function createRelief3D({ RISE }) {
 			crag = new Float32Array(n),
 			noise = noiseOf(game.missionId + ":" + game.W + "x" + game.H),
 			rough = ROUGH[RTS.MISSIONS[game.missionId]?.biome] ?? 1;
+		// Space (the orbital battle): a flat plane; the asteroid fields float above it (models-3d.js).
+		if (RTS.MISSIONS[game.missionId]?.space) return { cols, rows, cell: CELL, data: new Float32Array(n), rock: new Float32Array(n) };
 		const fbm = (x, y, size) => noise(x, y, size) * 0.55 + noise(x + 71, y - 33, size / 2.1) * 0.3 + noise(x - 19, y + 57, size / 4.4) * 0.15;
 		// Ridged noise: sharp crests where the noise crosses its middle (ridges, gullies).
 		const ridge = (x, y, size) => 1 - Math.abs(fbm(x, y, size) - 0.5) * 2;

@@ -31,6 +31,7 @@ import { nightLightShade } from "./night-lights-3d.js";
 import { createRelief3D } from "./relief-3d.js";
 import { createSunFx3D } from "./sun-fx-3d.js";
 import { createPost3D } from "./post-3d.js";
+import { createSpace3D } from "./space-3d.js";
 
 export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 	const { TYPES } = RTS;
@@ -48,6 +49,8 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 	// The ground is painted bare: rocks, plants and pebbles are 3D here (render-canvas.js setBareGround).
 	canvasRenderer.setBareGround?.(true);
 	const renderer = new THREE.WebGLRenderer({ antialias: true });
+	// Clipping planes on single materials: the halves of a ship breaking up in space (breakUp).
+	renderer.localClippingEnabled = true;
 	renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 	renderer.shadowMap.enabled = true;
 	renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -80,6 +83,10 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 	// The sky dome (sun, moon, stars, clouds) and the cloud shadows (webgl3d/sky-3d.js).
 	const sky = createSky3D(THREE);
 	scene.add(sky.mesh);
+	// Deep space under and around the orbital battle: the gas giant, its rings, a moon, the starry sphere
+	// (webgl3d/space-3d.js); shown only on space maps, in place of the sky dome.
+	const space3d = createSpace3D(THREE);
+	scene.add(space3d.group);
 	// Sunbeams through the clouds and the lens flare (webgl3d/sun-fx-3d.js).
 	const sunFx = createSunFx3D(THREE, { scene, heightAt: (x, y) => heightAt(x, y) });
 
@@ -284,6 +291,11 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		const biome = RTS.MISSIONS[game.missionId]?.biome || "dust",
 			detail = detailNormals(biome);
 		groundWeather.pbrBiome.value = biome === "ice" ? 1 : biome === "ash" ? 2 : 0;
+		// Space: the painted starfield is the whole ground (no surface grain, no shadows on it).
+		const space = spaceMap();
+		groundWeather.spaceGround.value = space ? 1 : 0;
+		if (space) groundWeather.pbrOn.value = 0;
+		else if (quality.pbr !== false) groundWeather.pbrOn.value = 1;
 
 		for (const t of tiles) {
 			terrain.remove(t.mesh);
@@ -324,16 +336,16 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 				const texture = new THREE.CanvasTexture(canvas);
 				texture.colorSpace = THREE.SRGBColorSpace;
 				texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
-				const normalMap = quality.relief ? detail.clone() : null;
+				const normalMap = quality.relief && !space ? detail.clone() : null;
 				if (normalMap) {
 					normalMap.repeat.set(w / 110, h / 110);
 					normalMap.needsUpdate = true;
 				}
 				const mesh = new THREE.Mesh(
 					geometry,
-					fogged(new THREE.MeshStandardMaterial({ map: texture, vertexColors: true, normalMap, normalScale: new THREE.Vector2(biome === "ice" ? 0.4 : 0.45, biome === "ice" ? 0.4 : 0.45), roughness: biome === "ice" ? 0.55 : 0.95, metalness: 0 }), true, true),
+					fogged(new THREE.MeshStandardMaterial({ map: texture, vertexColors: true, normalMap, normalScale: new THREE.Vector2(biome === "ice" ? 0.4 : 0.45, biome === "ice" ? 0.4 : 0.45), roughness: biome === "ice" ? 0.55 : 0.95, metalness: 0, transparent: space, depthWrite: !space }), true, true),
 				);
-				mesh.receiveShadow = true;
+				mesh.receiveShadow = !space;
 				terrain.add(mesh);
 				const tile = { x0, y0, w, h, canvas, texture, mesh, signature: null };
 				tiles.push(tile);
@@ -341,6 +353,93 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 				tile.signature = signature(tile);
 			}
 		buildOutskirts();
+		buildNebula();
+	}
+
+	// Space (0.131): the nebula clouds over the gas fields — soft glowing sprites at a few heights, violet
+	// and blue, added light (they brighten what is behind them); none on other maps.
+	let nebula = null,
+		nebulaTexture = null,
+		cloudTexture = null;
+	function buildNebula() {
+		if (nebula) {
+			world.remove(nebula);
+			nebula.traverse((o) => {
+				o.material?.dispose();
+				if (o.isPoints) o.geometry.dispose();
+			});
+			nebula = null;
+		}
+		if (!spaceMap()) return;
+		if (!nebulaTexture) {
+			const c = document.createElement("canvas");
+			c.width = c.height = 128;
+			const x = c.getContext("2d"),
+				g = x.createRadialGradient(64, 64, 0, 64, 64, 64);
+			g.addColorStop(0, "rgba(255,255,255,1)");
+			g.addColorStop(0.35, "rgba(255,255,255,.55)");
+			g.addColorStop(1, "rgba(255,255,255,0)");
+			x.fillStyle = g;
+			x.fillRect(0, 0, 128, 128);
+			nebulaTexture = new THREE.CanvasTexture(c);
+			nebulaTexture.colorSpace = THREE.SRGBColorSpace;
+			// A cloud: many soft blobs of different sizes, denser in the middle (0.137).
+			const c2 = document.createElement("canvas");
+			c2.width = c2.height = 256;
+			const y = c2.getContext("2d");
+			let sd = 77;
+			const r2 = () => (sd = (Math.imul(sd, 1664525) + 1013904223) >>> 0) / 4294967296;
+			for (let i = 0; i < 90; i++) {
+				const a = r2() * Math.PI * 2,
+					d = Math.pow(r2(), 0.8) * 90,
+					cx = 128 + Math.cos(a) * d,
+					cy = 128 + Math.sin(a) * d,
+					rr = 12 + r2() * 46,
+					gg = y.createRadialGradient(cx, cy, 0, cx, cy, rr);
+				gg.addColorStop(0, `rgba(255,255,255,${(0.08 + r2() * 0.12).toFixed(3)})`);
+				gg.addColorStop(1, "rgba(255,255,255,0)");
+				y.fillStyle = gg;
+				y.fillRect(cx - rr, cy - rr, rr * 2, rr * 2);
+			}
+			cloudTexture = new THREE.CanvasTexture(c2);
+			cloudTexture.colorSpace = THREE.SRGBColorSpace;
+		}
+		nebula = new THREE.Group();
+		const R = RTS.SPACE?.nebula?.radius || 230;
+		// Layers of cloud from below the plane to over the ships: as the camera moves they slide apart and
+		// the cloud reads as a volume.
+		(game.gasFields || []).forEach((f, i) => {
+			for (let k = 0; k < 12; k++) {
+				const a = k * 2.4 + i,
+					d = k ? R * (0.3 + ((k * 37) % 10) / 16) : 0,
+					m = new THREE.SpriteMaterial({ map: k % 2 ? cloudTexture : nebulaTexture, color: new THREE.Color(k % 3 === 1 ? "#4f86e6" : k % 3 === 2 ? "#c05ad8" : "#8a46e0"), transparent: true, opacity: k % 2 ? 0.12 : 0.04, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }),
+					sprite = new THREE.Sprite(m),
+					size = R * (0.9 + ((k * 53) % 9) / 10);
+				sprite.position.set(f.x + Math.cos(a) * d, -60 + ((k * 29) % 170), f.y + Math.sin(a) * d);
+				sprite.scale.set(size, size, 1);
+				m.rotation = a;
+				nebula.add(sprite);
+			}
+		});
+		// Space dust and ice specks at many heights over the plane: they slide against each other and the
+		// painted stars as the camera moves, so the board reads as deep space.
+		const area = (game.W * game.H) / (3360 * 2160),
+			count = Math.round(2600 * area),
+			pos = new Float32Array(count * 3),
+			col = new Float32Array(count * 3);
+		let seed = 4711;
+		const rnd = () => (seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296;
+		for (let i = 0; i < count; i++) {
+			pos.set([rnd() * game.W, 6 + Math.pow(rnd(), 1.6) * 220, rnd() * game.H], i * 3);
+			const warm = rnd() < 0.2,
+				b = 0.35 + rnd() * 0.65;
+			col.set(warm ? [b, b * 0.85, b * 0.7] : [b * 0.8, b * 0.9, b], i * 3);
+		}
+		const dust = new THREE.BufferGeometry();
+		dust.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+		dust.setAttribute("color", new THREE.BufferAttribute(col, 3));
+		nebula.add(new THREE.Points(dust, new THREE.PointsMaterial({ size: 3.2, map: nebulaTexture, vertexColors: true, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true, fog: false })));
+		world.add(nebula);
 	}
 
 	// Land around the map, in the mean colour of the map's ground, a little lower than its edges: the
@@ -375,13 +474,15 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		outskirts = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color: new THREE.Color(`rgb(${r},${g},${b})`).multiplyScalar(0.7), roughness: 1, metalness: 0 }));
 		outskirts.position.set(0, low - 3, 0);
 		outskirts.receiveShadow = true;
+		// Space: no land round the map — deep space goes on.
+		outskirts.visible = !spaceMap();
 		world.add(outskirts);
 	}
 
 	// Fog of war on the ground: visible 255, explored 110, unknown 25, smoothed (see refreshFog); the
 	// terrain shader darkens and desaturates by it.
 	const fogUniforms = { fogMap: { value: null }, fogSize: { value: new THREE.Vector2(1, 1) }, fogOn: { value: 1 }, fogTime: { value: 0 } },
-		groundWeather = { wetness: { value: 0 }, snowCover: { value: 0 }, rainLevel: { value: 0 }, weatherTime: { value: 0 }, skyTint: { value: new THREE.Color() }, rockTint: { value: new THREE.Color("#7a6a58") }, sandLevel: { value: 0 }, mistLevel: { value: 0 }, mistBand: { value: new THREE.Vector2(0, 40) }, pbrOn: { value: 1 }, pbrBiome: { value: 0 } };
+		groundWeather = { wetness: { value: 0 }, snowCover: { value: 0 }, rainLevel: { value: 0 }, weatherTime: { value: 0 }, skyTint: { value: new THREE.Color() }, rockTint: { value: new THREE.Color("#7a6a58") }, sandLevel: { value: 0 }, mistLevel: { value: 0 }, mistBand: { value: new THREE.Vector2(0, 40) }, pbrOn: { value: 1 }, pbrBiome: { value: 0 }, spaceGround: { value: 0 }, ionLevel: { value: 0 } };
 	// The vision grid is upsampled FOG_UP times and box-blurred twice, so the edge of sight is a soft
 	// curve instead of 40-unit steps.
 	const FOG_UP = 3;
@@ -626,7 +727,7 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			shader.fragmentShader = shader.fragmentShader
 				.replace(
 					"#include <common>",
-					"#include <common>\nvarying vec2 vMapXY;\nuniform sampler2D fogMap;\nuniform float fogOn;\nuniform float fogTime;\nuniform vec2 fogSize;\nuniform sampler2D overlayMap;\nuniform float overlayLinear;\nuniform float overlayOn;\nuniform vec4 overlayFrame;\nuniform vec2 overlaySize;\n" + FOG_NOISE,
+					"#include <common>\nvarying vec2 vMapXY;\nuniform float spaceGround;\nuniform float ionLevel;\nuniform sampler2D fogMap;\nuniform float fogOn;\nuniform float fogTime;\nuniform vec2 fogSize;\nuniform sampler2D overlayMap;\nuniform float overlayLinear;\nuniform float overlayOn;\nuniform vec4 overlayFrame;\nuniform vec2 overlaySize;\n" + FOG_NOISE,
 				)
 				.replace(
 					"#include <dithering_fragment>",
@@ -646,7 +747,36 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 							vec4 ui = texture2D(overlayMap, vec2(f.x, 1.0 - f.y));
 							gl_FragColor.rgb = mix(gl_FragColor.rgb, overlayLinear > 0.5 ? pow(ui.rgb, vec3(2.2)) * 1.25 : ui.rgb, ui.a);
 						}
-					}`,
+					}
+					#ifdef TERRAIN
+					// Space (the orbital battle): the plane of the battle is see-through — deep space shows
+					// below it; what was seen before lies under a thin dark veil, the unknown under a thicker
+					// one, and the interface layer (orders, selections, ghosts) stays on it.
+					if (spaceGround > 0.5) {
+						float veil = clamp((1.0 - seen) * 0.42 * fogOn + unknown * 0.16, 0.0, 0.62);
+						vec3 murk = vec3(0.008, 0.012, 0.024) * (0.6 + 0.8 * drift);
+						vec4 ui2 = vec4(0.0);
+						if (overlayOn > 0.5) {
+							vec2 f2 = ((vMapXY - overlayFrame.xy) * overlayFrame.z + overlaySize * 0.5) / overlaySize;
+							if (f2.x > 0.0 && f2.x < 1.0 && f2.y > 0.0 && f2.y < 1.0) {
+								ui2 = texture2D(overlayMap, vec2(f2.x, 1.0 - f2.y));
+								ui2.rgb = overlayLinear > 0.5 ? pow(ui2.rgb, vec3(2.2)) * 1.25 : ui2.rgb;
+							}
+						}
+						// A faint tactical grid where the side sees, and a glowing frame along the edge of the map.
+						// An ion storm: the grid flickers, tears sideways in bands and turns violet.
+						float tear = step(0.8, fract(sin(floor(vMapXY.y / 60.0) * 12.9898 + floor(fogTime * 6.0)) * 43758.5)) * ionLevel;
+						vec2 cellXY = abs(fract((vMapXY + vec2(tear * 40.0, 0.0)) / 400.0) - 0.5) * 400.0;
+						float grid = smoothstep(197.0, 199.6, max(cellXY.x, cellXY.y));
+						float edge = min(min(vMapXY.x, vMapXY.y), min(fogSize.x - vMapXY.x, fogSize.y - vMapXY.y));
+						float frame = exp(-max(edge, 0.0) / 7.0) + exp(-max(edge, 0.0) / 60.0) * 0.12;
+						vec3 holo = mix(vec3(0.3, 0.75, 0.95), vec3(0.7, 0.4, 1.0), ionLevel);
+						float holoA = (grid * 0.06 * smoothstep(0.4, 0.9, seen) + frame * 0.45) * (1.0 + ionLevel * (0.8 * sin(fogTime * 23.0 + vMapXY.x * 0.01) - 0.2));
+						vec3 base = mix(murk, holo, holoA / max(0.001, holoA + veil));
+						float a = max(veil, holoA);
+						gl_FragColor = vec4(mix(base, ui2.rgb, ui2.a), max(a, ui2.a));
+					}
+					#endif`,
 				);
 		};
 		return material;
@@ -753,9 +883,11 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		const deposit = (prefix, list, label, lift) => {
 			for (const o of list || []) if (explored(o)) sign(prefix + o.id, [label(o)], o.x, o.y, lift);
 		};
-		deposit("ore", game.ores, (o) => BoardArt.resourceLabel(o, false), 30);
-		deposit("gas", game.gasFields, (o) => BoardArt.resourceLabel(o, true), 30);
-		deposit("crystal", game.crystalFields, (o) => BoardArt.crystalLabel(o), 40);
+		// In space the deposits and relay buoys float: their signs higher.
+		const up = spaceMap() ? 40 : 0;
+		deposit("ore", game.ores, (o) => BoardArt.resourceLabel(o, false), 30 + up);
+		deposit("gas", game.gasFields, (o) => BoardArt.resourceLabel(o, true), 30 + up);
+		deposit("crystal", game.crystalFields, (o) => BoardArt.crystalLabel(o), 40 + up);
 		// Salvage wrecks: their metal value (SupportArt.wrecks caption).
 		for (const w of game.wrecks || []) if (explored(w)) sign("salvage" + w.id, [{ text: "WRAK · " + w.value, color: "#c9b98f" }], w.x, w.y, 34);
 		const v = labelView();
@@ -763,7 +895,7 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			if (!explored(n)) continue;
 			const shown = game.isVisible(n.x, n.y) || n.owner === (game.viewer ?? 0) ? n : { ...n, owner: -1, progress: 0 },
 				l = canvasRenderer.nodeLabel(v, shown);
-			sign("node" + n.name + n.x, [{ text: l.name, color: l.color }, { text: l.status, color: "#9aaba7" }], n.x, n.y, 70);
+			sign("node" + n.name + n.x, [{ text: l.name, color: l.color }, { text: l.status, color: "#9aaba7" }], n.x, n.y, 70 + up * 0.4);
 		}
 		for (const s of signs.values()) if (!s.seen) s.sprite.visible = false;
 	}
@@ -884,7 +1016,7 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 				r.group.add(r.plinth);
 			}
 		}
-		const lift = building ? buildingHeight(s) * (e.constructionLeft > 0 ? 0.35 : 1) + 0.5 : s.flying ? 90 : 2;
+		const lift = building ? buildingHeight(s) * (e.constructionLeft > 0 ? 0.35 : 1) + 0.5 : s.flying ? 90 : s.ship ? (RTS.SPACE?.hover ?? 34) : e.type === "worker" && spaceMap() ? DRONE_HOVER : 2;
 		if (r.plinth) r.plinth.scale.y = Math.max(1, lift - 0.5);
 		if (r.plinth) r.plinth.position.y = r.plinth.scale.y / 2;
 		r.decal.position.y = lift;
@@ -894,24 +1026,126 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 	// Collapsing models of the destroyed (1.2 s): buildings sink and lean, vehicles and walkers tip over
 	// and sink; still drawn in the batches while they go.
 	const dying = [];
+	// A ship destroyed in space breaks in two (0.135.2): two copies of its parts, each cut by a slanted
+	// plane at the break — the bow flies on and up, the stern back and down, both tumbling the opposite
+	// ways and sinking below the plane; embers glow along the broken edges and fade; a dozen fragments of
+	// hull (some burning) fly out in every direction, spinning, shrinking away.
+	const FRAGMENT = { geos: [new THREE.TetrahedronGeometry(1), new THREE.BoxGeometry(1.6, 0.5, 1), new THREE.OctahedronGeometry(0.9)], hull: new THREE.MeshStandardMaterial({ color: "#5d6366", roughness: 0.6, metalness: 0.6, flatShading: true }), ember: new THREE.MeshBasicMaterial({ color: "#ff8a3c", fog: false, toneMapped: false }) };
+	const breakTmp = { inv: new THREE.Matrix4(), m: new THREE.Matrix4(), q: new THREE.Quaternion(), v: new THREE.Vector3(), axis: new THREE.Vector3() };
+	function breakUp(d) {
+		const root = d.r.model.root;
+		root.updateWorldMatrix(true, true);
+		breakTmp.inv.copy(root.matrixWorld).invert();
+		const parts = [];
+		let reach = 4;
+		root.traverse((o) => {
+			if (!o.isMesh || !o.visible) return;
+			const rel = new THREE.Matrix4().multiplyMatrices(breakTmp.inv, o.matrixWorld);
+			parts.push({ geometry: o.geometry, material: o.material, rel });
+			o.geometry.boundingSphere || o.geometry.computeBoundingSphere();
+			breakTmp.v.setFromMatrixPosition(rel);
+			reach = Math.max(reach, Math.abs(breakTmp.v.x) + o.geometry.boundingSphere.radius * 0.5);
+		});
+		const wreck = new THREE.Group(),
+			cut = (d.spin * 0.6) * reach * 0.3,
+			tilt = new THREE.Vector3(1, d.spin * 0.5, 0.35 - d.spin * 0.4).normalize(),
+			halves = [];
+		root.matrixWorld.decompose(wreck.position, wreck.quaternion, wreck.scale);
+		for (const side of [1, -1]) {
+			const pivot = new THREE.Group(),
+				plane = new THREE.Plane(tilt.clone().multiplyScalar(side), -cut * side),
+				clip = new THREE.Plane(),
+				materials = [];
+			for (const p of parts) {
+				const m = (Array.isArray(p.material) ? p.material[0] : p.material).clone();
+				m.clippingPlanes = [clip];
+				m.side = THREE.DoubleSide;
+				materials.push(m);
+				const mesh = new THREE.Mesh(p.geometry, m);
+				mesh.matrixAutoUpdate = false;
+				mesh.matrix.copy(p.rel);
+				pivot.add(mesh);
+			}
+			// The glowing broken edge.
+			const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glareTexture, color: "#ff8a3c", blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, fog: false }));
+			glow.position.set(cut, 0, 0);
+			glow.scale.setScalar(reach * 1.4);
+			pivot.add(glow);
+			materials.push(glow.material);
+			wreck.add(pivot);
+			halves.push({ pivot, plane, clip, materials, glow, side, axis: new THREE.Vector3(side * 0.3, 1, d.spin).normalize(), roll: (0.7 + Math.abs(d.spin)) * side });
+		}
+		// Fragments.
+		const fragments = [];
+		// A station throws out more pieces (and heavier ones) than a ship.
+		const pieces = d.building ? 22 : 14;
+		for (let i = 0; i < pieces; i++) {
+			const ember = i % 4 === 0,
+				mesh = new THREE.Mesh(FRAGMENT.geos[i % 3], ember ? FRAGMENT.ember : FRAGMENT.hull),
+				a = i * 2.399 + d.spin * 7,
+				u = ((i * 0.37 + d.spin) % 1) * 2 - 1,
+				r = Math.sqrt(Math.max(0, 1 - u * u)),
+				speed = reach * (1.2 + (i % 5) * 0.45) * (d.building ? 0.6 : 1);
+			mesh.position.set(cut, 0, 0);
+			const size = reach * (0.06 + (i % 4) * 0.035);
+			mesh.scale.setScalar(size);
+			wreck.add(mesh);
+			fragments.push({ mesh, size, v: new THREE.Vector3(Math.cos(a) * r, u * 0.6, Math.sin(a) * r).multiplyScalar(speed), spin: new THREE.Vector3((i % 3) - 1, ((i + 1) % 3) - 1, 1).normalize(), rate: 2 + (i % 4) });
+		}
+		world.add(wreck);
+		root.visible = false;
+		return { wreck, halves, fragments, reach };
+	}
+	function animateBreak(d, k, dt) {
+		const b = d.broken,
+			ease = 1 - Math.pow(1 - k, 2),
+			// A station is heavier: its halves part and turn more slowly.
+			heavy = d.building ? 0.55 : 1;
+		for (const h of b.halves) {
+			// Apart along the axis, drifting a little up (bow) or down (stern), sinking with time.
+			h.pivot.position.set(h.side * b.reach * 1.1 * ease * heavy, (h.side * 0.25 * heavy - 0.9 * k) * b.reach * 1.2 * k, d.spin * b.reach * 0.4 * ease * heavy);
+			h.pivot.quaternion.setFromAxisAngle(h.axis, h.roll * 0.9 * k * heavy);
+			h.pivot.updateMatrixWorld(true);
+			h.clip.copy(h.plane).applyMatrix4(h.pivot.matrixWorld);
+			h.glow.material.opacity = Math.max(0, 1 - k * 1.6) * (0.75 + 0.25 * Math.sin(d.t * 23 + h.side));
+			const fade = k > 0.85 ? 1 - (k - 0.85) / 0.15 : 1;
+			h.pivot.scale.setScalar(Math.max(0.001, fade));
+		}
+		for (const f of b.fragments) {
+			f.mesh.position.addScaledVector(f.v, dt / Math.max(0.001, b.wreck.scale.x));
+			f.mesh.rotateOnAxis(f.spin, f.rate * dt);
+			f.mesh.scale.setScalar(Math.max(0.001, f.size * (1 - k * 0.9)));
+		}
+	}
+	function endBreak(d) {
+		world.remove(d.broken.wreck);
+		for (const h of d.broken.halves) for (const m of h.materials) m.dispose();
+	}
 	function collapse(dt) {
 		for (let i = dying.length - 1; i >= 0; i--) {
 			const d = dying[i];
 			d.t += dt;
-			const k = Math.min(1, d.t / 1.2),
+			const k = Math.min(1, d.t / (d.space ? (d.building ? 4.5 : 3.5) : 1.2)),
 				root = d.r.model.root;
 			(d.tint ??= new THREE.Color()).setScalar(1 - 0.7 * Math.min(1, k * 2));
-			if (d.building) {
-				root.position.y = -k * k * 40;
+			// From where it was: aircraft, ships and stations in space fall from their height.
+			d.y0 ??= root.position.y;
+			if (d.space) {
+				// Space: the ship breaks in two and to pieces (breakUp); only the wreck moves on.
+				d.broken ??= breakUp(d);
+				animateBreak(d, k, dt);
+			} else if (d.building) {
+				root.position.y = d.y0 - k * k * 40;
 				root.rotation.z = d.spin * 0.25 * k;
 				root.rotation.x = d.spin * 0.15 * k;
 			} else {
 				root.rotation.z = (d.spin > 0 ? 1 : -1) * Math.min(1, k * 2.5) * 1.3;
-				root.position.y = -k * k * 14;
+				root.position.y = d.y0 * (1 - k * k) - k * k * 14;
 			}
 			if (d.r.scaffold) d.r.scaffold.root.visible = false;
 			if (k >= 1) {
 				world.remove(d.r.group);
+				if (d.broken) endBreak(d);
 				dying.splice(i, 1);
 			}
 		}
@@ -962,6 +1196,12 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		// Under construction: the building rises out of the ground inside a scaffold.
 		r.model.root.scale.set(1, built, 1);
 		if (s.flying) r.model.root.position.y = 90;
+		// Ships of the orbital battle hover over the plane of the battle (space-rules.js).
+		else if (s.ship) r.model.root.position.y = RTS.SPACE?.hover ?? 34;
+		// The mining drone hovers a little lower than the warships.
+		else if (e.type === "worker" && spaceMap()) r.model.root.position.y = DRONE_HOVER;
+		// Stations of the orbital battle float on their platforms (webgl3d/ships-3d.js).
+		else if (building) r.model.root.position.y = stationLift(e, s);
 		if (building && built < 1) {
 			if (!r.scaffold) {
 				r.scaffold = models3d.scenery("scaffold", s.radius);
@@ -1106,6 +1346,111 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 	tracers.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(MAX_TRACERS * 3), 3);
 	tracers.frustumCulled = false;
 	world.add(tracers);
+	// The anamorphic streak of explosions in space (0.135): a thin horizontal flare, bright in the middle.
+	const streakTexture = (() => {
+		const c = document.createElement("canvas");
+		c.width = 256;
+		c.height = 32;
+		const x = c.getContext("2d"),
+			g = x.createLinearGradient(0, 0, 256, 0);
+		g.addColorStop(0, "rgba(255,255,255,0)");
+		g.addColorStop(0.42, "rgba(255,255,255,.35)");
+		g.addColorStop(0.5, "rgba(255,255,255,1)");
+		g.addColorStop(0.58, "rgba(255,255,255,.35)");
+		g.addColorStop(1, "rgba(255,255,255,0)");
+		x.fillStyle = g;
+		x.fillRect(0, 0, 256, 32);
+		x.globalCompositeOperation = "destination-in";
+		const v = x.createLinearGradient(0, 0, 0, 32);
+		v.addColorStop(0, "rgba(0,0,0,0)");
+		v.addColorStop(0.5, "rgba(0,0,0,1)");
+		v.addColorStop(1, "rgba(0,0,0,0)");
+		x.fillStyle = v;
+		x.fillRect(0, 0, 256, 32);
+		return new THREE.CanvasTexture(c);
+	})();
+	// Ship shields in space (0.136): a bubble with a bright rim (Fresnel) and a flare where the shot struck,
+	// hexagonal cells shimmering across it; added light.
+	const bubbles = [],
+		bubbleGeometry = new THREE.IcosahedronGeometry(1, 3),
+		bubbleMaterial = () =>
+			new THREE.ShaderMaterial({
+				uniforms: { uHit: { value: new THREE.Vector3(1, 0, 0) }, uK: { value: 1 } },
+				vertexShader: `varying vec3 vN; varying vec3 vView; varying vec3 vLocal;
+					void main() { vLocal = normalize(position); vN = normalize(mat3(modelMatrix) * normal); vec4 w = modelMatrix * vec4(position, 1.0); vView = normalize(cameraPosition - w.xyz); gl_Position = projectionMatrix * viewMatrix * w; }`,
+				fragmentShader: `varying vec3 vN; varying vec3 vView; varying vec3 vLocal; uniform vec3 uHit; uniform float uK;
+					void main() {
+						float rim = pow(1.0 - abs(dot(normalize(vN), vView)), 2.5);
+						float hit = pow(max(0.0, dot(vLocal, uHit)), 6.0);
+						vec2 h = vLocal.xz * 9.0 + vLocal.y * 4.0;
+						float cells = smoothstep(0.85, 1.0, max(abs(fract(h.x) - 0.5), abs(fract(h.y + h.x * 0.5) - 0.5)) * 2.0);
+						float a = (rim * 0.5 + hit * 1.4 + cells * hit * 0.8) * uK;
+						gl_FragColor = vec4(vec3(0.45, 0.8, 1.0) * a, 1.0);
+					}`,
+				transparent: true,
+				blending: THREE.AdditiveBlending,
+				depthWrite: false,
+				side: THREE.DoubleSide,
+				fog: false,
+			});
+	// Altitude lines of ships in space (see the effects pass): line segments, one pixel wide.
+	const ALT_MAX = 6 * 200,
+		ALT_OWN = new THREE.Color("#3fae8c").multiplyScalar(0.55),
+		ALT_FOE = new THREE.Color("#c0503c").multiplyScalar(0.55),
+		altGeometry = new THREE.BufferGeometry(),
+		altPos = new Float32Array(ALT_MAX * 3),
+		altCol = new Float32Array(ALT_MAX * 3);
+	altGeometry.setAttribute("position", new THREE.BufferAttribute(altPos, 3).setUsage(THREE.DynamicDrawUsage));
+	altGeometry.setAttribute("color", new THREE.BufferAttribute(altCol, 3).setUsage(THREE.DynamicDrawUsage));
+	const altLines = new THREE.LineSegments(altGeometry, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, toneMapped: false }));
+	altLines.frustumCulled = false;
+	altLines.visible = false;
+	world.add(altLines);
+	// Engine trails of ships in space: id → [[x, y, time], …] behind the stern (see the effects pass).
+	// Drawn as one continuous ribbon per ship (all ships in one mesh): turned to face the camera, soft
+	// across (a gradient texture), narrowing and fading out towards its end; added light.
+	const trails = new Map(),
+		TRAIL_LIFE = 0.7,
+		TRAIL_POINTS = 24,
+		TRAIL_MAX = 160 * TRAIL_POINTS * 2,
+		TRAIL_COOL = new THREE.Color("#5fd8ff"),
+		TRAIL_HOT = new THREE.Color("#ff8a3c"),
+		trailGeometry = new THREE.BufferGeometry(),
+		trailPos = new Float32Array(TRAIL_MAX * 3),
+		trailCol = new Float32Array(TRAIL_MAX * 3),
+		trailUv = new Float32Array(TRAIL_MAX * 2),
+		trailIndex = [];
+	for (let k = 0; k < TRAIL_MAX / 2 - 1; k++) {
+		const a = k * 2;
+		trailIndex.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+	}
+	trailGeometry.setAttribute("position", new THREE.BufferAttribute(trailPos, 3).setUsage(THREE.DynamicDrawUsage));
+	trailGeometry.setAttribute("color", new THREE.BufferAttribute(trailCol, 3).setUsage(THREE.DynamicDrawUsage));
+	trailGeometry.setAttribute("uv", new THREE.BufferAttribute(trailUv, 2));
+	trailGeometry.setIndex(trailIndex);
+	const trailTexture = (() => {
+		const c = document.createElement("canvas");
+		c.width = 4;
+		c.height = 64;
+		const x = c.getContext("2d"),
+			g = x.createLinearGradient(0, 0, 0, 64);
+		g.addColorStop(0, "rgba(0,0,0,1)");
+		g.addColorStop(0.5, "rgba(255,255,255,1)");
+		g.addColorStop(1, "rgba(0,0,0,1)");
+		x.fillStyle = g;
+		x.fillRect(0, 0, 4, 64);
+		const t = new THREE.CanvasTexture(c);
+		t.colorSpace = THREE.SRGBColorSpace;
+		return t;
+	})();
+	const trailMesh = new THREE.Mesh(trailGeometry, new THREE.MeshBasicMaterial({ map: trailTexture, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false, toneMapped: false }));
+	trailMesh.frustumCulled = false;
+	trailMesh.visible = false;
+	world.add(trailMesh);
+	const trailA = new THREE.Vector3(),
+		trailDir = new THREE.Vector3(),
+		trailSide = new THREE.Vector3(),
+		trailView = new THREE.Vector3();
 	const beam = { from: new THREE.Vector3(), to: new THREE.Vector3(), dir: new THREE.Vector3(), q: new THREE.Quaternion(), m: new THREE.Matrix4(), x: new THREE.Vector3(1, 0, 0), s: new THREE.Vector3() };
 	function tracer(i, a, b, width, c) {
 		beam.from.set(...a);
@@ -1133,31 +1478,48 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		fireballMaterial = () =>
 			new THREE.ShaderMaterial({
 				uniforms: { uK: { value: 0 }, uSeed: { value: 0 } },
-				vertexShader: `uniform float uK; uniform float uSeed; varying float vNoise; varying vec3 vN; varying vec3 vView;
+				vertexShader: `uniform float uK; uniform float uSeed; varying float vNoise; varying vec3 vN; varying vec3 vView; varying vec3 vObj;
 					${NOISE3}
 					void main() {
 						vec3 p = position;
-						// Billows: big lumps and smaller ones on them, churning upwards.
-						float n = bFbm(p * 2.3 + vec3(uSeed, uSeed * 0.7 - uK * 3.0, uSeed * 1.3));
-						float lumps = abs(bNoise(p * 4.5 + uSeed - uK * 2.0) - 0.5) * 2.0;
+						// Billows: the surface pushed out by turbulence warped by another noise (rolling, curling
+						// lumps instead of a lumpy ball), churning outwards and upwards as it ages.
+						vec3 q = p * 2.1 + vec3(uSeed, uSeed * 0.7 - uK * 2.6, uSeed * 1.3);
+						vec3 warp = vec3(bFbm(q + 3.1), bFbm(q - 1.7), bFbm(q + 7.3)) - 0.5;
+						float n = bFbm(q + warp * 1.6);
+						float lumps = abs(bNoise(p * 5.0 + warp * 2.0 + uSeed - uK * 2.0) - 0.5) * 2.0;
 						vNoise = n;
-						vec4 mv = modelViewMatrix * vec4(p * (0.55 + n * 0.75 + lumps * 0.18), 1.0);
+						vObj = p + warp * 0.6;
+						vec4 mv = modelViewMatrix * vec4(p * (0.5 + n * 0.85 + lumps * 0.22), 1.0);
 						vN = normalize(normalMatrix * normal);
 						vView = normalize(-mv.xyz);
 						gl_Position = projectionMatrix * mv;
 					}`,
-				fragmentShader: `uniform float uK; varying float vNoise; varying vec3 vN; varying vec3 vView;
+				fragmentShader: `uniform float uK; uniform float uSeed; varying float vNoise; varying vec3 vN; varying vec3 vView; varying vec3 vObj;
+					${NOISE3}
+					// Blackbody-like ramp: dark red → red → orange → yellow → white, by temperature 0…1.
+					vec3 blackbody(float t) {
+						return t < 0.25 ? mix(vec3(0.25, 0.02, 0.0), vec3(0.85, 0.12, 0.02), t / 0.25)
+							: t < 0.5 ? mix(vec3(0.85, 0.12, 0.02), vec3(1.0, 0.45, 0.06), (t - 0.25) / 0.25)
+							: t < 0.75 ? mix(vec3(1.0, 0.45, 0.06), vec3(1.0, 0.82, 0.35), (t - 0.5) / 0.25)
+							: mix(vec3(1.0, 0.82, 0.35), vec3(1.0, 0.98, 0.92), (t - 0.75) / 0.25);
+					}
 					void main() {
 						float facing = clamp(dot(normalize(vN), normalize(vView)), 0.0, 1.0);
-						float heat = clamp(1.05 - uK * 1.75 + (vNoise - 0.5) * 1.2 + facing * 0.45 - 0.3, 0.0, 1.0);
-						vec3 col = heat > 0.66 ? mix(vec3(1.0, 0.62, 0.18), vec3(1.0, 0.96, 0.82), (heat - 0.66) / 0.34)
-							: heat > 0.3 ? mix(vec3(0.72, 0.16, 0.03), vec3(1.0, 0.62, 0.18), (heat - 0.3) / 0.36)
-							: mix(vec3(0.16, 0.14, 0.13), vec3(0.72, 0.16, 0.03), smoothstep(0.0, 0.3, heat));
-						float glow = 0.5 + 1.0 * smoothstep(0.35, 0.85, heat);
-						// Breaking up: the cooler, thinner parts go first.
-						// Soft at the silhouette (a volume, not a shell), thinner as it cools.
-						float alpha = smoothstep(uK - 0.12, uK + 0.12, vNoise * 0.9 + facing * 0.35) * (1.0 - smoothstep(0.75, 1.0, uK)) * smoothstep(0.0, 0.45, facing) * (1.0 - uK * 0.45);
-						gl_FragColor = vec4(col * glow, alpha);
+						// Fine turbulence across the surface: the fire is not smooth.
+						float fine = bFbm(vObj * 6.0 + vec3(0.0, -uK * 4.0, uSeed));
+						float n = vNoise * 0.65 + fine * 0.35;
+						// Temperature: hottest at the core seen face-on and early, falling as it ages and expands.
+						float heat = clamp(0.92 - uK * 1.7 + (n - 0.5) * 1.9 + facing * 0.4 - 0.35, 0.0, 1.0);
+						// The cooler parts become smoke: dark, a little brown, lit faintly by the fire inside.
+						float smoke = smoothstep(0.32, 0.08, heat);
+						vec3 fire = blackbody(heat) * (0.5 + 1.1 * pow(heat, 4.0));
+						vec3 soot = mix(vec3(0.05, 0.045, 0.04), vec3(0.22, 0.12, 0.07), smoothstep(0.0, 0.3, heat)) * (0.7 + 0.5 * fine);
+						vec3 col = mix(fire, soot, smoke);
+						// Erosion: holes open in the thin parts first, the fireball breaks into wisps.
+						float erode = smoothstep(uK * 1.05 - 0.15, uK * 1.05 + 0.05, n * 0.95 + facing * 0.25);
+						float alpha = erode * smoothstep(0.0, 0.4, facing) * (1.0 - smoothstep(0.82, 1.0, uK)) * mix(1.0, 0.85, smoke);
+						gl_FragColor = vec4(col, alpha);
 						#include <colorspace_fragment>
 					}`,
 				transparent: true,
@@ -1233,7 +1595,7 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			if (e.hp <= 0 || hidden(e)) continue;
 			const s = TYPES[e.type],
 				ground = heightAt(e.x, e.y),
-				top = !s.speed ? (options.models && models3d.has(e) ? 62 : buildingHeight(s) + 14) : s.flying ? 110 : 30,
+				top = !s.speed ? (options.models && models3d.has(e) ? 62 : buildingHeight(s) + 14) + stationLift(e, s) : s.flying ? 110 : s.ship ? 50 + s.radius : e.type === "worker" && spaceMap() ? 46 : 30,
 				isSelected = selected.has(e.id);
 			if (isSelected) {
 				const ring = pooled(rings, ri++, () => new THREE.Mesh(ringGeometry, new THREE.MeshBasicMaterial({ color: "#8dffc8", transparent: true, opacity: 0.9, depthWrite: false })));
@@ -1266,7 +1628,8 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		for (let i = bi; i < bars.length; i++) bars[i].root.visible = false;
 
 		let si = 0,
-			fi = 0;
+			fi = 0,
+			bi2 = 0;
 		const color = new THREE.Color();
 		for (const ef of game.effects) {
 			if (options.fog && !game.isVisible(ef.x, ef.y)) continue;
@@ -1281,10 +1644,11 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 					d = Math.hypot(dx, dy) || 1,
 					ux = dx / d,
 					uy = dy / d,
-					fromY = heightAt(ef.x, ef.y) + (ef.air ? 88 : 14),
-					toY = heightAt(ef.tx, ef.ty) + (ef.airTarget ? 90 : 10),
+					hover = RTS.SPACE?.hover ?? 34,
+					fromY = heightAt(ef.x, ef.y) + (ef.air ? 88 : ef.ship ? hover + 4 : 14),
+					toY = heightAt(ef.tx, ef.ty) + (ef.airTarget ? 90 : ef.shipTarget ? hover + 4 : spaceMap() ? 26 : 10),
 					bomb = ef.bomb,
-					straight = ef.air || ef.airTarget,
+					straight = ef.air || ef.airTarget || ef.ship || ef.shipTarget,
 					head = Math.min(1, (1 - alpha) * (ef.rocket || bomb ? 1.25 : 1.7)),
 					tail = Math.max(0, head - (ef.rocket ? 0.1 : bomb ? 0.06 : ef.air ? 0.16 : 0.3)),
 					// The muzzle: at the nose of an aircraft, ahead of its centre.
@@ -1301,7 +1665,12 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 				}
 				if (head < 1) {
 					const [hx, hy, hz] = at(head);
-					if (bomb) {
+					// Space: the destroyer's beam stands from muzzle to target and thins out; the other ships fire
+					// fast laser bolts — cyan from the viewer's side, orange from the enemy.
+					const laser = ef.ship && (ef.team === (game.viewer ?? 0) ? "#7ff4ff" : "#ff8a4c");
+					if (laser && ef.lance) tracer(si++, at(0), at(1), 0.8 + 3.2 * alpha, color.set(laser));
+					else if (laser) tracer(si++, at(Math.max(0, head - 0.22)), at(Math.min(1, head * 1.3)), 1.5, color.set(laser));
+					else if (bomb) {
 						tracer(si++, at(tail), [hx, hy, hz], 2.6, color.set("#ff9a50"));
 						fx.shot("trail", hx, hy, hz);
 					} else if (ef.air) for (const side of [-4.5, 4.5]) tracer(si++, at(tail, side), at(head, side), 1.1, color.set("#fff0b0"));
@@ -1313,6 +1682,21 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 					impactsSeen.add(ef);
 					fx.shot("impact", ef.tx, toY, ef.ty, ef.rocket || bomb, { air: ef.airTarget });
 				}
+			} else if (ef.kind === "shieldHit" && ef.ship) {
+				// A ship's shield in space: a bubble round it, flaring where the shot struck, fading.
+				const b = pooled(bubbles, bi2++, () => {
+					const m = new THREE.Mesh(bubbleGeometry, bubbleMaterial());
+					m.renderOrder = 6;
+					world.add(m);
+					return { root: m };
+				});
+				const hover = RTS.SPACE?.hover ?? 34,
+					R = (ef.reach || 20) * 1.2;
+				b.root.visible = true;
+				b.root.position.set(ef.gx, hover + 2, ef.gy);
+				b.root.scale.set(R * 1.25, R * 0.75, R * 1.25);
+				b.root.material.uniforms.uHit.value.set(ef.x - ef.gx, 0, ef.y - ef.gy).normalize();
+				b.root.material.uniforms.uK.value = alpha;
 			} else if (ef.kind === "explosion") {
 				// A churning fireball swelling fast, rising and cooling into smoke; a shock ring running over
 				// the ground; a glare at the start (sparks, debris, dust and smoke come from scene-fx-3d.js,
@@ -1320,42 +1704,189 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 				const blast = pooled(flashes, fi++, () => {
 						const root = new THREE.Group(),
 							ball = new THREE.Mesh(fireballGeometry, fireballMaterial()),
+							balls = [new THREE.Mesh(fireballGeometry, fireballMaterial()), new THREE.Mesh(fireballGeometry, fireballMaterial())],
 							ring = new THREE.Mesh(shockGeometry, shockMaterial()),
-							glare = new THREE.Sprite(new THREE.SpriteMaterial({ map: glareTexture, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
+							glare = new THREE.Sprite(new THREE.SpriteMaterial({ map: glareTexture, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true })),
+							streak = new THREE.Sprite(new THREE.SpriteMaterial({ map: streakTexture, color: "#9fc8ff", blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false, transparent: true, fog: false }));
 						ball.renderOrder = 7;
 						ring.renderOrder = 3;
 						glare.renderOrder = 8;
-						root.add(ball, ring, glare);
-						return { root, ball, ring, glare };
+						streak.renderOrder = 9;
+						for (const b of balls) b.renderOrder = 7;
+						root.add(ball, ...balls, ring, glare, streak);
+						return { root, ball, balls, ring, glare, streak };
 					}),
 					size = ef.size || 40,
 					k = 1 - alpha,
 					ground = heightAt(ef.x, ef.y),
-					base = ground + (ef.air ? 90 : 0),
+					base = ef.space ? ef.lift : ground + (ef.air ? 90 : 0),
 					grow = 1 - Math.pow(1 - Math.min(1, k * 1.6), 3);
 				if (!blast.seeds) blast.seeds = new WeakMap();
 				if (!blast.seeds.has(ef)) blast.seeds.set(ef, Math.random() * 50);
 				blast.root.visible = true;
-				blast.ball.position.set(ef.x, base + size * (ef.air ? 0 : 0.22 + k * 0.45), ef.y);
+				// In space the fireball does not rise (no air): it swells and fades where the ship was.
+				blast.ball.position.set(ef.x, base + (ef.space ? 0 : size * (ef.air ? 0 : 0.22 + k * 0.45)), ef.y);
 				blast.ball.scale.set(size * (0.25 + grow * 0.55), size * (0.25 + grow * 0.55) * (0.85 + k * 0.45), size * (0.25 + grow * 0.55));
 				blast.ball.material.uniforms.uK.value = k;
 				blast.ball.material.uniforms.uSeed.value = blast.seeds.get(ef);
+				// Secondary blasts: smaller fireballs bursting a moment later beside the first (bigger blasts
+				// have both, small ones none) — the explosion reads as a cluster, not a single ball.
+				const seed = blast.seeds.get(ef);
+				blast.balls.forEach((b, j) => {
+					const delay = 0.12 + j * 0.14,
+						kk = (k - delay) / (1 - delay),
+						on = size >= 30 + j * 25 && kk > 0;
+					b.visible = on;
+					if (!on) return;
+					const a = seed * 3.1 + j * 2.4,
+						off = size * (0.35 + j * 0.15),
+						g2 = 1 - Math.pow(1 - Math.min(1, kk * 1.8), 3),
+						s2 = size * (0.55 - j * 0.12) * (0.3 + g2 * 0.6);
+					b.position.set(ef.x + Math.cos(a) * off, base + (ef.space ? Math.sin(a * 1.7) * off * 0.5 : size * (0.15 + j * 0.12 + kk * 0.4)), ef.y + Math.sin(a) * off);
+					b.scale.set(s2, s2 * (0.85 + kk * 0.35), s2);
+					b.material.uniforms.uK.value = Math.min(1, kk * 1.1);
+					b.material.uniforms.uSeed.value = seed + 11 + j * 7;
+				});
+				// Spark streaks: a dozen hot fragments on ballistic arcs (straight in space), drawn as short
+				// streaks along their flight, white-hot to orange, for the first part of the blast.
+				if (k < 0.55)
+					for (let j = 0; j < Math.min(14, 6 + size / 8) && si < MAX_TRACERS - 1; j++) {
+						const h1 = Math.sin(seed * 12.9 + j * 78.2) * 43758.5453,
+							h2 = Math.sin(seed * 4.1 + j * 19.7) * 23421.631,
+							r1 = h1 - Math.floor(h1),
+							r2 = h2 - Math.floor(h2),
+							ang = r1 * Math.PI * 2,
+							up = ef.space ? (r2 - 0.5) * 1.2 : 0.35 + r2 * 0.9,
+							speed = size * (3.5 + r2 * 4),
+							g = ef.space ? 0 : 520,
+							at = (t) => [ef.x + Math.cos(ang) * speed * t, base + size * 0.2 + up * speed * t - 0.5 * g * t * t, ef.y + Math.sin(ang) * speed * t],
+							t1 = Math.min(0.4, k * 0.65),
+							t0 = Math.max(0, t1 - 0.09),
+							fade = 1 - k / 0.55;
+						tracer(si++, at(t0), at(t1), 0.35 + 0.35 * fade, color.setRGB(1, 0.55 + fade * 0.4, 0.2 + fade * 0.5).multiplyScalar(fade * 1.3));
+					}
 				blast.ring.visible = !ef.air;
-				blast.ring.position.set(ef.x, ground + 2, ef.y);
-				blast.ring.scale.setScalar(size * (0.3 + k * 1.6));
+				// Space: the shock wave is a flat disc running out in the plane of the battle, wider and faster.
+				blast.ring.position.set(ef.x, ef.space ? base : ground + 2, ef.y);
+				blast.ring.scale.setScalar(size * (ef.space ? 0.4 + k * 3.2 : 0.3 + k * 1.6));
 				blast.ring.material.uniforms.uK.value = k;
 				const g = Math.max(0, 1 - k / 0.22);
 				blast.glare.visible = g > 0;
 				blast.glare.position.set(ef.x, base + size * 0.3, ef.y);
 				blast.glare.scale.setScalar(size * (1.6 + (1 - g) * 1.2));
-				blast.glare.material.opacity = g * g * 0.7;
+				blast.glare.material.opacity = g * g * 0.3;
+				// Space: an anamorphic streak through the blast, flaring at once and fading over half its life;
+				// a second, warmer and shorter one inside it.
+				const st = ef.space ? Math.max(0, 1 - k / 0.45) : 0;
+				blast.streak.visible = st > 0;
+				if (st > 0) {
+					blast.streak.position.set(ef.x, base + size * 0.1, ef.y);
+					blast.streak.scale.set(size * (9 + (1 - st) * 7), size * 0.32 * (0.4 + st * 0.6), 1);
+					blast.streak.material.opacity = st * st * 0.9;
+				}
 			}
+		}
+		// Space: altitude lines — a faint line from each ship down to its spot on the tactical plane, with a
+		// small cross there, so its place on the map reads at any camera angle. Plain one-pixel lines (not
+		// glowing beams: those swelled into white pegs zoomed out), dim, in the side's colour, fading upward.
+		let lv = 0;
+		if (spaceMap()) {
+			const hover = RTS.SPACE?.hover ?? 34;
+			for (const e of game.entities) {
+				const s = RTS.TYPES[e.type];
+				if (!(s?.ship || e.type === "worker") || e.hp <= 0 || lv + 6 > ALT_MAX || (options.fog && !game.isVisible(e.x, e.y))) continue;
+				const y = (s.ship ? hover : DRONE_HOVER) - 3,
+					c = e.team === (game.viewer ?? 0) ? ALT_OWN : ALT_FOE,
+					r = s.radius * 0.45;
+				const put = (x, h, z, k) => {
+					altPos.set([x, h, z], lv * 3);
+					altCol.set([c.r * k, c.g * k, c.b * k], lv * 3);
+					lv++;
+				};
+				put(e.x, 0.5, e.y, 1);
+				put(e.x, y, e.y, 0.15);
+				put(e.x - r, 0.5, e.y, 0.8);
+				put(e.x + r, 0.5, e.y, 0.8);
+				put(e.x, 0.5, e.y - r, 0.8);
+				put(e.x, 0.5, e.y + r, 0.8);
+			}
+		}
+		altLines.visible = lv > 0;
+		if (lv > 0) {
+			altGeometry.setDrawRange(0, lv);
+			altGeometry.attributes.position.needsUpdate = true;
+			altGeometry.attributes.color.needsUpdate = true;
+		}
+		// Space: engine trails — a ribbon through each ship's last positions behind its stern, from the
+		// drives (full width, bright) to its end (narrow, dark); only while the ship moves.
+		let tv = 0;
+		if (spaceMap()) {
+			const hover = RTS.SPACE?.hover ?? 34;
+			for (const e of game.entities) {
+				const s = RTS.TYPES[e.type];
+				if (!(s?.ship || s?.fighter || e.type === "worker") || e.hp <= 0) continue;
+				const back = s.radius * 0.95,
+					px = e.x - Math.cos(e.angle || 0) * back,
+					py = e.y - Math.sin(e.angle || 0) * back;
+				let t = trails.get(e.id);
+				if (!t) trails.set(e.id, (t = []));
+				const last = t[t.length - 1];
+				if (!last || Math.hypot(px - last[0], py - last[1]) > 5) t.push([px, py, clock]);
+				else last[2] = Math.max(last[2], clock - TRAIL_LIFE * 0.5);
+				while (t.length > TRAIL_POINTS || (t.length && clock - t[0][2] > TRAIL_LIFE)) t.shift();
+				if (t.length < 2 || (options.fog && !game.isVisible(e.x, e.y)) || tv + t.length * 2 + 4 > TRAIL_MAX) continue;
+				const hot = e.faction === "dominion" || (!e.faction && e.team !== (game.viewer ?? 0)) ? TRAIL_HOT : TRAIL_COOL,
+					y = s.fighter ? 90 : s.ship ? hover : DRONE_HOVER,
+					width = s.radius * (s.ship || s.fighter ? 0.55 : 0.4),
+					bright = s.ship || s.fighter ? 1 : 0.55;
+				// Separate it from the strip before: a collapsed black pair on its first point (zero area).
+				for (let k = 0; k < 2; k++) {
+					trailPos.set([t[t.length - 1][0], y, t[t.length - 1][1]], tv * 3);
+					trailCol.set([0, 0, 0], tv * 3);
+					tv++;
+				}
+				// Newest point first (at the drives), each one a pair of vertices across the ribbon.
+				for (let k = t.length - 1, n = 0; k >= 0; k--, n++) {
+					const p = t[k],
+						q = t[Math.max(0, k - 1)],
+						r = t[Math.min(t.length - 1, k + 1)],
+						age = Math.min(1, (clock - p[2]) / TRAIL_LIFE),
+						f = (1 - age) * (1 - n / t.length);
+					trailA.set(p[0], y, p[1]);
+					trailDir.set(r[0] - q[0], 0, r[1] - q[1]);
+					if (trailDir.lengthSq() < 1e-4) trailDir.set(Math.cos(e.angle || 0), 0, Math.sin(e.angle || 0));
+					trailView.subVectors(camera.position, trailA);
+					trailSide.crossVectors(trailDir, trailView).normalize().multiplyScalar(width * (0.25 + 0.75 * f));
+					const c = color.copy(hot).multiplyScalar(f * f * 1.6 * bright);
+					for (const side of [1, -1]) {
+						trailPos.set([trailA.x + trailSide.x * side, trailA.y + trailSide.y * side, trailA.z + trailSide.z * side], tv * 3);
+						trailCol.set([c.r, c.g, c.b], tv * 3);
+						trailUv.set([n / (t.length - 1), side > 0 ? 1 : 0], tv * 2);
+						tv++;
+					}
+				}
+				// And after it: a collapsed black pair on its last point.
+				for (let k = 0; k < 2; k++) {
+					trailPos.set([trailA.x, trailA.y, trailA.z], tv * 3);
+					trailCol.set([0, 0, 0], tv * 3);
+					tv++;
+				}
+			}
+			if (trails.size > 400 || (clock * 4) % 20 < 0.3) for (const id of trails.keys()) if (!game.get(id)) trails.delete(id);
+		}
+		trailMesh.visible = tv > 0;
+		if (tv > 0) {
+			trailGeometry.setDrawRange(0, Math.max(0, (tv / 2 - 1) * 6));
+			trailGeometry.attributes.position.needsUpdate = true;
+			trailGeometry.attributes.color.needsUpdate = true;
+			trailGeometry.attributes.uv.needsUpdate = true;
 		}
 		tracers.count = si;
 		tracers.visible = si > 0;
 		tracers.instanceMatrix.needsUpdate = true;
 		tracers.instanceColor.needsUpdate = true;
 		for (let i = fi; i < flashes.length; i++) flashes[i].root.visible = false;
+		for (let i = bi2; i < bubbles.length; i++) bubbles[i].root.visible = false;
 	}
 
 	// Sun height (-1 midnight … 1 noon) and its east–west position (-1 … 1). One shadowed light is the
@@ -1374,6 +1905,14 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
 		return t * t * (3 - 2 * t);
 	};
+	const SPACE_LIGHT = { zenith: new THREE.Color("#02040a"), horizon: new THREE.Color("#070b1a"), sun: new THREE.Color("#fff3e2"), ambient: new THREE.Color("#7f92c4"), bounce: new THREE.Color("#5a4232") };
+	const SOLAR_GLOW = new THREE.Color("#ffc070"),
+		PLANET_GLOW = new THREE.Color("#ff9a5c"),
+		PLANET_FROM = new THREE.Vector3(0.15, -0.85, -0.5).normalize();
+	const spaceMap = () => !!RTS.MISSIONS[game?.missionId]?.space,
+		DRONE_HOVER = 22;
+	// How high a building floats in space: its platform's underside clears the plane (0 elsewhere).
+	const stationLift = (e, s) => (spaceMap() && !["wall", "gate"].includes(e.type) ? s.radius * 0.8 + 10 : 0);
 	function light(elevation, across) {
 		const day = Math.max(0, Math.min(1, elevation * 3 + 0.35)),
 			colors = sky.palette(elevation);
@@ -1404,6 +1943,23 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		// Distance haze and the clear colour: the horizon, a little towards the zenith.
 		scene.background.copy(colors.horizon).lerp(colors.zenith, 0.2);
 		scene.fog.color.copy(scene.background);
+		// Space (the orbital battle): a hard white sun from the side, black sky, dim blue ambient and the
+		// warm light of the gas giant below.
+		if (spaceMap()) {
+			skyState.zenith.copy(SPACE_LIGHT.zenith);
+			skyState.horizon.copy(SPACE_LIGHT.horizon);
+			skyState.sunlight.copy(SPACE_LIGHT.sun);
+			dir.set(-0.62, 0.58, 0.52).normalize();
+			skyState.sunDir.copy(dir);
+			sun.color.copy(SPACE_LIGHT.sun);
+			// Vacuum: a hard sun, little ambient light — deep shadows on the hulls.
+			sun.intensity = 3.1;
+			hemi.color.copy(SPACE_LIGHT.ambient);
+			hemi.groundColor.copy(SPACE_LIGHT.bounce);
+			hemi.intensity = 0.4;
+			scene.background.copy(SPACE_LIGHT.horizon);
+			scene.fog.color.copy(SPACE_LIGHT.horizon);
+		}
 		// The sun and its shadow box follow the camera.
 		// The shadow box sits a little ahead of the view centre (more of the board lies beyond it than in front).
 		const ahead = rig.distance * 0.22 * Math.cos(rig.pitch);
@@ -1441,13 +1997,28 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		}
 		const twin = sky.sun2(skyState.sunDir, sun2Dir);
 		sun2.intensity = twin ? 0.5 * smooth(-0.04, 0.2, twin.y) * (1 - 0.6 * haze) : 0;
+		// Space, solar storm: the sun blazes and warm light floods the scene in surges.
+		if (spaceMap() && state.solar > 0) {
+			sun.intensity *= 1 + 0.9 * state.solar;
+			hemi.color.lerp(SOLAR_GLOW, 0.45 * state.solar);
+			hemi.intensity += 0.3 * state.solar;
+		}
+		// Space: the gas giant below throws a warm glow up onto the undersides of ships and stations.
+		if (spaceMap()) {
+			sun2.color.copy(PLANET_GLOW);
+			sun2.intensity = 0.75;
+			sun2.target.position.set(rig.x, 0, rig.y);
+			sun2.position.copy(sun2.target.position).addScaledVector(PLANET_FROM, 2500);
+		}
 		if (twin) {
 			sun2.target.position.set(rig.x, 0, rig.y);
 			sun2.position.copy(sun2.target.position).addScaledVector(twin, 2500);
 		}
 		sky.update({ camera, time: clock, ...skyState, aurora, haze, hazeColor: HAZE[state.kind] || HAZE.rain, cover, flash: state.flash || 0, flashColor: FLASH });
 		sunFx.update({ camera, imageRays: quality.cinema && quality.atmo, sunDir: skyState.sunDir, sunColor: skyState.sunlight, e: skyState.e, haze, mist: groundWeather.mistLevel.value, focus: rig, span: Math.max(1600, Math.min(4200, rig.distance * 2.2)) });
-		sky.clouds(clock, options.cloudShadows === false ? 0 : 0.4 * (1 - haze * 0.6));
+		sky.clouds(clock, options.cloudShadows === false || spaceMap() ? 0 : 0.4 * (1 - haze * 0.6));
+		sky.mesh.visible = !spaceMap();
+		space3d.update({ camera, time: clock, sun: skyState.sunDir });
 	}
 
 	function placeCamera() {
@@ -1458,8 +2029,14 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		// Distance haze, the far plane and the sun's shadow box follow the zoom (up to the whole map).
 		scene.fog.near = rig.distance * 1.6;
 		scene.fog.far = rig.distance * 4.5;
-		if (Math.abs(camera.far - rig.distance * 5) > rig.distance * 0.5) {
-			camera.far = rig.distance * 5;
+		// Space: the planet lies thousands of units below — a far view and no distance haze.
+		const far = spaceMap() ? 60000 : rig.distance * 5;
+		if (spaceMap()) {
+			scene.fog.near = 1e6;
+			scene.fog.far = 2e6;
+		}
+		if (Math.abs(camera.far - far) > rig.distance * 0.5) {
+			camera.far = far;
 			camera.updateProjectionMatrix();
 		}
 		const extent = Math.max(460, Math.min(3000, rig.distance * 0.9)),
@@ -1522,7 +2099,7 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		const o = typeof SceneFX !== "undefined" ? SceneFX.options : {},
 			level = { high: 0, medium: 1, low: 2 },
 			terrainLevel = level[o.terrain] ?? 0,
-			key = [o.terrain, o.particles, o.shadows, o.lights, o.water, o.scars, o.relief, o.flashes, o.cinema, o.ao, o.bloom, o.pbr, o.reflect, o.atmo, o.surface].join("|");
+			key = [o.terrain, o.particles, o.shadows, o.lights, o.water, o.scars, o.relief, o.flashes, o.cinema, o.ao, o.bloom, o.pbr, o.reflect, o.atmo, o.surface, o.dof].join("|");
 		if (key === qualityKey) return;
 		const first = qualityKey === null,
 			reliefChanged = !first && quality.relief !== (o.relief !== false),
@@ -1545,9 +2122,11 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			reflect: o.water !== false && o.reflect !== false && terrainLevel < 2,
 			atmo: o.cinema !== false && o.atmo !== false,
 			surface: o.surface !== false,
+			pbr: o.pbr !== false,
+			dof: o.dof !== false,
 		});
 		models3d.setSurface(quality.surface);
-		groundWeather.pbrOn.value = o.pbr !== false ? 1 : 0;
+		groundWeather.pbrOn.value = o.pbr !== false && !spaceMap() ? 1 : 0;
 		postSamples = quality.samples;
 		post.setSize(host.clientWidth * renderer.getPixelRatio(), host.clientHeight * renderer.getPixelRatio(), postSamples);
 		sun.castShadow = o.shadows !== false;
@@ -1576,6 +2155,7 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		magma: { light: [1.08, 0.97, 0.88], shadow: [1.0, 0.94, 0.95], saturation: 1.08 },
 		frozenhive: { light: [1.0, 1.0, 1.05], shadow: [0.96, 0.95, 1.08], saturation: 1.0 },
 		derelict: { light: [1.04, 0.99, 0.94], shadow: [0.95, 0.97, 1.03], saturation: 0.98 },
+		space: { light: [1.02, 1.0, 0.97], shadow: [0.88, 0.94, 1.14], saturation: 1.12 },
 	};
 	const NIGHT_SHADOW = new THREE.Color(0.86, 0.94, 1.14),
 		NIGHT_LIGHT = new THREE.Color(0.97, 1.0, 1.06),
@@ -1609,11 +2189,14 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			haze: scene.fog.color,
 			base: groundWeather.mistBand.value.x,
 			// The weather has its own haze (scene fog, dust and mist layers): not added here again.
-			density: 0.0005 + groundWeather.mistLevel.value * 0.0025 * (1 - haze),
+			// No air in space: no height fog, no light shafts.
+			density: spaceMap() ? 0 : 0.0005 + groundWeather.mistLevel.value * 0.0025 * (1 - haze),
 			falloff: 1 / 80,
-			rays: 0.55 * smooth(-0.02, 0.12, skyState.e) * (1 - haze),
+			rays: spaceMap() ? 0 : 0.55 * smooth(-0.02, 0.12, skyState.e) * (1 - haze),
 		});
-		post.render(scene, camera, { ...grade, atmosphere: quality.atmo ? atmo : null, ao: quality.ao, bloom: quality.bloom, aoRadius: Math.max(18, Math.min(40, rig.distance * 0.03)), aoStrength: 1.3, aoFade: rig.distance * 2, bloomStrength: 0.3 + 0.15 * night, view: globalThis.post3dView || 0 });
+		post.render(scene, camera, { ...grade, atmosphere: quality.atmo ? atmo : null, ao: quality.ao, bloom: quality.bloom, aoRadius: Math.max(18, Math.min(40, rig.distance * 0.03)), aoStrength: 1.3, aoFade: rig.distance * 2, bloomStrength: spaceMap() ? 0.5 : 0.3 + 0.15 * night,
+			// Depth of field (tilt-shift) in space: strongest close in (a miniature), gentle zoomed out.
+			dof: quality.dof && spaceMap() ? 0.15 + 0.35 * smooth(2600, 900, rig.distance) : 0, view: globalThis.post3dView || 0 });
 	}
 
 	// Reflections in the water (0.127): the scene seen from under the surface of the flat water nearest the
@@ -1726,10 +2309,12 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 				models3d.setSurface(quality.surface !== false, new THREE.Color(SOILS[m.biome] || SOILS.dust));
 			}
 			sky.setTheme(RTS.MISSIONS[game.missionId]?.theme);
+			space3d.setGame(game);
 			applyQuality(this, true);
 			canvasRenderer.setGame(game);
 			for (const r of records.values()) world.remove(r.group);
 			for (const d of dying) world.remove(d.r.group);
+			for (const d of dying) if (d.broken) endBreak(d);
 			dying.length = 0;
 			clearSigns();
 			records.clear();
@@ -1737,7 +2322,7 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			buildTerrain();
 			fx.setGame(game, heights);
 			life.setGame(game);
-			scatter.setGame(game, quality.scatter);
+			scatter.setGame(game, spaceMap() ? 0 : quality.scatter);
 			objectives.setGame(game);
 		},
 		setSelection(ids) {
@@ -1767,7 +2352,7 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 					// Destroyed (an explosion where it stood): it collapses for a moment; otherwise it simply
 					// leaves (a unit boarding a transport, a building taken down).
 					const boom = r.model && r.group.visible && game.effects.some((ef) => ef.kind === "explosion" && Math.abs(ef.x - r.group.position.x) < 4 && Math.abs(ef.y - r.group.position.z) < 4);
-					if (boom) dying.push({ r, t: 0, building: !!r.building, spin: (id % 7) / 7 - 0.5 });
+					if (boom) dying.push({ r, t: 0, building: !!r.building, spin: (id % 7) / 7 - 0.5, space: spaceMap() });
 					else world.remove(r.group);
 				}
 			collapse(dt);
@@ -1789,7 +2374,8 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			}
 			placeCamera();
 			const night = sunOverride?.night ?? 1 - day;
-			models3d.setNight(night);
+			// Space: the lights of hulls and stations burn as at night against the dark.
+			models3d.setNight(spaceMap() ? 0.8 : night);
 			const dawnMist = Math.max(0, 1 - Math.abs(skyState.e - 0.05) / 0.18) * 0.45;
 			weatherState = fx.update(dt, {
 				game,
@@ -1814,6 +2400,7 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			groundWeather.snowCover.value = weatherState.snowCover || 0;
 			groundWeather.rainLevel.value = weatherState.kind === "rain" ? weatherState.intensity || 0 : 0;
 			groundWeather.sandLevel.value = weatherState.kind === "sand" ? weatherState.intensity || 0 : 0;
+			groundWeather.ionLevel.value = weatherState.kind === "ion" ? weatherState.intensity || 0 : 0;
 			{
 				const k = weatherState.intensity || 0;
 				groundWeather.mistLevel.value = Math.max(dawnMist, night * 0.3, weatherState.kind === "rain" ? k * 0.6 : weatherState.kind === "snow" ? k * 0.5 : 0);
@@ -1822,7 +2409,7 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			fogUniforms.fogTime.value = clock;
 			groundWeather.skyTint.value.copy(scene.background);
 			// Models: snow settling on their tops, a sheen when wet (models-detail-3d.js paint).
-			models3d.setWeather(weatherState.snowCover || 0, weatherState.wetness || 0);
+			models3d.setWeather(weatherState.snowCover || 0, weatherState.wetness || 0, weatherState.sandCover || 0, clock);
 			watchList();
 			life.fadeTall(covers, dt);
 			drawReflection();

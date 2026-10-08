@@ -314,6 +314,8 @@ export function createSceneLife3D(THREE, { world, heightAt, models3d, hiddenLaye
 	}
 	function update(time, { fog, colors }) {
 		const biome = RTS.MISSIONS[game.missionId]?.biome,
+			// Space (the orbital battle): no animals or birds; the asteroid fields drift slowly.
+			space = !!RTS.MISSIONS[game.missionId]?.space,
 			visible = (x, y) => !fog || game.isVisible(x, y);
 		for (const r of records.values()) r.seen = false;
 
@@ -332,8 +334,8 @@ export function createSceneLife3D(THREE, { world, heightAt, models3d, hiddenLaye
 			(RTS.TYPES[e.type]?.speed ? movers : statics).push(e);
 		}
 		const booms = (game.effects || []).filter((f) => f.kind === "explosion" || f.kind === "shot");
-		for (const b of brains.values()) think(b, dt, time, movers, statics, booms);
-		for (const b of brains.values()) {
+		if (!space) for (const b of brains.values()) think(b, dt, time, movers, statics, booms);
+		if (!space) for (const b of brains.values()) {
 			if (!visible(b.x, b.y)) continue;
 			const r = make("animal|" + b.id + "|" + b.kind, () => models3d.scenery("animal", b.kind, biome));
 			r.holder.position.set(b.x, heightAt(b.x, b.y), b.y);
@@ -341,7 +343,7 @@ export function createSceneLife3D(THREE, { world, heightAt, models3d, hiddenLaye
 			r.model.update({ id: b.id }, { time, stride: b.stride, moving: b.v > 3, graze: b.graze, alert: b.alert, aim: b.look, recoil: 0 });
 		}
 		// Birds (PlanetArt.fauna): eighteen crossing the map, flying along +x.
-		for (let i = 0; i < 18; i++) {
+		for (let i = 0; i < (space ? 0 : 18); i++) {
 			const x = (i * 317 + time * (20 + (i % 3) * 4)) % game.W,
 				y = 100 + ((i * 197) % (game.H - 200)) + Math.sin(time * 0.12 + i) * 35;
 			if (!visible(x, y)) continue;
@@ -406,7 +408,7 @@ export function createSceneLife3D(THREE, { world, heightAt, models3d, hiddenLaye
 			const piece = marks.get(i),
 				r = piece
 					? make(`landmark|${i}|${piece}`, () => models3d.scenery("landmark", piece, o.w, o.h), piece === "eosBeacon" || piece === "nadirCitadel")
-					: make("obstacle|" + i + "|" + o.x + "|" + o.y, () => models3d.scenery("obstacle", o.kind || "rock", o.w, o.h, biome, i + 1), o.kind === "spire" || o.kind === "grove"),
+					: make("obstacle|" + i + "|" + o.x + "|" + o.y, () => models3d.scenery("obstacle", space ? "asteroids" : o.kind || "rock", o.w, o.h, biome, i + 1), o.kind === "spire" || o.kind === "grove"),
 				cx = o.x + o.w / 2,
 				cy = o.y + o.h / 2;
 			if (!r.placed) {
@@ -414,6 +416,7 @@ export function createSceneLife3D(THREE, { world, heightAt, models3d, hiddenLaye
 				r.holder.position.set(cx, heightAt(cx, cy), cy);
 			}
 			if (piece) r.model.update({ lit, progress: held }, { time });
+			else if (space) r.holder.rotation.y = time * (0.012 + (i % 3) * 0.006) * (i % 2 ? 1 : -1);
 		});
 		// Deposits (ore, gas, crystals): one model per stage (art.js layouts), swapped when the stage
 		// changes; shown once explored, like on the 2D board.
@@ -426,7 +429,7 @@ export function createSceneLife3D(THREE, { world, heightAt, models3d, hiddenLaye
 			for (const o of list || []) {
 				if (!explored(o)) continue;
 				const n = stage(o),
-					r = make(`deposit|${kind}|${o.id}|${n}`, () => models3d.scenery("deposit", kind, n));
+					r = make(`deposit|${kind}|${o.id}|${n}${space ? "|space" : ""}`, () => models3d.scenery("deposit", kind, n, space));
 				r.holder.position.set(o.x, heightAt(o.x, o.y), o.y);
 			}
 		// Relays: owner's colour and capture only while in sight or own (as on the 2D board).
@@ -436,7 +439,7 @@ export function createSceneLife3D(THREE, { world, heightAt, models3d, hiddenLaye
 				color = shown.owner === -1 ? "#d4bf86" : colors[shown.owner] || "#d4bf86",
 				// Act II chapter VI: the control nodes of the Hefajstos complex carry their machines.
 				machine = game.missionId === "colony6" ? node.name : null,
-				r = make(`relay|${i}|${color}|${node.hill ? 1 : 0}|${machine || ""}`, () => models3d.scenery("relay", color, !!node.hill, machine));
+				r = make(`relay|${i}|${color}|${node.hill ? 1 : 0}|${machine || ""}${space ? "|space" : ""}`, () => models3d.scenery("relay", color, !!node.hill, machine, space));
 			if (!r.placed) {
 				r.placed = true;
 				const base = heightAt(node.x, node.y);

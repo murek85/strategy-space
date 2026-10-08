@@ -16,7 +16,7 @@ const LoadingScreen = (() => {
 		"Mgła wojny skrywa wroga — zwiadowcy i drony widzą najdalej.",
 		"Przed atakiem dowódcy AI nasłuch czasem przechwytuje jego rozkazy — słuchaj łączności.",
 	];
-	const WORLD = { dust: ["#c69a5c", "#2a1c12", "#ffd29a"], ice: ["#d9e8f0", "#3a5060", "#bfe6ff"], ash: ["#7a5a50", "#1a100e", "#ff9a6a"] };
+	const WORLD = { dust: ["#c69a5c", "#2a1c12", "#ffd29a"], ice: ["#d9e8f0", "#3a5060", "#bfe6ff"], ash: ["#7a5a50", "#1a100e", "#ff9a6a"], space: ["#c49a6c", "#22140c", "#9cd0ff"] };
 	const STAGES = ["Wyjście z nadprzestrzeni…", "Ustalanie orbity…", "Generowanie terenu…", "Rozmieszczanie jednostek…", "Synchronizacja łączności…", "Gotowe"];
 
 	function backdrop(c, k, t, o, arrive) {

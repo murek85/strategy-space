@@ -31,7 +31,7 @@ Artyleria (JED-01), osłony, linia strzału i utrzymywanie pozycji są opisane w
 
 ## Większe kierunki na później
 
-- Bitwy kosmiczne i transport między planetami — osobny zakres mechanik; propozycja.
+- Bitwy kosmiczne i transport między planetami — osobny zakres mechanik; pierwszy krok gotowy: [bitwa na orbicie](BITWA_NA_ORBICIE.md) (0.130). Dalej: modele stacji, lotniskowiec, mgławice i asteroidy wpływające na walkę, desant z orbity, transport w kampanii.
 - Bohaterowie — propozycja. Trzy frakcje o różnym stylu istnieją od 0.39.
 - Przeniesienie do Unity/C# — odłożone na życzenie użytkownika, bez terminu.
 

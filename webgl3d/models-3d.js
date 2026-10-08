@@ -14,6 +14,7 @@ import { createSwarm3D } from "./swarm-detail-3d.js";
 import { createAct3 } from "./act3-detail-3d.js";
 import { createAct2 } from "./act2-detail-3d.js";
 import { createAct1 } from "./act1-detail-3d.js";
+import { createShips3D } from "./ships-3d.js";
 
 export function createModels3D(THREE) {
 	const geo = {
@@ -186,8 +187,18 @@ export function createModels3D(THREE) {
 		colossus: (k, r) => swarmWalker(k, r, { legs: 2, plates: true, twin: true, hump: true }),
 	};
 
+	// ---- Ships of the orbital battle: webgl3d/ships-3d.js ----
+	const ships = createShips3D(THREE, { tools: detail.tools, group });
 	const BUILDERS = {
 		...detail.builders,
+		corvette: ships.corvette,
+		frigate: ships.frigate,
+		lancer: ships.lancer,
+		cruiser: ships.cruiser,
+		carrier: ships.carrier,
+		fighter: ships.fighter,
+		pirate: ships.pirate,
+		pirateBase: ships.pirateBase,
 		uplink: (k, r) => act3.orbital(k, r),
 		beast: (k, r) => natureKit.beast(k, r),
 		frostTusk: (k, r) => natureKit.frostTusk(k, r),
@@ -249,6 +260,9 @@ export function createModels3D(THREE) {
 			stem: std("#cfc6b0", { roughness: 0.8, metalness: 0 }),
 		};
 	glowing.push([prop.egg, prop.egg.emissiveIntensity]);
+	const ASTEROID = std("#5e5853", { roughness: 0.95, metalness: 0.05 }),
+		ASTEROID_DARK = std("#3b3734", { roughness: 1, metalness: 0.05 }),
+		ASTEROID_ICE = std("#9fb0bc", { roughness: 0.55, metalness: 0.05 });
 	// Detailed props: the crashed ship, debris, carcass, ruins, resin, eggs, plant, islands, unit wrecks.
 	const props = createProps3D(THREE, { tools: detail.tools, nature: natureKit, group, materials: { prop, scenery, std } });
 	function obstacle(kind, w, h, biome, seed) {
@@ -297,7 +311,18 @@ export function createModels3D(THREE) {
 		else if (kind === "resin") props.resin(root, w, h, rnd);
 		else if (kind === "eggs") props.eggs(root, w, h, rnd, biome === "ice");
 		else if (kind === "processor") props.processor(root, w, h, rnd);
-		else {
+		else if (kind === "asteroids") {
+			// Space (the orbital battle): a field of rocks floating at different heights over the plane of the
+			// battle, big ones in the middle, a halo of small ones; dark, cratered stone with a few ice-bright faces.
+			const count = Math.max(8, Math.min(26, Math.round((w * h) / 2600)));
+			for (let n = 0; n < count; n++) {
+				const [x, z] = n ? spot(n, 0.85) : [0, 0],
+					edge = Math.hypot(x / rx, z / rz),
+					s = small * (n ? 0.07 + rnd(n + 9) * 0.13 : 0.24) * (1 - edge * 0.4),
+					y = 26 + rnd(n + 40) * 70 + (1 - edge) * 20;
+				rockPart(root, n % 4 === 3 ? ASTEROID_ICE : n % 2 ? ASTEROID : ASTEROID_DARK, [s * (1 + rnd(n + 3) * 0.6), s * (0.8 + rnd(n + 4) * 0.5), s * (0.9 + rnd(n + 5) * 0.4)], [x, y, z], n * 7 + seed);
+			}
+		} else {
 			// Mesa: a few boulders on the plateau. Rock and outcrop: a tight pile of big boulders over most of
 			// the raised ground, the biggest in the middle, so the rock reads as rock, not as a smooth mound.
 			if (kind === "mesa")
@@ -416,6 +441,78 @@ export function createModels3D(THREE) {
 		}
 		return { root, update() {} };
 	}
+	// ---- Space (the orbital battle, 0.132): deposits float over the plane of the battle ----
+	const SPACE_DEP = {
+		gas: std("#b27aee", { emissive: "#8a48d8", emissiveIntensity: 1.3, roughness: 0.4, transparent: true, opacity: 0.5 }),
+		gasBlue: std("#7aa8f0", { emissive: "#3f70d8", emissiveIntensity: 1.1, roughness: 0.4, transparent: true, opacity: 0.38 }),
+		gasCore: std("#f2dcff", { emissive: "#e0b8ff", emissiveIntensity: 2.2, roughness: 0.3 }),
+		ice: std("#c6d6e2", { roughness: 0.45, metalness: 0.05 }),
+		buoy: std("#a9b4b8", { roughness: 0.4, metalness: 0.65 }),
+		panel: std("#1f3a5c", { roughness: 0.25, metalness: 0.55, emissive: "#0a1a30", emissiveIntensity: 0.4 }),
+		strut: std("#2c3437", { roughness: 0.5, metalness: 0.75 }),
+	};
+	glowing.push([SPACE_DEP.gas, SPACE_DEP.gas.emissiveIntensity], [SPACE_DEP.gasBlue, SPACE_DEP.gasBlue.emissiveIntensity], [SPACE_DEP.gasCore, SPACE_DEP.gasCore.emissiveIntensity]);
+	// Ore: a cluster of asteroids with metal veins and nuggets; gas: a glowing nebula pocket with a bright
+	// heart and drifting ice; crystals: a small asteroid bristling with golden shards. Fewer and smaller
+	// as the deposit empties (stage n: 0 exhausted … 6 full).
+	function spaceDeposit(kind, n) {
+		const root = new THREE.Group(),
+			k = n ? 0.55 + (n / 6) * 0.45 : 0.35,
+			H = 30;
+		if (kind === "ore") {
+			const rocks = [[0, 0, 0, 15], [-22, 6, 8, 8], [20, -4, 10, 7], [8, 14, -18, 6], [-12, -6, -16, 5], [26, 10, -10, 4]].slice(0, n ? 1 + Math.ceil(n * 0.8) : 4);
+			rocks.forEach(([x, y, z, s], i) => {
+				const r = s * (n ? k : 0.5);
+				rockPart(root, i % 2 ? DEP.oreDark : DEP.ore, [r * 1.2, r, r * 1.05], [x * k, H + y, z * k], i * 5 + 2);
+				if (n && s >= 7)
+					for (let j = 0; j < 3; j++) part(root, "octa", DEP.vein, [r * 0.25, r * 0.32, r * 0.2], [x * k + (j - 1) * r * 0.4, H + y + r * 0.75, z * k + (j % 2 ? 1 : -1) * r * 0.25], [j, i + j, 0.4]);
+			});
+		} else if (kind === "gas") {
+			if (n) {
+				part(root, "sphere", SPACE_DEP.gas, [26 * k, 18 * k, 24 * k], [0, H, 0]);
+				part(root, "sphere", SPACE_DEP.gasBlue, [20 * k, 14 * k, 18 * k], [-12 * k, H + 4, 8 * k]);
+				part(root, "sphere", SPACE_DEP.gas, [14 * k, 10 * k, 14 * k], [14 * k, H - 3, -10 * k]);
+				part(root, "sphere", SPACE_DEP.gasCore, [6 * k, 6 * k, 6 * k], [0, H, 0]);
+			}
+			// Ice and dust caught in the cloud.
+			for (let i = 0; i < 7; i++) {
+				const a = i * 2.3,
+					d = 22 + (i % 3) * 8;
+				rockPart(root, SPACE_DEP.ice, [1.6 + (i % 2), 1.3, 1.5], [Math.cos(a) * d, H - 8 + (i % 4) * 5, Math.sin(a) * d], i + 11);
+			}
+		} else {
+			rockPart(root, DEP.oreDark, [11, 8, 10], [0, H - 4, 0], 7);
+			if (n) {
+				const shards = [[0, 0, 14, 4, 0], [-6, 4, 11, 3, -0.4], [6, -3, 10, 3, 0.4], [-3, -7, 8, 2.5, 0.25], [7, 6, 7, 2.5, -0.3], [-8, -3, 6, 2, 0.6], [2, 8, 6, 2, -0.5]];
+				shards.slice(0, n + 1).forEach(([x, z, h, w, lean], i) => {
+					const g = natureKit.crystals(root, DEP.crystal, [x, z], h * k + w, w, lean, i + 1);
+					g.position.y += H + 2;
+				});
+			}
+		}
+		return { root, update() {} };
+	}
+	// The relay in space: a buoy over the plane — a hexagonal core, a ring in the owner's colour, solar
+	// panels on two arms, antennae and a beacon; the ring and panels turn (returned as the "dish").
+	function buoy(root, light) {
+		const b = group(root, [0, 44, 0]),
+			turn = group(b);
+		const { mesh, cyl, ball, box, pipe, torusGeo } = detail.tools;
+		cyl(b, SPACE_DEP.buoy, 7, 12, [0, 0, 0], { segs: 6 });
+		cyl(b, SPACE_DEP.strut, 4, 5, [0, -8, 0], { segs: 6, top: 6 });
+		ball(b, light, 2.6, [0, -11.5, 0]);
+		mesh(turn, torusGeo(15, 1.8, 24, "y"), light);
+		mesh(turn, torusGeo(15, 0.7, 24, "y"), SPACE_DEP.strut, [0, -1.6, 0]);
+		for (const side of [-1, 1]) {
+			pipe(turn, SPACE_DEP.strut, [side * 7, 0, 0], [side * 22, 0, 0], 0.7, 6);
+			box(turn, SPACE_DEP.panel, [16, 0.6, 10], [side * 31, 0, 0], null, 0.2);
+			for (let k = -1; k <= 1; k++) box(turn, SPACE_DEP.strut, [0.4, 0.8, 10.2], [side * 31 + k * 5, 0, 0], null, 0.05);
+		}
+		pipe(b, SPACE_DEP.strut, [0, 6, 0], [0, 22, 0], 0.5, 5);
+		pipe(b, SPACE_DEP.strut, [0, 6, 0], [7, 18, 4], 0.35, 5);
+		ball(b, light, 1.6, [0, 23, 0]);
+		return turn;
+	}
 	// Relay: a hexagonal plinth, a tripod mast with a dish, a light in the owner's colour and a capture
 	// ring that fills with the capturing side's colour.
 	const ringColors = new Map(),
@@ -423,14 +520,14 @@ export function createModels3D(THREE) {
 			if (!ringColors.has(color)) ringColors.set(color, std(color, { emissive: color, emissiveIntensity: 0.6 }));
 			return ringColors.get(color);
 		};
-	function relay(color, hill = false, name = null) {
+	function relay(color, hill = false, name = null, space = false) {
 		const root = new THREE.Group(),
 			light = ringOf(color),
 			SEGMENTS = 24,
 			ring = [],
 			ground = [];
 		// The station: base, cabinets, lattice mast, the owner's beacon, a turning dish (act1-detail-3d.js).
-		const dish = act1.relayStation(root, light);
+		const dish = space ? buoy(root, light) : act1.relayStation(root, light);
 		// The capture zone (radius 95): a dashed circle in the owner's colour, flat on the ground.
 		for (let i = 0; i < 36; i++) {
 			const a = (i / 36) * Math.PI * 2;
@@ -505,8 +602,8 @@ export function createModels3D(THREE) {
 			const model = obstacle(kind, w, h, biome, seed);
 			return ["rock", "outcrop", "mesa"].includes(kind) ? model : baked(["obstacle", kind, w, h, biome, seed].join("|"), model);
 		},
-		deposit: (kind, n) => baked("deposit|" + kind + "|" + n, deposit(kind, n)),
-		relay: (color, hill, name) => baked(["relay", color, !!hill, name || ""].join("|"), relay(color, hill, name)),
+		deposit: (kind, n, space = false) => (space ? baked("spaceDeposit|" + kind + "|" + n, spaceDeposit(kind, n)) : baked("deposit|" + kind + "|" + n, deposit(kind, n))),
+		relay: (color, hill, name, space = false) => baked(["relay", color, !!hill, name || "", space ? "space" : ""].join("|"), relay(color, hill, name, space)),
 		scaffold,
 		// Act I landmarks on the rock outcrops of its maps (webgl3d/scene-life-3d.js picks the outcrop).
 		landmark: (piece, w, h) => baked(["landmark", piece, w, h].join("|"), act1.landmark(piece, w, h)),
@@ -524,6 +621,8 @@ export function createModels3D(THREE) {
 	function builderOf(e) {
 		const s = RTS.TYPES[e.type];
 		if (!s) return null;
+		// Space (the orbital battle): the worker is a mining drone, whatever its faction.
+		if (e.type === "worker" && RTS.MISSIONS[mission]?.space) return ships.miner;
 		if (e.faction === "swarm" && !s.threat && e.type !== "wall" && e.type !== "gate") {
 			const gate = swarmGate(e);
 			if (gate === "heart") return (k, r) => act3.heart(k, r, "#" + k.team.color.getHexString());
@@ -542,16 +641,29 @@ export function createModels3D(THREE) {
 		// A fresh model for an entity; its look depends on type, side and faction only.
 		create(e, teamColors) {
 			const s = RTS.TYPES[e.type],
-				model = builderOf(e)(kit(e.team, e.faction, e.tint, teamColors), s.radius);
+				k = kit(e.team, e.faction, e.tint, teamColors),
+				model = builderOf(e)(k, s.radius),
+				// Space (the orbital battle): buildings stand on a floating platform (webgl3d/ships-3d.js).
+				station = !s.speed && !s.threat && !s.pirate && RTS.MISSIONS[mission]?.space && !["wall", "gate"].includes(e.type);
+			if (station) {
+				// The platform's thruster flames flicker with the building's own animation.
+				const plumes = ships.platform(model.root, k, s.radius, e.type),
+					own = model.update;
+				model.update = (en, info) => {
+					own?.call(model, en, info);
+					plumes.update(info.time);
+				};
+			}
 			model.key = [e.type, e.team, e.faction || "", e.tint || ""].join("|");
+			const miner = e.type === "worker" && RTS.MISSIONS[mission]?.space;
 			// Static parts merged per group and material (models-detail-3d.js), shared by every entity of the look.
-			return bake(model, model.key + "|" + (swarmGate(e) || ""), e);
+			return bake(model, model.key + "|" + (swarmGate(e) || "") + (station ? "|station" : "") + (miner ? "|miner" : ""), e);
 		},
 		types: () => Object.keys(BUILDERS),
 		// The mission on the board (act III's special Swarm gates); the renderer sets it with the game.
 		setMission: (id) => (mission = id),
-		// Weather on the models: snow cover and wetness, 0…1 (the renderer, from weather-3d.js).
-		setWeather: (snow, wet) => bake.setWeather(snow, wet),
+		// Weather on the models: snow cover, wetness and settled sand, 0…1, and the clock (rivulets).
+		setWeather: (snow, wet, sand = 0, time = 0) => bake.setWeather(snow, wet, sand, time),
 		// Surface detail (plates, worn edges, dust) on or off, and the planet's dust colour (THREE.Color).
 		setSurface: (on, soil) => bake.setSurface(on, soil),
 		setNight,

@@ -108,7 +108,7 @@
 			me = g.humans?.[0] ?? 0;
 		if (g.entities.some((e) => e.type === "hq" && e.hp > 0 && e.team !== me && e.team !== 2 && !g.allied?.(me, e.team) && g.factionFor?.(e.team)?.key === "swarm")) return "game:hive";
 		if (m.theme === "derelict") return "game:wreck";
-		if (m.theme === "lumen" || m.theme === "skyfall") return "game:lumen";
+		if (m.theme === "lumen" || m.theme === "skyfall" || m.theme === "space") return "game:lumen";
 		if (m.theme === "magma" || g.missionId === "colony6") return "game:forge";
 		return "game:" + (m.sunny ? "sun" : m.biome);
 	}
@@ -402,7 +402,20 @@
 	function updateHud() {
 		const weather = game.weather,
 			forecast = game.forecast;
-		if ($("weather-status"))
+		// Space (the orbital battle): no weather and no night.
+		if ($("weather-status") && game.space)
+			$("weather-status").textContent =
+				"✦ ORBITA · " +
+				(weather.intensity > 0.05
+					? weather.name +
+						(weather.kind === "ion"
+							? " · celność −" + Math.round(weather.intensity * 30 * (game.upgrades.guidance ? 0.25 : 1)) + "%" + (game.ionStorm?.() ? " · osłony nie odnawiają się" : "")
+							: weather.kind === "solar"
+								? " · promieniowanie wyczerpuje osłony, nie odnawiają się"
+								: " · uderzenia odłamków" + (game.upgrades.meteorShield ? " (osłony −80%)" : " · zbadaj osłony przeciwmeteorytowe"))
+					: "Spokojnie") +
+				(forecast ? " · " + (weather.remaining > 0 ? "Koniec za " + Math.ceil(weather.remaining) + " s" : weather.name + " za " + Math.ceil(weather.until) + " s") : game.stormOutlook?.near ? " · " + weather.name + " nadciąga · ok. " + Math.ceil(game.stormOutlook.until) + " s" : " · Prognoza: zbadaj monitoring w laboratorium");
+		else if ($("weather-status"))
 			$("weather-status").textContent =
 				`${game.night > 0.5 ? "☾ NOC" : "☀ DZIEŃ"} · ${weather.intensity > 0.05 ? weather.name + " · ruch −" + Math.round(weather.intensity * 35 * (game.upgrades.mobility ? 0.25 : 1)) + "% · celność −" + Math.round(weather.intensity * 30 * (game.upgrades.guidance ? 0.25 : 1)) + "%" : "Spokojna pogoda"}${forecast ? " · " + (weather.remaining > 0 ? "Koniec za " + Math.ceil(weather.remaining) + " s" : weather.name + " " + (game.stormOutlook?.from || "") + " za " + Math.ceil(weather.until) + " s") : game.stormOutlook?.near ? " · " + weather.name + " nadciąga " + game.stormOutlook.from + " · ok. " + Math.ceil(game.stormOutlook.until) + " s" : " · Prognoza: zbadaj monitoring w laboratorium"}`;
 
@@ -1304,7 +1317,8 @@
 				eyebrow: m.training ? "SZKOLENIE WOLNYCH KOLONII" : m.campaign ? "KAMPANIA · ODZYSKANY ŚWIT" : "OPERACJA NIEZALEŻNA",
 				title: m.name,
 				planet: m.planet,
-				biome: m.biome,
+				// The orbital battle arrives at the gas giant (loading-screen.js "space").
+				biome: m.space ? "space" : m.biome,
 				reduced: !!menu?.reduced,
 			});
 		requestAnimationFrame(() =>
@@ -1322,7 +1336,7 @@
 		const ok = loadGame(key);
 		if (ok && typeof LoadingScreen !== "undefined") {
 			const m = MISSIONS[game.missionId] || {},
-				screen = LoadingScreen.show({ eyebrow: "WCZYTANY ZAPIS · " + timeLabel(game.time), title: m.name, planet: m.planet, biome: m.biome, reduced: !!menu?.reduced, minTime: 1.2 });
+				screen = LoadingScreen.show({ eyebrow: "WCZYTANY ZAPIS · " + timeLabel(game.time), title: m.name, planet: m.planet, biome: m.space ? "space" : m.biome, reduced: !!menu?.reduced, minTime: 1.2 });
 			afterFrames(3, () => screen.done());
 		}
 		return ok;
@@ -1406,6 +1420,8 @@
 	}
 	function buy(type) {
 		if (!started || finished) return;
+		// In space the keys of the ground classes order the ships of the same class (space-rules.js).
+		if (game.space) type = { trooper: "corvette", rocket: "frigate", tank: "lancer", heavy: "cruiser" }[type] || type;
 		act("enqueue", type, preferredProducer(type));
 		updateHud();
 	}
@@ -1511,6 +1527,7 @@
 	const RESEARCH_FIELDS = {
 		colony: "KOLONIA",
 		meteorology: "POGODA",
+		meteorShield: "ORBITA",
 		guidance: "POGODA",
 		mobility: "POGODA",
 		weapons: "WALKA",
@@ -1772,6 +1789,21 @@
 			["drone", "Dron zwiadowczy", "Zwiad z powietrza · koszary", "✢", ""],
 			["saboteur", "Sabotażyści", "Wyłączają wrogie budynki · koszary", "☍", ""],
 		);
+		// Orbital battle (space-rules.js): ships instead of ground units, orbital descriptions of the stations.
+		if (game.space) {
+			const ground = new Set(["trooper", "rocket", "tank", "heavy", "artillery", "raider", "grenadier", "flamer", "destroyer", "sentinel", "skyguard", "saboteur", "crawler", "spitter", "colossus", "transport", "serviceRover"]);
+			groups.army = [
+				["corvette", "Korweta", "Szybka · roje na niszczyciele i krążowniki · stocznia lekka", "➤", "Q"],
+				["frigate", "Fregata", "Łowca korwet i myśliwców · stocznia lekka", "◆", "W"],
+				["lancer", "Niszczyciel", "Działo liniowe na duże okręty · stocznia ciężka", "➹", "E"],
+				["cruiser", "Krążownik", "Silne osłony, burzy stacje · wymaga laboratorium", "⬢", "Y"],
+				["carrier", "Lotniskowiec", "Wypuszcza do 4 myśliwców · wymaga laboratorium", "✈", ""],
+				...groups.army.filter(([type]) => !ground.has(type)),
+			];
+			groups.research.push(["meteorShield", "Osłony przeciwmeteorytowe", "−80% obrażeń od deszczu asteroid", "☄", ""]);
+			const SPACE_DESC = { barracks: "Korwety i fregaty", factory: "Niszczyciele i krążowniki", turret: "Obrona stacji", depot: "Rozładunek rudy z asteroid", extractor: "Na obłoku mgławicy · wymaga drona" };
+			groups.build = groups.build.map((g) => (SPACE_DESC[g[0]] ? [g[0], g[1], SPACE_DESC[g[0]], g[3], g[4]] : g));
+		}
 		// Research: the one under way first, then what can be started, what is locked, and what is done.
 		if (tabName === "research") {
 			const rank = (kind) => ({ working: 0, paused: 0, ready: 1, poor: 1, locked: 2, done: 3 })[game.researchStatus(kind).state] ?? 2;
@@ -2631,7 +2663,7 @@
 				relays: `${game.nodes.filter((n) => n.owner === me).length} / ${game.nodes.length}`,
 				objectives: objectives.slice(0, 5).map((o) => ({ text: o.text, done: !!o.done, failed: !!o.failed, secondary: !!o.secondary })),
 				attack: nextAttack != null && nextAttack > 0 && nextAttack < 3600 ? timeLabel(nextAttack) : null,
-				sky: `${game.night > 0.5 ? "☾ Noc" : "☀ Dzień"} · ${weather?.intensity > 0.05 ? weather.name : "spokojna pogoda"}`,
+				sky: game.space ? "✦ Orbita · " + (weather?.intensity > 0.05 ? weather.name.toLowerCase() : "spokojnie") : `${game.night > 0.5 ? "☾ Noc" : "☀ Dzień"} · ${weather?.intensity > 0.05 ? weather.name : "spokojna pogoda"}`,
 				line: game.act2?.radio?.at(-1) || null,
 			};
 		},

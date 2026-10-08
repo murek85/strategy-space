@@ -147,6 +147,8 @@
 					"guidance",
 					"mobility",
 					"precision",
+					// Orbit only (space-rules.js); locked elsewhere.
+					...(root.RTS?.RESEARCH?.meteorShield ? ["meteorShield"] : []),
 				].map(r),
 			},
 		];

@@ -1040,8 +1040,14 @@ kbd {
 	border: 1px solid rgba(160, 220, 210, 0.25);
 	box-shadow: 0 30px 90px #000a, inset 0 1px 0 rgba(255, 255, 255, 0.06);
 	max-height: calc(100% - 16px);
+	/* Scrolls only on very short boards, without bars (the card is laid out to fit). */
+	overflow-x: hidden;
 	overflow-y: auto;
+	scrollbar-width: none;
 	animation: end-rise 0.7s ease-out both;
+}
+.briefing.end-report::-webkit-scrollbar {
+	display: none;
 }
 .briefing.end-report:not(.with-epilogue) {
 	width: 560px;
@@ -1091,7 +1097,8 @@ kbd {
 }
 .end-report .briefing-controls {
 	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+	/* The five numbers in one row on the usual card. */
+	grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
 	gap: 8px;
 	border: none;
 }

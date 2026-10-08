@@ -551,16 +551,18 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 				if (ef.kind !== "shot" || ef.life < ef.maxLife * 0.6 || Math.abs(ef.x - focus.x) > span * 0.6 || Math.abs(ef.y - focus.y) > span * 0.6 || hidden({ x: ef.x, y: ef.y, team: -1 })) continue;
 				lights.point(ef.x, ef.y, heightAt(ef.x, ef.y) + (ef.air ? 88 : 16), { color: "#ffc070", power: night * (ef.rocket ? 260 : 140), range: ef.rocket ? 90 : 60 });
 			}
-		// Fires on burning buildings and vehicles flicker over their surroundings at night.
-		if (night > 0.05)
+		// Fires on burning buildings and vehicles flicker over their surroundings — strongly at night, but
+		// by day too (0.138).
+		{
 			for (const e of game.entities) {
 				const s = TYPES[e.type];
 				if (!s || e.hp <= 0 || s.flying || e.team === 2 || e.constructionLeft > 0 || hidden(e) || Math.abs(e.x - focus.x) > span || Math.abs(e.y - focus.y) > span) continue;
 				const building = !s.speed;
 				if (!(building || s.radius >= 16) || e.hp / e.maxHp >= (building ? 0.3 : 0.2)) continue;
 				const flick = 0.75 + 0.25 * Math.sin(clockNow * 17 + e.id) * Math.sin(clockNow * 7.3 + e.id * 2);
-				lights.point(e.x, e.y, heightAt(e.x, e.y) + Math.min(60, s.radius * 0.8) + 6, { color: "#ff8a3a", power: night * flick * (building ? 560 : 300), range: s.radius * 2.6 + 80 });
+				lights.point(e.x, e.y, heightAt(e.x, e.y) + Math.min(60, s.radius * 0.8) + 6, { color: "#ff8a3a", power: (0.35 + night) * flick * (building ? 560 : 300), range: s.radius * 2.6 + 80 });
 			}
+		}
 		// A working drill flickers on the deposit at night (warm on ore, golden on crystal).
 		if (night > 0.05)
 			for (const m of miners)
@@ -571,7 +573,7 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 			const k = 1 - ef.life / ef.maxLife,
 				f = Math.max(0, 1 - k / 0.55),
 				size = ef.size || 40;
-			if (f > 0) lights.point(ef.x, ef.y, heightAt(ef.x, ef.y) + (ef.air ? 90 : size * 0.4), { color: "#ffb35c", power: f * f * size * (25 + night * 15), range: size * 5 + 80 });
+			if (f > 0) lights.point(ef.x, ef.y, ef.space ? ef.lift : heightAt(ef.x, ef.y) + (ef.air ? 90 : size * 0.4), { color: "#ffb35c", power: f * f * size * (25 + night * 15), range: size * 5 + 80 });
 		}
 		lights.end(focus, span, true);
 		pools.visible = pools.count > 0;
@@ -582,6 +584,8 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 	// thinning out behind (only flying units that move, near the view).
 	const lastAir = new Map();
 	function airTrails(game, dt, hidden, focus, span) {
+		// Space: no air for vapour trails (craft there leave engine ribbons, three-renderer.js).
+		if (RTS.MISSIONS[game.missionId]?.space) return;
 		const seen = new Set();
 		for (const e of game.entities) {
 			const s = TYPES[e.type];
@@ -623,11 +627,11 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 		geometry.setAttribute("rgba", new THREE.BufferAttribute(colors, 4));
 		geometry.setAttribute("misc", new THREE.BufferAttribute(misc, 3));
 		const material = new THREE.ShaderMaterial({
-			uniforms: { map: { value: softDot }, scale: { value: 500 }, light: { value: 1 } },
+			uniforms: { map: { value: softDot }, scale: { value: 500 }, light: { value: 1 }, time: { value: 0 } },
 			vertexShader: `attribute float size; attribute vec4 rgba; attribute vec3 misc; varying vec4 vC; varying vec3 vM; uniform float scale;
 				void main() { vC = rgba; vM = misc; vec4 mv = modelViewMatrix * vec4(position, 1.0); gl_PointSize = size * scale / -mv.z; gl_Position = projectionMatrix * mv; }`,
 			fragmentShader: additive
-				? `uniform sampler2D map; uniform float light; varying vec4 vC; varying vec3 vM;
+				? `uniform sampler2D map; uniform float light; uniform float time; varying vec4 vC; varying vec3 vM;
 				${PUFF}
 				void main() {
 					vec2 q = gl_PointCoord;
@@ -641,13 +645,21 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 						a = pow(1.0 - smoothstep(0.0, 0.6, r), 2.0) + spikes * 0.9;
 						col = mix(vC.rgb, vec3(1.0), pow(1.0 - smoothstep(0.0, 0.35, r), 2.0));
 					} else if (vM.z > 0.5) {
-						// A flame tongue: narrow at the top, flickering edges; white-hot → orange → red with age.
-						vec2 d = vec2((q.x - 0.5) * 2.0, (q.y - 0.5) * 2.0);
-						float w = mix(0.95, 0.25, smoothstep(-0.9, 0.9, -d.y));
-						float n = pNoise(vec2(q.x * 4.0 + vM.y * 13.0, q.y * 3.0 + vM.x * 6.0 + vM.y * 7.0));
-						a = smoothstep(w, w * 0.35, abs(d.x) + (n - 0.5) * 0.35) * smoothstep(1.0, 0.55, length(d * vec2(0.8, 1.0)));
-						col = vM.x < 0.3 ? mix(vec3(1.0, 0.82, 0.45), vec3(0.95, 0.45, 0.12), vM.x / 0.3) : mix(vec3(0.95, 0.45, 0.12), vec3(0.5, 0.09, 0.03), (vM.x - 0.3) / 0.7);
-						col *= vC.rgb;
+						// A flame tongue (0.138): turbulence rising through it (two octaves of noise scrolling up),
+						// wide at the base and narrowing to a swaying, broken tip; white-yellow at the base,
+						// orange in the middle, dark red at the tip, cooler as the particle ages.
+						float h = 1.0 - q.y;
+						float t = time * 2.6 + vM.y * 40.0;
+						float n = pNoise(vec2(q.x * 3.5 + vM.y * 17.0, q.y * 3.0 + t)) * 0.65 + pNoise(vec2(q.x * 8.0 - vM.y * 9.0, q.y * 7.0 + t * 1.7)) * 0.35;
+						float sway = (pNoise(vec2(vM.y * 7.0, t * 0.6)) - 0.5) * 0.55 * h * h;
+						float x = abs((q.x - 0.5) * 2.0 + sway + (n - 0.5) * 0.45 * h);
+						float w = mix(0.78, 0.06, pow(h, 0.85)) * (0.75 + 0.5 * n);
+						a = smoothstep(w, w * 0.25, x) * smoothstep(1.0, 0.7 - n * 0.25, h) * smoothstep(0.0, 0.14, h);
+						float heat = clamp((1.0 - h) * 1.15 - vM.x * 0.55 + (n - 0.5) * 0.3, 0.0, 1.0);
+						col = heat > 0.66 ? mix(vec3(1.0, 0.62, 0.16), vec3(1.0, 0.95, 0.75), (heat - 0.66) / 0.34)
+							: heat > 0.33 ? mix(vec3(0.85, 0.2, 0.04), vec3(1.0, 0.62, 0.16), (heat - 0.33) / 0.33)
+							: mix(vec3(0.3, 0.04, 0.01), vec3(0.85, 0.2, 0.04), heat / 0.33);
+						col *= vC.rgb * (0.55 + 0.75 * heat * heat);
 					} else a = texture2D(map, q).a;
 					a *= vC.a;
 					if (a < 0.01) discard;
@@ -659,7 +671,7 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 					vec2 q = gl_PointCoord;
 					float a;
 					float shade = 1.0;
-					if (vM.z > 0.5) a = smoothstep(0.5, 0.3, length(q - 0.5));
+					if (vM.z > 0.5 && vM.z < 1.5) a = smoothstep(0.5, 0.3, length(q - 0.5));
 					else {
 						// A puff: a ragged round edge from noise turned by the seed, billowing as it ages;
 						// lit from above, darker underneath.
@@ -671,7 +683,15 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 					}
 					a *= vC.a;
 					if (a < 0.01) discard;
-					gl_FragColor = vec4(vC.rgb * light * shade, a);
+					vec3 col = vC.rgb * light * shade;
+					// Fire-lit smoke (style 2, from explosions): while young it glows orange from the fire inside,
+					// most at its lower side and its dense middle.
+					if (vM.z > 1.5) {
+						float young = 1.0 - smoothstep(0.0, 0.35, vM.x);
+						float inner = smoothstep(0.45, 0.0, length(q - vec2(0.5, 0.62)));
+						col += vec3(1.0, 0.42, 0.12) * young * (0.6 + 1.6 * inner) * (1.0 - smoothstep(0.0, 1.0, 1.0 - q.y) * 0.5);
+					}
+					gl_FragColor = vec4(col, a);
 				}`,
 			transparent: true,
 			depthWrite: false,
@@ -740,11 +760,98 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 		fire = particleSystem(2500, true);
 	const rand = (a, b) => a + Math.random() * (b - a);
 	const seenExplosions = new WeakSet();
+	// Fire on burning buildings and vehicles (0.138): a few steady fire spots on the roof and the edges of the
+	// building (more as it is wrecked further), fixed by its id, each pouring out flame tongues every frame
+	// with a hot glow at its root, embers rising, and fire-lit smoke above. In space (no air) the flames do
+	// not rise: short jets burst from torn modules in every direction, with sparks, and no smoke.
+	const spotOf = (e, i, n, r, top) => {
+		const h = Math.sin(e.id * 12.9898 + i * 78.233) * 43758.5453,
+			u = h - Math.floor(h),
+			a = (i / n) * TAU + e.id * 2.39 + u * 0.8;
+		return [Math.cos(a) * r * (0.18 + u * 0.3), top * (0.55 + u * 0.45), Math.sin(a) * r * (0.18 + u * 0.3)];
+	};
+	function burnFires(game, dt, hidden) {
+		const space = !!RTS.MISSIONS[game.missionId]?.space;
+		for (const e of game.entities) {
+			if (e.hp <= 0 || e.constructionLeft > 0 || e.team === 2) continue;
+			const s = TYPES[e.type];
+			if (!s || s.flying) continue;
+			const f = e.hp / e.maxHp,
+				building = !s.speed;
+			if (!(building ? f < 0.3 : s.radius >= 16 && f < 0.2) || hidden(e)) continue;
+			// How hard it burns: from 0 (just caught) to 1 (nearly gone).
+			const fierce = Math.min(1, ((building ? 0.3 : 0.2) - f) / (building ? 0.25 : 0.17)),
+				ground = heightAt(e.x, e.y) + (space ? (building ? s.radius * 0.8 + 10 : s.ship ? 34 : 22) : 0),
+				top = building ? Math.min(60, s.radius * 0.8) : 16,
+				n = building ? Math.max(2, Math.min(6, Math.round(s.radius / 14 + fierce * 2))) : 1 + Math.round(fierce),
+				size = (building ? s.radius * 0.34 : s.radius * 0.5) * (0.8 + 0.5 * fierce);
+			for (let i = 0; i < n; i++) {
+				const [ox, oy, oz] = spotOf(e, i, n, s.radius, top),
+					x = e.x + ox,
+					y = ground + oy,
+					z = e.y + oz;
+				if (space) {
+					// Venting: a short jet in a direction of its own, and sparks.
+					if (Math.random() < dt * 10 * density) {
+						const a = rand(0, TAU),
+							u = rand(-0.6, 0.8),
+							sp = rand(40, 80);
+						fire.spawn({ x, y, z, vx: Math.cos(a) * sp, vy: u * sp, vz: Math.sin(a) * sp, lift: 0, drag: 2.5, life: 0, max: rand(0.25, 0.45), s0: size * 0.9, s1: size * 0.3, r: 1, g: 1, b: 1, a: 0.8, style: 1 });
+					}
+					if (Math.random() < dt * 6 * density) {
+						const a = rand(0, TAU),
+							sp = rand(60, 140);
+						fire.spawn({ x, y, z, vx: Math.cos(a) * sp, vy: rand(-60, 60), vz: Math.sin(a) * sp, lift: 0, life: 0, max: rand(0.4, 0.8), s0: rand(1.5, 2.5), s1: 0.5, r: 1, g: 0.8, b: 0.5, a: 1 });
+					}
+					continue;
+				}
+				// Flame tongues pouring up, a hot glow at the root, now and then an ember.
+				if (Math.random() < dt * (14 + 10 * fierce) * density)
+					fire.spawn({ x: x + rand(-2, 2), y, z: z + rand(-2, 2), vx: rand(-3, 3) + 4, vy: rand(16, 30), vz: rand(-3, 3), life: 0, max: rand(0.5, 0.9), s0: size * rand(0.9, 1.25), s1: size * 0.55, r: 1, g: 1, b: 1, a: 0.42, style: 1 });
+				if (Math.random() < dt * 8 * density) fire.spawn({ x, y: y + 2, z, vx: 0, vy: 3, vz: 0, lift: 0, life: 0, max: rand(0.25, 0.4), s0: size * 0.9, s1: size * 0.6, r: 1, g: 0.5, b: 0.15, a: 0.3 });
+				if (Math.random() < dt * (1.5 + 2 * fierce) * density)
+					fire.spawn({ x, y: y + size * 0.5, z, vx: rand(-6, 12), vy: rand(30, 70), vz: rand(-6, 6), drag: 0.6, lift: -10, life: 0, max: rand(1.2, 2.2), s0: rand(1.4, 2.4), s1: 0.5, r: 1, g: rand(0.5, 0.7), b: 0.15, a: 1 });
+				if (Math.random() < dt * (2 + 2 * fierce) * density)
+					smoke.spawn({ x: x + rand(-3, 3), y: y + size * 1.1, z: z + rand(-3, 3), vx: rand(8, 16), vy: rand(20, 34), vz: rand(1, 6), drag: 0.15, life: 0, max: rand(2.6, 4.2), s0: size * 1.1, s1: size * 4.5, r: 0.16, g: 0.155, b: 0.15, a: 0.55, style: 2 });
+			}
+		}
+	}
+	// Burning debris of explosions: chunks flying on their arcs (straight in space), each leaving a trail of
+	// small flames and, on a planet, smoke behind it; they burn out or hit the ground.
+	const burners = [];
+	function updateBurners(dt) {
+		for (let i = burners.length - 1; i >= 0; i--) {
+			const b = burners[i];
+			b.life += dt;
+			b.vy -= b.g * dt;
+			const px = b.x,
+				py = b.y,
+				pz = b.z;
+			b.x += b.vx * dt;
+			b.y += b.vy * dt;
+			b.z += b.vz * dt;
+			const left = 1 - b.life / b.max;
+			if (left <= 0 || (!b.space && b.y < b.ground + 1)) {
+				burners[i] = burners[burners.length - 1];
+				burners.pop();
+				continue;
+			}
+			// Flames all along the way flown this frame (an unbroken trail at any frame rate).
+			const steps = Math.min(8, Math.max(1, Math.ceil(Math.hypot(b.x - px, b.y - py, b.z - pz) / (b.size * 0.8))));
+			for (let k = 1; k <= steps; k++) {
+				const f = k / steps;
+				fire.spawn({ x: px + (b.x - px) * f, y: py + (b.y - py) * f, z: pz + (b.z - pz) * f, vx: rand(-4, 4), vy: rand(-4, 4), vz: rand(-4, 4), lift: 0, life: -dt * (1 - f), max: rand(0.25, 0.45), s0: b.size * (1.2 + left), s1: b.size * 0.4, r: 1, g: 0.5 + left * 0.3, b: 0.15, a: 0.95 * Math.min(1, left * 2) });
+			}
+			if (!b.space && Math.random() < dt * 40)
+				smoke.spawn({ x: b.x, y: b.y, z: b.z, vx: rand(-3, 3), vy: rand(4, 12), vz: rand(-3, 3), drag: 0.8, life: 0, max: rand(1.4, 2.4), s0: b.size * 1.2, s1: b.size * 5, r: 0.22, g: 0.21, b: 0.2, a: 0.45 * left, style: 2 });
+		}
+	}
 	let emitClock = 0;
 	function damageAndExplosions(game, dt, hidden, scars = true) {
 		emitClock += dt;
 		// Emitters run 10 times a second; each spawn carries its own randomness.
-		if (emitClock >= 0.1 && scars) {
+		// (No damage smoke in space: there is no air to carry it; burnFires vents sparks there.)
+		if (emitClock >= 0.1 && scars && !RTS.MISSIONS[game.missionId]?.space) {
 			emitClock = 0;
 			for (const e of game.entities) {
 				if (e.hp <= 0 || e.constructionLeft > 0 || hidden(e)) continue;
@@ -763,16 +870,10 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 						const k = burning ? rand(0.16, 0.26) : rand(0.36, 0.46);
 						smoke.spawn({ x: e.x + rand(-s.radius, s.radius) * 0.4, y: ground + top, z: e.y + rand(-s.radius, s.radius) * 0.4, vx: rand(8, 18), vy: rand(18, 34), vz: rand(1, 6), drag: 0.15, life: 0, max: rand(2.8, 4.6), s0: s.radius * 0.55, s1: s.radius * (burning ? 3 : 2.6), r: k, g: k * 0.97, b: k * 0.94, a: burning ? 0.62 : 0.5 });
 					}
-				if (burning) {
-					// Flame tongues licking up from a few spots, and embers rising out of them.
-					for (let n = 0; n < 3; n++)
-						if (Math.random() < 0.95 * density)
-							fire.spawn({ x: e.x + rand(-s.radius, s.radius) * 0.35, y: ground + top * 0.7, z: e.y + rand(-s.radius, s.radius) * 0.35, vx: rand(-3, 3), vy: rand(18, 36), vz: rand(-3, 3), life: 0, max: rand(0.45, 0.85), s0: s.radius * 0.42, s1: s.radius * 0.12, r: 1, g: 1, b: 1, a: 0.42, style: 1 });
-					if (Math.random() < 0.6 * density)
-						fire.spawn({ x: e.x + rand(-s.radius, s.radius) * 0.3, y: ground + top, z: e.y + rand(-s.radius, s.radius) * 0.3, vx: rand(-6, 10), vy: rand(30, 60), vz: rand(-6, 6), drag: 0.6, life: 0, max: rand(1, 1.8), s0: rand(1.5, 2.6), s1: 0.6, r: 1, g: rand(0.5, 0.7), b: 0.15, a: 1 });
-				}
+				// (The flames themselves come every frame from steady fire spots: burnFires below.)
 			}
 		}
+		if (scars) burnFires(game, dt, hidden);
 		// Fresh craters smoulder: thin smoke curling up and now and then a spark, for about 25 s.
 		for (const k of game.craters || []) {
 			const age = game.time - k.born;
@@ -790,8 +891,36 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 			const size = ef.size || 40,
 				scale = size / 50,
 				ground = heightAt(ef.x, ef.y),
-				y = ground + (ef.air ? 90 : 8),
+				y = ef.space ? ef.lift : ground + (ef.air ? 90 : 8),
 				n = (count) => Math.ceil(count * density * Math.min(1.6, 0.6 + scale * 0.5));
+			// Space (0.136): no air, no gravity — sparks fly out in every direction and burn out, hull
+			// fragments drift away tumbling for a few seconds, burning pieces glow and fade; no smoke, no dust.
+			if (ef.space) {
+				const ball = (sp) => {
+					const a = rand(0, TAU),
+						u = rand(-1, 1),
+						r = Math.sqrt(1 - u * u);
+					return [Math.cos(a) * r * sp, u * sp * 0.6, Math.sin(a) * r * sp];
+				};
+				for (let i = 0; i < n(40); i++) {
+					const [vx, vy, vz] = ball(rand(80, 260) * scale);
+					fire.spawn({ x: ef.x, y, z: ef.y, vx, vy, vz, lift: 0, life: 0, max: rand(0.3, 0.8), s0: rand(3, 6), s1: 0.6, r: 1, g: rand(0.8, 0.95), b: rand(0.5, 0.75), a: 1 });
+				}
+				for (let i = 0; i < n(14); i++) {
+					const [vx, vy, vz] = ball(rand(20, 70) * scale);
+					fire.spawn({ x: ef.x, y, z: ef.y, vx, vy, vz, lift: 0, drag: 0.15, life: rand(-0.1, 0), max: rand(2, 3.5), s0: rand(2.5, 4), s1: 0.8, r: 1, g: rand(0.45, 0.6), b: 0.15, a: 0.95 });
+				}
+				for (let i = 0; i < Math.ceil(n(5)); i++) {
+					const [vx, vy, vz] = ball(rand(60, 150) * scale);
+					burners.push({ x: ef.x, y, z: ef.y, vx, vy, vz, life: 0, max: rand(1.2, 2.2), g: 0, size: rand(2, 3) * Math.max(1, scale), space: true });
+				}
+				for (let i = 0; i < n(16); i++) {
+					const [vx, vy, vz] = ball(rand(25, 90) * scale),
+						c = rand(0.12, 0.22);
+					smoke.spawn({ x: ef.x, y, z: ef.y, vx, vy, vz, lift: 0, drag: 0.05, life: 0, max: rand(3, 5), s0: rand(2, 4.5) * Math.max(1, scale), s1: rand(1.5, 3), r: c, g: c * 0.98, b: c * 1.05, a: 1, style: 1 });
+				}
+				continue;
+			}
 			// Sparks: fast, white-yellow, falling.
 			for (let i = 0; i < n(26); i++) {
 				const a = rand(0, TAU),
@@ -813,7 +942,13 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 			}
 			// The smoke column: dark puffs welling up one after another, growing.
 			for (let i = 0; i < n(12); i++)
-				smoke.spawn({ x: ef.x + rand(-size, size) * 0.2, y: y + rand(0, size * 0.4), z: ef.y + rand(-size, size) * 0.2, vx: rand(-8, 8), vy: rand(18, 45), vz: rand(-8, 8), drag: 0.6, life: -rand(0.05, 0.7), max: rand(2.4, 4.4), s0: size * 0.45, s1: size * rand(1.6, 2.3), r: 0.2, g: 0.19, b: 0.18, a: 0.62 });
+				smoke.spawn({ x: ef.x + rand(-size, size) * 0.2, y: y + rand(0, size * 0.4), z: ef.y + rand(-size, size) * 0.2, vx: rand(-8, 8), vy: rand(18, 45), vz: rand(-8, 8), drag: 0.6, life: -rand(0.05, 0.7), max: rand(2.4, 4.4), s0: size * 0.45, s1: size * rand(1.6, 2.3), r: 0.2, g: 0.19, b: 0.18, a: 0.62, style: 2 });
+			// Burning debris: a few chunks flung out on arcs, each trailing smoke and fire (see burners).
+			for (let i = 0; i < Math.ceil(n(4)); i++) {
+				const a = rand(0, TAU),
+					sp = rand(70, 170) * scale;
+				burners.push({ x: ef.x, y, z: ef.y, vx: Math.cos(a) * sp, vy: rand(120, 260) * Math.min(1.4, 0.7 + scale * 0.4), vz: Math.sin(a) * sp, life: 0, max: rand(0.9, 1.6), g: 420, size: rand(2, 3.5) * Math.max(1, scale), ground });
+			}
 			// Dust thrown out along the ground (not in the air).
 			if (!ef.air)
 				for (let i = 0; i < n(12); i++) {
@@ -1098,9 +1233,11 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 			nightLights(game, quality.lights === false ? 0 : night, hidden, focus, span);
 			airTrails(game, dt, hidden, focus, span);
 			damageAndExplosions(game, dt, hidden, quality.scars !== false);
+			updateBurners(dt);
 			mapEffects(game, dt, focus, span, night, (x, y) => !hidden({ x, y, team: -1 }), gasFlow);
 			miningFx(game, dt, focus, span, (x, y) => !hidden({ x, y, team: -1 }));
 			for (const sys of [smoke, fire]) sys.material.uniforms.scale.value = scale;
+			fire.material.uniforms.time.value = time;
 			smoke.material.uniforms.light.value = light;
 			const n = smoke.update(dt) + fire.update(dt);
 			const state = weather3d.update(game, time, dt, { focus, span, density, flashes: quality.flashes !== false, mist: Math.max(night * 0.3, mistLevel || 0), mistTint: sky });

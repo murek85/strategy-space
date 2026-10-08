@@ -23,6 +23,8 @@ function createTerrainHeight() {
 			hills = new Float32Array(cols * rows),
 			up = new Float32Array(cols * rows),
 			down = new Float32Array(cols * rows);
+		// Space (the orbital battle): a flat plane, the asteroids float above it.
+		if (RTS.MISSIONS[game.missionId]?.space) return { cols, rows, height: new Float32Array(cols * rows), key: [game.missionId, game.W, game.H, "space"].join("|") };
 		// Seeded value noise, two octaves.
 		let seed = [...String(game.missionId)].reduce((h, c) => Math.imul(h ^ c.charCodeAt(0), 16777619), 2166136261) >>> 0;
 		const rand = () => (seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296;
