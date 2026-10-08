@@ -186,4 +186,4 @@ Moduł `webgl3d/space-3d.js` (`createSpace3D`, grupa w scenie widoczna tylko na 
 
 - Strażnicy artefaktu właściwi dla kosmosu (dziś zostają stworzenia planety).
 - Lotniskowiec wypuszczający myśliwce; mgławice ograniczające widzenie.
-- Desant z orbity na planetę i transport w kampanii — zob. [Pomysły](POMYSLY.md).
+- Desant z orbity na planetę — wdrożony w 0.152 jako tryb „Inwazja”, zob. [Desant z orbity](DESANT_Z_ORBITY.md); dalej transport w kampanii — zob. [Pomysły](POMYSLY.md).

@@ -1595,7 +1595,10 @@
 			require("./trade-rules.js")(RTS);
 			require("./network-rules.js")(RTS);
 			require("./doctrine-rules.js")(RTS);
+			require("./patrol-rules.js")(RTS);
 			require("./space-rules.js")(RTS);
+			require("./deposit-rules.js")(RTS);
+			require("./invasion-rules.js")(RTS);
 		};
 	} else install(root.RTS);
 })(typeof window !== "undefined" ? window : globalThis);

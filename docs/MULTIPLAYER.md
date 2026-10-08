@@ -1,4 +1,26 @@
-# Gra wieloosobowa (wersje 0.46–0.49 i 0.123)
+# Gra wieloosobowa (wersje 0.46–0.49, 0.123 i 0.153)
+
+## Przez serwer: lobby, 2 na 2, powrót do bitwy (wersja 0.153, 2026-10-08 — etap G4)
+
+Plan: [Etap G](ETAP_G.md). Obok połączenia 1 na 1 przez kody (bez zmian, niżej) — gry przez serwer lobby.
+
+**Jak zagrać.** Gra wieloosobowa → „Przez serwer”: adres serwera pusty (serwer, z którego wczytano grę — `npm start`), wpisany (np. `192.168.1.10:4174` lub `wss://…`), a w aplikacji Windows „Uruchom serwer w sieci lokalnej” (port 4174; gra pokazuje adresy dla innych graczy w tej sieci). Lista gier → „Dołącz” albo „Utwórz grę” (nazwa, 1 na 1 lub 2 na 2). W pokoju: miejsca w dwóch drużynach (A: drużyny 0 i 3, B: 1 i 4), „Zajmij” wolne miejsce, gospodarz może dać „Komputer” na wolne miejsce; zasady jak w lobby 1 na 1 (wybiera gospodarz), gotowość, czat; gospodarz zaczyna, gdy każde miejsce jest zajęte (człowiek lub komputer) i wszyscy są gotowi.
+
+**Serwer** (`lobby-server.js`, czysty Node, bez zależności): WebSocket (RFC 6455) pod `/lobby` — w `server.js` na porcie gry, osobno `npm run lobby` (port 4174, wszystkie interfejsy) albo w aplikacji (`desktop.lobby()`). Klasa `Lobby` nie zależy od transportu (testy podłączają sztuczne gniazda). Pokoje (do 50), miejsca, zasady, gotowość, start (ziarno losuje serwer), czat, ping. W bitwie przekazuje tury każdego gracza pozostałym, zapisuje je w dzienniku pokoju, porównuje sumy kontrolne (co 10 tur) i ogłasza rozsynchronizowanie. Gracze nie mogą wysyłać poleceń systemowych („@…”).
+
+**Gra** (`network-rules.js`, `RTS.createNetworkGame` → `createLobbyGame`, gdy gracze mają drużyny): 2 lub 4 strony, każda człowiek lub dowódca AI (poziom średni); każdy człowiek startuje jak gospodarz (kopia startu w swoim narożniku); sojusze z `teams-rules.js`; wynik po stronach (`teamResult` — strona przegrywa, gdy padną wszystkie jej centra; `resultFor` odwraca go dla drugiej strony, nie dla sojusznika); suma kontrolna obejmuje skarbce dowódców AI. `netTakeover(drużyna, on)` — przejęcie strony przez komputer (dowódca z jej metalem, jednostki w obronie) i oddanie (metal wraca na konto gracza).
+
+**Lockstep** (`netplay.js`): `RelayLink` — WebSocket do serwera z interfejsem połączenia WebRTC; `Lockstep` z `teams` (drużyny ludzi, polecenia w kolejności drużyn) i `relay: true` — tury mają drużynę, polecenia systemowe serwera `@aiTakeover` / `@aiRelease` wykonują się u wszystkich w tej samej turze; luka we własnych turach (po powrocie) to tury puste, tak samo jak na serwerze; `replay(log, from, release)` odtwarza bitwę z dziennika. `lobbyUrl(adres)` — adres serwera z tego, co wpisał gracz.
+
+**Zerwane połączenie.** Serwer od razu wysyła za tę drużynę puste tury (bitwa trwa, jej wojska stoją), po 20 s wpisuje do dziennika `@aiTakeover` (komputer prowadzi stronę). Gracz, który stracił połączenie, widzi „Łączenie ponownie…” — gra łączy się co 2 s przez minutę; po powrocie (ten sam identyfikator klienta, zapisany w profilu) serwer wysyła ustawienia i cały dziennik, bitwa odtwarza się w przyspieszeniu, a w pierwszej turze gracza idzie `@aiRelease`. Po przeładowaniu strony trwająca bitwa jest na liście gier („Wróć do bitwy”). Pozostali gracze dostają komunikaty: utrata połączenia, przejęcie przez komputer, powrót.
+
+**Interfejs.** `netplay-menu.js`: ekrany „Gry na serwerze” i pokoju, czat pokoju z listą uczestników (sojusznik / przeciwnik), nagłówek ekranów sieciowych. `app.js`: `foes()` — gracze drugiej strony (panel wywiadu, raport końca, komunikat startu, menu pauzy), czat w bitwie z nazwą nadawcy, `relayLost()` — ponowne łączenie; w bitwie przez serwer bez rewanżu.
+
+**Weryfikacja.** `tests/lobby.test.js` (5): pokoje, miejsca, komputer na miejscu, zasady, gotowość i start (2 na 2 z komputerem — ludzie, dowódca AI, sojusze); cztery locksteppy przez serwer — tury i rozkazy wszystkich, bez rozsynchronizowania (sumy porównuje serwer); zerwane połączenie — puste tury, przejęcie przez komputer po 20 s u wszystkich, powrót z odtworzeniem dziennika i oddaniem strony, dalej bez rozsynchronizowania; rozsynchronizowanie zgłoszone przez serwer, gracz nie wyśle polecenia systemowego; prawdziwy WebSocket (serwer osobny, hello, gra, ping). Przeglądarka (dwie karty): lista gier, pokój 2 na 2 (dwóch graczy + dwa komputery), start u obu, zerwanie połączenia jednej karty → „Łączenie ponownie…” → powrót do bitwy bez rozsynchronizowania. `tests/network.test.js` (1 na 1) bez zmian.
+
+**Ograniczenia.** Serwer w internecie trzeba wystawić samodzielnie (np. `npm run lobby` na serwerze VPS za proxy z `wss://`); bez kont i uwierzytelniania (identyfikator klienta w profilu); dziennik w pamięci serwera (restart serwera kończy trwające bitwy); tryby scenariuszy (przekaźniki, król wzgórza) i znaczniki dla sojusznika na minimapie — propozycje.
+
+## 1 na 1 przez kody (wersje 0.46–0.49 i 0.123)
 
 Nowa pozycja menu **Gra wieloosobowa**: bitwa jeden na jeden z drugim człowiekiem, przez przeglądarkę, bez serwera gry. Zakres pierwszej wersji wybrany przez użytkownika: połączenie P2P (WebRTC), dwóch graczy, wersja minimalna (lobby z ustawieniami i sama bitwa).
 

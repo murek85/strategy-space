@@ -1,7 +1,7 @@
 /* Holograms of the interface on the 3D board (0.144.3):
-   - Selection: a holographic ring at the foot of every selected unit or building (a thin outer line,
-     dashes running round inside it, four brackets turning) and a column of light rising from it, with a
-     scan line climbing up — for ships it reaches up to the hull.
+   - Selection: a subtle holographic ring at the foot of every selected unit or building (a thin outer
+     line, dashes running round inside it, four brackets turning); over buildings also a short column of
+     light rising from it, with a scan line climbing up (units have none since 0.147.8).
    - Orders of the selected units: dashes flowing along the ground from each unit to where it goes, a
      hologram diamond bobbing over the spot with a ring pulsing under it (mint for a move, amber for an
      attack move); an attack: red dashes to the target and a red reticle turning round it, pulsing.
@@ -37,7 +37,8 @@ export function createHolo3D(THREE, { world, heightAt }) {
 			float outer = smoothstep(0.95, 0.975, r) * (1.0 - smoothstep(0.995, 1.02, r));
 			float dash = step(0.45, fract(a * 16.0 - time * 0.35)) * smoothstep(0.78, 0.8, r) * (1.0 - smoothstep(0.85, 0.87, r));
 			float corner = step(0.9, abs(cos(a * 6.28318 * 2.0 + time * 0.6))) * smoothstep(0.88, 0.9, r) * (1.0 - smoothstep(0.93, 0.95, r));
-			gl_FragColor = vec4(color * (outer * 0.9 + dash * 0.5 + corner) * alpha * 1.3, 1.0);
+			// Subtle (0.147.8): it marks the unit without outshining it.
+			gl_FragColor = vec4(color * (outer * 0.8 + dash * 0.35 + corner * 0.6) * alpha * 0.6, 1.0);
 			#include <colorspace_fragment>
 		}`,
 		COLUMN_FS = `void main() {
@@ -185,9 +186,10 @@ export function createHolo3D(THREE, { world, heightAt }) {
 				sel.ring.scale.setScalar(r);
 				sel.ring.material.uniforms.color.value.set(c);
 				sel.column.material.uniforms.color.value.set(c);
-				// The column: up to the hull of a ship or an aircraft, a short glow for the rest.
-				const h = s.ship ? hover + s.radius * 0.6 : s.flying ? 92 : !s.speed ? Math.min(70, r * 0.9) : r * 1.2 + 8;
-				sel.column.scale.set(r * 0.98, h, r * 0.98);
+				// The column of light only over buildings (0.147.8): over vehicles, infantry and ships its rim
+				// read as a white ring over the unit and hid it.
+				sel.column.visible = !s.speed;
+				if (!s.speed) sel.column.scale.set(r * 0.98, Math.min(70, r * 0.9), r * 0.98);
 				// Orders: where it goes (the end of its path, or the order's point), or its target.
 				const o = e.order;
 				if (!o || !s.speed) continue;

@@ -1,6 +1,42 @@
-# Sztuczna inteligencja przeciwnika — dowódca AI (wersja 0.34; styl frakcji 0.51, kampania 0.97–0.98 i 0.102)
+# Sztuczna inteligencja przeciwnika — dowódca AI (wersja 0.34; styl frakcji 0.51, kampania 0.97–0.98 i 0.102; Twierdza, doktryny, patrole i eskorta 0.150)
 
 Aktualizacja: 2026-09-27. Realizuje pomysły [AI-01–AI-05](POMYSLY.md): gospodarkę, płatną produkcję, obronę, przejmowanie przekaźników, odbudowę i poziomy trudności. Reguły są w `enemy-ai.js` (ładowany jako ostatni moduł reguł); wszystkie liczby w `RTS.AI_LEVELS` i `RTS.AI`.
+
+## Twierdza, doktryny, patrole i eskorta (wersja 0.150, 2026-10-08 — etap G1)
+
+Plan: [Etap G](ETAP_G.md). Dotyczy dowódcy scenariuszy na poziomie średnim i trudnym; łatwy poziom i rozdziały kampanii (`campaignAi`) bez zmian — kampania była strojona bez tych mechanik.
+
+**Twierdza i doktryna** (`aiAdvance`, `aiPickDoctrine`, `aiAdvanced`):
+- Nowe pola poziomu: `fortressAt` (średni 660 s, trudny 480 s, łatwy `null`), `patrols` (0 / 1 / 2), `escorts` (0 / 1 / 2), `escortHeavy` (tylko trudny). Koszty w `RTS.AI`: Twierdza 900 metalu, 45 s; doktryna 700 metalu, 40 s (AI nie ma gazu ani kryształów — cena obejmuje ich wartość); czas × `prodTime` poziomu.
+- Warunki Twierdzy: czas `fortressAt`, ukończona fabryka, armia co najmniej `minAttack`, metal ponad rezerwę na budowę. Po ukończeniu: `T.upgrades.fortress`, centrum ×1,5 PW (raz, znacznik `fortress`), +`RTS.FORTRESS.income` (4) metalu/s do dochodu dowódcy.
+- Doktryna jego frakcji (`aiStyleKey`; Dominium kampanii, Kolonie bez frakcji): obronna, gdy wartość jego armii < 0,9 × znanej armii wroga (pod mgłą — zapamiętanej) albo był atakowany w ostatnich 120 s; inaczej ofensywna — dla Dominium tylko, gdy co najmniej 25% armii to pojazdy albo stoją 4 budynki strzelające (Ciężki ostrzał wzmacnia też obronę), inaczej Silniejsze osłony.
+- Efekty: `doctrine-rules.js` — `doctrineOf(drużyna)` czyta też `enemyAi.teams[drużyna].upgrades`, więc obrażenia, pancerz, utrzymywanie terenu i szybkość działają bez zmian; szybsza produkcja w kolejce dowódcy (`aiQueue` ÷ `production`).
+- Wywiad: gdy gracz widzi wrogie centrum — „Wywiad: Dominium rozbudowuje centrum do Twierdzy / przyjmuje doktrynę „…”” (alarm); sojusznik AI w 2 na 2 melduje zawsze.
+- `aiReport()`: także `doctrine`, `patrols`, `escorts`.
+
+**Patrole** (`aiPatrols`, `aiSetPatrol`): oddziały po dwa (`RTS.AI.patrolSize`) z wolnych obrońców (zostaje `keepHome`), najszybsze najpierw; trasa od miejsca zbiórki do najbliższych własnych przekaźników, magazynów i placówek dalej niż 300 od centrum (bez nich — punkt 560 przed bazą). Rozkazy `patrol-rules.js` ustawiane wprost (`e.patrol`, rozkaz z `patrol: true`), bo `patrol()` gracza zagrałby dźwięk rozkazu u gracza. Przy zagrożeniu bazy patrole dołączają do obrony; atak bierze je do natarcia (nowe jednostki obejmują trasy) — atak i oddziały przekaźników mają pierwszeństwo przy przydziale.
+
+**Eskorta** (`aiEscorts`, `aiEscortHeavy`): jedna jednostka (nie lotnicza) przy każdym z robotów kopiących najdalej (złoże dalej niż `RTS.AI.escortFrom` = 450 od centrum; średni 1, trudny 2); zwolniona, gdy robot kopie znów blisko lub ginie. Na trudnym: artyleria, kolosy, lotniskowce i krążowniki w natarciu dostają po dwie lżejsze jednostki grupy z rozkazem eskorty (`aiAttack` nie nadpisuje ich rozkazu).
+
+**Symulacje** (`node tools/ai-sim.js [minuty] [--maps …]`, G1.4) — 15 min, mapy horizon, frost, ember, AI przeciw biernemu graczowi z niezniszczalnym centrum (ataki wyłączone):
+
+| Poziom | Twierdza | Doktryna | Armia (15 min) | Patrole (śr.) | Eskorty (śr.) |
+|---|---|---|---|---|---|
+| Łatwy | — | — | 15–16 | 0 | 0 |
+| Średni | 11:47 | 12:30 | 27–28 | 2 | 0,3–0,9 |
+| Trudny | 8:38 | 9:14 | 44–45 | 4 | 0,3–1,3 |
+
+Bez presji gracza AI wybiera doktryny ofensywne (Logistyka, Ciężki ostrzał, Nawała); wariant obronny sprawdzają testy. Pojedynki doktryn (armie po 3000 metalu tej samej frakcji, 20 rund, przy budynku strony z doktryną) — ile własnej armii zostaje stronie z doktryną, wobec tła bez doktryny (przewaga miejsca w arenie):
+
+| Frakcja | Tło (bez) | Ofensywna | Obronna |
+|---|---|---|---|
+| Kolonie | 22% | Logistyka 6% (produkcyjna — w walce tylko szybkość) | Fortyfikacja 42% (+20) |
+| Dominium | 26% | Ciężki ostrzał 38% (+12) | Osłony 42% (+16) |
+| Rój | 4% | Nawała 6% (produkcyjna) | Pancerz chitynowy 21% (+17) |
+
+Obronne doktryny dają w czystym starciu podobną przewagę (+16–20 punktów), więc w obrębie frakcji są wyrównane; Logistyka i Nawała zarabiają produkcją (+25% / +30%), czego pojedynek nie mierzy. Balans bez zmian.
+
+Testy: `tests/ai-doctrine.test.js` (10) — Twierdza, potem doktryna własnej frakcji, jedna; łatwy i kampania bez; dochód Twierdzy; wybór doktryny wg sytuacji (wszystkie trzy frakcje); efekty doktryn dla jednostek AI (osłony, szybkość, produkcja); meldunek wywiadu tylko przy widocznym centrum; patrole na trasach i powrót do obrony; eskorta dalekiego robota i jej zwolnienie; eskorta artylerii w natarciu; zapis i wczytanie.
 
 ## Mgła wojny dla dowódcy (wersja 0.129, 2026-10-07)
 

@@ -1,6 +1,13 @@
 # Mapy tematyczne scenariuszy
 
-Wdrożono 2026-09-26, wersja 0.19. Cztery nowe mapy w Gra jednoosobowa → Scenariusze, dostępne we wszystkich trybach (Podbój, Utrzymanie przekaźników, Obrona) i rozmiarach (mała, średnia, duża).
+Wdrożono 2026-09-26, wersja 0.19.
+
+## Każde złoże do wykorzystania (wersja 0.151.3, 2026-10-08) — wszystkie mapy
+
+- Problem: ekstraktor stoi dokładnie na złożu gazu (`canBuild` w `engine.js`), a część złóż leżała w przeszkodzie (asteroida, skała) lub bliżej niż pozwalają zasady przy rudzie, kryształach, przekaźniku, innym złożu albo budynku — nie dało się ich nigdy zabudować. Diagnoza (wszystkie mapy scenariuszy × 3 rozmiary × 4 ziarna): 20 z 816 złóż — Orbita Kharona i Cmentarzysko (asteroida rudy obok), Pierścienie Glacjalis (w przeszkodzie), Rzeki Magmy (ruda obok), Słoneczna Dolina i Bliźniacze Słońca (na nieruchomym Paszczaku — złoża przesunięte przy skalowaniu mapy); w kampanii rozdziały I i II (ruda obok).
+- Nowy moduł `deposit-rules.js` (ostatni moduł reguł): po `configureMission` (każda misja i rozdział) i `configureSkirmish` (scenariusze — skalowanie i generowanie mapy) `settleDeposits()` przesuwa złoże gazu, na którym ekstraktor nie spełnia zasad, do najbliższego wolnego miejsca (pierścienie co 20 do 400 wokół, 16 kierunków; `gasSiteFree` — zasady `canBuild` z małym zapasem, bez zasięgu gracza); złoże rudy lub kryształów, do którego robot nie może podejść (`oreReachable`), tak samo. Jednostki i fauna ruchoma są pomijane (odejdą lub zginą), budynki i nieruchome stworzenia się liczą. Deterministyczne — jednakowe w grze sieciowej; poprawne złoża zostają na miejscu.
+- Zasięg bez zmian: ekstraktor nadal tylko w zasięgu centrum (380) lub własnego przekaźnika (240).
+- Testy: `tests/deposits.test.js` (3) — każda mapa scenariuszy, rozmiar i ziarno oraz każdy rozdział kampanii: ekstraktor mieści się na każdym złożu gazu, każde złoże rudy jest osiągalne; wymuszony przypadek (złoże w skale i przy rudzie) przesunięty, deterministycznie; poprawne złoża nietknięte. Cztery nowe mapy w Gra jednoosobowa → Scenariusze, dostępne we wszystkich trybach (Podbój, Utrzymanie przekaźników, Obrona) i rozmiarach (mała, średnia, duża).
 
 Mapy są inspirowane klimatem filmów science fiction — bioluminescencyjne dżungle i latające góry oraz pustynie pod dwoma słońcami i światy lawy — ale mają własne nazwy, planety i projekty. Nie używają nazw, postaci ani elementów chronionych marek.
 

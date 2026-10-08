@@ -25,6 +25,16 @@ Wybór przy rozkazach oddziału: Linia, Kolumna, Rozproszenie. Wpływa na nastę
 
 Są to docelowe ustawienia prostych formacji: jednostki nadal korzystają z indywidualnego wyszukiwania drogi. Nie utrzymują sztywnego szyku w marszu i mogą go opuścić podczas walki. Bezpośredni atak na wskazany cel zachowuje dotychczasowe zachowanie. Nie ma ukrytych premii obrażeń ani pancerza. Wybór formacji jest zapisywany.
 
+## Patrol i eskorta (wersja 0.148, 2026-10-08)
+
+Dalszy ciąg DOW-01, moduł `patrol-rules.js` (po `doctrine-rules.js`).
+
+- **Patrol** — `patrol(ids, x, y)`: jednostki bojowe (bez robotów) dostają atak w marszu do punktu w formacji, a do każdej zapisuje się trasa `e.patrol = { a, b, to }`. Gdy ścieżka się skończy, `unitTick` odwraca kierunek (po dojściu bliżej niż 40 od końca) albo — gdy odcinek przerwała walka — wznawia ten sam odcinek. Rozkazy patrolu są oznaczone `order.patrol`; każdy inny rozkaz, `stop` lub `hold` kończy patrol. Trasa krótsza niż 60 jest odrzucana.
+- **Eskorta** — `escort(ids, targetId)`: rozkaz `{ kind: "escort", targetId, slot, of }` dla jednostek bojowych; chroniony musi być własny lub sojuszniczy (także budynek). Każda jednostka ma miejsce na pierścieniu wokół chronionego (promień: oba promienie + 30) i co 0,5 s wyznacza do niego drogę. Silnik sam wybiera cele w zasięgu i je goni; cel dalej niż 280 od chronionego (`RTS.ESCORT.leash`) jest porzucany. Rozkaz trwa, dopóki chroniony żyje.
+- Interfejs: przyciski „Patrol ⇧P” i „Eskorta ⇧E” w trzecim rzędzie rozkazów; po wyborze PPM wskazuje punkt lub chronionego, Esc anuluje. Status oddziału: „patroluje” / „eskortuje”. Panel rozkazów zagęszczony (przyciski 20 px, odstęp 3 px), by zmieścić trzeci rząd.
+- Sieć: `patrol` (3 argumenty) i `escort` (2) w `RTS.NET_COMMANDS`. Bez liczb losowych — bezpieczne w lockstepie. Trasa i rozkaz zapisują się z jednostką.
+- Testy: `tests/patrol.test.js` (7) — trasa tam i z powrotem, walka po drodze, przerwanie rozkazem / Stop / Pozycją, odmowa dla robotów i krótkich tras, eskorta w ruchu, smycz 280, koniec po śmierci chronionego, komendy sieciowe i zapis.
+
 ## Grafika i dźwięk
 
 - Nowe bryły transportera i baterii: gąsienice, dach, boczne ściany, wieżyczki, odrzut, lampki załogi i obracający się radar.

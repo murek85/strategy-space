@@ -8,7 +8,11 @@
    - Shared pause: game.pauseGame() / game.resumeGame() are ordinary network actions, so both computers stop and
      start on the same step. Each player may pause RTS.NET_PAUSE.count times, each pause ends by itself after
      RTS.NET_PAUSE.length seconds; either player resumes, after a countdown of RTS.NET_PAUSE.resume seconds.
-   The lockstep itself (turns, delays, the WebRTC channel) lives in netplay.js. Loaded after campaign-act3.js. */
+   - Lobby battles (G4, 0.153): settings whose players carry a team — 1 vs 1 or 2 vs 2 (teams 0 and 3 against 1 and
+     4), each seat a human or the computer commander. Every human starts like the host; the result is counted by
+     sides (a side is beaten when all its command centres fall). A dropped player's team can be handed to the
+     computer and back (netTakeover — system commands of the relay server, the same turn on every computer).
+   The lockstep itself (turns, delays, the WebRTC channel, the relay) lives in netplay.js. Loaded after campaign-act3.js. */
 (function (root) {
 	function install(RTS) {
 		if (RTS.networkInstalled) return;
@@ -52,6 +56,8 @@
 			board: 2,
 			unload: 1,
 			setFormation: 1,
+			patrol: 3,
+			escort: 2,
 			surrender: 0,
 			trade: 3,
 			pauseGame: 0,
@@ -131,6 +137,12 @@
 				mix(pause ? pause.left : -1);
 				mix(pause?.resumeIn ?? -1);
 				for (const team of this.humans) mix(this.pausesLeft?.[team] ?? -1);
+				// Computer commanders of a lobby battle (their own treasury).
+				for (const T of Object.values(this.enemyAi?.teams || {})) {
+					mix(T.team);
+					mix(T.metal);
+					mix(T.attackNo);
+				}
 				return h.toString(16);
 			},
 		});
@@ -156,11 +168,11 @@
 
 		// The guest starts like the host: the host's starting units and buildings copied to the guest's corner
 		// (offsets mirrored towards the map centre), placed on free ground.
-		function mirrorStart(g) {
+		function mirrorStart(g, team = 1) {
 			const hq0 = g.hq(0),
-				hq1 = g.hq(1);
+				hq1 = g.hq(team);
 			if (!hq0 || !hq1) return;
-			for (const e of g.entities.filter((e) => e.team === 1 && e.type !== "hq")) e.hp = 0;
+			for (const e of g.entities.filter((e) => e.team === team && e.type !== "hq")) e.hp = 0;
 			g.entities = g.entities.filter((e) => e.hp > 0);
 			const sx = Math.sign(g.W / 2 - hq1.x) * Math.sign(g.W / 2 - hq0.x) || -1,
 				sy = Math.sign(g.H / 2 - hq1.y) * Math.sign(g.H / 2 - hq0.y) || -1;
@@ -174,19 +186,20 @@
 						if (p.x > 40 && p.y > 40 && p.x < g.W - 40 && p.y < g.H - 40 && !g.blocked(p.x, p.y, r + 6) && !g.entities.some((o) => o.hp > 0 && dist(o, p) < TYPES[o.type].radius + r + 8)) spot = p;
 					}
 				if (!spot) continue;
-				const copy = g.spawn(e.type, 1, spot.x, spot.y);
+				const copy = g.spawn(e.type, team, spot.x, spot.y);
 				copy.constructionLeft = e.constructionLeft;
 				copy.angle = e.angle + Math.PI;
 			}
-			for (const w of g.units(1).filter((e) => e.type === "worker")) {
+			for (const w of g.units(team).filter((e) => e.type === "worker")) {
 				const ore = [...g.ores].sort((a, b) => dist(w, a) - dist(w, b))[0];
-				if (ore) g.as(1, () => g.gather([w.id], ore.id));
+				if (ore) g.as(team, () => g.gather([w.id], ore.id));
 			}
 		}
 
 		// settings: { map, seed, size, resources, weather, fauna, dayLength, startLevel, players: [host, guest] },
 		// each player { name, color, faction }.
 		RTS.createNetworkGame = function (settings) {
+			if ((settings.players || []).some((p) => Number.isInteger(p?.team))) return createLobbyGame(settings);
 			const map = RTS.MISSIONS[settings.map] && !RTS.MISSIONS[settings.map].campaign ? settings.map : "horizon",
 				[host, guest] = settings.players,
 				seed = Number.isInteger(settings.seed) && settings.seed > 0 ? settings.seed : 42;
@@ -233,6 +246,133 @@
 			g.updateVision();
 			return g;
 		};
+
+		// A lobby battle: settings.players = [{ team, ai, name, color, faction }] for teams 0, 1 (1 vs 1) or 0, 3, 1, 4
+		// (2 vs 2, settings.teams "duo"); the host is team 0 and a human.
+		const LOBBY_TEAMS = { 2: [0, 1], 4: [0, 3, 1, 4] };
+		function createLobbyGame(settings) {
+			const map = RTS.MISSIONS[settings.map] && !RTS.MISSIONS[settings.map].campaign ? settings.map : "horizon",
+				seed = Number.isInteger(settings.seed) && settings.seed > 0 ? settings.seed : 42,
+				four = (settings.players || []).length >= 4,
+				teams = LOBBY_TEAMS[four ? 4 : 2];
+			const g = new Game(seed, map),
+				seats = teams.map((team) => settings.players.find((p) => p?.team === team) || { team, ai: true });
+			seats[0].ai = false;
+			g.players = {};
+			for (const p of seats)
+				g.players[p.team] = {
+					name: String(p.name || (p.ai ? "Komputer" : "Gracz")).replace(/[<>]/g, "").slice(0, 24),
+					color: RTS.PLAYER_COLORS.includes(p.color) ? p.color : RTS.PLAYER_COLORS[teams.indexOf(p.team) % RTS.PLAYER_COLORS.length],
+					faction: RTS.FACTIONS[p.faction] ? p.faction : "colonies",
+					ai: !!p.ai,
+				};
+			g.configureSkirmish({
+				name: g.players[0].name,
+				color: g.players[0].color,
+				faction: g.players[0].faction,
+				enemyFaction: g.players[1].faction,
+				players: four ? 4 : 2,
+				teams: four ? "duo" : "ffa",
+				difficulty: ["easy", "normal", "hard"].includes(settings.difficulty) ? settings.difficulty : "normal",
+				enemy: "commander",
+				mode: "conquest",
+				size: settings.size,
+				resources: settings.resources,
+				weather: settings.weather,
+				fauna: settings.fauna,
+				dayLength: settings.dayLength,
+				startLevel: settings.startLevel,
+				seed,
+			});
+			const humans = seats.filter((p) => !p.ai).map((p) => p.team);
+			for (const team of humans) if (team !== 0) mirrorStart(g, team);
+			g.setHumans(humans);
+			g.humanOrder = [...humans];
+			g.perspective = 0;
+			for (const team of humans) delete g.enemyAi?.teams?.[team];
+			if (g.enemyAi && !Object.keys(g.enemyAi.teams).length) g.enemyAi = null;
+			g.nextWave = g.enemyAi ? g.aiNextAttack() : Infinity;
+			g.network = true;
+			g.teamBattle = true;
+			g.netPause = null;
+			g.pausesLeft = Object.fromEntries(humans.map((t) => [t, PAUSE.count]));
+			for (const e of g.entities) {
+				const f = g.factionFor(e.team);
+				if (f && e.team !== 2) {
+					e.faction = f.key;
+					e.tint = g.colorFor(e.team);
+				}
+			}
+			g.updateVision();
+			return g;
+		}
+		RTS.createLobbyGame = createLobbyGame;
+
+		const side = (g, team) => (g.alliances ? g.sideLeader(team) : team);
+		const lobbyOld = {};
+		for (const k of ["applyDamage", "resultFor", "tick"]) lobbyOld[k] = Game.prototype[k];
+		Object.assign(Game.prototype, {
+			// A lobby battle ends when one side has no command centre left; the result is kept for the perspective
+			// (team 0's side), resultFor turns it for the other side.
+			teamResult() {
+				const teams = Object.keys(this.players || {}).map(Number),
+					alive = new Set(this.entities.filter((e) => e.type === "hq" && e.hp > 0 && teams.includes(e.team)).map((e) => side(this, e.team)));
+				if (alive.size > 1) return null;
+				return alive.has(side(this, this.perspective ?? 0)) ? "victory" : "defeat";
+			},
+			applyDamage(a, b, n) {
+				lobbyOld.applyDamage.call(this, a, b, n);
+				if (this.teamBattle && b?.type === "hq" && b.hp <= 0) this.result = this.teamResult();
+			},
+			resultFor(team = this.viewer) {
+				if (!this.teamBattle || !this.result) return lobbyOld.resultFor.call(this, team);
+				if (side(this, team) === side(this, this.perspective ?? 0)) return this.result;
+				return this.result === "victory" ? "defeat" : "victory";
+			},
+			// The computer takes a dropped player's team over (on) or hands it back (off) — the same turn everywhere.
+			netTakeover(team, on) {
+				if (!this.teamBattle || !this.hq(team)) return false;
+				if (on) {
+					if (!this.isHuman(team)) return false;
+					const hq = this.hq(team),
+						d = Math.hypot(this.W / 2 - hq.x, this.H / 2 - hq.y) || 1,
+						foes = this.aiFoes ? this.aiFoes(team) : [];
+					this.scenario.enemy = "commander";
+					this.enemyAi ||= { teams: {} };
+					this.enemyAi.teams[team] = {
+						team,
+						metal: Math.floor(this.sides[team].credits),
+						think: 0,
+						nextAttack: this.time + 90,
+						attackNo: 0,
+						attack: null,
+						rally: { x: Math.round(hq.x + ((this.W / 2 - hq.x) / d) * 220), y: Math.round(hq.y + ((this.H / 2 - hq.y) / d) * 220) },
+						upgrades: {},
+						lastThreat: -99,
+						raidAt: this.time + 120,
+						mined: 0,
+						spent: 0,
+						intel: { structures: Object.fromEntries(this.entities.filter((e) => e.type === "hq" && e.hp > 0 && foes.includes(e.team)).map((e) => [e.id, { x: Math.round(e.x), y: Math.round(e.y), type: e.type, team: e.team }])), army: {}, workers: [] },
+					};
+					for (const e of this.entities)
+						if (e.team === team && e.hp > 0 && TYPES[e.type].speed) {
+							e.modeTagged = true;
+							if (e.type !== "worker") e.aiRole = "defend";
+						}
+					this.humans = this.humans.filter((t) => t !== team);
+				} else {
+					const T = this.enemyAi?.teams?.[team];
+					if (this.isHuman(team) || !T) return false;
+					this.sides[team].credits = Math.floor(T.metal);
+					delete this.enemyAi.teams[team];
+					for (const e of this.entities) if (e.team === team) delete e.aiRole;
+					this.humans = (this.humanOrder || [...this.humans, team]).filter((t) => t === team || this.humans.includes(t));
+				}
+				this.nextWave = this.enemyAi && Object.keys(this.enemyAi.teams).length ? this.aiNextAttack() : Infinity;
+				this.updateVision();
+				return true;
+			},
+		});
 	}
 	if (typeof module !== "undefined" && module.exports) module.exports = install;
 	else install(root.RTS);

@@ -1398,7 +1398,7 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 	ringGeometry.rotateX(-Math.PI / 2);
 	const rings = [],
 		bars = [];
-	const barMaterial = (color) => new THREE.SpriteMaterial({ color, depthTest: false, transparent: true });
+	const barMaterial = (color, opacity = 1) => new THREE.SpriteMaterial({ color, depthTest: false, transparent: true, opacity });
 	function pooled(list, i, make) {
 		if (!list[i]) {
 			list[i] = make();
@@ -1696,22 +1696,23 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			if (isSelected || e.hp < e.maxHp) {
 				const bar = pooled(bars, bi++, () => {
 					const root = new THREE.Group(),
-						back = new THREE.Sprite(barMaterial("#0d1a1f")),
-						fill = new THREE.Sprite(barMaterial("#6fe39a"));
+						// Subtle (0.147.8): thin, narrow and see-through, so the bar does not hide the unit.
+						back = new THREE.Sprite(barMaterial("#0d1a1f", 0.45)),
+						fill = new THREE.Sprite(barMaterial("#6fe39a", 0.8));
 					fill.center.set(0, 0.5);
 					back.renderOrder = 10;
 					fill.renderOrder = 11;
 					root.add(back, fill);
 					return { root, back, fill };
 				});
-				const w = Math.max(24, s.radius * 1.8),
+				const w = Math.max(18, s.radius * 1.3),
 					f = Math.max(0, e.hp / e.maxHp);
 				bar.root.visible = true;
 				bar.root.position.set(e.x, ground + top, e.y);
-				bar.back.scale.set(w + 3, 6, 1);
-				bar.fill.scale.set(w * f, 4, 1);
+				bar.back.scale.set(w + 2, 3.6, 1);
+				bar.fill.scale.set(w * f, 2.2, 1);
 				bar.fill.position.x = -w / 2;
-				bar.fill.material.color.set(f > 0.6 ? "#6fe39a" : f > 0.3 ? "#e4c25a" : "#f06a5e");
+				bar.fill.material.color.set(f > 0.6 ? "#5cc98a" : f > 0.3 ? "#d4b45a" : "#e0665c");
 			}
 		}
 		for (let i = ri; i < rings.length; i++) rings[i].visible = false;

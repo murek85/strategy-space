@@ -1,6 +1,63 @@
-# Kampania i oprawa: sceny łączności, wybory, filmy, menu i interfejs (wersje 0.99–0.122, 2026-10-07)
+# Kampania i oprawa: sceny łączności, wybory, filmy, menu i interfejs (wersje 0.99–0.122, 0.149–0.152.1; 2026-10-07–08)
 
 Najnowsze zmiany na górze. Zakres: portrety i sceny łączności, wybory, głosy, intro, prologi i epilogi, ekrany końca i ładowania, menu, pauza, ekrany menu, interfejs gry, drzewo rozwoju, panel badań, ekran kampanii, odblokowanie do testów, filmy na pełnym ekranie.
+
+## Szuflada celów: bez przewijania, ukryta pod raportem (wersja 0.152.1, 2026-10-08)
+
+- Poziome przewijanie szuflady: `#wave-progress` („Planowany atak”) dostawał szerokość ponad 100% (`1 − pozostały czas / okres`, gdy termin minął — u dowódcy AI z odległym lub minionym atakiem; zmierzone 1131 px przy panelu 240 px). `app.js`: wartość ograniczona do 0–100%; `hud-compact.css`: `.intel-panel` bez przewijania w poziomie, `.thin-track` przycina wypełnienie.
+- Szuflada i panel orbity pod nakładką: `app.js` `watchOverlay` — `MutationObserver` na atrybucie `hidden` nakładki `#overlay` ustawia `body.overlay-open`; `hud-compact.css` ukrywa wtedy `.sidebar` i `.orbit-panel` (`visibility: hidden`) — przy odprawie, raporcie zwycięstwa / porażki, decyzjach i ekranie lądowania Inwazji; po zamknięciu wracają.
+
+## Okna potwierdzenia w stylu gry (wersja 0.151.2, 2026-10-08)
+
+- Nowy moduł `game-dialog.js` (`GameDialog.confirm({ eyebrow, title, text, sections, facts, ok, cancel, tone })` → `Promise<boolean>`): modalny `<dialog>` w warstwie górnej, karta w stylu pokładu (`hud.css`: `.game-dialog`, odcień `tone-warn` dla ostrzeżeń). Esc i kliknięcie w tło — anuluj, Enter — potwierdź; fokus na „Anuluj”. Teksty wstawiane jako tekst, nigdy HTML. Klawisze w oknie nie trafiają do skrótów gry (także osłona w obsłudze klawiatury `app.js`).
+- `app.js`: `confirmInGame` — w bitwie jednoosobowej pauza na czas decyzji (jak przy dawnym `confirm()`), w sieciowej bez pauzy; `confirmDoctrine` — efekt doktryny, sekcja „Zostanie zablokowana do końca operacji” z drugą doktryną frakcji, koszt (metal, gaz, kryształy) i czas.
+- `menu.js`: import zapisów (Ustawienia → Aplikacja i zapisy) pyta w tym samym oknie: plik, liczba wpisów, pochodzenie.
+- `window.confirm` zostaje tylko jako zapas, gdy modułu brak. Sprawdzone w przeglądarce: okno doktryny, pauza w czasie decyzji, Anuluj / Przyjmij / Esc (bez menu pauzy).
+
+## Pasek ładowania bez zamrożenia (wersja 0.151.1, 2026-10-08)
+
+- Objaw (zgłoszony w aplikacji Electron, występuje też w przeglądarce): pasek ekranu ładowania stał, po czym od razu pojawiała się mapa. Przyczyna: `launchWithScreen` (`app.js`) buduje misję synchronicznie (`restart`), a pierwsza klatka renderera 3D buduje świat — główny wątek jest zajęty ok. 0,5 s dwa razy (pomiar `longtask` w aplikacji: 562 i 503 ms; w przeglądarce 585 i 465 ms), a pasek był przesuwany przez `requestAnimationFrame` (`loading-screen.js`), który w tym czasie nie działa.
+- `style.css`: pasek (`.loading-bar b`) wypełnia się animacją CSS `loading-fill` samego `transform: scaleX` (9 s, zwalnia ku 85%), a po pasku biegnie odblask `loading-glint` (`::after`, `translateX`, 1,4 s w kółko) — animacje `transform` Chromium wykonuje w wątku kompozytora, więc trwają także podczas blokady. Przy ograniczonych animacjach (`.reduced`) bez odblasku.
+- `loading-screen.js`: procent i etap czyta ze stanu paska (`getComputedStyle(...).transform`); po `done()` zatrzymuje animację w bieżącym miejscu i przejściem 0,4 s doprowadza pasek do 100%, potem zamyka ekran jak dotąd.
+- Samokontrola aplikacji (`npm run app:check`) raportuje też długie blokady wątku przy starcie mapy (`blocks`). Dalsze skrócenie samych blokad (podział budowy świata 3D na kroki) — propozycja.
+
+## Szersze kafle produkcji (wersja 0.150.2, 2026-10-08)
+
+- `hud-compact.css`: `--deck-slot: 132px` (było 112) — kafel ok. 145 px w oknie 962 px (4 w rzędzie), ok. 135–145 px na szerokich ekranach.
+
+## Jednakowe kafle produkcji (wersja 0.150.1, 2026-10-08)
+
+- `app.js`, `paginateDeck`: `--deck-columns` to liczba kolumn mieszczących się w rzędzie (szerokość / `--deck-slot`), a nie mniejsza z niej i liczby kafli zakładki — wcześniej zakładka z mniejszą liczbą kafli niż miejsc (armia, 9 kafli przy 11 miejscach na ekranie 1920 px) rozciągała kafle (ok. 142 px wobec 116 px w Budowie i Badaniach). Teraz reszta rzędu zostaje pusta.
+
+## Równe strzałki stronicowania (wersja 0.149.4, 2026-10-08)
+
+- `hud-compact.css`: znaki ‹ › w `#deck-prev` / `#deck-next` ukryte (`font-size: 0`, etykiety `aria-label` bez zmian); strzałka to `::before` — kwadrat 6 px z dwiema krawędziami 1,5 px obrócony o 135° / −45°, pionowo na środku, poziomo przesunięty o 20% ku grotowi (optyczne wyśrodkowanie szewronu).
+
+## Odstęp przy stronicowaniu (wersja 0.149.3, 2026-10-08)
+
+- `hud-compact.css`: rząd stronicowania 24 px (było 20), przyciski 20 px (były 26 — nachodziły na pasek kolejki), `.deck-pagination` wyśrodkowane w rzędzie — ok. 6 px odstępu od kafli i od paska postępu.
+
+## Kafle produkcji w jednym rzędzie (wersja 0.149.2, 2026-10-08)
+
+- `hud-compact.css`: `--deck-rows: 1`, `--deck-slot: 112px` — jeden rząd wyższych kafli; nazwa do dwóch linii (`-webkit-line-clamp: 2`), koszt, pod nim czas (`em` blokowo), klawisz w prawym górnym rogu, symbol 18 px.
+- Zakładki produkcji (`.deck-tabs`) stoją na linii `border-bottom: 1px solid var(--hud-edge)` nagłówka `.production-heading`, jak zakładki szuflady (`.intel-tabs`).
+
+## Małe kafle produkcji (wersja 0.149.1, 2026-10-08)
+
+- `hud-compact.css`: karty w siatce dwóch rzędów (`--deck-rows: 2`, szerokość miejsca `--deck-slot: 138px`); kafel to symbol 16 px, nazwa w jednej linii, koszt i czas, klawisz z prawej. Opis (`.card-description`), stan (`.card-status`) i etykieta dziedziny badania ukryte na kaflu. Niedostępny kafel ma przygaszoną nazwę, zablokowany (`.locked`) — bursztynowy pasek z lewej.
+- `app.js`, `paginateDeck`: liczba kolumn z `--deck-slot`, na stronę `kolumny × --deck-rows` (najwyżej 12 kolumn).
+- `app.js`, `setupCardTip` / `renderCardTip`: okno `#card-tip` nad kaflem — nazwa i klawisz, opis (`data-description`), parametry jednostki z `TYPES`, budynek / powód niedostępności (bursztynowo, gdy kafel wyłączony lub zablokowany), wskazówka budowy (`data-tip`, zamiast natywnego `title`), pełny koszt. Kafel pod kursorem wyznacza `elementFromPoint` przy `pointermove` (wyłączone przyciski nie dostają zdarzeń myszy), także fokus klawiatury; okno odświeża się z `updateHud`, znika przy kliknięciu i zmianie zakładki.
+
+## Zwarty interfejs bitwy (wersja 0.149, 2026-10-08)
+
+Wybrana koncepcja: smukła dolna konsola (B) z pływającą szufladą nad planszą (z koncepcji A). Pomiar przed zmianą (okno 962×914): pasek górny 82 px, panel boczny 230 px, konsola 216 px — plansza 51% okna.
+
+- Nowy arkusz `hud-compact.css`, dołączany w `index.html` jako ostatni — tylko nadpisuje układ pozostałych arkuszy (zmienne `--hud-top: 46px`, `--hud-bottom: 158px`).
+- Plansza na całą szerokość (`.workspace` → sama `.battlefield`). `.sidebar` (zakładki Cele / Logistyka / Kolejki / Oddział) to szuflada `position: absolute` nad planszą: 262 px, z lewej, pod nagłówkiem mapy (od 130 px), nad rzędem grup (do 98 px od dołu), półprzezroczysta z rozmyciem; pasek „łączność aktywna” z zegarem ukryty.
+- Zwijanie (`app.js`, `setupSidebar`): kliknięcie otwartej zakładki dodaje klasę `.collapsed` (zostają same zakładki), każda zakładka rozwija; stan w `localStorage` (`hud.drawerCollapsed`).
+- Pasek górny: logo pomniejszone, liczby 17 px, przyciski 28 px.
+- Konsola: panel oddziału 318 px bez nagłówka sekcji, rozkazy w trzech kolumnach (przyciski 19 px; kolejność Wszystkie, Roboty, Statystyki / Zatrzymaj, Pozycja, Patrol / Eskorta), formacja jednym rzędem bez etykiety; produkcja z rzędem stronicowania (`24px 1fr 20px 5px`) i niższymi kartami.
+- Wynik: 962×914 — plansza ok. 78% okna; 1280×720 — plansza 1280×516 (ok. 72%, wcześniej ok. 48%). Menu główne i pauza bez zmian.
 
 ## Raport końca operacji bez pasków (wersja 0.131.1, 2026-10-07)
 

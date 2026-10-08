@@ -9,7 +9,9 @@ const mime = {
 	".css": "text/css; charset=utf-8",
 	".svg": "image/svg+xml",
 };
-http.createServer((req, res) => {
+// The lobby of network battles (G4, 0.153) at ws://…/lobby on the same port.
+const { mountLobby } = require("./lobby-server.js");
+const server = http.createServer((req, res) => {
 	let pathname;
 	try {
 		pathname = decodeURIComponent(
@@ -39,6 +41,8 @@ http.createServer((req, res) => {
 		});
 		res.end(data);
 	});
-}).listen(port, "127.0.0.1", () =>
+});
+mountLobby(server);
+server.listen(port, process.env.HOST || "127.0.0.1", () =>
 	console.log(`Pogranicze Galaktyki: http://127.0.0.1:${port}`),
 );

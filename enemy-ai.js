@@ -48,11 +48,16 @@
 				upgrades: [],
 				heavyAt: null,
 				artilleryAt: null,
+				// G1 (0.150): no Fortress, patrols or escorts on easy.
+				fortressAt: null,
+				patrols: 0,
+				escorts: 0,
+				escortHeavy: false,
 			},
 			normal: {
 				name: "Średni",
 				description:
-					"Przeciwnik utrzymuje 6 robotów, stawia fabrykę po ok. 3 minutach i drugie koszary, zajmuje pobliskie przekaźniki, broni kopalń, a do ataku wybiera najbliższy Twój budynek. Częściowo dobiera jednostki przeciw Twojej armii; po 9 minutach ulepsza pancerz.",
+					"Przeciwnik utrzymuje 6 robotów, stawia fabrykę po ok. 3 minutach i drugie koszary, zajmuje pobliskie przekaźniki, broni kopalń, a do ataku wybiera najbliższy Twój budynek. Częściowo dobiera jednostki przeciw Twojej armii; po 9 minutach ulepsza pancerz, po ok. 11 rozbudowuje centrum do Twierdzy i przyjmuje doktrynę. Patroluje drogę do przekaźnika i osłania dalekie wydobycie.",
 				think: 2,
 				passive: 3,
 				relayIncome: 2,
@@ -81,11 +86,15 @@
 				upgrades: [{ kind: "armor", at: 540, cost: 300 }],
 				heavyAt: 420,
 				artilleryAt: null,
+				fortressAt: 660,
+				patrols: 1,
+				escorts: 1,
+				escortHeavy: false,
 			},
 			hard: {
 				name: "Trudny",
 				description:
-					"Przeciwnik szybko rozwija gospodarkę (8 robotów, magazyn przy dalszym złożu), buduje fabrykę po 2 minutach, trzy wieżyczki i hangar, reaguje co sekundę, dobiera jednostki przeciw Twojej armii, atakuje najsłabiej bronione cele, nęka roboty szybkimi oddziałami i wycofuje przegrane ataki. Ulepsza pancerz i broń.",
+					"Przeciwnik szybko rozwija gospodarkę (8 robotów, magazyn przy dalszym złożu), buduje fabrykę po 2 minutach, trzy wieżyczki i hangar, reaguje co sekundę, dobiera jednostki przeciw Twojej armii, atakuje najsłabiej bronione cele, nęka roboty szybkimi oddziałami i wycofuje przegrane ataki. Ulepsza pancerz i broń, po ok. 8 minutach ma Twierdzę i doktrynę dobraną do sytuacji; dwa patrole, eskorta wydobycia i artylerii w natarciu.",
 				think: 1,
 				passive: 4.5,
 				relayIncome: 3,
@@ -117,6 +126,10 @@
 				],
 				heavyAt: 300,
 				artilleryAt: 480,
+				fortressAt: 480,
+				patrols: 2,
+				escorts: 2,
+				escortHeavy: true,
 			},
 		});
 		// Faction styles, applied to a level (see aiLevel): multipliers (×), additions (+) and unit weight biases.
@@ -171,6 +184,13 @@
 			raidFrom: 300,
 			surplus: 1500,
 			surplusTurrets: 2,
+			// G1 (0.150): the Fortress and a doctrine for the commander — paid in metal only (it has no gas or
+			// crystals: the price includes their worth), researched for a while; patrol squads of two; escorts for
+			// workers mining further than escortFrom from the base.
+			fortress: { metal: 900, time: 45 },
+			doctrine: { metal: 700, time: 40 },
+			patrolSize: 2,
+			escortFrom: 450,
 		});
 
 		// Fog of war for the commanders: on; vision refreshed every `refresh` s; the remembered enemy army fades by
@@ -456,7 +476,7 @@
 					if (!hq) continue;
 					const L = this.aiLevel(T.team);
 					const relays = this.nodes.filter((n) => n.owner === this.sideLeader(T.team)).length;
-					T.metal += dt * (L.passive + relays * L.relayIncome) * bonus;
+					T.metal += dt * ((L.passive + relays * L.relayIncome) * bonus + (T.upgrades.fortress ? RTS.FORTRESS?.income ?? 4 : 0));
 					this.aiWorkers(T, dt, L);
 					this.aiProduce(T, dt, L);
 					if ((T.think -= dt) <= 0) {
@@ -672,6 +692,7 @@
 						pay(u.cost);
 						T.upgrades[u.kind] = true;
 					}
+				this.aiAdvance(T, L, hq, army, reserve, pay);
 				// Army production in every free producer, up to the size allowed at this moment of the battle.
 				const [base, perMinute, cap] = L.army;
 				let armySize = army.length + own.filter((b) => b.aiQueue && b.aiQueue.type !== "worker").length;
@@ -683,7 +704,7 @@
 					const cost = this.aiCost(type, T.team);
 					if (T.metal < cost + reserve) continue;
 					pay(cost);
-					b.aiQueue = { type, left: TYPES[type].build * L.prodTime * (RTS.FACTION_KIT?.[this.factionFor(T.team)?.key]?.production || 1) };
+					b.aiQueue = { type, left: (TYPES[type].build * L.prodTime * (RTS.FACTION_KIT?.[this.factionFor(T.team)?.key]?.production || 1)) / (this.doctrineOf?.(T.team)?.production || 1) };
 					armySize++;
 				}
 				this.aiMilitary(T, L, hq, army, workers);
@@ -707,6 +728,150 @@
 					if (b) best = { x: b.x, y: b.y };
 				}
 				if (best) this.orbitalStrike(uplink.id, best.x, best.y);
+			},
+			// G1 (0.150): the Fortress, then a doctrine of the side's faction — each paid at once and ready after its
+			// research time. Not in the campaign (its chapters are balanced without them).
+			aiAdvance(T, L, hq, army, reserve, pay) {
+				const P = T.advance;
+				if (P) {
+					if (this.time >= P.at) {
+						delete T.advance;
+						T.upgrades[P.kind] = true;
+						this.aiAdvanced(T, P.kind, hq);
+					}
+					return;
+				}
+				if (L.fortressAt == null || this.campaignAi || !RTS.RESEARCH?.fortress) return;
+				if (!T.upgrades.fortress) {
+					const factory = this.entities.some((e) => e.team === T.team && e.type === "factory" && e.hp > 0 && !e.constructionLeft);
+					if (this.time >= L.fortressAt && factory && army.length >= L.minAttack && T.metal >= AI.fortress.metal + reserve) {
+						pay(AI.fortress.metal);
+						T.advance = { kind: "fortress", at: this.time + AI.fortress.time * L.prodTime };
+					}
+					return;
+				}
+				if (this.doctrineOf?.(T.team)) return;
+				const d = this.aiPickDoctrine(T, L, army);
+				if (d && T.metal >= AI.doctrine.metal + reserve) {
+					pay(AI.doctrine.metal);
+					T.advance = { kind: d.id, at: this.time + AI.doctrine.time * L.prodTime };
+				}
+			},
+			// The doctrine for the moment: the defensive one when the side is losing the arms race or was attacked in
+			// the last two minutes; otherwise the offensive one — for the Dominium only when Heavy fire has enough to
+			// work with (a quarter of the army in vehicles, or four towers: it strengthens defence buildings too).
+			aiPickDoctrine(T, L, army) {
+				const list = RTS.DOCTRINES?.[this.aiStyleKey(T.team)] || RTS.DOCTRINES?.colonies;
+				if (!list) return null;
+				const worth = (units) => units.reduce((n, e) => n + (TYPES[e.type]?.cost || 60), 0),
+					losing = worth(army) < worth(this.aiPlayerArmy(T.team)) * 0.9,
+					pressed = this.time - T.lastThreat < 120,
+					heavy = army.length ? army.filter((e) => !TYPES[e.type].flying && TYPES[e.type].hp >= 300).length / army.length : 0,
+					towers = this.entities.filter((e) => e.team === T.team && e.hp > 0 && !e.constructionLeft && !TYPES[e.type].speed && TYPES[e.type].damage > 0).length;
+				const offensive = !losing && !pressed && (this.aiStyleKey(T.team) !== "dominion" || heavy >= 0.25 || towers >= 4);
+				return list[offensive ? 0 : 1];
+			},
+			aiAdvanced(T, kind, hq) {
+				if (kind === "fortress" && hq && !hq.fortress) {
+					hq.fortress = true;
+					hq.hp *= RTS.FORTRESS?.hpFactor ?? 1.5;
+					hq.maxHp *= RTS.FORTRESS?.hpFactor ?? 1.5;
+				}
+				// The player hears of it from an ally, or when the enemy centre is in sight.
+				const viewer = this.humans?.[0] ?? 0,
+					ally = this.allied(viewer, T.team);
+				if (!ally && !(hq && this.isVisibleTo(viewer, hq.x, hq.y))) return;
+				const what = kind === "fortress" ? "rozbudowuje centrum do Twierdzy" : `przyjmuje doktrynę „${(RTS.RESEARCH?.[kind]?.name || kind).replace("Doktryna: ", "")}”`;
+				this.notify(`${ally ? "Sojusznik" : "Wywiad: " + this.sideName(T.team)} ${what}.`, ally ? undefined : "alarm");
+			},
+			// Patrols (0.150.1): squads of two walk between the rally point and the side's outer relays and depots
+			// (or a point in front of the base), fighting on the way; on a threat to the base they join the defence.
+			aiPatrols(T, L, hq, army) {
+				if (!L.patrols || !this.patrol || this.campaignAi) return;
+				const side = this.sideLeader(T.team),
+					spots = [...this.nodes.filter((n) => n.owner === side), ...this.entities.filter((b) => b.team === T.team && b.hp > 0 && ["depot", "outpost"].includes(b.type))]
+						.filter((p) => dist(p, hq) > 300)
+						.sort((a, b) => dist(a, hq) - dist(b, hq));
+				if (!spots.length) {
+					const d = dist(T.rally, hq) || 1;
+					spots.push({ x: Math.max(90, Math.min(this.W - 90, hq.x + ((T.rally.x - hq.x) / d) * 560)), y: Math.max(90, Math.min(this.H - 90, hq.y + ((T.rally.y - hq.y) / d) * 560)) });
+				}
+				const free = army.filter((e) => e.aiRole === "defend" && !e.target).sort((a, b) => TYPES[b.type].speed - TYPES[a.type].speed);
+				let spare = free.length - L.keepHome;
+				for (let k = 0; k < L.patrols; k++) {
+					const end = spots[k % spots.length],
+						squad = army.filter((e) => e.aiRole === "patrol" && e.aiPatrol === k);
+					for (const e of squad) if (!e.patrol || dist(e.patrol.b, end) > 90) this.aiSetPatrol(e, T, end);
+					while (squad.length < AI.patrolSize && spare > 0 && free.length) {
+						const e = free.shift();
+						spare--;
+						e.aiRole = "patrol";
+						e.aiPatrol = k;
+						squad.push(e);
+						this.aiSetPatrol(e, T, end);
+					}
+				}
+			},
+			// The orders of patrol-rules.js, set directly (the player's patrol() would sound the order for the player).
+			aiSetPatrol(e, T, end) {
+				const a = this.aiRallySpot(T, e),
+					b = { x: Math.round(end.x + ((e.id % 3) - 1) * 30), y: Math.round(end.y + 40) };
+				e.path = this.pathTo(e, b);
+				if (!e.path.length || dist(a, b) < 120) {
+					delete e.patrol;
+					e.aiRole = "defend";
+					return;
+				}
+				e.patrol = { a: { x: Math.round(a.x), y: Math.round(a.y) }, b, to: "b" };
+				e.order = { kind: "attackMove", x: b.x, y: b.y, patrol: true };
+				e.repath = 0.6;
+			},
+			// Escorts (0.150.2): one unit with each of the workers mining furthest from the base (normal one worker,
+			// hard two); let go when the worker mines near home again or falls.
+			aiEscorts(T, L, hq, army) {
+				if (!L.escorts || !this.escort || this.campaignAi) return;
+				const far = this.entities
+					.filter((w) => w.team === T.team && w.type === "worker" && w.hp > 0)
+					.map((w) => ({ w, ore: this.ores.find((o) => o.id === w.aiTask?.oreId && o.amount > 0) }))
+					.filter(({ ore }) => ore && dist(ore, hq) > AI.escortFrom)
+					.sort((a, b) => dist(b.ore, hq) - dist(a.ore, hq))
+					.slice(0, L.escorts)
+					.map(({ w }) => w.id);
+				for (const e of army)
+					if (e.aiRole === "escort" && (e.order?.kind !== "escort" || !far.includes(e.order.targetId))) {
+						e.aiRole = "defend";
+						if (e.order?.kind === "escort") {
+							e.order = null;
+							e.path = [];
+						}
+					}
+				const free = army.filter((e) => e.aiRole === "defend" && !e.target && !TYPES[e.type].flying).sort((a, b) => TYPES[b.type].speed - TYPES[a.type].speed);
+				let spare = free.length - L.keepHome;
+				for (const id of far) {
+					if (army.some((e) => e.aiRole === "escort" && e.order?.targetId === id) || spare <= 0 || !free.length) continue;
+					const e = free.shift();
+					spare--;
+					e.aiRole = "escort";
+					e.order = { kind: "escort", targetId: id, slot: 0, of: 1 };
+					e.path = [];
+					e.target = null;
+					e.repath = 0;
+				}
+			},
+			// Hard: in an attack, the slow and fragile heavy units (artillery, colossi, carriers, cruisers) get two of
+			// the lighter units of the group as escort.
+			aiEscortHeavy(group) {
+				if (!this.escort || this.campaignAi) return;
+				const heavy = group.filter((e) => ["artillery", "colossus", "carrier", "cruiser"].includes(e.type)),
+					light = group.filter((e) => !heavy.includes(e) && (TYPES[e.type].hp || 0) < 400 && !TYPES[e.type].flying);
+				for (const h of heavy)
+					for (let i = 0; i < 2 && light.length; i++) {
+						const e = light.shift();
+						e.order = { kind: "escort", targetId: h.id, slot: i, of: 2 };
+						e.path = [];
+						e.target = null;
+						e.repath = 0;
+					}
 			},
 			aiPlayerArmy(team = 1) {
 				const foes = this.aiFoes(team),
@@ -773,7 +938,10 @@
 				const defenders = army.filter((e) => e.aiRole === "defend" || !e.aiRole);
 				if (threats.length) {
 					T.lastThreat = this.time;
-					let responders = defenders;
+					// Patrols drop their routes and join the defence (sent out again when it is calm).
+					const patrols = army.filter((e) => e.aiRole === "patrol");
+					for (const e of patrols) e.aiRole = "defend";
+					let responders = defenders.concat(patrols);
 					const nearHome = attack.filter((e) => dist(e, hq) < 1000);
 					if (threat > total(responders) * 0.8) responders = responders.concat(nearHome);
 					// Hard: an attack far away comes back when the base is outmatched.
@@ -793,6 +961,9 @@
 				this.aiRelays(T, L, army);
 				this.aiScout(T, L, army);
 				this.aiAttack(T, L, hq, army, attack);
+				// Patrols and escorts from what the attack and the relay squads left (an attack comes first).
+				if (!threats.length) this.aiPatrols(T, L, hq, army);
+				this.aiEscorts(T, L, hq, army);
 			},
 			// Relay squads: a share of the army takes and holds the nearest relays not owned by the side.
 			aiRelays(T, L, army) {
@@ -858,8 +1029,9 @@
 			},
 			aiAttack(T, L, hq, army, attack) {
 				if (this.time >= T.nextAttack) {
+					// Patrols go with an attack too (new units take up the routes again); escorts stay with the workers.
 					const pool = army
-							.filter((e) => e.aiRole === "defend" || !e.aiRole)
+							.filter((e) => e.aiRole === "defend" || e.aiRole === "patrol" || !e.aiRole)
 							.sort((a, b) => dist(a, hq) - dist(b, hq)),
 						keep = Math.min(L.keepHome, Math.floor(pool.length / 3)),
 						[size, grow, most] = L.attackSize,
@@ -884,6 +1056,7 @@
 						e.aiRole = "attack";
 						this.aiGoTo(e, target, "attackMove");
 					}
+					if (L.escortHeavy) this.aiEscortHeavy(group);
 					// Expedition: two thirds of an attack go for the artifact once the hunt is open.
 					if (this.modeState?.mode === "expedition" && this.time >= (RTS.EXPEDITION?.aiStart ?? 0))
 						group.forEach((e, i) => {
@@ -921,7 +1094,8 @@
 					const alive = (id) => (this.get(id)?.hp || 0) > 0,
 						gone = A.target.id != null ? (this.aiIntel(T.team) ? this.aiSees(T.team, A.target.x, A.target.y) && !alive(A.target.id) : !this.get(A.target.id)) : attack.every((e) => dist(e, A.target) < 160 && !e.target);
 					if (gone) A.target = this.aiTarget(T, L, centre(attack)) || A.target;
-					for (const e of attack) if (!e.target) this.aiGoTo(e, A.target, "attackMove");
+					// Escorts of the attack's heavy units keep to them (the order ends when the guarded one falls).
+					for (const e of attack) if (!e.target && e.order?.kind !== "escort") this.aiGoTo(e, A.target, "attackMove");
 				}
 				// Hard: fast raiders harass workers at the player's outer deposits.
 				if (L.raids && this.time >= T.raidAt) {
@@ -962,6 +1136,9 @@
 						buildings: own.filter((e) => !TYPES[e.type].speed).length,
 						attacks: T.attackNo,
 						upgrades: Object.keys(T.upgrades),
+						doctrine: this.doctrineOf?.(T.team)?.id || null,
+						patrols: own.filter((e) => e.aiRole === "patrol").length,
+						escorts: own.filter((e) => e.order?.kind === "escort").length,
 					};
 				});
 			},

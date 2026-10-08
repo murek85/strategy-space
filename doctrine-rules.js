@@ -11,7 +11,9 @@
        the Swarm — Nawała (production +30% faster, +10% speed) or Pancerz chitynowy (17% less damage, as
          +20% toughness).
      A side without a faction of a scenario (the campaign) takes the Colonies' doctrines.
-   - Human sides only (the computer opponent does not research them); saved with the side's upgrades.
+   - Human sides research them; the computer commander (enemy-ai.js, since 0.150) takes the Fortress and a
+     doctrine of its own on normal and hard, kept in its own upgrades (enemyAi.teams[team].upgrades) — the
+     effects below read both. Saved with the side's upgrades.
    Shared by browser and tests. */
 (function (root) {
 	function install(RTS) {
@@ -77,7 +79,8 @@
 			},
 			// The doctrine a side took (its data), or null.
 			doctrineOf(team) {
-				for (const d of ALL) if (this.upgradeOf(team, d.id)) return d;
+				const ai = this.enemyAi?.teams?.[team]?.upgrades;
+				for (const d of ALL) if (this.upgradeOf(team, d.id) || ai?.[d.id]) return d;
 				return null;
 			},
 			doctrines(team = this.me) {

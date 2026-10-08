@@ -1157,12 +1157,13 @@
 #unload-transport[hidden] {
 	display: none !important;
 }
-/* Selection orders: an even grid of two columns, the shortcut at the right edge of each button. */
+/* Selection orders: an even grid of two columns, the shortcut at the right edge of each button.
+   Tighter since 0.148 (a third row of orders: patrol and escort). */
 .selection-actions {
 	display: grid;
 	grid-template-columns: repeat(2, minmax(0, 1fr));
-	gap: 4px;
-	margin-top: 10px;
+	gap: 3px;
+	margin-top: 6px;
 }
 .selection-actions button {
 	display: flex;
@@ -1170,7 +1171,7 @@
 	justify-content: space-between;
 	gap: 4px;
 	min-width: 0;
-	height: 23px;
+	height: 20px;
 	padding: 0 7px;
 	border-radius: 2px;
 	white-space: nowrap;
@@ -1200,6 +1201,13 @@
 #hold-position {
 	order: 4;
 }
+/* DOW-01: patrol and escort, the third row of orders. */
+#patrol-order {
+	order: 5;
+}
+#escort-order {
+	order: 6;
+}
 .selection-actions > button {
 	order: 10;
 }
@@ -1212,7 +1220,7 @@
 	grid-column: 1 / -1;
 	order: 50;
 	position: relative;
-	margin-top: 6px;
+	margin-top: 4px;
 }
 .formation-label {
 	position: absolute;

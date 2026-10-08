@@ -26,13 +26,17 @@
 		paused = false,
 		building = false,
 		attackMode = false,
+		// DOW-01 (0.148): "patrol" or "escort" — the next right click gives that order.
+		orderMode = false,
 		strikeMode = null,
+		// G2 (0.152): "drop" or "strike" — the next left click lands pods or calls the strike from orbit.
+		orbitMode = null,
 		finished = false;
 	// Network play (netplay.js): the lockstep session, or null in a single-player battle.
 	let netSession = null;
 	// A player's action: run at once in a single-player battle; in a network battle sent to both computers and run
 	// there a few turns later (the answer is optimistic: counts for the selection, true otherwise).
-	const COUNTED = new Set(["hold", "demolish", "salvage", "sabotage", "board", "setRally"]);
+	const COUNTED = new Set(["hold", "demolish", "salvage", "sabotage", "board", "setRally", "patrol", "escort"]);
 	function act(name, ...args) {
 		if (!netSession) return game[name](...args);
 		netSession.issue(name, args);
@@ -43,6 +47,8 @@
 	window.currentGame = () => game;
 	window.currentNetwork = () => netSession;
 	window.currentMenu = () => menu;
+	// The board's renderer in use: "three", "webgl", "webgpu" or "canvas" (diagnostics, the desktop app's self-check).
+	window.currentRendererMode = () => rendererMode;
 	let choiceOpen = false,
 		act2Signature = "";
 	let width = 1,
@@ -449,8 +455,9 @@
 				? "Planowany atak"
 				: "Następny desant";
 			$("wave").textContent = waves ? timeLabel(Math.max(0, game.nextWave - game.time)) : "—";
+			// Clamped (0.152.1): an attack overdue or far off gave widths beyond the track (a long sideways scroll).
 			$("wave-progress").style.width = waves
-				? `${100 * (1 - (game.nextWave - game.time) / Math.max(35, 65 - game.wave * 3))}%`
+				? `${Math.max(0, Math.min(100, 100 * (1 - (game.nextWave - game.time) / Math.max(35, 65 - game.wave * 3))))}%`
 				: "0%";
 		}
 		$("obj-capture").classList.toggle("done", game.captured);
@@ -464,7 +471,7 @@
 					? `Oddział · ${es.length} jednostek`
 					: "Brak zaznaczenia";
 		$("selection-detail").textContent = es.length
-			? `${Math.ceil(es.reduce((a, e) => a + e.hp, 0))} PW · ${es.some((e) => e.order?.kind === "build") ? "buduje" : es.some((e) => e.order?.kind === "gas") ? "wydobywa gaz" : es.some((e) => e.order?.kind === "gather") ? "wydobywa rudę" : es.some((e) => e.order?.kind === "repair") ? "naprawia" : es.some((e) => e.order?.kind === "hold") ? "utrzymuje pozycję" : es.some((e) => e.target) ? "w walce" : es.some((e) => ["trooper", "rocket"].includes(e.type) && game.cover(e)) ? "w osłonie" : "gotowość"}`
+			? `${Math.ceil(es.reduce((a, e) => a + e.hp, 0))} PW · ${es.some((e) => e.order?.kind === "build") ? "buduje" : es.some((e) => e.order?.kind === "gas") ? "wydobywa gaz" : es.some((e) => e.order?.kind === "gather") ? "wydobywa rudę" : es.some((e) => e.order?.kind === "repair") ? "naprawia" : es.some((e) => e.order?.kind === "hold") ? "utrzymuje pozycję" : es.some((e) => e.order?.kind === "escort") ? "eskortuje" : es.some((e) => e.patrol) ? "patroluje" : es.some((e) => e.target) ? "w walce" : es.some((e) => ["trooper", "rocket"].includes(e.type) && game.cover(e)) ? "w osłonie" : "gotowość"}`
 			: "LPM lub przeciągnij ramkę";
 		if (es.length === 1 && es[0].type === "extractor") {
 			const b = es[0],
@@ -631,7 +638,7 @@
 				!!game.developmentRequirement(b.dataset.build) ||
 				game.credits < game.cost(b.dataset.build) ||
 				!game.units((game.viewer ?? 0)).some((e) => e.type === "worker");
-			b.title =
+			b.dataset.tip =
 				b.disabled && !game.units((game.viewer ?? 0)).some((e) => e.type === "worker")
 					? "Potrzebny robot budowlany"
 					: game.developmentRequirement(b.dataset.build) ||
@@ -650,13 +657,14 @@
 				done = working ? 1 - game.research.left / game.research.total : 0;
 			b.disabled = !started || !availability.allowed;
 			b.querySelector("small").textContent = working ? `${Math.floor(done * 100)}% · zostało ${Math.ceil(game.research.left)} s${game.power.factor < 1 ? " · tempo " + Math.round(game.power.factor * 100) + "%" : ""}` : status;
-			b.title = b.dataset.description + " · " + status;
 			b.dataset.state = availability.state;
 			b.classList.toggle("is-complete", !!game.upgrades[kind]);
 			b.classList.toggle("is-working", working);
 			const bar = b.querySelector(".research-progress");
 			if (bar) bar.style.width = `${working ? done * 100 : availability.state === "done" ? 100 : 0}%`;
 		});
+		renderCardTip();
+		renderOrbitPanel();
 		// With no research under way, the research tab counts what has been researched.
 		if (activeTab === "research" && !game.research) {
 			const all = [...document.querySelectorAll("[data-research]")];
@@ -894,7 +902,7 @@
 	function openChat() {
 		const input = chatHud().querySelector("input");
 		input.hidden = false;
-		input.placeholder = `Wiadomość do: ${game.players[1 - game.viewer].name} · Enter wysyła, Esc zamyka`;
+		input.placeholder = `Wiadomość do: ${netRelay ? "wszystkich w bitwie" : game.players[1 - game.viewer].name} · Enter wysyła, Esc zamyka`;
 		input.focus();
 		renderChat();
 	}
@@ -932,17 +940,17 @@
 	// Tactical intel in a network battle: the opponent, the relays, the connection and the pauses left.
 	function networkIntel() {
 		const me = game.viewer,
-			other = game.players[1 - me],
+			mySide = game.sideLeader?.(me) ?? me,
 			ping = netSession?.ping,
 			nodes = game.nodes.length,
 			mine = game.nodes.filter((n) => n.owner === me).length,
-			theirs = game.nodes.filter((n) => n.owner === 1 - me).length;
+			theirs = game.nodes.filter((n) => n.owner != null && n.owner >= 0 && n.owner !== 2 && n.owner !== mySide).length;
 		$("wave").previousElementSibling.textContent = "Opóźnienie sieci";
 		$("wave").textContent = ping != null ? ping + " ms" : "—";
 		// The bar: the share of relays held (yours against the opponent's).
 		$("wave-progress").style.width = `${nodes ? (100 * mine) / nodes : 0}%`;
 		$("intel-text").textContent =
-			`Przeciwnik: ${other.name} (${game.factionFor(1 - me)?.name || "frakcja nieznana"}). Przekaźniki: Twoje ${mine}, przeciwnika ${theirs} z ${nodes}. ` +
+			`${foes(me).length > 1 ? "Przeciwnicy" : "Przeciwnik"}: ${foes(me).map((p) => `${p.name} (${game.factionFor(p.team)?.name || "frakcja nieznana"}${p.ai ? ", komputer" : ""})`).join(", ")}. Przekaźniki: Twoje ${mine}, przeciwnika ${theirs} z ${nodes}. ` +
 			`Zniszcz jego centrum dowodzenia. Wspólna pauza [Spacja]: zostało ${game.pausesLeft?.[me] ?? 0} z ${RTS.NET_PAUSE.count}.`;
 	}
 	// Shared pause (network): a request goes to both players as an ordinary action.
@@ -1000,6 +1008,8 @@
 	// netLink: the connection to the other player; it outlives a battle (the end screen offers a rematch on it).
 	let netLink = null,
 		netLast = null,
+		// A lobby battle (G4): { url, room, client, player } — the server to come back to.
+		netRelay = null,
 		rematch = null;
 	const hookedLinks = new WeakSet();
 	// Listeners of the application on a link, once per connection: chat, rematch, the other player leaving.
@@ -1011,7 +1021,12 @@
 			if (msg.k === "chat") {
 				const text = NetPlay.chatText(msg.text);
 				if (!text || !netSession) return;
-				addChat(game.players[1 - game.viewer], text);
+				// A lobby battle names the sender (team); 1 on 1 has only the other player.
+				addChat(Number.isInteger(msg.team) ? game.players[msg.team] || { name: msg.name, color: msg.color } : game.players[1 - game.viewer], text);
+				sound.play("radio");
+			} else if (["dropped", "back", "takeover"].includes(msg.k) && netSession) {
+				const who = game.players[msg.team]?.name || msg.name || "Gracz";
+				toast(msg.k === "dropped" ? `${who} traci połączenie — bitwa trwa, jego wojska czekają.` : msg.k === "back" ? `${who} wraca do bitwy.` : `${who} nie wraca — jego stronę prowadzi komputer.`);
 				sound.play("radio");
 			} else if (msg.k === "rematch" && rematch) {
 				rematch.theirs = true;
@@ -1060,27 +1075,78 @@
 					: "Rewanż: te same zasady i frakcje, nowy układ mapy. Obaj gracze muszą się zgodzić.";
 		status.classList.toggle("rematch-offer", !!rematch.theirs && !rematch.mine && !rematch.gone);
 	}
-	function startNetwork({ link, team, settings }) {
+	// The players of the other side of a network battle (1 on 1: the opponent; 2 vs 2: both of them).
+	function foes(me = game.viewer) {
+		return Object.entries(game.players || {})
+			.map(([t, p]) => ({ ...p, team: Number(t) }))
+			.filter((p) => p.team !== me && !game.allied(me, p.team));
+	}
+	// relay (G4): a lobby battle through the server — { url, room, client, player }; resume: the server's log after
+	// coming back (the battle is rebuilt by replaying it).
+	function startNetwork({ link, team, settings, relay = null, resume = null }) {
 		// A rematch reuses the connection: only the finished battle ends.
 		const again = link === netLink;
 		endNetwork(again);
 		netLink = link;
 		netLast = { team, settings };
+		netRelay = relay;
 		rematch = null;
 		hookLink(link);
 		const prepared = RTS.createNetworkGame(settings);
 		prepared.viewer = team;
 		netSession = new NetPlay.Lockstep(prepared, team, link, {
-			onDesync: () => networkOver("Rozsynchronizowanie gry", "Symulacje obu graczy przestały się zgadzać — bitwa została przerwana. Zgłoś to twórcy gry (mapa, frakcje, co działo się tuż przed)."),
-			onClose: () => networkOver("Połączenie zerwane", "Drugi gracz opuścił bitwę albo połączenie zostało przerwane."),
+			teams: relay ? prepared.humans.slice() : [0, 1],
+			relay: !!relay,
+			onDesync: () => networkOver("Rozsynchronizowanie gry", "Symulacje graczy przestały się zgadzać — bitwa została przerwana. Zgłoś to twórcy gry (mapa, frakcje, co działo się tuż przed)."),
+			onClose: () => (relay ? relayLost() : networkOver("Połączenie zerwane", "Drugi gracz opuścił bitwę albo połączenie zostało przerwane.")),
 			pump: advanceHidden,
 		});
+		if (resume) netSession.replay(resume.log, resume.from, resume.release);
 		// The lobby conversation continues in the battle (and from one battle to its rematch).
 		if (!again) chatLog = (menu.net?.chat || []).slice(-6).map((e) => ({ ...e, at: performance.now() }));
 		chatHud().hidden = false;
 		menu.hide();
 		restart(prepared.missionId, null, prepared);
-		toast(`${again ? "Rewanż" : "Bitwa sieciowa"}: ${game.players[0].name} kontra ${game.players[1].name}. Zniszcz centrum dowodzenia przeciwnika.`);
+		const mine = Object.entries(game.players).filter(([t]) => game.allied(team, Number(t)) || Number(t) === team).map(([, p]) => p.name),
+			theirs = foes(team).map((p) => p.name);
+		toast(resume ? "Powrót do bitwy — dogoniono jej przebieg." : `${again ? "Rewanż" : "Bitwa sieciowa"}: ${mine.join(" i ")} kontra ${theirs.join(" i ")}. Zniszcz ${theirs.length > 1 ? "wszystkie centra dowodzenia przeciwników" : "centrum dowodzenia przeciwnika"}.`);
+	}
+	// A lobby battle lost its server: reconnect (every 2 s, for a minute) and come back by the server's log.
+	function relayLost() {
+		const relay = netRelay;
+		if (!relay || finished) return networkOver("Połączenie zerwane", "Połączenie z serwerem gry zostało przerwane.");
+		const team = netLast.team;
+		netSession?.stop();
+		netSession = null;
+		paused = true;
+		$("overlay").hidden = false;
+		$("overlay").innerHTML = `<div class="briefing"><span class="eyebrow">GRA WIELOOSOBOWA / ${timeLabel(game.time)}</span><div class="briefing-symbol">⌁</div><h2>Łączenie ponownie…</h2><p id="relay-status">Połączenie z serwerem gry zostało przerwane. Bitwa trwa u pozostałych graczy — wracam do niej.</p><button id="end-menu" class="primary-button end-secondary">ZREZYGNUJ <span>↗</span></button></div>`;
+		$("end-menu").onclick = () => {
+			netRelay = null;
+			endNetwork();
+			started = false;
+			menu.show("home");
+		};
+		let tries = 0;
+		const attempt = () => {
+			if (netRelay !== relay) return;
+			if (++tries > 30) return networkOver("Nie udało się wrócić", "Serwer gry nie odpowiada. Spróbuj później: Gra wieloosobowa → Przez serwer — trwająca bitwa pojawi się na liście.");
+			if ($("relay-status")) $("relay-status").textContent = `Połączenie z serwerem przerwane — próba ${tries} z 30…`;
+			const link = new NetPlay.RelayLink(relay.url);
+			link.on("open", () => link.send({ k: "hello", v: 1, client: relay.client, player: relay.player }));
+			link.on("message", (msg) => {
+				if (msg.k === "welcome") link.send({ k: "rejoin", room: relay.room });
+				else if (msg.k === "resume") {
+					$("overlay").hidden = true;
+					paused = false;
+					startNetwork({ link, team: msg.team ?? team, settings: msg.settings, relay, resume: msg });
+				} else if (msg.k === "error" && netRelay === relay) networkOver("Nie udało się wrócić", msg.text);
+			});
+			link.on("close", () => {
+				if (netRelay === relay && !netSession) setTimeout(attempt, 2000);
+			});
+		};
+		attempt();
 	}
 	// keepLink: the battle ends but the connection stays (end screen with a rematch, or the rematch itself).
 	function endNetwork(keepLink = false) {
@@ -1094,6 +1160,7 @@
 		}
 		if (keepLink) return;
 		rematch = null;
+		netRelay = null;
 		if (netLink) {
 			netLink.close();
 			netLink = null;
@@ -1114,13 +1181,32 @@
 			menu.show("home");
 		};
 	}
+	// Inwazja (G2): the orbit is decided — who holds it and with how many drop pods; then the landing.
+	function showInvasionLanding() {
+		const I = game.invasion,
+			C = I.carry,
+			mine = C.owner === (game.viewer ?? 0),
+			target = MISSIONS[I.target] || {},
+			how = I.decided === "time" ? "Po 8 minutach walki o orbitę zdecydowała siła flot i stacji." : mine ? "Stacja dowodzenia wroga na orbicie zniszczona." : "Twoja stacja dowodzenia na orbicie zniszczona.";
+		$("overlay").hidden = false;
+		$("overlay").innerHTML = `<div class="briefing invasion-landing ${mine ? "victory" : "defeat"}"><span class="eyebrow">INWAZJA · FAZA 1 ZAKOŃCZONA / ${timeLabel(game.time)}</span><div class="briefing-symbol">${mine ? "◈" : "⌁"}</div><h2>${mine ? "Orbita zdobyta." : "Orbita utracona."}</h2><p>${how} ${mine ? `Twoja flota osłania ${C.pods} kapsuł desantowych; na planecie masz też uderzenie z orbity i skan orbitalny.` : `Wróg ma ${C.pods} kapsuł desantowych, uderzenie z orbity i skan — buduj baterie przeciwlotnicze, by zestrzeliwać kapsuły.`}</p><div class="briefing-controls"><span><b>${C.mine}</b>Twoje siły na orbicie</span><span><b>${C.theirs}</b>Siły wroga na orbicie</span><span><b>${C.pods}</b>Kapsuły ${mine ? "Twoje" : "wroga"}</span></div><button id="invasion-land" class="primary-button">LĄDOWANIE — ${(target.name || "").toUpperCase()} <span>↓</span></button><button id="end-menu" class="primary-button end-secondary">MENU GŁÓWNE <span>↗</span></button></div>`;
+		$("invasion-land").onclick = () => {
+			$("overlay").hidden = true;
+			launchWithScreen(I.target, { ...game.scenario, mode: "invasion", invasion: { phase: "ground", owner: C.owner, pods: C.pods, from: game.missionId } });
+		};
+		$("end-menu").onclick = () => {
+			started = false;
+			menu.show("home");
+		};
+	}
 	function showEnd() {
 		const victory = (game.resultFor?.() ?? game.result) === "victory";
 		if (netSession) {
 			const me = game.viewer,
-				other = game.players[1 - me];
+				others = foes(me),
+				other = { name: others.map((p) => p.name).join(" i ") };
 			$("overlay").hidden = false;
-			$("overlay").innerHTML = `<div class="briefing"><span class="eyebrow">GRA WIELOOSOBOWA / ${timeLabel(game.time)}</span><div class="briefing-symbol">${victory ? "◈" : "⌁"}</div><h2>${victory ? "Zwycięstwo." : "Porażka."}</h2><p>${victory ? `Centrum dowodzenia gracza ${other.name} zniszczone.` : `${other.name} zniszczył Twoje centrum dowodzenia.`}</p><div class="briefing-controls"><span><b>${game.sideOf(me).kills}</b>Twoje zniszczone cele</span><span><b>${game.sideOf(1 - me).kills}</b>Cele zniszczone przez przeciwnika</span><span><b>${game.nodes.filter((n) => n.owner === me).length} / ${game.nodes.length}</b>Twoje przekaźniki</span></div><p id="rematch-status" class="rematch-status" role="status"></p><button id="rematch" class="primary-button">REWANŻ <span>↻</span></button><button id="end-menu" class="primary-button end-secondary">MENU GŁÓWNE <span>↗</span></button></div>`;
+			$("overlay").innerHTML = `<div class="briefing"><span class="eyebrow">GRA WIELOOSOBOWA / ${timeLabel(game.time)}</span><div class="briefing-symbol">${victory ? "◈" : "⌁"}</div><h2>${victory ? "Zwycięstwo." : "Porażka."}</h2><p>${netRelay ? (victory ? `Wszystkie centra dowodzenia strony ${other.name} zniszczone.` : `Strona ${other.name} zniszczyła wszystkie centra dowodzenia Twojej strony.`) : victory ? `Centrum dowodzenia gracza ${other.name} zniszczone.` : `${other.name} zniszczył Twoje centrum dowodzenia.`}</p><div class="briefing-controls"><span><b>${game.sideOf(me).kills}</b>Twoje zniszczone cele</span><span><b>${others.reduce((n, p) => n + (game.sideOf(p.team)?.kills || 0), 0)}</b>Cele zniszczone przez przeciwnika</span><span><b>${game.nodes.filter((n) => n.owner === (game.sideLeader?.(me) ?? me)).length} / ${game.nodes.length}</b>Twoje przekaźniki</span></div><p id="rematch-status" class="rematch-status" role="status"></p>${netRelay ? "" : '<button id="rematch" class="primary-button">REWANŻ <span>↻</span></button>'}<button id="end-menu" class="primary-button end-secondary">MENU GŁÓWNE <span>↗</span></button></div>`;
 			// The connection stays for a rematch; the lockstep stops a moment later (the other computer still gets
 			// the last turn).
 			const ended = netSession;
@@ -1130,7 +1216,7 @@
 			decorateEnd(victory);
 			rematch = { mine: false, theirs: false, gone: !netLink?.open };
 			renderRematch();
-			$("rematch").onclick = askRematch;
+			if ($("rematch")) $("rematch").onclick = askRematch;
 			$("end-menu").onclick = () => {
 				endNetwork();
 				started = false;
@@ -1138,6 +1224,7 @@
 			};
 			return;
 		}
+		if (game.invasion?.phase === "orbit" && game.invasionResult?.()) return showInvasionLanding();
 		// Survival keeps the best time per map and level.
 		let modeText = game.modeResult?.() || null;
 		if (modeText && game.modeState?.mode === "survival" && RTS.recordSurvival) {
@@ -1297,7 +1384,8 @@
 		finished = false;
 		building = false;
 		wallDrag = null;
-		attackMode = false;
+		attackMode = orderMode = false;
+			orbitMode = null;
 		autosaveClock = 0;
 		$("placement").hidden = true;
 		camera = {
@@ -1315,10 +1403,16 @@
 	// The world the loading screen arrives at, for a map in space (its look, space-rules.js).
 	const spaceWorld = (m) => (m.look?.blackHole ? "spaceVoid" : m.look?.planet === "ice" ? "spaceIce" : m.look?.planet === "lava" ? "spaceLava" : "space");
 	function launchWithScreen(missionId = "horizon", scenario = null, prepared = null) {
+		// Inwazja (G2): the operation starts with the battle in orbit above the chosen planet.
+		if (scenario?.mode === "invasion" && !scenario.invasion && !prepared && RTS.INVASION && !MISSIONS[missionId]?.space && !MISSIONS[missionId]?.campaign) {
+			const orbit = RTS.INVASION.orbitFor[MISSIONS[missionId].biome] || "orbit";
+			scenario = { ...scenario, mode: "conquest", invasion: { phase: "orbit", target: missionId } };
+			missionId = orbit;
+		}
 		if (typeof LoadingScreen === "undefined" || prepared) return restart(missionId, scenario, prepared);
 		const m = MISSIONS[missionId] || {},
 			screen = LoadingScreen.show({
-				eyebrow: m.training ? "SZKOLENIE WOLNYCH KOLONII" : m.campaign ? "KAMPANIA · ODZYSKANY ŚWIT" : "OPERACJA NIEZALEŻNA",
+				eyebrow: scenario?.invasion ? (scenario.invasion.phase === "orbit" ? `INWAZJA · FAZA 1 — ORBITA NAD ${(MISSIONS[scenario.invasion.target]?.planet || "").toUpperCase()}` : "INWAZJA · FAZA 2 — LĄDOWANIE") : m.training ? "SZKOLENIE WOLNYCH KOLONII" : m.campaign ? "KAMPANIA · ODZYSKANY ŚWIT" : "OPERACJA NIEZALEŻNA",
 				title: m.name,
 				planet: m.planet,
 				// The orbital battle arrives at the gas giant (loading-screen.js "space").
@@ -1398,6 +1492,18 @@
 			fit();
 		} else toast("Złoże jest obecnie poza widocznym terenem.");
 		updateHud();
+	}
+	// DOW-01: the next right click patrols to a point or escorts a unit.
+	function beginOrder(mode) {
+		if (![...selected].some((id) => { const e = game.get(id); return e?.team === (game.viewer ?? 0) && TYPES[e.type].speed && TYPES[e.type].damage; })) {
+			toast("Wybierz jednostki bojowe.");
+			return;
+		}
+		building = false;
+		attackMode = false;
+		strikeMode = null;
+		orderMode = mode;
+		toast(mode === "patrol" ? "Patrol: wskaż PPM drugi koniec trasy. Esc — anuluj." : "Eskorta: wskaż PPM jednostkę lub budynek do ochrony. Esc — anuluj.");
 	}
 	function selectIdle() {
 		const workers = game.idleWorkers();
@@ -1508,7 +1614,8 @@
 			act2Signature = "";
 			building = false;
 			wallDrag = null;
-			attackMode = false;
+			attackMode = orderMode = false;
+			orbitMode = null;
 			$("placement").hidden = true;
 			$("overlay").hidden = true;
 			missionLabels();
@@ -1554,17 +1661,21 @@
 		const list = document.querySelector(".unit-cards"),
 			cards = [...list.children];
 		if (!list.clientWidth || !cards.length || !$("deck-page")) return;
-		const count = Math.max(
-				1,
-				Math.min(7, Math.floor((list.clientWidth + 8) / 180)),
-			),
+		// Compact cards (0.150): the slot width and the number of rows come from the stylesheet.
+		const style = getComputedStyle(list),
+			slot = parseFloat(style.getPropertyValue("--deck-slot")) || 180,
+			rows = parseInt(style.getPropertyValue("--deck-rows")) || 1,
+			columns = Math.max(1, Math.min(12, Math.floor((list.clientWidth + 8) / slot))),
+			count = columns * rows,
 			pages = Math.ceil(cards.length / count);
 		const focused = cards.indexOf(document.activeElement);
 		if (focused >= 0 && !delta)
 			deckPages[activeTab] = Math.floor(focused / count);
 		const page = clamp(deckPages[activeTab] + delta, 0, pages - 1);
 		deckPages[activeTab] = page;
-		list.style.setProperty("--deck-columns", Math.min(count, cards.length));
+		// The same tile width in every tab (0.150.1): a tab with fewer cards than columns leaves the rest of the row
+		// empty instead of stretching its tiles.
+		list.style.setProperty("--deck-columns", columns);
 		cards.forEach(
 			(card, i) =>
 				(card.hidden = i < page * count || i >= (page + 1) * count),
@@ -1574,6 +1685,88 @@
 			`${page * count + 1}–${Math.min(cards.length, (page + 1) * count)} z ${cards.length}`;
 		$("deck-prev").disabled = page === 0;
 		$("deck-next").disabled = page === pages - 1;
+	}
+	// A window over a production card (0.150): the compact card shows its name and cost, the rest is here — the
+	// description, the unit's figures, the building or what is missing, the full cost and the key.
+	let tipCard = null;
+	function setupCardTip() {
+		const tip = document.createElement("div");
+		tip.id = "card-tip";
+		tip.className = "card-tip";
+		tip.setAttribute("role", "tooltip");
+		tip.hidden = true;
+		document.body.append(tip);
+		// Hit-testing finds disabled cards too (they get no mouse events of their own).
+		const pick = (card) => {
+			if (card === tipCard) return;
+			tipCard = card;
+			renderCardTip();
+		};
+		document.addEventListener("pointermove", (e) => pick(document.elementFromPoint(e.clientX, e.clientY)?.closest?.(".production .unit-card") || null));
+		document.addEventListener("focusin", (e) => pick(e.target.closest?.(".production .unit-card") || null));
+		document.addEventListener("pointerdown", () => pick(null), true);
+	}
+	function renderCardTip() {
+		const tip = $("card-tip");
+		if (!tip) return;
+		const card = tipCard;
+		if (!card || card.hidden || !card.isConnected || menu?.active) {
+			tip.hidden = true;
+			return;
+		}
+		const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]),
+			name = card.querySelector("strong")?.textContent || "",
+			description = card.dataset.description || card.querySelector(".card-description")?.textContent || "",
+			status = card.querySelector(".card-status")?.textContent || "",
+			extra = card.dataset.tip && card.dataset.tip !== description && card.dataset.tip !== status ? card.dataset.tip : "",
+			s = card.dataset.unit ? TYPES[card.dataset.unit] : null,
+			figures = s ? [`${s.hp} PW`, s.damage ? `obrażenia ${s.damage}` : "", s.range ? `zasięg ${s.range}` : "", s.speed ? `ruch ${s.speed}` : ""].filter(Boolean).join(" · ") : "",
+			key = card.querySelector("kbd")?.textContent || "",
+			warn = card.disabled || card.classList.contains("locked");
+		tip.innerHTML =
+			`<strong>${esc(name)}${key ? ` <kbd>${esc(key)}</kbd>` : ""}</strong>` +
+			(description ? `<p>${esc(description)}</p>` : "") +
+			(figures ? `<p class="card-tip-figures">${esc(figures)}</p>` : "") +
+			(status ? `<p class="card-tip-status${warn ? " warn" : ""}">${esc(status)}</p>` : "") +
+			(extra ? `<p class="card-tip-status${warn ? " warn" : ""}">${esc(extra)}</p>` : "") +
+			`<p class="card-tip-cost">${card.querySelector(".unit-copy b")?.innerHTML || ""}</p>`;
+		tip.hidden = false;
+		const r = card.getBoundingClientRect(),
+			w = tip.offsetWidth;
+		tip.style.left = `${clamp(r.left + r.width / 2 - w / 2, 8, innerWidth - w - 8)}px`;
+		tip.style.bottom = `${innerHeight - r.top + 8}px`;
+	}
+	// The game's confirmation window (game-dialog.js); a single-player battle waits while it is open, as it did
+	// under the browser's confirm().
+	async function confirmInGame(options) {
+		if (typeof GameDialog === "undefined") return window.confirm(`${options.title}\n\n${options.text || ""}`);
+		const hold = !netSession && started && !paused;
+		if (hold) paused = true;
+		try {
+			return await GameDialog.confirm(options);
+		} finally {
+			if (hold) paused = false;
+			updateHud();
+		}
+	}
+	// A doctrine: what it gives, which one it locks for the rest of the operation, what it costs.
+	function confirmDoctrine(kind) {
+		const r = RESEARCH[kind],
+			list = RTS.DOCTRINES?.[game.doctrineFaction?.()] || [],
+			d = list.find((x) => x.id === kind),
+			other = list.find((x) => x.id !== kind);
+		return confirmInGame({
+			eyebrow: "DOKTRYNA FRAKCJI · WYBÓR OSTATECZNY",
+			title: r.name.replace("Doktryna: ", ""),
+			text: d?.effect || r.description,
+			sections: other ? [{ label: "Zostanie zablokowana do końca operacji", text: `${other.name.replace("Doktryna: ", "")} — ${other.effect}`, tone: "warn" }] : [],
+			facts: [
+				["Koszt", `${r.metal} metalu${r.gas ? ` · ${r.gas} gazu` : ""}${r.crystals ? ` · ${r.crystals} kryształów` : ""}`],
+				["Czas", `${r.time} s w centrum dowodzenia`],
+			],
+			ok: "Przyjmij doktrynę",
+			cancel: "Anuluj",
+		});
 	}
 	function deck(tabName) {
 		activeTab = tabName;
@@ -1848,15 +2041,12 @@
 			.forEach((b) => (b.onclick = () => beginBuild(b.dataset.build)));
 		document.querySelectorAll("[data-research]").forEach(
 			(b) =>
-				(b.onclick = () => {
-					const r = RESEARCH[b.dataset.research];
-					// A doctrine is final: say so before it starts.
-					if (r?.doctrine && !window.confirm(`${r.name}
-
-${r.description}
-
-Przyjąć tę doktrynę?`)) return;
-					act("startResearch", b.dataset.research);
+				(b.onclick = async () => {
+					const kind = b.dataset.research,
+						r = RESEARCH[kind];
+					// A doctrine is final: say so before it starts (in the game's own window, 0.151.2).
+					if (r?.doctrine && !(await confirmDoctrine(kind))) return;
+					act("startResearch", kind);
 					updateHud();
 				}),
 		);
@@ -1875,6 +2065,7 @@ Przyjąć tę doktrynę?`)) return;
 		$("development-open").onclick = () => {
 			if (started && !finished) development?.open();
 		};
+		setupCardTip();
 		$("deck-prev").onclick = () => paginateDeck(-1);
 		$("deck-next").onclick = () => paginateDeck(1);
 		new ResizeObserver(() => paginateDeck()).observe(
@@ -1971,11 +2162,66 @@ Przyjąć tę doktrynę?`)) return;
 				'<p id="power-warning" hidden></p><p id="campaign-objectives" hidden></p>',
 			);
 		setupSidebar();
+		setupOrbitPanel();
+		watchOverlay();
 		economyPanel = new EconomyPanel(
 			document.querySelector(".economy-card"),
 			economyAction,
 		);
 		deck("army");
+	}
+	// Inwazja (G2): the orbit panel on the board — who holds the orbit, the drop and the strike from orbit.
+	// While the overlay (briefing, victory / defeat report, the landing of an invasion) is up, the drawer and the
+	// orbit panel step aside (0.152.1): body.overlay-open follows the overlay's hidden attribute.
+	function watchOverlay() {
+		const overlay = $("overlay"),
+			sync = () => document.body.classList.toggle("overlay-open", !overlay.hidden);
+		new MutationObserver(sync).observe(overlay, { attributes: true, attributeFilter: ["hidden"] });
+		sync();
+	}
+	function setupOrbitPanel() {
+		const panel = document.createElement("div");
+		panel.id = "orbit-panel";
+		panel.className = "orbit-panel";
+		panel.hidden = true;
+		panel.innerHTML = '<span class="orbit-owner"></span><button type="button" id="orbit-drop"></button><button type="button" id="orbit-strike"></button>';
+		$("battlefield").append(panel);
+		const begin = (mode, text) => {
+			const why = mode === "drop" ? game.dropRequirement((game.viewer ?? 0)) : game.orbitStrikeRequirement((game.viewer ?? 0));
+			if (why) return toast(why);
+			building = attackMode = orderMode = false;
+			strikeMode = null;
+			orbitMode = mode;
+			toast(text);
+			updateHud();
+		};
+		$("orbit-drop").onclick = () => begin("drop", "Desant z orbity: wskaż lądowisko (LPM) w zbadanym terenie, z dala od wrogiego centrum. PPM lub Esc — anuluj.");
+		$("orbit-strike").onclick = () => begin("strike", "Uderzenie z orbity: wskaż cel (LPM). PPM lub Esc — anuluj.");
+	}
+	function renderOrbitPanel() {
+		const panel = $("orbit-panel");
+		if (!panel) return;
+		const I = game.invasion;
+		panel.hidden = I?.phase !== "ground";
+		if (panel.hidden) return;
+		const me = game.viewer ?? 0,
+			mine = I.owner === me;
+		panel.classList.toggle("enemy", !mine);
+		panel.querySelector(".orbit-owner").textContent = mine ? "ORBITA · TWOJA" : `ORBITA · WROGA — kapsuły wroga: ${game.podsLeft(I.owner)}`;
+		const drop = $("orbit-drop"),
+			strike = $("orbit-strike");
+		drop.hidden = strike.hidden = !mine;
+		if (!mine) return;
+		const dropWhy = game.dropRequirement(me),
+			strikeWhy = game.orbitStrikeRequirement(me);
+		drop.textContent = orbitMode === "drop" ? "Wskaż lądowisko…" : `Desant · ${game.podsLeft(me)} kaps.${dropWhy && /za \d/.test(dropWhy) ? " · " + dropWhy.match(/\d+ s/)[0] : ""}`;
+		strike.textContent = orbitMode === "strike" ? "Wskaż cel…" : `Uderzenie z orbity${strikeWhy && /za \d/.test(strikeWhy) ? " · " + strikeWhy.match(/\d+ s/)[0] : ""}`;
+		drop.disabled = !!dropWhy && orbitMode !== "drop";
+		strike.disabled = !!strikeWhy && orbitMode !== "strike";
+		drop.title = dropWhy || `Zrzuć do ${RTS.INVASION.dropSize} kapsuł z oddziałami (lądowanie po ${RTS.INVASION.fall} s; baterie przeciwlotnicze mogą je zestrzelić).`;
+		strike.title = strikeWhy || "Uderzenie z orbity w zbadany cel.";
+		drop.classList.toggle("armed", orbitMode === "drop");
+		strike.classList.toggle("armed", orbitMode === "strike");
 	}
 	function setupSidebar() {
 		const meter = document.createElement("div");
@@ -2017,7 +2263,14 @@ Przyjąć tę doktrynę?`)) return;
 			const button = document.createElement("button");
 			button.textContent = name;
 			button.setAttribute("aria-pressed", String(!panel.hidden));
+			button.title = `${name} — ponowne kliknięcie zwija panel`;
 			button.onclick = () => {
+				// The drawer over the board (0.149): the open tab clicked again folds it, any tab unfolds it.
+				const fold = button.getAttribute("aria-pressed") === "true" && !sidebar.classList.contains("collapsed");
+				sidebar.classList.toggle("collapsed", fold);
+				try {
+					localStorage.setItem("hud.drawerCollapsed", fold ? "1" : "0");
+				} catch {}
 				panels.forEach((p) => (p.hidden = p !== panel));
 				[...nav.children].forEach((b) =>
 					b.setAttribute("aria-pressed", String(b === button)),
@@ -2030,11 +2283,14 @@ Przyjąć tę doktrynę?`)) return;
 			.querySelectorAll(":scope > .section-label")
 			.forEach((n) => n.remove());
 		sidebar.prepend(nav, ...panels);
+		try {
+			sidebar.classList.toggle("collapsed", localStorage.getItem("hud.drawerCollapsed") === "1");
+		} catch {}
 		document
 			.querySelector(".selection-actions")
 			.insertAdjacentHTML(
 				"beforeend",
-				'<button id="inspect-army">Statystyki</button><div class="formation-control" id="army-formation" role="radiogroup" aria-label="Formacja oddziału"><span class="formation-label">Formacja</span><div class="formation-options"><button type="button" role="radio" data-formation="line" title="Linia — jeden szereg w poprzek kierunku marszu: cały oddział strzela naraz"><svg viewBox="0 0 16 10" aria-hidden="true"><circle cx="2" cy="5" r="1.5"/><circle cx="6" cy="5" r="1.5"/><circle cx="10" cy="5" r="1.5"/><circle cx="14" cy="5" r="1.5"/></svg>Linia</button><button type="button" role="radio" data-formation="column" title="Kolumna — dwójkami, wąski szyk na przejścia i mosty"><svg viewBox="0 0 16 10" aria-hidden="true"><circle cx="6" cy="1.6" r="1.3"/><circle cx="10" cy="1.6" r="1.3"/><circle cx="6" cy="5" r="1.3"/><circle cx="10" cy="5" r="1.3"/><circle cx="6" cy="8.4" r="1.3"/><circle cx="10" cy="8.4" r="1.3"/></svg>Kolumna</button><button type="button" role="radio" data-formation="spread" title="Rozproszenie — siatka z dużymi odstępami"><svg viewBox="0 0 16 10" aria-hidden="true"><circle cx="2" cy="1.6" r="1.3"/><circle cx="8" cy="1.6" r="1.3"/><circle cx="14" cy="1.6" r="1.3"/><circle cx="2" cy="8.4" r="1.3"/><circle cx="8" cy="8.4" r="1.3"/><circle cx="14" cy="8.4" r="1.3"/></svg>Rozprosz.</button></div></div><button id="load-transport" hidden>Załaduj</button><button id="unload-transport" hidden>Wyładuj</button><button id="hold-position">Pozycja <kbd>⇧S</kbd></button><button id=toggle-gate hidden>Otwórz / zamknij</button><button id="module-a" hidden></button><button id="module-b" hidden></button><button id="orbital-strike" hidden>Uderzenie orbitalne</button><button id="demolish" hidden title="Zwrot: do 50% za budowlę, 100% za fundament. Centrum nie można rozebrać.">Rozbierz</button>',
+				'<button id="inspect-army">Statystyki</button><div class="formation-control" id="army-formation" role="radiogroup" aria-label="Formacja oddziału"><span class="formation-label">Formacja</span><div class="formation-options"><button type="button" role="radio" data-formation="line" title="Linia — jeden szereg w poprzek kierunku marszu: cały oddział strzela naraz"><svg viewBox="0 0 16 10" aria-hidden="true"><circle cx="2" cy="5" r="1.5"/><circle cx="6" cy="5" r="1.5"/><circle cx="10" cy="5" r="1.5"/><circle cx="14" cy="5" r="1.5"/></svg>Linia</button><button type="button" role="radio" data-formation="column" title="Kolumna — dwójkami, wąski szyk na przejścia i mosty"><svg viewBox="0 0 16 10" aria-hidden="true"><circle cx="6" cy="1.6" r="1.3"/><circle cx="10" cy="1.6" r="1.3"/><circle cx="6" cy="5" r="1.3"/><circle cx="10" cy="5" r="1.3"/><circle cx="6" cy="8.4" r="1.3"/><circle cx="10" cy="8.4" r="1.3"/></svg>Kolumna</button><button type="button" role="radio" data-formation="spread" title="Rozproszenie — siatka z dużymi odstępami"><svg viewBox="0 0 16 10" aria-hidden="true"><circle cx="2" cy="1.6" r="1.3"/><circle cx="8" cy="1.6" r="1.3"/><circle cx="14" cy="1.6" r="1.3"/><circle cx="2" cy="8.4" r="1.3"/><circle cx="8" cy="8.4" r="1.3"/><circle cx="14" cy="8.4" r="1.3"/></svg>Rozprosz.</button></div></div><button id="load-transport" hidden>Załaduj</button><button id="unload-transport" hidden>Wyładuj</button><button id="hold-position">Pozycja <kbd>⇧S</kbd></button><button id="patrol-order" title="Patrol: PPM wskazuje drugi koniec trasy — oddział krąży między nim a obecną pozycją, walcząc po drodze.">Patrol <kbd>⇧P</kbd></button><button id="escort-order" title="Eskorta: PPM na własnej jednostce lub budynku — oddział trzyma się przy nim i go broni.">Eskorta <kbd>⇧E</kbd></button><button id=toggle-gate hidden>Otwórz / zamknij</button><button id="module-a" hidden></button><button id="module-b" hidden></button><button id="orbital-strike" hidden>Uderzenie orbitalne</button><button id="demolish" hidden title="Zwrot: do 50% za budowlę, 100% za fundament. Centrum nie można rozebrać.">Rozbierz</button>',
 			);
 		// The shortcut also in the tooltip (a narrow panel hides the key badges).
 		for (const button of document.querySelectorAll(".selection-actions button"))
@@ -2093,6 +2349,8 @@ Przyjąć tę doktrynę?`)) return;
 			selected = new Set([...selected].filter((id) => game.get(id)));
 			updateHud();
 		};
+		$("patrol-order").onclick = () => beginOrder("patrol");
+		$("escort-order").onclick = () => beginOrder("escort");
 		$("hold-position").onclick = () => {
 			const count = act("hold", [...selected]);
 			toast(
@@ -2109,7 +2367,8 @@ Przyjąć tę doktrynę?`)) return;
 			if (why) return toast(why);
 			strikeMode = b.id;
 			building = false;
-			attackMode = false;
+			attackMode = orderMode = false;
+			orbitMode = null;
 			toast("Wskaż cel uderzenia orbitalnego (LPM). PPM lub Esc — anuluj.");
 		};
 		for (const [id, index] of [
@@ -2164,6 +2423,12 @@ Przyjąć tę doktrynę?`)) return;
 				toast("Uderzenie orbitalne anulowane.");
 				return;
 			}
+			if (orbitMode) {
+				orbitMode = null;
+				toast(game.invasion ? "Rozkaz z orbity anulowany." : "Anulowano.");
+				updateHud();
+				return;
+			}
 			if (building) {
 				building = false;
 				wallDrag = null;
@@ -2180,6 +2445,27 @@ Przyjąć tę doktrynę?`)) return;
 			);
 			const friendly = at(p, 0);
 			const ids = [...selected];
+			// DOW-01: patrol to the point, or escort the own (or allied) unit or building under the cursor.
+			if (orderMode) {
+				const mode = orderMode;
+				orderMode = false;
+				if (mode === "patrol") {
+					const count = act("patrol", ids, p.x, p.y);
+					toast(count ? `${count} jednostek patroluje trasę.` : "Patrol: wybierz jednostki bojowe i dalszy punkt trasy.");
+					if (count) game.effects.push({ kind: "command", x: p.x, y: p.y, attack: true, life: 0.7, maxLife: 0.7 });
+				} else {
+					const viewer = game.viewer ?? 0,
+						guarded =
+							friendly ||
+							game.entities
+								.filter((u) => u.hp > 0 && game.allied?.(viewer, u.team) && game.isVisible(u.x, u.y) && dist(p, u) < Math.max(TYPES[u.type].radius + 10, 16 / scale))
+								.sort((a, b) => dist(a, p) - dist(b, p))[0];
+					const count = guarded ? act("escort", ids, guarded.id) : 0;
+					toast(count ? `${count} jednostek eskortuje: ${TYPES[guarded.type].name}.` : "Eskorta: wskaż PPM własną jednostkę lub budynek.");
+				}
+				updateHud();
+				return;
+			}
 			if (
 				friendly?.type === "transport" &&
 				ids.some((id) =>
@@ -2275,10 +2561,18 @@ Przyjąć tę doktrynę?`)) return;
 				life: 0.7,
 				maxLife: 0.7,
 			});
-			attackMode = false;
+			attackMode = orderMode = false;
+			orbitMode = null;
 			return;
 		}
 		if (e.button === 0) {
+			if (orbitMode) {
+				const mode = orbitMode;
+				orbitMode = null;
+				act(mode === "drop" ? "orbitalDrop" : "orbitStrike", p.x, p.y);
+				updateHud();
+				return;
+			}
 			if (strikeMode) {
 				const id = strikeMode;
 				strikeMode = null;
@@ -2410,11 +2704,13 @@ Przyjąć tę doktrynę?`)) return;
 			e.preventDefault();
 			if (e.repeat) return;
 			if (menu?.active) menu.escape();
-			else if (building || attackMode || strikeMode) {
+			else if (building || attackMode || orderMode || strikeMode || orbitMode) {
 				building = false;
 				wallDrag = null;
-				attackMode = false;
+				attackMode = orderMode = false;
+			orbitMode = null;
 				strikeMode = null;
+				orbitMode = null;
 				$("placement").hidden = true;
 			} else if (started && !finished) menu.show("pause");
 			return;
@@ -2431,7 +2727,7 @@ Przyjąć tę doktrynę?`)) return;
 			}
 			return;
 		}
-		if (document.querySelector("#army-stats-dialog")?.open) return;
+		if (document.querySelector("#army-stats-dialog")?.open || (typeof GameDialog !== "undefined" && GameDialog.isOpen())) return;
 		if (e.target.closest("input,select,textarea")) return;
 		if (e.key === "Enter" && netSession && started && !finished) {
 			e.preventDefault();
@@ -2475,7 +2771,8 @@ Przyjąć tę doktrynę?`)) return;
 			e.preventDefault();
 		keys.add(key);
 		if (e.repeat || !started) return;
-		if (key === " ") togglePause();
+		if (e.shiftKey && (key === "p" || key === "e")) beginOrder(key === "p" ? "patrol" : "escort");
+		else if (key === " ") togglePause();
 		else if (key === "/") {
 			camera.yaw = 0;
 			camera.tilt = 0;
@@ -2521,7 +2818,8 @@ Przyjąć tę doktrynę?`)) return;
 		} else if (key === "escape") {
 			building = false;
 			wallDrag = null;
-			attackMode = false;
+			attackMode = orderMode = false;
+			orbitMode = null;
 			$("placement").hidden = true;
 		} else if (key === "h") {
 			const b = game.hq((game.viewer ?? 0));
@@ -2574,7 +2872,8 @@ Przyjąć tę doktrynę?`)) return;
 			pan = null;
 			building = false;
 			wallDrag = null;
-			attackMode = false;
+			attackMode = orderMode = false;
+			orbitMode = null;
 			$("placement").hidden = true;
 			sound.silenceEffects();
 			return previous;
@@ -2728,7 +3027,7 @@ Przyjąć tę doktrynę?`)) return;
 		isNetwork: () => !!netSession,
 		networkInfo: () =>
 			netSession
-				? { ping: netSession.ping, waiting: netSession.waiting, players: game.players, viewer: game.viewer, pause: game.netPause, pausesLeft: game.pausesLeft?.[game.viewer] ?? 0 }
+				? { ping: netSession.ping, waiting: netSession.waiting, players: game.players, viewer: game.viewer, foes: foes().map((p) => p.name).join(" i "), pause: game.netPause, pausesLeft: game.pausesLeft?.[game.viewer] ?? 0 }
 				: null,
 		sharedPause,
 		surrender: () => act("surrender"),

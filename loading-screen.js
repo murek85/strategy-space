@@ -63,7 +63,8 @@ const LoadingScreen = (() => {
 		const k = typeof CampaignFilm !== "undefined" ? CampaignFilm.kit : null,
 			root = document.createElement("div"),
 			tip = TIPS[Math.floor(Math.random() * TIPS.length)];
-		root.className = "loading-screen";
+		// Reduced motion: no glint along the bar (the bar itself still fills).
+		root.className = "loading-screen" + (o.reduced ? " reduced" : "");
 		root.setAttribute("role", "status");
 		root.setAttribute("aria-live", "polite");
 		root.innerHTML = `<canvas class="loading-backdrop" aria-hidden="true"></canvas><div class="loading-hud" aria-hidden="true"><i></i><i></i><i></i><i></i></div><div class="loading-card"><span class="loading-eyebrow">${o.eyebrow || "OPERACJA"}</span><h1>${o.title || "Pogranicze Galaktyki"}</h1><p class="loading-planet">${o.planet || ""}</p><div class="loading-bar"><b></b></div><div class="loading-stage"><span></span><em>0%</em></div><p class="loading-tip"><b>Wskazówka</b> ${tip}</p></div>`;
@@ -94,17 +95,32 @@ const LoadingScreen = (() => {
 			removeEventListener("resize", fit);
 			setTimeout(() => root.remove(), 450);
 		};
+		// The bar's own position (its CSS animation runs on the compositor, also while the page is busy).
+		const shown = () => {
+			const m = getComputedStyle(bar).transform.match(/matrix\(([-\d.e]+)/);
+			return m ? Number(m[1]) : 0;
+		};
+		let completing = false;
 		const frame = (now) => {
 			if (!root.isConnected) return;
 			const t = (now - start) / 1000;
-			// Progress: walks with time, but holds before the end until the work is done.
-			const timeShare = Math.min(1, t / minTime),
-				p = finished ? Math.min(1, Math.max(timeShare, (now - finishedAt) / 400 + 0.85)) : Math.min(0.85, timeShare * 0.9);
-			bar.style.width = (p * 100).toFixed(1) + "%";
+			// Progress: the CSS animation walks towards 85% and holds there until the work is done; then the bar is
+			// carried to the end from where it stands.
+			let p = shown();
+			if (finished && !completing) {
+				completing = true;
+				bar.style.animation = "none";
+				bar.style.transform = `scaleX(${p})`;
+				void bar.offsetWidth;
+				bar.style.transition = "transform 0.4s ease-out";
+				bar.style.transform = "scaleX(1)";
+				root.classList.add("finished");
+			}
+			if (completing && now - finishedAt > 420) p = 1;
 			pct.textContent = Math.round(p * 100) + "%";
 			stage.textContent = STAGES[Math.min(STAGES.length - 1, Math.floor(p * (STAGES.length - 1) + (p >= 1 ? 1 : 0)))];
 			if (k) backdrop(c, k, o.reduced ? 2 : t, o, o.reduced ? 0.7 : Math.min(1, t / Math.max(minTime, 1.2)));
-			if (finished && p >= 1 && t >= minTime) return close();
+			if (finished && p >= 0.999 && t >= minTime) return close();
 			requestAnimationFrame(frame);
 		};
 		requestAnimationFrame(frame);

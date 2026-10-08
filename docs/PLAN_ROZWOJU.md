@@ -1,6 +1,6 @@
 # Plan rozwoju prototypu
 
-Aktualizacja: 2026-10-08. Aktualna wersja: 0.147.7.
+Aktualizacja: 2026-10-08. Aktualna wersja: 0.153.
 
 Ten plik jest punktem wejścia do dokumentacji: opisuje bieżący stan, otwarte kierunki i historię wersji. Instrukcja gry i sterowanie: [README](../README.md).
 
@@ -30,8 +30,11 @@ Gra zawiera trzy frakcje (Wolne Kolonie, Dominium, Rój Kryształowy), osiem map
 | [Renderer 3D](RENDERER_3D.md) | Opis wdrożenia | Wdrożone w 0.52–0.96 (Three.js: teren, modele, światło, pogoda, niebo, przyroda, kamera); kinowy obraz 0.125, teren PBR 0.126, atmosfera i woda 0.127, detale modeli 0.128 — cztery etapy „rewolucji 3D” zrealizowane |
 | [Dźwięk i muzyka](AUDIO.md) | Opis wdrożenia | Próbki i Tone.js od 0.45; muzyka filmowa 0.103–0.105 |
 | [Gra wieloosobowa](MULTIPLAYER.md) | Opis wdrożenia | Wdrożone w 0.46–0.49; płynność gospodarza 0.123 |
-| [Kampania — oprawa](KAMPANIA_OPRAWA.md) | Opis wdrożenia | Sceny łączności, wybory, głosy, filmy, menu, pauza, interfejs gry, drzewo i panel badań, wybór rozdziału (0.99–0.122) |
+| [Kampania — oprawa](KAMPANIA_OPRAWA.md) | Opis wdrożenia | Sceny łączności, wybory, głosy, filmy, menu, pauza, interfejs gry, drzewo i panel badań, wybór rozdziału (0.99–0.122); zwarty interfejs bitwy (0.149) |
 | [Wersja 0.12](WERSJA_0_12.md), [0.13](WERSJA_0_13.md), [0.14](WERSJA_0_14.md) | Notatki wydań | Wdrożone |
+| [Etap G](ETAP_G.md) | Plan (2026-10-08) | Ukończony: G1 (AI nowych mechanik) 0.150, G3 (aplikacja Electron) 0.151, G2 (desant z orbity) 0.152, G4 (lobby, 2 na 2, powrót do bitwy) 0.153 |
+| [Desant z orbity](DESANT_Z_ORBITY.md) | Opis wdrożenia | Tryb „Inwazja” (0.152) |
+| [Aplikacja na Windows](APLIKACJA.md) | Opis wdrożenia | Electron, instalator, zapisy do pliku (0.151) |
 | [Pomysły](POMYSLY.md) | Lista możliwości | Aktualne statusy pomysłów |
 | [Gospodarka i rozwój](GOSPODARKA_I_ROZWOJ.md) | Koncepcja z 0.3–0.8 | Historyczna; niemal całość wdrożona |
 | [Grafika planszy](GRAFIKA_PLANSZY.md) | Koncepcja i realizacja 2D | Historyczna; pakiety 2D wdrożone, 3D wdrożone później jako [renderer 3D](RENDERER_3D.md) |
@@ -39,19 +42,18 @@ Gra zawiera trzy frakcje (Wolne Kolonie, Dominium, Rój Kryształowy), osiem map
 
 ## Otwarte kierunki
 
-Wpis nie oznacza zlecenia realizacji ani terminu.
+Wpis nie oznacza zlecenia realizacji ani terminu. Wybrane do realizacji: [Etap G](ETAP_G.md) (G1 AI nowych mechanik → G2 desant z orbity → G3 aplikacja Electron → G4 lobby, ponowne dołączenie, 2 na 2).
 
 | Kierunek | Źródło | Status |
 |---|---|---|
-| Twierdza i doktryny dalej: doktryny w rękach AI, balans kosztów i efektów po rozgrywkach, specjalistyczne lotnictwo i osłony dla poziomu III | [Poziomy centrum](POZIOMY_CENTRUM.md) | Propozycja |
+| Twierdza i doktryny dalej: balans kosztów i efektów po rozgrywkach z ludźmi, specjalistyczne lotnictwo i osłony dla poziomu III (doktryny w rękach AI — wdrożone w 0.150) | [Poziomy centrum](POZIOMY_CENTRUM.md) | Propozycja |
 | AI dalej: budynki wsparcia, moduły i jednostki specjalne w rękach AI; strojenie dowódcy w kampanii z rozgrywek (mgła wojny dla AI — wdrożona w 0.129) | [AI przeciwnika](AI_PRZECIWNIKA.md), [Etap E](ETAP_E_WSPARCIE_I_MODULY.md) | Propozycja |
-| DOW-01 dalej: patrol i rozkaz eskorty | [Pomysły](POMYSLY.md) | Propozycja |
 | Bohaterowie | [Pomysły](POMYSLY.md) | Propozycja |
 | Scenariusze dalej: edytor map, wyzwania z ziarnem i tabele wyników; balans Ekspedycji, Króla wzgórza i Przetrwania | [Kierunki §9](KIERUNKI_ROZWOJU.md), [Etap F](ETAP_F.md) | Propozycja |
 | Kampania: nagrane głosy (dziś syntezowane, 0.101), balans aktów II–III | [Kampania — oprawa](KAMPANIA_OPRAWA.md) | Propozycja |
 | Oprawa: dźwięki leczenia, osłony i sabotażu; dalsza czytelność efektów walki (OPR-02) | [Etap E](ETAP_E_WSPARCIE_I_MODULY.md), [Pomysły](POMYSLY.md) | Propozycja |
 | Balans trzech frakcji, kosztów i dochodu pasywnego (BAL-01, GOS-03) | [Pomysły](POMYSLY.md), [Etap F](ETAP_F.md) | Wymaga rozgrywek porównawczych |
-| Bitwy kosmiczne i transport między planetami | [Bitwa na orbicie](BITWA_NA_ORBICIE.md), [Pomysły](POMYSLY.md) | W toku: bitwa na orbicie (0.130–0.142); dalej desant z orbity, transport w kampanii |
+| Bitwy kosmiczne i transport między planetami | [Bitwa na orbicie](BITWA_NA_ORBICIE.md), [Desant z orbity](DESANT_Z_ORBITY.md), [Pomysły](POMYSLY.md) | W toku: bitwa na orbicie (0.130–0.142), desant z orbity — tryb Inwazja (0.152); dalej transport w kampanii, inwazja w grze sieciowej |
 
 ## Testy
 
@@ -268,6 +270,24 @@ Przy każdym kolejnym etapie należy uruchomić pełny zestaw, nie tylko testy u
 | 0.147.5 | Jaśniejsze noce na mapach pustynnych — [opis](RENDERER_3D.md) |
 | 0.147.6 | Czytelne noce na mapach magmowych — [opis](RENDERER_3D.md) |
 | 0.147.7 | Noce w kampanii sprawdzone; czytelny nocą Świetlisty Gąszcz — [opis](RENDERER_3D.md) |
+| 0.147.8 | Dyskretne zaznaczenie jednostek: bez kolumny światła, delikatniejszy pierścień — [opis](RENDERER_3D.md) |
+| 0.147.9 | Delikatniejsze paski życia w widoku 3D — [opis](RENDERER_3D.md) |
+| 0.148 | DOW-01: rozkazy patrolu i eskorty — [opis](ETAP_B_ARMIA_I_BAZA.md) |
+| 0.149 | Zwarty interfejs bitwy: plansza na całą szerokość, szuflada celów nad mapą, niższe paski — [opis](KAMPANIA_OPRAWA.md) |
+| 0.149.1 | Małe kafle produkcji z oknem informacji po najechaniu — [opis](KAMPANIA_OPRAWA.md) |
+| 0.149.2 | Kafle produkcji w jednym, wyższym rzędzie — [opis](KAMPANIA_OPRAWA.md) |
+| 0.149.3 | Odstęp przy stronicowaniu kafli produkcji — [opis](KAMPANIA_OPRAWA.md) |
+| 0.149.4 | Równe strzałki stronicowania — [opis](KAMPANIA_OPRAWA.md) |
+| 0.150 | Etap G1: AI używa Twierdzy, doktryn, patroli i eskorty; symulacje `tools/ai-sim.js` — [opis](AI_PRZECIWNIKA.md) |
+| 0.150.1 | Jednakowe kafle produkcji we wszystkich zakładkach — [opis](KAMPANIA_OPRAWA.md) |
+| 0.150.2 | Szersze kafle produkcji — [opis](KAMPANIA_OPRAWA.md) |
+| 0.151 | Etap G3: aplikacja Electron, instalator Windows, eksport i import zapisów — [opis](APLIKACJA.md) |
+| 0.151.1 | Pasek ładowania animowany w wątku kompozytora — bez zamrożenia przy budowie mapy — [opis](KAMPANIA_OPRAWA.md) |
+| 0.151.2 | Okna potwierdzenia w stylu gry (doktryna, import zapisów) — [opis](KAMPANIA_OPRAWA.md) |
+| 0.151.3 | Każde złoże do wykorzystania: złoża gazu w przeszkodach lub przy innych złożach przesuwane na wolne miejsce — [opis](MAPY_TEMATYCZNE.md) |
+| 0.152 | Etap G2: desant z orbity — tryb „Inwazja” (orbita, potem planeta; kapsuły, uderzenie i skan z orbity) — [opis](DESANT_Z_ORBITY.md) |
+| 0.152.1 | Szuflada celów bez poziomego przewijania, ukryta pod raportem końca — [opis](KAMPANIA_OPRAWA.md) |
+| 0.153 | Etap G4: serwer lobby, lista gier, 2 na 2 przez sieć z komputerem na wolnym miejscu, powrót do bitwy po zerwaniu połączenia — [opis](MULTIPLAYER.md) |
 
 Wersja 0.7 nie ma osobnych notatek w dokumentacji.
 

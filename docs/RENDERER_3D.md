@@ -1,4 +1,13 @@
-# Renderer 3D (wersje 0.52–0.96, 0.125–0.147.7)
+# Renderer 3D (wersje 0.52–0.96, 0.125–0.147.9)
+
+## Delikatniejsze paski życia (wersja 0.147.9, 2026-10-08)
+
+- `syncMarks` (`three-renderer.js`): szerokość `max(18, 1,3 × promień)` (było `max(24, 1,8 × promień)`), tło 3,6 j. wysokości z kryciem 0,45 (było 6, pełne), pasek 2,2 j. z kryciem 0,8 (było 4, pełny); kolory `#5cc98a` / `#d4b45a` / `#e0665c`.
+
+## Dyskretne zaznaczenie (wersja 0.147.8, 2026-10-08)
+
+- `holo-3d.js`: kolumna światła zaznaczenia tylko nad budynkami (`!speed`, wysokość do 70 j.) — nad pojazdami, piechotą i statkami jej krawędź widziana z góry tworzyła biały okrąg zasłaniający jednostkę.
+- Pierścień zaznaczenia: `(linia × 0,8 + kreski × 0,35 + narożniki × 0,6) × 0,6` (było `(0,9 + 0,5 + 1) × 1,3`). U statków zostaje na płaszczyźnie pod kadłubem — na wysokości kadłuba nakładał się na model.
 
 ## Noce na popiele (wersja 0.147.4, 2026-10-08)
 

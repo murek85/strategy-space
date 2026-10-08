@@ -2166,3 +2166,75 @@ body.menu-over-game .menu-hud b {
 	box-shadow: 0 12px 40px #000a;
 	animation: pause-in 0.25s ease-out both;
 }
+
+/* Ustawienia → Aplikacja i zapisy (0.151): export and import of the saves side by side. */
+.save-transfer {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+	gap: 8px;
+	margin: 10px 0 6px;
+}
+#saves-status:empty {
+	display: none;
+}
+
+/* Gry na serwerze (G4, 0.153): the list of games, the teams of a room, coming back to a battle. */
+.net-rooms {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin: 8px 0 4px;
+}
+.net-room {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 9px 12px;
+	border: 1px solid rgba(160, 220, 210, 0.18);
+	background: rgba(12, 26, 34, 0.55);
+}
+.net-room span {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+.net-room small,
+.net-empty,
+.net-server {
+	color: #9fb9bb;
+	font-size: 12px;
+}
+.net-teams {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+	gap: 14px;
+	margin: 6px 0 4px;
+}
+.net-team {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+.net-team h3 {
+	margin: 0;
+	font: 10px monospace;
+	letter-spacing: 2px;
+	text-transform: uppercase;
+	color: #7fe7c8;
+}
+.net-player.mine {
+	border-color: rgba(127, 231, 200, 0.45);
+}
+.net-player .net-small {
+	margin-left: 6px;
+}
+.net-resume {
+	padding: 10px 12px;
+	border-left: 2px solid #e8b864;
+	background: rgba(120, 86, 30, 0.18);
+	margin: 6px 0 10px;
+}
+.net-resume p {
+	margin: 0 0 8px;
+}

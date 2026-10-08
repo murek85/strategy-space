@@ -17,11 +17,11 @@ Wdrożono 2026-10-08 na życzenie użytkownika. Zasady w `doctrine-rules.js` (ł
 | Rój | Nawała | produkcja o 30% szybsza, jednostki +10% szybkości | masa i tempo |
 | | Pancerz chitynowy | jednostki i budynki −17% obrażeń (jak +20% wytrzymałości) | wytrzymałe fale, kolosy |
 
-- Efekty liczy `damage()` (atakujący — Ciężki ostrzał, wieże Fortyfikacji; cel — osłony, pancerz, utrzymywanie terenu), `movementFactor()` i `productionRate()` (nowy punkt zaczepienia w `engine.js`, kolejka produkcji w `sideTick`). Doktryna należy do strony gracza (`upgradeOf(drużyna, id)`), zapisywana z jej ulepszeniami; przeciwnik komputerowy nie przyjmuje doktryn.
+- Efekty liczy `damage()` (atakujący — Ciężki ostrzał, wieże Fortyfikacji; cel — osłony, pancerz, utrzymywanie terenu), `movementFactor()` i `productionRate()` (nowy punkt zaczepienia w `engine.js`, kolejka produkcji w `sideTick`). Doktryna należy do strony gracza (`upgradeOf(drużyna, id)`), zapisywana z jej ulepszeniami. Od 0.150 dowódca AI (średni i trudny poziom scenariuszy) też buduje Twierdzę i przyjmuje doktrynę — we własnych ulepszeniach `enemyAi.teams[drużyna].upgrades`, które `doctrineOf()` czyta obok strony gracza ([AI przeciwnika](AI_PRZECIWNIKA.md)).
 - Ukończone badanie zgłasza swój efekt (`RESEARCH[...].done` — nowe pole, czytane przez silnik przed dotychczasową listą komunikatów).
 - Interfejs: karty „Centrum III — Twierdza” i dwie doktryny frakcji w BADANIACH (pola TWIERDZA / DOKTRYNA), drzewo rozwoju F2 → Gospodarka (gałąź centrum: Kolonia → Twierdza → doktryny), zaznaczenie centrum („Centrum 3 — Twierdza · doktryna …”), napis nad centrum „III · TWIERDZA”, baza wiedzy.
 - Testy: `tests/doctrine.test.js` (wymagania i koszty Twierdzy, jednorazowa premia wytrzymałości i dochód, zapis; blokady doktryn — przed Twierdzą, innej frakcji, wykluczanie w toku i po ukończeniu, anulowanie; efekty wszystkich sześciu doktryn); `tests/development.test.js` — badania frakcyjne (doktryny) w drzewie tylko dla swojej frakcji, jak jednostki.
-- Dalej (propozycje): doktryny w rękach AI, balans po rozgrywkach, specjalistyczne lotnictwo i zaawansowane osłony jako zawartość poziomu III.
+- Dalej (propozycje): balans po rozgrywkach (doktryny w rękach AI — 0.150), specjalistyczne lotnictwo i zaawansowane osłony jako zawartość poziomu III.
 
 ---
 

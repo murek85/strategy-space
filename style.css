@@ -1217,16 +1217,63 @@ kbd {
 	text-transform: uppercase;
 }
 .loading-bar {
+	position: relative;
 	height: 3px;
 	background: rgba(160, 220, 210, 0.15);
 	overflow: hidden;
 }
+/* The bar moves by a CSS animation of transform (0.151.1): the browser runs it on the compositor, so it keeps going
+   while the page's thread is busy building the map (a JavaScript-driven bar froze there). It slows towards 85% and
+   is finished by loading-screen.js when the work is done. */
 .loading-bar b {
 	display: block;
 	height: 100%;
-	width: 0;
+	width: 100%;
+	transform: scaleX(0);
+	transform-origin: left center;
 	background: linear-gradient(90deg, #4fd0b0, #c9fff0);
 	box-shadow: 0 0 12px #7fe7c8;
+	animation: loading-fill 9s cubic-bezier(0.15, 0.7, 0.3, 1) forwards;
+	will-change: transform;
+}
+/* A glint running along the bar — alive even during a long build. */
+.loading-bar::after {
+	content: "";
+	position: absolute;
+	inset: 0 auto 0 0;
+	width: 22%;
+	background: linear-gradient(90deg, transparent, rgba(230, 255, 248, 0.85), transparent);
+	animation: loading-glint 1.4s linear infinite;
+	will-change: transform;
+}
+.loading-screen.reduced .loading-bar::after {
+	display: none;
+}
+.loading-screen.finished .loading-bar::after {
+	opacity: 0;
+	transition: opacity 0.3s;
+}
+@keyframes loading-fill {
+	0% {
+		transform: scaleX(0);
+	}
+	30% {
+		transform: scaleX(0.55);
+	}
+	65% {
+		transform: scaleX(0.76);
+	}
+	100% {
+		transform: scaleX(0.85);
+	}
+}
+@keyframes loading-glint {
+	from {
+		transform: translateX(-100%);
+	}
+	to {
+		transform: translateX(460%);
+	}
 }
 .loading-stage {
 	display: flex;

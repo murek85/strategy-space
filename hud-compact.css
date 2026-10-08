@@ -1,0 +1,402 @@
+/* Compact battle interface (0.149): one slim console at the bottom (concept B) with a floating drawer over the
+   board for objectives, logistics, queues and the army report (from concept A). The board takes the whole width;
+   the top bar and the console are lower. Loaded last: it only overrides the layout of the other sheets. */
+:root {
+	--hud-top: 46px;
+	--hud-bottom: 158px;
+}
+body .topbar {
+	height: var(--hud-top);
+	min-height: 0;
+	padding-top: 0;
+	padding-bottom: 0;
+	gap: 14px;
+}
+body .topbar .brand {
+	width: auto;
+	transform: scale(0.78);
+	transform-origin: left center;
+	margin-right: -30px;
+}
+body .topbar .resource {
+	gap: 7px;
+}
+body .topbar .resource strong {
+	font-size: 17px;
+	line-height: 1.05;
+}
+body .topbar .resource small {
+	font-size: 8px;
+}
+body .topbar .resource-icon {
+	transform: scale(0.8);
+}
+body .topbar .icon-button {
+	height: 28px;
+}
+
+/* The board over the whole width; the drawer floats over it. */
+body .workspace {
+	position: relative;
+	height: calc(100% - var(--hud-top) - var(--hud-bottom));
+}
+body .battlefield {
+	flex: 1 1 auto;
+	width: 100%;
+}
+body .sidebar {
+	position: absolute;
+	z-index: 6;
+	left: 12px;
+	top: 130px;
+	width: 262px;
+	max-height: calc(100% - 130px - 98px);
+	padding: 8px 10px 0;
+	background: rgba(8, 17, 22, 0.86);
+	border: 1px solid rgba(160, 220, 210, 0.2);
+	box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+	backdrop-filter: blur(6px);
+}
+body .sidebar .intel-tabs {
+	margin-bottom: 8px;
+}
+body .sidebar .intel-tabs button {
+	padding: 6px 3px;
+	font-size: 9px;
+}
+body .sidebar .intel-panel {
+	min-height: 0;
+	overflow-y: auto;
+	padding-bottom: 8px;
+}
+body .sidebar .sidebar-bottom {
+	display: none;
+}
+/* Collapsed: only the tabs; a click on the open tab folds and unfolds the drawer. */
+body .sidebar.collapsed {
+	padding-bottom: 0;
+}
+body .sidebar.collapsed .intel-panel {
+	display: none;
+}
+body .sidebar.collapsed .intel-tabs {
+	margin-bottom: 8px;
+}
+body .sidebar.collapsed .intel-tabs button[aria-pressed="true"] {
+	color: #91a9af;
+	border-color: #3b535b;
+	background: #1c2b34;
+}
+
+/* The console: lower, the orders in three columns. */
+body .command-bar {
+	height: var(--hud-bottom);
+	padding-top: 8px;
+	padding-bottom: 8px;
+	gap: 14px;
+}
+body .selection-panel {
+	width: 318px;
+	flex: 0 0 318px;
+	height: auto;
+	overflow: hidden;
+}
+body .selection-panel > .section-label {
+	display: none;
+}
+body .selection-panel .selection-main {
+	margin: 0;
+	padding: 0;
+}
+body .selection-main {
+	gap: 8px;
+}
+body .selection-icon {
+	width: 30px;
+	height: 30px;
+	min-width: 30px;
+	font-size: 15px;
+}
+body .selection-actions {
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 3px;
+	margin-top: 6px;
+}
+body .selection-actions button {
+	height: 19px;
+	padding: 0 5px;
+	font-size: 9.5px;
+}
+body .selection-actions kbd {
+	font-size: 8px;
+	padding: 0 3px;
+}
+/* Statistics next to the selection orders, the formation along the bottom. */
+body #inspect-army {
+	order: 3;
+}
+body #stop {
+	order: 4;
+}
+body #hold-position {
+	order: 5;
+}
+body #patrol-order {
+	order: 6;
+}
+body #escort-order {
+	order: 7;
+}
+body .formation-control {
+	margin-top: 2px;
+	padding: 0;
+}
+body .formation-control .formation-label {
+	display: none;
+}
+body .formation-options button {
+	height: 19px;
+	min-height: 0;
+	padding-top: 0;
+	padding-bottom: 0;
+	font-size: 9.5px;
+}
+body .production {
+	gap: 4px;
+	grid-template-rows: 24px minmax(0, 1fr) 24px 5px;
+}
+/* Paging: buttons fit their row, with room above the queue bar (0.149.3). */
+body .production .deck-pagination {
+	align-self: center;
+}
+body .production .deck-pagination button {
+	position: relative;
+	height: 20px;
+	min-height: 0;
+	padding: 0;
+	/* The ‹ › glyphs sit on the text baseline, off centre: a drawn chevron instead (0.149.4). */
+	font-size: 0;
+	color: transparent;
+}
+body .production .deck-pagination button::before {
+	content: "";
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	width: 6px;
+	height: 6px;
+	border-right: 1.5px solid #cce8db;
+	border-bottom: 1.5px solid #cce8db;
+}
+body .production #deck-prev::before {
+	transform: translate(-30%, -50%) rotate(135deg);
+}
+body .production #deck-next::before {
+	transform: translate(-70%, -50%) rotate(-45deg);
+}
+body .production .unit-cards {
+	padding-bottom: 0;
+}
+body .production .unit-card {
+	padding: 6px 8px 5px;
+}
+
+/* Compact production cards (0.149.1, one row since 0.149.2): small tiles — symbol, name (up to two lines), cost and
+   time, key; the description, the figures and the building or what is missing in the window over the card
+   (#card-tip, app.js). */
+body .production .unit-cards,
+body .production .unit-cards.expanded-build {
+	--deck-slot: 132px;
+	--deck-rows: 1;
+	grid-template-rows: minmax(0, 1fr);
+	gap: 6px;
+}
+body .production .unit-card {
+	grid-template-columns: 20px minmax(0, 1fr);
+	gap: 6px;
+	align-items: center;
+	padding: 6px 8px 6px 7px;
+	border-radius: 5px;
+}
+body .production .unit-symbol {
+	width: 20px;
+	font-size: 18px;
+	margin: 0;
+	align-self: center;
+}
+body .production .unit-copy {
+	gap: 3px;
+}
+body .production .unit-copy strong {
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+	font-size: 11px;
+	line-height: 1.25;
+	padding-right: 12px;
+	overflow: hidden;
+	overflow-wrap: normal;
+}
+body .production .card-description,
+body .production .unit-copy small,
+body .production .research-tag {
+	display: none;
+}
+body .production .unit-copy b {
+	margin-top: 0;
+	font-size: 9.5px;
+	line-height: 1.2;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+body .production .unit-copy em {
+	display: block;
+	font-size: 9.5px;
+}
+body .production .unit-card > kbd {
+	top: 5px;
+	right: 5px;
+	font-size: 8px;
+}
+/* What cannot be ordered now: a dim tile with an amber edge mark (the reason is in the window). */
+body .production .unit-card:disabled .unit-copy strong {
+	color: #8fa2aa;
+}
+body .production .unit-card.locked {
+	box-shadow: inset 2px 0 0 #c9a25a;
+}
+
+.card-tip {
+	position: fixed;
+	z-index: 60;
+	width: 250px;
+	padding: 9px 11px 8px;
+	background: rgba(9, 18, 24, 0.96);
+	border: 1px solid rgba(160, 220, 210, 0.28);
+	box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+	color: #c8d8dc;
+	font-size: 11px;
+	line-height: 1.45;
+	pointer-events: none;
+}
+.card-tip[hidden] {
+	display: none;
+}
+.card-tip strong {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 8px;
+	color: #e6f2ee;
+	font-size: 12.5px;
+	font-weight: 600;
+	margin-bottom: 4px;
+}
+.card-tip kbd {
+	font-size: 9px;
+}
+.card-tip p {
+	margin: 0 0 4px;
+}
+.card-tip-figures {
+	color: #9fd8c8;
+}
+.card-tip-status {
+	color: #9bafba;
+}
+.card-tip-status.warn {
+	color: #e8b864;
+}
+.card-tip-cost {
+	color: #e4c98a;
+	margin-bottom: 0 !important;
+}
+.card-tip-cost em {
+	color: #a2b3bc;
+	font-style: normal;
+}
+
+/* The production tabs stand on a line across the console, as the drawer's tabs do (0.149.2). */
+body .production-heading {
+	align-items: flex-end;
+	border-bottom: 1px solid var(--hud-edge);
+}
+body .production-heading .deck-tabs {
+	align-self: flex-end;
+	margin-bottom: -1px;
+}
+body .production-heading .queue-controls {
+	align-self: center;
+}
+
+/* Inwazja (G2, 0.152): the orbit panel under the zoom buttons — who holds the orbit, the drop and the strike. */
+.orbit-panel {
+	position: absolute;
+	z-index: 6;
+	top: 104px;
+	right: 12px;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	width: 196px;
+	padding: 8px;
+	background: rgba(8, 17, 22, 0.86);
+	border: 1px solid rgba(160, 220, 210, 0.22);
+	box-shadow: inset 0 2px 0 var(--hud-lit, #7fe7c8);
+	backdrop-filter: blur(6px);
+}
+.orbit-panel[hidden] {
+	display: none;
+}
+.orbit-panel.enemy {
+	box-shadow: inset 0 2px 0 #e8b864;
+}
+.orbit-owner {
+	font: 10px monospace;
+	letter-spacing: 1px;
+	color: #9fd8c8;
+}
+.orbit-panel.enemy .orbit-owner {
+	color: #e8b864;
+	line-height: 1.4;
+}
+.orbit-panel button {
+	height: 24px;
+	padding: 0 8px;
+	text-align: left;
+	font-size: 10.5px;
+	background: rgba(12, 26, 34, 0.75);
+	border: 1px solid rgba(160, 220, 210, 0.2);
+	color: #cfe2df;
+	cursor: pointer;
+}
+.orbit-panel button[hidden] {
+	display: none;
+}
+.orbit-panel button:hover:enabled {
+	border-color: var(--hud-lit, #7fe7c8);
+	background: rgba(30, 60, 70, 0.9);
+}
+.orbit-panel button:disabled {
+	opacity: 0.55;
+	cursor: default;
+}
+.orbit-panel button.armed {
+	border-color: #7fe7c8;
+	background: rgba(127, 231, 200, 0.18);
+	color: #effff9;
+}
+
+/* 0.152.1: no sideways scroll in the drawer (a bar's fill never wider than its track), and the drawer and the
+   orbit panel hidden while the overlay (briefing, report, landing) is up. */
+body .sidebar .intel-panel {
+	overflow-x: hidden;
+}
+body .sidebar .thin-track {
+	overflow: hidden;
+}
+body.overlay-open .sidebar,
+body.overlay-open .orbit-panel {
+	visibility: hidden;
+}

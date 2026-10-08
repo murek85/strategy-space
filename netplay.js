@@ -7,7 +7,12 @@
      sent at the start of the next one and run on both computers NET.delay turns later, in the same order
      (host first). A computer waits when it lacks the other player's turn. Every NET.checkEvery turns the
      players compare state checksums: a difference is a desync.
-   Messages: hello / settings / ready / start (lobby), turn, ping / pong, bye. */
+   Messages: hello / settings / ready / start (lobby), turn, ping / pong, bye.
+   - Lobby battles (G4, 0.153): RelayLink — a WebSocket to the lobby server (lobby-server.js), which relays every
+     turn to the other players (1 vs 1 or 2 vs 2), keeps the log and compares checksums. Lockstep with `teams` (all
+     human and computer seats whose turns are awaited: the computer seats send none, so only humans are listed) and
+     `relay: true`: turns carry their team; system commands of the server ("@aiTakeover", "@aiRelease") hand a
+     dropped team to the computer and back; replay(log) rebuilds a battle after coming back. */
 const NetPlay = (() => {
 	"use strict";
 	const PREFIX = "RTS1.";
@@ -131,7 +136,7 @@ const NetPlay = (() => {
 	class Lockstep {
 		// game: from RTS.createNetworkGame; team: this player's team (0 host, 1 guest); link: an open Link.
 		// pump: called when a turn arrives while the page is hidden (timers are then throttled hard; messages are not).
-		constructor(game, team, link, { onDesync, onClose, pump } = {}) {
+		constructor(game, team, link, { onDesync, onClose, pump, teams = [0, 1], relay = false } = {}) {
 			const NET = RTS.NET;
 			this.game = game;
 			this.team = team;
@@ -144,7 +149,10 @@ const NetPlay = (() => {
 			this.pending = [];
 			// turns[t] = { 0: commands | undefined, 1: commands | undefined }; the first turns are empty for both.
 			this.turns = new Map();
-			for (let t = 0; t < NET.delay; t++) this.turns.set(t, { 0: [], 1: [] });
+			// The teams whose turns are awaited, in the order their commands run (the host's first).
+			this.teams = [...teams].sort((a, b) => a - b);
+			this.relay = relay;
+			for (let t = 0; t < NET.delay; t++) this.turns.set(t, Object.fromEntries(this.teams.map((x) => [x, []])));
 			this.sent = NET.delay - 1;
 			this.hashes = new Map();
 			this.remoteHashes = new Map();
@@ -159,6 +167,8 @@ const NetPlay = (() => {
 			link.on("message", this.handler);
 			link.on("close", this.closeHandler);
 			this.pingTimer = setInterval(() => link.send({ k: "ping", at: performance.now() }), 2000);
+			// (Node, tests: the timer does not keep the process alive.)
+			this.pingTimer?.unref?.();
 		}
 		other() {
 			return 1 - this.team;
@@ -171,13 +181,22 @@ const NetPlay = (() => {
 		}
 		receive(msg) {
 			if (msg.k === "turn" && Number.isInteger(msg.t) && Array.isArray(msg.c)) {
-				const slot = this.turns.get(msg.t) || {};
-				slot[this.other()] = msg.c.filter((c) => Array.isArray(c) && typeof c[0] === "string" && Array.isArray(c[1])).slice(0, 64);
-				this.turns.set(msg.t, slot);
-				if (Array.isArray(msg.h)) this.compare(msg.h[0], msg.h[1], true);
+				const from = this.relay ? msg.team : this.other();
+				if (!this.teams.includes(from) || from === this.team) return;
+				this.store(from, msg.t, msg.c);
+				if (!this.relay && Array.isArray(msg.h)) this.compare(msg.h[0], msg.h[1], true);
 				if (typeof document !== "undefined" && document.hidden) this.pump?.();
+			} else if (msg.k === "desync" && this.relay && !this.desync) {
+				this.desync = true;
+				this.onDesync?.(msg.t);
 			} else if (msg.k === "ping") this.link.send({ k: "pong", at: msg.at });
 			else if (msg.k === "pong" && Number.isFinite(msg.at)) this.ping = Math.round(performance.now() - msg.at);
+		}
+		// A team's commands for a turn; system commands ("@…") only from the relay server.
+		store(team, t, commands) {
+			const slot = this.turns.get(t) || {};
+			slot[team] = commands.filter((c) => Array.isArray(c) && typeof c[0] === "string" && Array.isArray(c[1]) && (this.relay || !c[0].startsWith("@"))).slice(0, 65);
+			this.turns.set(t, slot);
 		}
 		compare(turn, hash, remote) {
 			(remote ? this.remoteHashes : this.hashes).set(turn, hash);
@@ -196,6 +215,8 @@ const NetPlay = (() => {
 		sendFor(t) {
 			const target = t + this.NET.delay;
 			if (target <= this.sent) return;
+			// A gap (after coming back to a lobby battle) holds empty turns of this team — the server fills it the same way.
+			for (let g = this.sent + 1; g < target; g++) if (!this.turns.get(g)?.[this.team]) this.store(this.team, g, []);
 			this.sent = target;
 			const slot = this.turns.get(target) || {};
 			slot[this.team] = this.pending.splice(0);
@@ -204,7 +225,7 @@ const NetPlay = (() => {
 			if (t % this.NET.checkEvery === 0) {
 				const hash = this.game.checksum();
 				msg.h = [t, hash];
-				this.compare(t, hash, false);
+				if (!this.relay) this.compare(t, hash, false);
 			}
 			this.link.send(msg);
 		}
@@ -225,7 +246,7 @@ const NetPlay = (() => {
 				if (this.sub === 0) {
 					this.sendFor(this.turn);
 					const slot = this.turns.get(this.turn);
-					if (!slot || !slot[0] || !slot[1]) {
+					if (!this.complete(slot)) {
 						this.waiting += dt;
 						// The time spent waiting is not made up afterwards: the computer that is ahead (usually the
 						// host, which starts first while the guest still builds its board) falls in behind the
@@ -235,7 +256,7 @@ const NetPlay = (() => {
 					}
 					this.waiting = 0;
 					this.turns.delete(this.turn);
-					for (const team of [0, 1]) for (const [name, args] of slot[team]) this.game.applyCommand(team, name, args);
+					this.apply(slot);
 				}
 				this.game.tick(NET.step);
 				steps++;
@@ -247,6 +268,36 @@ const NetPlay = (() => {
 			}
 			return steps;
 		}
+		complete(slot) {
+			return !!slot && this.teams.every((t) => slot[t]);
+		}
+		apply(slot) {
+			for (const team of this.teams)
+				for (const [name, args] of slot[team]) {
+					if (name === "@aiTakeover" || name === "@aiRelease") this.game.netTakeover?.(team, name === "@aiTakeover");
+					else this.game.applyCommand(team, name, args);
+				}
+		}
+		// Coming back to a lobby battle: the server's log (every team's turns so far) is replayed at once; this
+		// player's turns up to `from` are in it already (sent by the server while it was away).
+		replay(log, from, release = false) {
+			// The computer held this team while the player was away: the hand-back goes with the player's next turn.
+			if (release) this.pending.unshift(["@aiRelease", []]);
+			for (const e of log || []) if (Number.isInteger(e?.t) && this.teams.includes(e.team) && Array.isArray(e.c)) this.store(e.team, e.t, e.c);
+			this.sent = Math.max(this.sent, from);
+			const NET = this.NET;
+			for (;;) {
+				const slot = this.turns.get(this.turn);
+				if (!this.complete(slot) || this.game.result) break;
+				this.turns.delete(this.turn);
+				this.apply(slot);
+				for (let k = 0; k < NET.stepsPerTurn; k++) this.game.tick(NET.step);
+				this.turn++;
+			}
+			this.sub = 0;
+			this.clock = 0;
+			return this.turn;
+		}
 		stop() {
 			clearInterval(this.pingTimer);
 			// The link may live on (a rematch on the same connection): drop only this lockstep's handlers.
@@ -254,6 +305,64 @@ const NetPlay = (() => {
 			h.message = (h.message || []).filter((fn) => fn !== this.handler);
 			h.close = (h.close || []).filter((fn) => fn !== this.closeHandler);
 		}
+	}
+
+	// ---------- the lobby server (G4) ----------
+	// A WebSocket to the lobby server with the Link's interface (on / send / close, events open, message, close).
+	class RelayLink {
+		constructor(url) {
+			this.url = url;
+			this.handlers = {};
+			this.open = false;
+			this.closed = false;
+			const ws = (this.ws = new WebSocket(url));
+			ws.onopen = () => {
+				this.open = true;
+				this.emit("open");
+			};
+			ws.onmessage = (m) => {
+				let msg;
+				try {
+					msg = JSON.parse(m.data);
+				} catch {
+					return;
+				}
+				if (msg && typeof msg.k === "string") this.emit("message", msg);
+			};
+			ws.onclose = () => this.lost();
+			ws.onerror = () => {};
+		}
+		on(type, fn) {
+			(this.handlers[type] ||= []).push(fn);
+			return this;
+		}
+		emit(type, data) {
+			for (const fn of this.handlers[type] || []) fn(data);
+		}
+		lost() {
+			if (this.closed) return;
+			this.closed = true;
+			this.open = false;
+			this.emit("close");
+		}
+		send(msg) {
+			if (this.open && this.ws.readyState === 1) this.ws.send(JSON.stringify(msg));
+		}
+		close() {
+			this.closed = true;
+			this.open = false;
+			try {
+				this.ws.close();
+			} catch {}
+		}
+	}
+	// The lobby's address from what the player typed: "host:port", a full ws(s) URL, or empty — the page's own server.
+	function lobbyUrl(address) {
+		const a = String(address || "").trim();
+		if (/^wss?:\/\//i.test(a)) return a.replace(/\/?$/, "").replace(/(\/lobby)?$/, "/lobby");
+		if (a) return `ws://${a.replace(/\/.*$/, "")}/lobby`;
+		if (typeof location !== "undefined" && /^https?:$/.test(location.protocol)) return `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/lobby`;
+		return "ws://localhost:4174/lobby";
 	}
 
 	// Chat: plain text, one line, at most 200 characters (shown with textContent, never as HTML).
@@ -275,6 +384,7 @@ const NetPlay = (() => {
 		return clean;
 	}
 
-	return { Link, Lockstep, encode, decode, chatText, sendChat, DEFAULT_STUN, available: () => typeof RTCPeerConnection === "function" };
+	return { Link, Lockstep, RelayLink, lobbyUrl, encode, decode, chatText, sendChat, DEFAULT_STUN, available: () => typeof RTCPeerConnection === "function", lobbyAvailable: () => typeof WebSocket === "function" };
 })();
 if (typeof window !== "undefined") window.NetPlay = NetPlay;
+if (typeof module !== "undefined" && module.exports) module.exports = NetPlay;

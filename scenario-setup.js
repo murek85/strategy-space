@@ -138,7 +138,7 @@
 			const extra = normalize(s),
 				mode = MODES[s.mode] ? s.mode : "conquest",
 				modePart =
-					mode === "relays" ? "R" + extra.pointsPerRelay : mode === "defense" ? "D" + extra.defenseTime / 60 : mode === "expedition" ? "X" : mode === "hill" ? "H" + extra.hillTime : mode === "survival" ? "V" : "C",
+					mode === "relays" ? "R" + extra.pointsPerRelay : mode === "defense" ? "D" + extra.defenseTime / 60 : mode === "expedition" ? "X" : mode === "hill" ? "H" + extra.hillTime : mode === "survival" ? "V" : mode === "invasion" ? "I" : "C",
 				// Day length and start level are added only when they differ from the defaults (older codes stay valid).
 				extraLetters = extra.dayLength !== "normal" || extra.startLevel !== "outpost" ? OPTIONS.dayLength[extra.dayLength].code + OPTIONS.startLevel[extra.startLevel].code : "";
 			return [
@@ -150,7 +150,7 @@
 			].join("-") + (s.teams === "duo" ? "-T" : "") + (s.enemy === "waves" ? "-W" : "");
 		};
 		RTS.parseScenarioCode = (code) => {
-			const m = /^([a-z0-9]+)-([SML])([234])([ENH])-(C|X|V|R\d+|D\d+|H\d+)-([PNR])([FNM])([CNH])(?:([SNLDE])([OC]))?-(\d{1,6})(?:-(T))?(?:-(W))?$/i.exec(String(code || "").trim());
+			const m = /^([a-z0-9]+)-([SML])([234])([ENH])-(C|X|V|I|R\d+|D\d+|H\d+)-([PNR])([FNM])([CNH])(?:([SNLDE])([OC]))?-(\d{1,6})(?:-(T))?(?:-(W))?$/i.exec(String(code || "").trim());
 			if (!m) return null;
 			const [, missionId, size, players, diff, modePart, res, fauna, weather, day, start, seed, duo, waves] = m;
 			if (!MISSIONS[missionId] || MISSIONS[missionId].campaign) return null;
@@ -161,7 +161,7 @@
 					size: byLetter(SIZE, up(size)),
 					players: Number(players),
 					difficulty: byLetter(DIFF, up(diff)),
-					mode: { C: "conquest", X: "expedition", R: "relays", D: "defense", H: "hill", V: "survival" }[kind],
+					mode: { C: "conquest", X: "expedition", R: "relays", D: "defense", H: "hill", V: "survival", I: "invasion" }[kind],
 					dayLength: day ? byLetter(codeOf(OPTIONS.dayLength), up(day)) : "normal",
 					startLevel: start ? byLetter(codeOf(OPTIONS.startLevel), up(start)) : "outpost",
 					resources: byLetter(codeOf(OPTIONS.resources), up(res)),

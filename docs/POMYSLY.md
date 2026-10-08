@@ -19,7 +19,7 @@ Odłożone 2026-09-20, wdrożone 2026-09-27 jako dowódca AI scenariuszy — [op
 
 | ID | Pomysł | Status |
 |---|---|---|
-| DOW-01 | Formacje i patrol | Formacje (linia, kolumna, rozproszenie) zrealizowane w 0.15. Patrol i rozkaz eskorty — propozycja |
+| DOW-01 | Formacje i patrol | Zrealizowane: formacje (linia, kolumna, rozproszenie) w 0.15, patrol i rozkaz eskorty w 0.148 — [opis](ETAP_B_ARMIA_I_BAZA.md) |
 | JED-02 | Zwiadowca | Zrealizowane w 0.12 jako unikalny Zwiadowca Wolnych Kolonii |
 | JED-03 | Ciężka maszyna krocząca | Zrealizowane w 0.9; balans do obserwacji |
 | OPR-01 | Muzyka i głosy jednostek | Muzyka proceduralna od 0.10, warstwowa i reagująca na bitwę w 0.16; radiowe motywy rozkazów w 0.15; próbki i Tone.js w 0.45; muzyka filmowa w 0.103–0.105; syntezowane głosy rozmówców kampanii w 0.101. Nagrane głosy — propozycja |

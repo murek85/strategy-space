@@ -122,7 +122,7 @@ class CommandMenu {
 			body = "";
 		if (screen === "home") {
 			title = "Dowództwo<br>pogranicza.";
-			body = `<p class="menu-lead">Sektor zewnętrzny. Nowy front.<br>Twoje rozkazy wyznaczają granice.</p><nav aria-label="Główna nawigacja">${save.valid ? this.button("continue", "Kontynuuj", true) : ""}${this.button("single", "Gra jednoosobowa", !save.valid)}${this.button("slots", "Wczytaj grę — sloty")}${this.button("knowledge", "Baza wiedzy")}${this.button("settings", "Ustawienia")}</nav><p class="menu-message">${save.error || ""}</p>`;
+			body = `<p class="menu-lead">Sektor zewnętrzny. Nowy front.<br>Twoje rozkazy wyznaczają granice.</p><nav aria-label="Główna nawigacja">${save.valid ? this.button("continue", "Kontynuuj", true) : ""}${this.button("single", "Gra jednoosobowa", !save.valid)}${this.button("slots", "Wczytaj grę — sloty")}${this.button("knowledge", "Baza wiedzy")}${this.button("settings", "Ustawienia")}${typeof window !== "undefined" && window.desktop?.app ? this.button("quit", "Wyjdź z gry") : ""}</nav><p class="menu-message">${save.error || ""}</p>`;
 		} else if (screen === "single") {
 			title = "Gra jednoosobowa";
 			body = `<p>Wybierz samodzielną bitwę lub kontynuuj historię Wolnych Kolonii.</p>${this.button("training", "Szkolenie: Próba kolonii")}${this.button("scenarios", "Scenariusze")}${this.button("campaign", "Kampania: Odzyskany Świt", true)}${this.button("back", "Wróć")}`;
@@ -278,7 +278,11 @@ class CommandMenu {
 								.map(([key, label]) => `<label class="menu-setting"><input type="checkbox" id="visual-${key}" class="webgl-effect"> ${label}</label>`)
 								.join("")}`
 					: ""
-			}<p id="menu-preferences" role="status">Ustawienia zapamiętujemy na tym urządzeniu.</p>${this.button("back", "Wróć")}`;
+			}<h2>Aplikacja i zapisy</h2>${
+				typeof window !== "undefined" && window.desktop?.app
+					? `<label class="menu-setting"><input type="checkbox" id="app-fullscreen"> Pełny ekran <kbd>F11</kbd></label>`
+					: ""
+			}<p>Kopia zapasowa wszystkiego, co gra trzyma na tym urządzeniu: zapisy bitew i slotów, postęp kampanii, rekordy i ustawienia — do jednego pliku, który wczytasz na innym komputerze lub po ponownej instalacji.</p><div class="save-transfer"><button type="button" id="saves-export" class="menu-action"><span>Eksportuj zapisy do pliku</span><span aria-hidden="true">↓</span></button><button type="button" id="saves-import" class="menu-action"><span>Importuj zapisy z pliku</span><span aria-hidden="true">↑</span></button><input type="file" id="saves-file" accept=".json,application/json" hidden></div><p id="saves-status" role="status"></p><p id="menu-preferences" role="status">Ustawienia zapamiętujemy na tym urządzeniu.</p>${this.button("back", "Wróć")}`;
 		} else if (screen === "knowledge") {
 			title = "Baza wiedzy";
 			body = KnowledgeBase.template() + this.button("back", "Wróć");
@@ -304,6 +308,24 @@ class CommandMenu {
 				body;
 		if (screen === "news")
 			body =
+				"<h2>0.153 / Lobby i 2 na 2 przez sieć</h2><p>Gra wieloosobowa przez serwer: lista gier, 1 na 1 i 2 na 2, komputer na wolnym miejscu, czat. Po zerwaniu połączenia gra łączy się sama i wraca do bitwy; w tym czasie Twoją stronę prowadzi komputer.</p>" +
+				"<h2>0.152.1 / Szuflada celów</h2><p>Bez poziomego przewijania w szufladzie celów; szuflada chowa się pod raportem zwycięstwa lub porażki.</p>" +
+				"<h2>0.152 / Inwazja — desant z orbity</h2><p>Nowy tryb scenariusza: najpierw zdobądź orbitę nad planetą, potem wyląduj. Kto panuje na orbicie, ma kapsuły desantowe, uderzenie z orbity i skan; baterie przeciwlotnicze zestrzeliwują kapsuły.</p>" +
+				"<h2>0.151.3 / Złoża do wykorzystania</h2><p>Mgławice i złoża gazu nie leżą już w asteroidach ani tuż przy innych złożach — na każdym da się postawić ekstraktor.</p>" +
+				"<h2>0.151.2 / Okna w stylu gry</h2><p>Wybór doktryny i import zapisów potwierdzasz we własnym oknie gry — z efektem doktryny, tą, która zostanie zablokowana, kosztem i czasem.</p>" +
+				"<h2>0.151.1 / Płynny pasek ładowania</h2><p>Pasek postępu przy wczytywaniu mapy rusza się przez cały czas, także gdy gra buduje planszę.</p>" +
+				"<h2>0.151 / Aplikacja na Windows</h2><p>Gra jako aplikacja z instalatorem, działająca bez internetu: pełny ekran (F11), zapamiętane okno, przycisk wyjścia. W Ustawieniach → Aplikacja i zapisy eksport i import wszystkich zapisów do pliku.</p>" +
+				"<h2>0.150.2 / Szersze kafle</h2><p>Kafle produkcji są szersze — nazwy mieszczą się swobodniej.</p>" +
+				"<h2>0.150.1 / Jednakowe kafle</h2><p>Kafle produkcji mają ten sam rozmiar we wszystkich zakładkach.</p>" +
+				"<h2>0.150 / Przeciwnik z doktryną</h2><p>Dowódca AI (średni i trudny poziom) buduje Twierdzę i przyjmuje doktrynę dobraną do sytuacji, patroluje drogi do przekaźników, osłania dalekie wydobycie i eskortuje artylerię w natarciu.</p>" +
+				"<h2>0.149.4 / Równe strzałki</h2><p>Strzałki stronicowania kafli produkcji są na środku przycisków.</p>" +
+				"<h2>0.149.3 / Odstęp przy stronicowaniu</h2><p>Stronicowanie kafli produkcji nie nachodzi już na pasek postępu kolejki.</p>" +
+				"<h2>0.149.2 / Kafle w jednym rzędzie</h2><p>Kafle produkcji w jednym, wyższym rzędzie — pełniejsze nazwy, koszt i czas pod spodem; zakładki na wspólnej linii.</p>" +
+				"<h2>0.149.1 / Małe kafle produkcji</h2><p>Karty produkcji to małe kafle w dwóch rzędach; opis, parametry, wymagania i pełny koszt w oknie po najechaniu myszką.</p>" +
+				"<h2>0.149 / Zwarty interfejs bitwy</h2><p>Plansza na całą szerokość, panel celów jako zwijana szuflada nad mapą, niższy pasek zasobów i dolna konsola.</p>" +
+				"<h2>0.148 / Patrol i eskorta</h2><p>Nowe rozkazy: patrol (⇧P) — oddział krąży po trasie i walczy po drodze; eskorta (⇧E) — oddział chroni wskazaną jednostkę lub budynek i trzyma się przy nim.</p>" +
+				"<h2>0.147.9 / Delikatniejsze paski życia</h2><p>Paski życia nad jednostkami są cieńsze i półprzezroczyste — nie zasłaniają jednostek.</p>" +
+				"<h2>0.147.8 / Dyskretne zaznaczenie</h2><p>Bez białego okręgu nad zaznaczonymi jednostkami, delikatniejszy pierścień pod nimi — jednostki są lepiej widoczne.</p>" +
 				"<h2>0.147.7 / Noce w kampanii</h2><p>Świetlisty Gąszcz jest nocą czytelny — mech ma fakturę, a świecące rośliny nadal się odcinają.</p>" +
 				"<h2>0.147.6 / Noce na magmie</h2><p>Na mapach magmowych czarna lawa jest nocą czytelna w świetle księżyca.</p>" +
 				"<h2>0.147.5 / Noce na pustyni</h2><p>Na mapach pustynnych piasek odbija światło księżyca — noce są tam jaśniejsze.</p>" +
@@ -541,7 +563,7 @@ class CommandMenu {
 		queueMicrotask(() => ranges.forEach(fill));
 		if (screen === "knowledge") KnowledgeBase.mount(this.root);
 		this.root.querySelector(".menu-footer span").textContent =
-			"PROTOTYP 0.147.7 · ZAPIS LOKALNY";
+			"PROTOTYP 0.153 · ZAPIS LOKALNY";
 		if (
 			screen === "scenarios" ||
 			(screen === "briefing" &&
@@ -716,6 +738,7 @@ class CommandMenu {
 			if (b) b.onclick = fn;
 		};
 		on("single", () => this.show("single"));
+		on("quit", () => window.desktop?.quit());
 		on("scenarios", () => this.show("scenarios"));
 		on("slots", () => {
 			this.slotOrigin = this.screen;
@@ -998,6 +1021,7 @@ class CommandMenu {
 						"Ustawienie działa teraz, ale nie można go zapamiętać.";
 				}
 			};
+			this.mountAppSettings();
 		}
 		this.syncAudio();
 		(
@@ -1312,6 +1336,73 @@ class CommandMenu {
 		setTimeout(() => el.remove(), 3500);
 	}
 	// Settings in tabs: each section (a heading in the scroll) becomes a panel; the first one is the sound.
+	// Ustawienia → Aplikacja i zapisy (G3, 0.151): full screen in the desktop app; saves to a file and back
+	// (save-transfer.js) — in the browser too.
+	mountAppSettings() {
+		const fullscreen = this.root.querySelector("#app-fullscreen"),
+			status = this.root.querySelector("#saves-status"),
+			file = this.root.querySelector("#saves-file"),
+			desktop = window.desktop;
+		if (fullscreen && desktop) {
+			desktop.isFullScreen().then((on) => (fullscreen.checked = on));
+			fullscreen.onchange = () => desktop.setFullScreen(fullscreen.checked).then((on) => (fullscreen.checked = on));
+			if (!this.fullscreenWatch) {
+				this.fullscreenWatch = true;
+				desktop.onFullScreen((on) => {
+					const box = this.root.querySelector("#app-fullscreen");
+					if (box) box.checked = on;
+				});
+			}
+		}
+		const exporter = this.root.querySelector("#saves-export");
+		if (!exporter || typeof SaveTransfer === "undefined") return;
+		const version = (document.querySelector(".menu-footer span")?.textContent.match(/PROTOTYP (\S+)/) || [])[1] || "";
+		exporter.onclick = () => {
+			try {
+				const text = SaveTransfer.exportSaves(localStorage, version),
+					link = document.createElement("a");
+				link.href = URL.createObjectURL(new Blob([text], { type: "application/json" }));
+				link.download = `pogranicze-zapisy-${new Date().toISOString().slice(0, 10)}.json`;
+				document.body.append(link);
+				link.click();
+				link.remove();
+				setTimeout(() => URL.revokeObjectURL(link.href), 10000);
+				status.textContent = `Wyeksportowano ${SaveTransfer.keysOf(localStorage).length} wpisów do pliku ${link.download}.`;
+			} catch {
+				status.textContent = "Nie udało się wyeksportować zapisów.";
+			}
+		};
+		this.root.querySelector("#saves-import").onclick = () => file.click();
+		file.onchange = async () => {
+			const chosen = file.files?.[0];
+			file.value = "";
+			if (!chosen) return;
+			const text = await chosen.text(),
+				check = SaveTransfer.readSaves(text);
+			if (!check.ok) {
+				status.textContent = check.error;
+				return;
+			}
+			const from = [check.game && `wersja ${check.game}`, check.exported && check.exported.slice(0, 10)].filter(Boolean).join(", ");
+			const question = {
+				eyebrow: "ZAPISY · IMPORT Z PLIKU",
+				title: "Zastąpić zapisy z tego urządzenia?",
+				text: "Import zastąpi wszystkie obecne zapisy bitew i slotów, postęp kampanii, rekordy i ustawienia danymi z pliku. Gra uruchomi się potem ponownie.",
+				facts: [["Plik", chosen.name], ["Wpisów", String(check.keys.length)], ...(from ? [["Pochodzenie", from]] : [])],
+				ok: "Importuj zapisy",
+				cancel: "Anuluj",
+				tone: "warn",
+			};
+			if (!(await (typeof GameDialog !== "undefined" ? GameDialog.confirm(question) : Promise.resolve(window.confirm(question.text))))) return;
+			try {
+				SaveTransfer.importSaves(localStorage, text);
+				status.textContent = "Zapisy wczytane. Gra uruchomi się ponownie…";
+				setTimeout(() => location.reload(), 900);
+			} catch {
+				status.textContent = "Nie udało się zapisać danych na tym urządzeniu.";
+			}
+		};
+	}
 	tabbed() {
 		const scroll = this.root.querySelector(".menu-scroll");
 		if (!scroll) return;
