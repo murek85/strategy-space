@@ -12,7 +12,10 @@
      turn to the other players (1 vs 1 or 2 vs 2), keeps the log and compares checksums. Lockstep with `teams` (all
      human and computer seats whose turns are awaited: the computer seats send none, so only humans are listed) and
      `relay: true`: turns carry their team; system commands of the server ("@aiTakeover", "@aiRelease") hand a
-     dropped team to the computer and back; replay(log) rebuilds a battle after coming back. */
+     dropped team to the computer and back; replay(log) rebuilds a battle after coming back.
+   - Phases (0.155): when a battle decides its first phase (the orbit of an Inwazja, network-modes.js), every
+     computer builds the next one at the same step (RTS.nextNetworkPhase) and the lockstep goes on with it; the
+     commands already sent for the old battle are dropped. onPhase(game) tells the page. */
 const NetPlay = (() => {
 	"use strict";
 	const PREFIX = "RTS1.";
@@ -136,7 +139,7 @@ const NetPlay = (() => {
 	class Lockstep {
 		// game: from RTS.createNetworkGame; team: this player's team (0 host, 1 guest); link: an open Link.
 		// pump: called when a turn arrives while the page is hidden (timers are then throttled hard; messages are not).
-		constructor(game, team, link, { onDesync, onClose, pump, teams = [0, 1], relay = false } = {}) {
+		constructor(game, team, link, { onDesync, onClose, onPhase, pump, teams = [0, 1], relay = false } = {}) {
 			const NET = RTS.NET;
 			this.game = game;
 			this.team = team;
@@ -161,6 +164,9 @@ const NetPlay = (() => {
 			this.desync = false;
 			this.onDesync = onDesync;
 			this.onClose = onClose;
+			this.onPhase = onPhase;
+			// Turns up to this one were issued in an earlier phase of the battle: their commands are dropped.
+			this.ignoreUntil = -1;
 			this.pump = pump;
 			this.handler = (msg) => this.receive(msg);
 			this.closeHandler = () => this.onClose?.();
@@ -256,11 +262,12 @@ const NetPlay = (() => {
 					}
 					this.waiting = 0;
 					this.turns.delete(this.turn);
-					this.apply(slot);
+					this.apply(slot, this.turn);
 				}
 				this.game.tick(NET.step);
 				steps++;
 				this.clock -= NET.step;
+				if (this.game.result && this.nextPhase()) continue;
 				if (++this.sub === NET.stepsPerTurn) {
 					this.sub = 0;
 					this.turn++;
@@ -271,12 +278,25 @@ const NetPlay = (() => {
 		complete(slot) {
 			return !!slot && this.teams.every((t) => slot[t]);
 		}
-		apply(slot) {
+		apply(slot, turn = this.turn) {
 			for (const team of this.teams)
 				for (const [name, args] of slot[team]) {
 					if (name === "@aiTakeover" || name === "@aiRelease") this.game.netTakeover?.(team, name === "@aiTakeover");
-					else this.game.applyCommand(team, name, args);
+					else if (turn > this.ignoreUntil) this.game.applyCommand(team, name, args);
 				}
+		}
+		// The battle decided its first phase: the next one, built the same way on every computer, takes over at once
+		// (the rest of this turn is not run). silent: while replaying the log (the page takes the battle afterwards).
+		nextPhase(silent = false) {
+			const next = RTS.nextNetworkPhase?.(this.game);
+			if (!next) return false;
+			this.ignoreUntil = this.turn + this.NET.delay;
+			this.pending = [];
+			this.sub = 0;
+			this.turn++;
+			this.game = next;
+			if (!silent) this.onPhase?.(next);
+			return true;
 		}
 		// Coming back to a lobby battle: the server's log (every team's turns so far) is replayed at once; this
 		// player's turns up to `from` are in it already (sent by the server while it was away).
@@ -290,9 +310,13 @@ const NetPlay = (() => {
 				const slot = this.turns.get(this.turn);
 				if (!this.complete(slot) || this.game.result) break;
 				this.turns.delete(this.turn);
-				this.apply(slot);
-				for (let k = 0; k < NET.stepsPerTurn; k++) this.game.tick(NET.step);
-				this.turn++;
+				this.apply(slot, this.turn);
+				let phase = false;
+				for (let k = 0; k < NET.stepsPerTurn && !phase; k++) {
+					this.game.tick(NET.step);
+					phase = !!this.game.result && this.nextPhase(true);
+				}
+				if (!phase) this.turn++;
 			}
 			this.sub = 0;
 			this.clock = 0;

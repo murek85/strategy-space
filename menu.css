@@ -2238,3 +2238,13 @@ body.menu-over-game .menu-hud b {
 .net-resume p {
 	margin: 0 0 8px;
 }
+/* 0.155: the scenario mode of a network battle — its goal, or why it falls back to conquest. */
+.net-mode-note {
+	grid-column: 1 / -1;
+	margin: -4px 0 4px;
+	font-size: 0.86em;
+	color: #9fb6bf;
+}
+.net-mode-note.warn {
+	color: #d6bc86;
+}

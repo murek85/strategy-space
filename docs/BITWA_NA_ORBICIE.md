@@ -4,7 +4,15 @@ Aktualizacja: 2026-10-08. Wersje: 0.130 (mapa, statki, osłony), 0.131 (stacje, 
 
 Pierwszy krok kierunku „Bitwy kosmiczne i transport między planetami” (zob. [Pomysły](POMYSLY.md)): mapa w kosmosie, na której zamiast pojazdów walczą statki. Zasady w `space-rules.js` (łańcuch modułów zasad, ostatni), wygląd 2D w `space-art.js`, modele 3D statków w `webgl3d/ships-3d.js`.
 
-## Nowe mapy w kosmosie (0.143)
+## Czytelność bitwy na tle kosmosu (0.155.1, 2026-10-09)
+
+Zgłoszenie właściciela: budynki, statki i inne elementy na mapach kosmicznych są słabo widoczne. Sprawdzenie w grze (renderer 3D; Orbita Kharona, Wrota Pustki, Pierścienie Glacjalis), z porównaniem po wyłączaniu kolejnych warstw tła:
+- planeta (Kharon) zajmowała pół widoku, a jej pasy chmur miały jasność szarych kadłubów — statki ginęły na jej tle (czarna dziura na Wrotach Pustki tak samo);
+- skały głębokiego pola (420, setki–tysiące jednostek pod planszą) w perspektywie leżały „między” jednostkami, przyciemnione mgłą głębi prawie do czerni — wyglądały jak przeszkody albo statki;
+- pierścienie przecinały pole bitwy ciemnymi łukami; Droga Mleczna, mgławice i blask słońca dokładały ruchliwe, nasycone tło.
+
+Zmiany (`webgl3d/space-3d.js`, stałe `CALM`): planeta ×0,55, poświata ×0,45, pierścienie i drobiny pierścieni ×0,5 (mniej kryjące), czarna dziura ×0,6, Droga Mleczna ×0,55, mgławice (niebo i obłoki w oddali) ×0,5, blask słońca, smuga i odblaski obiektywu ×0,4 (tarcza słońca bez zmian). Głębokie pole: najbliższe skały 1400 zamiast 700 pod planszą, półprzezroczyste (0,5), drobiny słabsze. Nowa ciemna warstwa 30 jednostek pod planszą (krycie 0,5), wygaszana do zera 700 jednostek za brzegiem mapy — pole bitwy ma ciemne tło, a jego granica jest widoczna. Statki (`webgl3d/ships-3d.js`): paski strony z materiału świecącego w kolorze strony. Światło w kosmosie (`three-renderer.js`): rozproszone 0,62 zamiast 0,4 — zacienione burty nie toną w tle.
+
 
 Trzy mapy scenariusza (`space-rules.js`, `MORE`), zarejestrowane jak orbita w `RTS.FRONTIER_MAPS` i `MISSIONS`; każda w innym świecie, z innym układem i burzami. Misja niesie `look` (wygląd 2D i 3D) i `storms` (kolejność burz; `stormNames` — własne nazwy). Orbita Kharona ma `look` domyślny (gazowy olbrzym, dalekie pierścienie).
 

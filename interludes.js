@@ -55,6 +55,32 @@ const Interludes = (() => {
 			["whisper", "…nie uciszycie nas wszystkich… jest nas więcej…"],
 			["lira", "Może. Ale nie tutaj. Ruszamy."],
 		],
+		colony10: [
+			["lira", "Rozejm z Varnem miał zakończyć wojnę. Admiralicja ma inne zdanie — orbita Eos jest zamknięta."],
+			["vok", "Tu admirał Selen Vok. Varn to zdrajca, a jego rozejm to papier. Każdy statek Kolonii na tej orbicie zostanie zatopiony."],
+			["lira", "Mamy lotniskowiec i dziesięć minut. Przełammy blokadę — z ocalałej floty zrobimy kapsuły na lądowanie."],
+		],
+		colony11: [
+			["lira", "Orbita nasza. Kapsuły czekają w lukach — pora zejść na Eos."],
+			["vok", "Baterie przeciwlotnicze stoją na całym Horyzoncie. Każda kapsuła spłonie, zanim dotknie piasku."],
+			["gate", "…OGRÓD MILCZY… KTO TRZYMA LATARNIE…"],
+			["lira", "Znowu ten sygnał. Artefakt pod piaskiem odpowiada — i to nie jest Rój."],
+		],
+		colony12: [
+			["lira", "Vok wycofała się do twierdzy na Popielnym Szlaku. Jeśli ją zdobędziemy, Admiralicja straci ostatnią bazę na powierzchni."],
+			["vok", "Moja twierdza wytrzymała już niejedno oblężenie. Wasze też przetrwa."],
+			["gate", "…KAŻDY, KTO TRZYMA LATARNIE, ODPOWIE…"],
+		],
+		colony13: [
+			["vok", "Pierścienie Glacjalis to moja ostatnia orbita. Tu skończy się wasza inwazja."],
+			["lira", "Jej okręt flagowy stoi przy stacji. Uderzmy, zanim szczeliny otworzą się w środku bitwy."],
+			["gate", "…SZCZELINA OTWARTA… OGRÓD WZYWA…"],
+		],
+		colony14: [
+			["gate", "…OGRÓD MILCZY… WY GO UCISZYLIŚCIE… BRAMA OTWARTA…"],
+			["lira", "Wszystkie szczeliny prowadzą tutaj — do Bramy przy horyzoncie Erebusa."],
+			["lira", "Rdzeń Wartowników stoi przy samej krawędzi. Zniszczmy go, zanim przejdzie ich więcej."],
+		],
 	};
 	// The world under the scene: by the map's theme, else its biome — [surface, night, air].
 	const WORLD = {
@@ -65,10 +91,11 @@ const Interludes = (() => {
 		magma: ["#8a3a24", "#1a0806", "#ff7a3a"],
 		frozenhive: ["#b8d0e0", "#2a3a50", "#c9b8ff"],
 		derelict: ["#6a6a66", "#141414", "#ffb08a"],
+		space: ["#3a4466", "#05060c", "#9fb8ff"],
 	};
 	// Sides: the Colonies speak from the left in teal, the Dominium from the right in red, Varn (an officer of the
 	// Dominium, an ally) in amber, the Swarm in violet.
-	const SIDE = { lira: "#7fe7c8", tessa: "#f0cf8a", vale: "#9cc6f2", koss: "#f2a38c", dominium: "#ff6a5a", varn: "#e9a17a", whisper: "#c98cff" };
+	const SIDE = { lira: "#7fe7c8", tessa: "#f0cf8a", vale: "#9cc6f2", koss: "#f2a38c", dominium: "#ff6a5a", varn: "#e9a17a", whisper: "#c98cff", vok: "#ff8f7a", gate: "#7fe9ff" };
 	const LEFT = new Set(["lira", "tessa", "vale", "koss"]);
 
 	function film(id) {
@@ -101,7 +128,7 @@ const Interludes = (() => {
 				[who, text] = lines[scene],
 				left = LEFT.has(who),
 				color = SIDE[who] || "#c5d7d9",
-				enemy = who === "dominium" || who === "whisper",
+				enemy = ["dominium", "whisper", "vok", "gate"].includes(who),
 				t = reduced ? scene * LINE + 2 : time,
 				s = speakers[who] || {};
 			c.save();
@@ -169,7 +196,7 @@ const Interludes = (() => {
 			c.globalAlpha = appear;
 			c.font = "10px monospace";
 			c.fillStyle = color;
-			c.fillText(enemy ? (who === "whisper" ? "SYGNAŁ NIEZNANY · ŹRÓDŁO: ARTEFAKTY" : "PRZECHWYCONO · KANAŁ DOMINIUM 3.07") : "ŁĄCZNOŚĆ · KANAŁ 7.31 · SZYFR KOLONII", dx, 92);
+			c.fillText(enemy ? (who === "whisper" ? "SYGNAŁ NIEZNANY · ŹRÓDŁO: ARTEFAKTY" : who === "gate" ? "SYGNAŁ NIEZNANY · ŹRÓDŁO: SZCZELINA" : who === "vok" ? "PRZECHWYCONO · KANAŁ ADMIRALICJI 1.01" : "PRZECHWYCONO · KANAŁ DOMINIUM 3.07") : "ŁĄCZNOŚĆ · KANAŁ 7.31 · SZYFR KOLONII", dx, 92);
 			c.fillRect(dx, 98, dw * (reduced ? 1 : clamp01(local / 0.6)), 1.2);
 			c.font = "15px monospace";
 			const typed = reduced ? text : text.slice(0, Math.floor(clamp01(local / (LINE * 0.62)) * text.length));
@@ -203,7 +230,7 @@ const Interludes = (() => {
 			c.stroke();
 			c.restore();
 			// The frame of the film: grade, vignette, grain, letterbox; the header on the bar.
-			K.finish(c, scene, local, time, reduced, enemy ? (who === "whisper" ? "#6a2a8f" : "#8f2a2a") : "#2a6f8f");
+			K.finish(c, scene, local, time, reduced, enemy ? (who === "whisper" ? "#6a2a8f" : who === "gate" ? "#1f6f8f" : "#8f2a2a") : "#2a6f8f");
 			c.font = "11px monospace";
 			c.fillStyle = "rgba(190,215,222,0.85)";
 			c.fillText(`ŁĄCZNOŚĆ · ${(m.planet || "").toUpperCase()}`, 24, BAR - 12);

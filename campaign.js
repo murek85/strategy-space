@@ -10,6 +10,11 @@
 		"colony7",
 		"colony8",
 		"colony9",
+		"colony10",
+		"colony11",
+		"colony12",
+		"colony13",
+		"colony14",
 	];
 	// Story decisions kept between chapters (campaign-act2.js, campaign-choices.js).
 	const CHOICES = {
@@ -25,6 +30,8 @@
 			// Badges mark completed secondary objectives; choices keep story decisions (act II).
 			this.badges = {};
 			this.choices = {};
+			// What a chapter leaves for the next one (act IV: the drop pods the fleet of X makes for XI).
+			this.carry = {};
 			// The campaign difficulty (easy, normal, hard): the commander AI and the enemy's strength.
 			this.difficulty = "normal";
 			try {
@@ -37,6 +44,8 @@
 					if (CHOICES[id]?.includes(s.choices?.[id]))
 						this.choices[id] = s.choices[id];
 				}
+				const pods = s.carry?.colony10?.pods;
+				if (Number.isInteger(pods) && pods >= 0 && pods <= 8) this.carry.colony10 = { pods };
 				if (["easy", "normal", "hard"].includes(s.difficulty))
 					this.difficulty = s.difficulty;
 			} catch {}
@@ -49,6 +58,8 @@
 			const choice = game.campaignChoice?.() ?? game.act2?.choice;
 			if (CHOICES[game.missionId]?.includes(choice))
 				this.choices[game.missionId] = choice;
+			const carry = game.campaignCarry?.();
+			if (carry) this.carry[game.missionId] = carry;
 			return this.store();
 		}
 		setDifficulty(level) {
@@ -87,6 +98,7 @@
 						...this.completed,
 						badges: this.badges,
 						choices: this.choices,
+						carry: this.carry,
 						difficulty: this.difficulty,
 					}),
 				);

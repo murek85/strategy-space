@@ -167,6 +167,23 @@
 				name: "Fala",
 				description: "Rój trzyma się planu poziomu trudności: tanie jednostki, stała presja.",
 			},
+			// H3d (0.154): the Watchers rift in fast and often — Sparks blink onto workers, Wardens phase when hurt
+			// and merge into Constructs (watchers-rules.js), a beaten attack pulls back to its Anchors.
+			watchers: {
+				name: "Szczeliny",
+				description: "Wartownicy atakują często średnimi grupami, iskry skaczą na Twoje roboty, strażnicy wchodzą w fazę i scalają się w konstrukty; przegrany atak wycofują.",
+				interval: 0.85,
+				firstAttack: 0.9,
+				attackSize: 0.9,
+				minAttack: 0,
+				relayShare: 1.2,
+				raids: true,
+				retreat: true,
+				raidFrom: 200,
+				raidEvery: 65,
+				factoryEarlier: 40,
+				units: { spark: 2, prism: 1.4, arc: 1, warden: 1.3, trooper: 0.4, tank: 0.5 },
+			},
 		});
 		const ENEMY = (RTS.ENEMY_MODES = {
 			commander: { name: "Dowódca AI", code: "A", description: "Przeciwnik zbiera surowce, buduje i płaci za każdą jednostkę." },
@@ -209,7 +226,7 @@
 		const value = (e) => ((TYPES[e.type].cost || 60) * e.hp) / Math.max(1, e.maxHp || TYPES[e.type].hp);
 		const total = (list) => list.reduce((n, e) => n + value(e), 0);
 		const centre = (list) => ({ x: list.reduce((n, e) => n + e.x, 0) / list.length, y: list.reduce((n, e) => n + e.y, 0) / list.length });
-		const PRODUCERS = { hq: ["worker"], barracks: ["trooper", "rocket", "raider", "grenadier", "flamer", "crawler", "spitter"], factory: ["tank", "sentinel", "destroyer", "colossus", "heavy", "artillery", "skyguard"], hangar: ["interceptor", "bomber"] };
+		const PRODUCERS = { hq: ["worker"], barracks: ["trooper", "rocket", "raider", "grenadier", "flamer", "crawler", "spitter", "spark"], factory: ["tank", "sentinel", "destroyer", "colossus", "heavy", "artillery", "skyguard", "prism", "arc", "warden"], hangar: ["interceptor", "bomber"] };
 		const disabled = (g, e) => (e.disabledUntil || 0) > g.time || (e.moduleLeft || 0) > 0;
 
 		Object.assign(Game.prototype, {
@@ -905,6 +922,10 @@
 						crawler: faction === "swarm" ? 3 + 2 * c * infantry : 0,
 						spitter: faction === "swarm" ? 2 + 3 * c * vehicles : 0,
 						colossus: faction === "swarm" && L.heavyAt != null && t >= L.heavyAt ? 1.2 : 0,
+						spark: faction === "watchers" ? 3 + 2 * c * infantry : 0,
+						prism: faction === "watchers" ? 1.5 + 5 * c * vehicles : 0,
+						arc: faction === "watchers" ? 1 + 3 * c * infantry : 0,
+						warden: faction === "watchers" && L.heavyAt != null && t >= L.heavyAt - 60 ? 1.5 + c * vehicles : 0,
 						heavy: L.heavyAt != null && t >= L.heavyAt ? 1.2 + 2 * c * vehicles : 0,
 						artillery: L.artilleryAt != null && t >= L.artilleryAt ? 0.8 : 0,
 						skyguard: TYPES.skyguard && air > 0 ? 8 * c * air : 0,

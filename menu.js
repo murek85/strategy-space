@@ -35,7 +35,7 @@ const WINDOW_SCREENS = [
 // The line over each screen's title, like the channel of a console.
 const EYEBROWS = {
 	single: "WYBÓR OPERACJI / SEKTOR 07",
-	campaign: "MAPA OPERACYJNA / AKTY I–III",
+	campaign: "MAPA OPERACYJNA / AKTY I–IV",
 	scenarios: "SYMULATOR BITEW / KONFIGURACJA",
 	briefing: "ODPRAWA / KANAŁ SZYFROWANY",
 	review: "ODPRAWA / DZIENNIK ŁĄCZNOŚCI",
@@ -208,6 +208,10 @@ class CommandMenu {
 				)}${missions.some(([, m]) => m.act === 3) ? `<h2 class="act-heading">Akt III · Przebudzenie Roju</h2>${progress.colony6 && typeof Act3Film !== "undefined" ? this.button("intro3", "Prolog aktu III") : ""}${missions
 				.filter(([, m]) => m.act === 3)
 				.map(card)
+				.join("")}` : ""}${missions.some(([, m]) => m.act === 4) ? `<h2 class="act-heading">Akt IV · Inwazja</h2>${missions
+				.filter(([, m]) => m.act === 4)
+				.sort(([a], [b]) => Number(a.slice(6)) - Number(b.slice(6)))
+				.map(card)
 				.join("")}` : ""}</nav><aside id="mission-preview" class="galaxy-info mission-preview" aria-live="polite" aria-label="Podgląd wybranego rozdziału"></aside></div>${this.button("campaign-back", "Wróć do wyboru gry")}`;
 		} else if (screen === "slots") {
 			title =
@@ -219,7 +223,7 @@ class CommandMenu {
 		} else if (screen === "briefing") {
 			const m = RTS.MISSIONS[this.selectedMission];
 			title = m.name;
-			body = `<span class="menu-tag">${m.training ? "SZKOLENIE WOLNYCH KOLONII" : m.campaign ? (m.act === 2 ? "KAMPANIA · AKT II · " : "KAMPANIA · ROZDZIAŁ ") + m.name : "OPERACJA NIEZALEŻNA"} / ${m.planet}</span><p>${m.description}</p><h2>Cele operacji</h2><p class="menu-objective">${m.campaign ? m.objective : (RTS.describeScenario?.(this.scenario) || RTS.MODES?.[this.scenario.mode])?.objective || "Zniszcz wszystkie wrogie centra dowodzenia."}</p>${this.legacyHtml(m)}${m.facts ? `<div class="menu-facts"><span>${m.facts[0]}</span><span>${m.facts[1]}</span></div><p>Nowa umiejętność: ${m.lesson}. Wskazówki i dziennik łączności w panelu celów; odprawę można powtórzyć z menu pauzy.</p>` : `<div class="menu-facts"><span>Metal · gaz · kryształy<br>${m.training || !m.campaign ? "Start: Przyczółek → rozbudowa w BADANIA" : "Start: Kolonia"}</span><span>${m.commanderFacts || (m.training ? "1800" : m.campaign ? "650" : "400") + " metalu na start<br>" + (m.training ? "Bez wrogich desantów" : "Pierwszy desant po " + (m.campaign ? "100" : "65") + " s")}</span></div><p>PPM robotem na złożu — wydobycie. Reaktor [C], laboratorium [N]. Home — cała mapa.</p>`}${m.campaign ? this.campaignLevelHtml(m) : ""}${this.button("launch", "Rozpocznij operację", true)}${typeof Interludes !== "undefined" && Interludes.has(this.selectedMission) ? this.button("replay-interlude", "Scena łączności") : ""}${this.button("mission-back", "Wróć do wyboru misji")}`;
+			body = `<span class="menu-tag">${m.training ? "SZKOLENIE WOLNYCH KOLONII" : m.campaign ? (m.act === 2 ? "KAMPANIA · AKT II · " : m.act === 4 ? "KAMPANIA · AKT IV · " : "KAMPANIA · ROZDZIAŁ ") + m.name : "OPERACJA NIEZALEŻNA"} / ${m.planet}</span><p>${m.description}</p><h2>Cele operacji</h2><p class="menu-objective">${m.campaign ? m.objective : (RTS.describeScenario?.(this.scenario) || RTS.MODES?.[this.scenario.mode])?.objective || "Zniszcz wszystkie wrogie centra dowodzenia."}</p>${this.legacyHtml(m)}${m.facts ? `<div class="menu-facts"><span>${m.facts[0]}</span><span>${m.facts[1]}</span></div><p>Nowa umiejętność: ${m.lesson}. Wskazówki i dziennik łączności w panelu celów; odprawę można powtórzyć z menu pauzy.</p>` : `<div class="menu-facts"><span>Metal · gaz · kryształy<br>${m.training || !m.campaign ? "Start: Przyczółek → rozbudowa w BADANIA" : "Start: Kolonia"}</span><span>${m.commanderFacts || (m.training ? "1800" : m.campaign ? "650" : "400") + " metalu na start<br>" + (m.training ? "Bez wrogich desantów" : "Pierwszy desant po " + (m.campaign ? "100" : "65") + " s")}</span></div><p>PPM robotem na złożu — wydobycie. Reaktor [C], laboratorium [N]. Home — cała mapa.</p>`}${m.campaign ? this.campaignLevelHtml(m) : ""}${this.button("launch", "Rozpocznij operację", true)}${typeof Interludes !== "undefined" && Interludes.has(this.selectedMission) ? this.button("replay-interlude", "Scena łączności") : ""}${this.button("mission-back", "Wróć do wyboru misji")}`;
 		} else if (screen === "replace") {
 			title = "Rozpocząć od nowa?";
 			body = `<p>Rozpoczęcie operacji zastąpi dotychczasowy autosave na tym urządzeniu; ręczne sloty pozostaną zachowane. Powrót do odprawy zachowa postęp.</p>${this.button("confirm", "Rozpocznij i zastąp zapis", true)}${this.button("cancel", "Wróć do odprawy")}`;
@@ -308,6 +312,10 @@ class CommandMenu {
 				body;
 		if (screen === "news")
 			body =
+				"<h2>0.156 / Akt IV: Inwazja — rozdziały X i XI</h2><p>Nowy akt kampanii po rozdziale IX. Przełam blokadę orbity Eos flotą z lotniskowcem — ocalałe statki to kapsuły desantowe na rozdział XI, w którym lądujesz na Cichym Horyzoncie pod ogniem baterii Admiralicji. Adm. Selen Vok, tajemniczy Głos Bramy i pierwsze szczeliny Wartowników. Rozdziały XII–XIV w wersji roboczej.</p>" +
+				"<h2>0.155.1 / Czytelność map w kosmosie</h2><p>Planeta, pierścienie, czarna dziura, mgławice i słońce przygaszone, skały pod polem bitwy nie udają już przeszkód, a pod planszą leży ciemne tło. Statki mają świecące paski w kolorze strony.</p>" +
+				"<h2>0.155 / Inwazja i tryby w grze sieciowej</h2><p>Gra wieloosobowa: nowe pole Tryb — przekaźniki, król wzgórza, ekspedycja i Inwazja (orbita, potem lądowanie, kapsuły i uderzenia z orbity przez sieć). Przez serwer, przeciw samym komputerom: Obrona i Przetrwanie w kooperacji.</p>" +
+				"<h2>0.154 / Wartownicy Otchłani</h2><p>Czwarta frakcja: rasa maszyn z białego kamienia i światła. Tarcze na wszystkim, lewitacja, Rezonatory zamiast górników. Iskra skacze (⇧Q), Strażnik wchodzi w fazę, dwaj strażnicy scalają się w Konstrukt, Pryzmat i Łuk biją wiązką i łańcuchem. Kotwice otwierają szczeliny i teleporty, a Rdzeń potrafi przelecieć. Wybierz ich w scenariuszu albo w grze sieciowej.</p>" +
 				"<h2>0.153 / Lobby i 2 na 2 przez sieć</h2><p>Gra wieloosobowa przez serwer: lista gier, 1 na 1 i 2 na 2, komputer na wolnym miejscu, czat. Po zerwaniu połączenia gra łączy się sama i wraca do bitwy; w tym czasie Twoją stronę prowadzi komputer.</p>" +
 				"<h2>0.152.1 / Szuflada celów</h2><p>Bez poziomego przewijania w szufladzie celów; szuflada chowa się pod raportem zwycięstwa lub porażki.</p>" +
 				"<h2>0.152 / Inwazja — desant z orbity</h2><p>Nowy tryb scenariusza: najpierw zdobądź orbitę nad planetą, potem wyląduj. Kto panuje na orbicie, ma kapsuły desantowe, uderzenie z orbity i skan; baterie przeciwlotnicze zestrzeliwują kapsuły.</p>" +
@@ -537,7 +545,7 @@ class CommandMenu {
 					)
 					.join(
 						"",
-					)}</select></label><label>Frakcja<select id="scenario-faction" aria-label="Frakcja"><option value="colonies">Wolne Kolonie</option><option value="dominion">Dominium</option>${RTS.FACTIONS?.swarm ? '<option value="swarm">Rój Kryształowy</option>' : ""}</select></label>${this.settingFields()}<p id="faction-description"></p><p id="mode-description"></p></div><h2>Cele operacji</h2>`,
+					)}</select></label><label>Frakcja<select id="scenario-faction" aria-label="Frakcja"><option value="colonies">Wolne Kolonie</option><option value="dominion">Dominium</option>${RTS.FACTIONS?.swarm ? '<option value="swarm">Rój Kryształowy</option>' : ""}${RTS.FACTIONS?.watchers ? '<option value="watchers">Wartownicy Otchłani</option>' : ""}</select></label>${this.settingFields()}<p id="faction-description"></p><p id="mode-description"></p></div><h2>Cele operacji</h2>`,
 			);
 		}
 		this.root.classList.toggle("reduced-motion", this.reduced);
@@ -563,7 +571,7 @@ class CommandMenu {
 		queueMicrotask(() => ranges.forEach(fill));
 		if (screen === "knowledge") KnowledgeBase.mount(this.root);
 		this.root.querySelector(".menu-footer span").textContent =
-			"PROTOTYP 0.153 · ZAPIS LOKALNY";
+			"PROTOTYP 0.156 · ZAPIS LOKALNY";
 		if (
 			screen === "scenarios" ||
 			(screen === "briefing" &&
@@ -1099,8 +1107,8 @@ class CommandMenu {
 				normal: "Przeciwnik w pełnej sile.",
 				hard: "Silniejszy przeciwnik (+15% wytrzymałości i obrażeń).",
 			}[level],
-			ai = m.commander || m.act === 3 ? " " + (RTS.AI_LEVELS?.[level]?.description || "") + (RTS.CAMPAIGN_AI?.[this.selectedMission]?.hangar === false && RTS.AI_LEVELS?.[level]?.hangarAt != null ? " W tym rozdziale bez hangaru i lotnictwa." : "") : "";
-		return `<label class="campaign-level">Poziom trudności kampanii<select id="campaign-difficulty" aria-label="Poziom trudności kampanii">${["easy", "normal", "hard"].map((k) => `<option value="${k}" ${k === level ? "selected" : ""}>${RTS.AI_LEVELS?.[k]?.name || k}</option>`).join("")}</select></label><p class="campaign-level-info">${m.commander ? "<b>Przeciwnik: dowódca AI</b> — zamiast zaplanowanych desantów Dominium buduje bazę, zbiera surowce, broni się i atakuje według poziomu. " + (RTS.AI_STYLES?.dominion ? `Styl „${RTS.AI_STYLES.dominion.name}”: ${RTS.AI_STYLES.dominion.description} ` : "") : m.act === 3 ? "<b>Przeciwnik: dowódca AI.</b> " : ""}${info}${ai}</p>`;
+			ai = m.commander || m.act >= 3 ? " " + (RTS.AI_LEVELS?.[level]?.description || "") + (RTS.CAMPAIGN_AI?.[this.selectedMission]?.hangar === false && RTS.AI_LEVELS?.[level]?.hangarAt != null ? " W tym rozdziale bez hangaru i lotnictwa." : "") : "";
+		return `<label class="campaign-level">Poziom trudności kampanii<select id="campaign-difficulty" aria-label="Poziom trudności kampanii">${["easy", "normal", "hard"].map((k) => `<option value="${k}" ${k === level ? "selected" : ""}>${RTS.AI_LEVELS?.[k]?.name || k}</option>`).join("")}</select></label><p class="campaign-level-info">${m.commander ? "<b>Przeciwnik: dowódca AI</b> — zamiast zaplanowanych desantów Dominium buduje bazę, zbiera surowce, broni się i atakuje według poziomu. " + (RTS.AI_STYLES?.dominion ? `Styl „${RTS.AI_STYLES.dominion.name}”: ${RTS.AI_STYLES.dominion.description} ` : "") : m.act >= 3 ? "<b>Przeciwnik: dowódca AI.</b> " : ""}${info}${ai}</p>`;
 	}
 	launch() {
 		this.hide();
@@ -1125,7 +1133,7 @@ class CommandMenu {
 		this.fitGalaxy();
 		window.addEventListener("resize", this.fitGalaxy);
 		const progress = this.api.campaign?.() || {},
-			order = ["training", "colony1", "colony2", "colony3", "colony4", "colony5", "colony6", "colony7", "colony8", "colony9"].filter((id) => RTS.MISSIONS[id]),
+			order = ["training", "colony1", "colony2", "colony3", "colony4", "colony5", "colony6", "colony7", "colony8", "colony9", "colony10", "colony11", "colony12", "colony13", "colony14"].filter((id) => RTS.MISSIONS[id]),
 			status = (id) => (progress[id] ? "done" : !RTS.MISSIONS[id].requires || progress[RTS.MISSIONS[id].requires] ? "open" : "locked");
 		if (typeof GalaxyMap !== "undefined") this.galaxy = GalaxyMap.portrait(null, { reduced: this.reduced });
 		const show = (id) => this.showMission(id, order, status);
@@ -1141,14 +1149,14 @@ class CommandMenu {
 		if (!preview || !m) return;
 		if (this.previewMission === id && preview.childElementCount) return;
 		this.previewMission = id;
-		const ROMAN = ["S", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX"],
+		const ROMAN = ["S", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII", "XIII", "XIV"],
 			num = ROMAN[order.indexOf(id)] || "",
 			state = status(id),
 			details = this.api.campaignDetails?.() || { badges: {}, choices: {} },
 			planet = m.planet.split(" — ")[0],
 			world = typeof GalaxyMap !== "undefined" ? GalaxyMap.WORLDS[planet] : null,
 			label = { done: "◉ Ukończony", open: "● Do rozegrania", locked: "⊘ Zablokowany" }[state],
-			act = ["", "I · Odzyskany Świt", "II · Cena świtu", "III · Przebudzenie Roju"][m.act || 1];
+			act = ["", "I · Odzyskany Świt", "II · Cena świtu", "III · Przebudzenie Roju", "IV · Inwazja"][m.act || 1];
 		preview.innerHTML =
 			`<span class="eyebrow">AKT ${act}</span><h3><i class="world-num ${state}">${num}</i>${m.name.replace(/^[IVX]+ · /, "")}</h3>` +
 			(world ? `<canvas class="world-portrait" role="img" aria-label="Podgląd planety ${planet}"></canvas>` : "") +
@@ -1272,7 +1280,23 @@ class CommandMenu {
 	// Long screens get the knowledge-base layout: fixed title and actions, scrolled content between them.
 	// Act III briefing: the consequences of the act II decision about the Hefajstos complex.
 	legacyHtml(m) {
-		return this.decisionsHtml() + this.act3LegacyHtml(m);
+		return this.decisionsHtml() + this.act3LegacyHtml(m) + this.act4LegacyHtml();
+	}
+	// Act IV: Varn after the decision of chapter VIII (X and XI), and the pods the fleet of X left for XI.
+	act4LegacyHtml() {
+		const id = this.selectedMission;
+		if (!["colony10", "colony11"].includes(id) || !RTS.ACT4_VARN) return "";
+		const details = this.api.campaignDetails?.() || {},
+			V = RTS.ACT4_VARN[details.choices?.colony8],
+			pods = details.carry?.colony10?.pods;
+		const varn = V
+			? `<div class="menu-legacy"><span class="menu-tag">SKUTKI DECYZJI · PROPOZYCJA VARNA</span><h3>${V.name}</h3><p>${V.summary}</p></div>`
+			: `<div class="menu-legacy"><span class="menu-tag">SKUTKI DECYZJI · PROPOZYCJA VARNA</span><p>Brak zapisanej decyzji z rozdziału VIII — Varn nie bierze udziału w wojnie z Admiralicją.</p></div>`;
+		const fleet =
+			id === "colony11"
+				? `<div class="menu-legacy"><span class="menu-tag">WYNIK ROZDZIAŁU X · FLOTA</span><p>${Number.isInteger(pods) ? `Ocalała flota z blokady Eos: <b>${pods} kapsuł desantowych</b>.` : `Brak zapisanego wyniku rozdziału X — na start ${RTS.INVASION?.minPods + 2 || 4} kapsuły.`}</p></div>`
+				: "";
+		return varn + fleet;
 	}
 	// Briefing: what earlier story decisions (campaign-choices.js) change in this chapter.
 	decisionsHtml() {

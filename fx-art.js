@@ -51,6 +51,19 @@ const FxArt = (() => {
 				const k = 0.35 + i * 0.16 + t * 0.1;
 				out.push({ t: "disc", x: (ef.fx ?? ef.x) + dx * k + Math.sin(i * 2.1 + t * 9) * 4, y: (ef.fy ?? ef.y) + dy * k + Math.cos(i * 1.7 + t * 9) * 4, r: 4 + i * 2 + t * 4, color: i % 2 ? "#ffb347" : "#ff7a2e", alpha: a * (0.8 - i * 0.08) });
 			}
+		} else if (ef.kind === "rift") {
+			// The Watchers (0.154): a rift of light — a vertical slit opening and closing, rings spreading
+			// (a small one for a Spark's blink, a bright burst when two Wardens merge).
+			const s = ef.small ? 0.55 : ef.merge ? 1.4 : 1,
+				open = Math.sin(Math.min(1, t * 1.6) * Math.PI);
+			out.push({ t: "line", x: ef.x, y: ef.y + 10 * s, x2: ef.x, y2: ef.y - 46 * s * open - 6, w: 7 * s * open + 1, color: "#7fe9ff", alpha: a * 0.55 });
+			out.push({ t: "line", x: ef.x, y: ef.y + 6 * s, x2: ef.x, y2: ef.y - 40 * s * open - 4, w: 2.5 * s * open + 0.5, color: "#f2fdff", alpha: a });
+			out.push({ t: "ring", x: ef.x, y: ef.y, r: (8 + t * 34) * s, w: 3 * a, color: "#7fe9ff", alpha: a * 0.8 });
+			if (ef.merge) out.push({ t: "disc", x: ef.x, y: ef.y, r: 22 * a, color: "#dffaff", alpha: a * 0.5 });
+		} else if (ef.kind === "phase") {
+			// A Warden in phase: a pale shell shimmering round it.
+			out.push({ t: "ring", x: ef.x, y: ef.y, r: 20 + t * 4, w: 2.5, color: "#bdf4ff", alpha: a * 0.7 });
+			out.push({ t: "arc", x: ef.x, y: ef.y, r: 15, a0: t * 6, a1: t * 6 + 2.2, w: 1.5, color: "#ffffff", alpha: a * 0.6 });
 		} else if (ef.kind === "artifact") {
 			out.push({ t: "ring", x: ef.x, y: ef.y, r: 14 + t * 60, w: 5 * a, color: "#f5e27a", alpha: a });
 			out.push({ t: "line", x: ef.x, y: ef.y, x2: ef.x, y2: ef.y - 40 - t * 80, w: 6 * a, color: "#fff7c4", alpha: a * 0.8 });
@@ -99,7 +112,7 @@ const FxArt = (() => {
 			else if (s.t === "cross") g.moveTo(s.x - s.s, s.y).lineTo(s.x + s.s, s.y).moveTo(s.x, s.y - s.s).lineTo(s.x, s.y + s.s).stroke(stroke);
 		}
 	}
-	const KINDS = new Set(["shieldHit", "heal", "sparks", "dust", "emp", "artifact", "flame"]);
+	const KINDS = new Set(["shieldHit", "heal", "sparks", "dust", "emp", "artifact", "flame", "rift", "phase"]);
 	const handles = (ef) => KINDS.has(ef.kind);
 
 	// A crater left by heavy fire: dark bowl, lighter rim, thrown soil; fades in its last minute.

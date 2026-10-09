@@ -5,12 +5,14 @@
    A kit holds the materials of one side: team colour (stripes, lights), metal, dark metal, glass.
    Colonies read rounded and pale (cylinders, domes); the Dominium angular and rust-red (wedges, plates);
    the Swarm matte obsidian monoliths, sentries and walkers with the team stripe as the only colour
-   (as swarm-art.js). Wildlife and monsters use natural materials. Types without a model stay as painted
+   (as swarm-art.js); the Watchers white stone with cyan seams of light, hovering (watchers-art.js).
+   Wildlife and monsters use natural materials. Types without a model stay as painted
    decals (three-renderer.js). */
 import { createDetail3D, createBaker, windowCurve } from "./models-detail-3d.js";
 import { createNature3D } from "./nature-detail-3d.js";
 import { createProps3D } from "./props-detail-3d.js";
 import { createSwarm3D } from "./swarm-detail-3d.js";
+import { createWatchers3D } from "./watchers-detail-3d.js";
 import { createAct3 } from "./act3-detail-3d.js";
 import { createAct2 } from "./act2-detail-3d.js";
 import { createAct1 } from "./act1-detail-3d.js";
@@ -49,12 +51,26 @@ export function createModels3D(THREE) {
 	const kits = new Map();
 	function kit(team, faction, tint, teamColors) {
 		const swarm = faction === "swarm",
-			dominion = !swarm && (faction === "dominion" || (!faction && team === 1)),
+			watchers = faction === "watchers",
+			dominion = !swarm && !watchers && (faction === "dominion" || (!faction && team === 1)),
 			color = tint || teamColors[team] || "#bbc1e2",
 			key = [color, faction || team].join("|");
 		if (kits.has(key)) return kits.get(key);
 		// Swarm: matte obsidian, no glow — the team stripe is the only colour (as in swarm-art.js).
-		const k = swarm
+		const k = watchers
+			? {
+					// The Watchers: smooth white stone, seams and lenses of cyan light (as in watchers-art.js).
+					watchers,
+					team: std(color, { roughness: 0.45 }),
+					glow: std(color, { emissive: color, emissiveIntensity: 0.8 }),
+					metal: std("#c4ced5", { roughness: 0.4, metalness: 0.15 }),
+					plate: std("#eef2f4", { roughness: 0.3, metalness: 0.05 }),
+					dark: std("#7f8d98", { roughness: 0.5, metalness: 0.2 }),
+					black: std("#33404a", { roughness: 0.6 }),
+					glass: std("#a8f4ff", { emissive: "#4fdcff", emissiveIntensity: 1.2, roughness: 0.2, metalness: 0.1 }),
+					warn: std("#d3dbe0", { roughness: 0.7, metalness: 0.05 }),
+				}
+			: swarm
 			? {
 					swarm,
 					team: std(color, { roughness: 0.5 }),
@@ -102,6 +118,7 @@ export function createModels3D(THREE) {
 		k.strobe = std("#ffffff", { emissive: "#ffffff", emissiveIntensity: 2 });
 		// Crystal in a robot's hopper (the colour of the crystal deposits).
 		k.crystal = std("#f4d989", { roughness: 0.15, metalness: 0.1, emissive: "#c9962a", emissiveIntensity: 0.35 });
+		if (watchers) for (const m of [k.metal, k.plate, k.dark, k.black, k.warn, k.team]) m.userData.clean = true;
 		for (const m of Object.values(k)) if (m.isMaterial && m.emissiveIntensity && m.emissive.getHex()) glowing.push([m, m.emissiveIntensity]);
 		kits.set(key, k);
 		return k;
@@ -165,6 +182,30 @@ export function createModels3D(THREE) {
 		swarmWalker = (k, r, o) => swarmKit.walker(k, r, o),
 		swarmFlyer = (k, r) => swarmKit.flyer(k, r);
 	// ---- Special buildings of act III and the orbital station: webgl3d/act3-detail-3d.js ----
+	// ---- Watchers: white stone and light, webgl3d/watchers-detail-3d.js ----
+	const watchersKit = createWatchers3D(THREE, { tools: detail.tools, group }),
+		WATCHERS_UNITS = {
+			worker: (k, r) => watchersKit.weaver(k, r),
+			trooper: (k, r) => watchersKit.drone(k, r, { prongs: true }),
+			rocket: (k, r) => watchersKit.drone(k, r, { beam: true }),
+			saboteur: (k, r) => watchersKit.drone(k, r, {}),
+			spark: (k, r) => watchersKit.drone(k, r, { fins: true, prongs: true }),
+			prism: (k, r) => watchersKit.drone(k, r, { long: 4, beam: true, plates: true }),
+			arc: (k, r) => watchersKit.drone(k, r, { long: 6, arc: true, fins: true }),
+			warden: (k, r) => watchersKit.drone(k, r, { long: 4, plates: true, ring: true, prongs: true }),
+			construct: (k, r) => watchersKit.drone(k, r, { long: 8, plates: true, arc: true, orbit: true }),
+			tank: (k, r) => watchersKit.drone(k, r, { long: 4, prongs: true, plates: true }),
+			heavy: (k, r) => watchersKit.drone(k, r, { long: 6, beam: true, plates: true, ring: true }),
+			artillery: (k, r) => watchersKit.drone(k, r, { long: 8, arc: true }),
+			transport: (k, r) => watchersKit.drone(k, r, { long: 10, plates: true }),
+			skyguard: (k, r) => watchersKit.drone(k, r, { long: 2, ring: true, prongs: true }),
+			hauler: (k, r) => watchersKit.drone(k, r, { long: 10, fins: true }),
+		},
+		watcherOnly = (k, r, type) => {
+			const own = kit(2, "watchers", "#a9c4cf", []),
+				s = RTS.TYPES[type];
+			return !s.speed ? watchersKit.building(own, r, type) : WATCHERS_UNITS[type](own, r);
+		};
 	const act3 = createAct3(THREE, { tools: detail.tools, swarm: swarmKit, group, std });
 	// ---- Objective sites of act II: webgl3d/act2-detail-3d.js ----
 	const act2 = createAct2(THREE, { tools: detail.tools, group, std });
@@ -209,6 +250,8 @@ export function createModels3D(THREE) {
 		spitter: (k) => swarmSentry(kit(2, "swarm", "#8a94a3", []), 12, { spine: true }),
 		colossus: (k, r) => swarmWalker(kit(2, "swarm", "#8a94a3", []), r, { legs: 2, plates: true, twin: true, hump: true }),
 		monolith: (k, r) => swarmBuilding(kit(2, "swarm", "#8a94a3", []), r, "monolith"),
+		// Watchers-only types outside the Watchers dispatch.
+		...Object.fromEntries(["spark", "prism", "arc", "warden", "construct", "anchor", "resonator"].map((t) => [t, (k, r) => watcherOnly(k, r, t)])),
 	};
 
 	// ---- Scenery: wildlife (game.wildlife(), not entities), birds, fish, floating islands, wrecks ----
@@ -853,6 +896,11 @@ export function createModels3D(THREE) {
 			if (!s.speed) return (k, r) => swarmBuilding(k, r, e.type);
 			if (s.flying) return swarmFlyer;
 			return SWARM_UNITS[e.type] || (s.radius < 14 ? (k) => swarmSentry(k, s.radius) : (k, r) => swarmWalker(k, r, { prong: true }));
+		}
+		if (e.faction === "watchers" && !s.threat && !s.ship && e.type !== "wall" && e.type !== "gate") {
+			if (!s.speed) return (k, r) => watchersKit.building(k, r, e.type);
+			if (s.flying) return watchersKit.flyer;
+			return WATCHERS_UNITS[e.type] || ((k, r) => watchersKit.drone(k, r, s.radius < 14 ? {} : { long: 4, plates: true }));
 		}
 		return BUILDERS[e.type] || null;
 	}

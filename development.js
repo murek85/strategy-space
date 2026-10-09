@@ -55,6 +55,12 @@
 		spitter: "Pluwacz Roju: kwas ×1,4 przeciw budynkom; trafiony cel przez 4 s otrzymuje o 15% więcej obrażeń.",
 		colossus: "Kolos Roju: 1400 PW, stała regeneracja 6 PW/s, uderzenie rani też sąsiadów celu.",
 		monolith: "Monolit rezonansowy Roju: wrogie jednostki naziemne w promieniu 260 poruszają się o 35% wolniej; odsłania sabotażystów. 20 mocy.",
+		spark: "Iskra Wartowników: szybka i lekka; umiejętność Skok — teleport do 260 w stronę wskazanego punktu, co 10 s.",
+		prism: "Pryzmat Wartowników: wiązka, której obrażenia rosną o 25% z każdym kolejnym trafieniem tego samego celu (do +150%).",
+		arc: "Łuk Wartowników: artyleria; wyładowanie przeskakuje na 2 kolejnych wrogów w pobliżu (60% i 36% siły).",
+		warden: "Strażnik Wartowników: ciężki; umiejętność Faza — 3 s bez otrzymywania obrażeń (bez strzelania), co 18 s. Dwaj strażnicy scalają się w konstrukt.",
+		anchor: "Kotwica Wartowników: poszerza strefę budowy (320); jednostki z kuźni wychodzą ze szczeliny przy kotwicy najbliższej punktu zbiórki; jednostki przy kotwicy przeskakują do innej.",
+		resonator: "Rezonator Wartowników: przy złożu rudy (5 metalu/s), kryształów (3 metalu i 0,4 kryształu/s) albo własnym przekaźniku (5 metalu/s) — zamiast robotów górniczych.",
 	};
 	const icons = { building: "▤", unit: "➤", research: "⌬" };
 	// The badge of a node's state and the names of the tabs.
@@ -92,6 +98,7 @@
 						...(game.factionFor?.(0)?.key === "colonies" ? ["outpost"] : []),
 						...(game.factionFor?.(0)?.key === "dominion" ? ["uplink"] : []),
 						...(game.factionFor?.(0)?.key === "swarm" ? ["monolith"] : []),
+						...(game.factionFor?.(0)?.key === "watchers" ? ["anchor", "resonator"] : []),
 						"lab",
 						"depot",
 						"reactor",
@@ -115,6 +122,7 @@
 					...(faction === "colonies" ? ["raider", "grenadier"] : []),
 					...(faction === "dominion" ? ["flamer"] : []),
 					...(faction === "swarm" ? ["crawler", "spitter"] : []),
+					...(faction === "watchers" ? ["spark"] : []),
 					"drone",
 					"saboteur",
 				]
@@ -133,6 +141,7 @@
 						...(faction === "dominion" ? ["sentinel", "destroyer"] : []),
 						...(faction === "colonies" ? ["serviceRover"] : []),
 						...(faction === "swarm" ? ["colossus"] : []),
+						...(faction === "watchers" ? ["prism", "arc", "warden"] : []),
 						// Act III: the Dominium's destroyer lent after the evacuation of Hefajstos.
 						...(faction !== "dominion" && game.loanedUnit?.("destroyer") ? ["destroyer"] : []),
 					].map(u),

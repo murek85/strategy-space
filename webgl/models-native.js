@@ -280,6 +280,7 @@ function createNativeModels(options) {
 			e.type === "shieldgen" ? [Math.round((e.shield || 0) / 35), (e.overload || 0) > 0 ? 1 : 0].join(":") : "",
 			(e.healTargets || []).length,
 			e.type === "uplink" ? ((e.strikeReady || 0) > game.time ? 0 : 1) : "",
+			e.lifted ? 1 : "",
 		].join("|");
 		return { s, unit, rest, lookAngle: (d / DIRS) * TAU, probe, aimed, working, kindKey, key, box: boxFor(s) };
 	}

@@ -1777,6 +1777,24 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 					if (hull) fx.shot("hull", ef.tx, toY, ef.ty, ef.rocket || bomb, hull);
 					else fx.shot("impact", ef.tx, toY, ef.ty, ef.rocket || bomb, { air: ef.airTarget || spaceMap() });
 				}
+			} else if ((ef.kind === "rift" || ef.kind === "phase") && bi2 < 40) {
+				// The Watchers (0.154): a rift (teleport, blink, a unit out of the forge) flares up and fades; a
+				// phase is a pale shell round the Warden.
+				const b = pooled(bubbles, bi2++, () => {
+					const m = new THREE.Mesh(bubbleGeometry, bubbleMaterial());
+					m.renderOrder = 6;
+					world.add(m);
+					return { root: m };
+				});
+				const rift = ef.kind === "rift",
+					s = ef.small ? 0.6 : ef.merge ? 1.5 : 1,
+					k = 1 - alpha;
+				b.root.visible = true;
+				b.root.position.set(ef.x, heightAt(ef.x, ef.y) + (rift ? 20 * s : 12), ef.y);
+				if (rift) b.root.scale.set(6 * s + k * 26 * s, 26 * s * (1 - k * 0.6), 6 * s + k * 26 * s);
+				else b.root.scale.set(20, 15, 20);
+				b.root.material.uniforms.uHit.value.set(0, 1, 0);
+				b.root.material.uniforms.uK.value = rift ? alpha * 1.4 : alpha * 0.8;
 			} else if (ef.kind === "shieldHit" && ef.ship) {
 				// A ship's shield in space: a bubble round it, flaring where the shot struck, fading.
 				const b = pooled(bubbles, bi2++, () => {
@@ -2068,11 +2086,12 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			dir.set(-0.62, 0.58, 0.52).normalize();
 			skyState.sunDir.copy(dir);
 			sun.color.copy(skyState.sunlight);
-			// Vacuum: a hard sun, little ambient light — deep shadows on the hulls.
+			// Vacuum: a hard sun, little ambient light — deep shadows on the hulls (0.156: a little more ambient,
+			// so the shaded sides of hulls do not sink into the dark backdrop).
 			sun.intensity = 3.1;
 			hemi.color.copy(SPACE_LIGHT.ambient);
 			hemi.groundColor.copy(SPACE_LIGHT.bounce);
-			hemi.intensity = 0.4;
+			hemi.intensity = 0.62;
 			scene.background.copy(SPACE_LIGHT.horizon);
 			scene.fog.color.copy(SPACE_LIGHT.horizon);
 		}

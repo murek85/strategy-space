@@ -1192,6 +1192,15 @@
 					tone(220, 440, 0.25);
 					tone(660, 880, 0.3, 0.2);
 					break;
+				case "rift":
+					tone(520, 1560, 0.32, 0, 0.05, "sine");
+					tone(780, 2340, 0.28, 0.04, 0.03, "triangle");
+					this.noise(0.18, 0.04 * level, pan);
+					break;
+				case "phase":
+					tone(140, 150, 0.6, 0, 0.06, "sine");
+					tone(1320, 1240, 0.5, 0.05, 0.035, "sine");
+					break;
 				case "order-move":
 					tone(380, 420, 0.09, 0, 0.035, "triangle");
 					tone(560, 620, 0.12, 0.11, 0.035);

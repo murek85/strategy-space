@@ -24,7 +24,7 @@ const LOBBY = {
 	delay: 2,
 	keepEnded: 120,
 	colors: ["#b0efd0", "#72b7ff", "#d3a0ff", "#f0cb70", "#f59caf"],
-	factions: ["colonies", "dominion", "swarm"],
+	factions: ["colonies", "dominion", "swarm", "watchers"],
 };
 const SEATS = { 2: [0, 1], 4: [0, 3, 1, 4] };
 const clean = (s, n = 24) => String(s ?? "").replace(/[\u0000-\u001f\u007f<>]/g, "").trim().slice(0, n);
@@ -33,7 +33,7 @@ const player = (p) => ({
 	color: LOBBY.colors.includes(p?.color) ? p.color : LOBBY.colors[0],
 	faction: LOBBY.factions.includes(p?.faction) ? p.faction : "colonies",
 });
-const RULE_KEYS = ["map", "size", "resources", "weather", "fauna", "dayLength", "startLevel"];
+const RULE_KEYS = ["mode", "map", "size", "resources", "weather", "fauna", "dayLength", "startLevel"];
 const cleanRules = (r = {}) => {
 	const out = {};
 	for (const k of RULE_KEYS) if (typeof r[k] === "string") out[k] = clean(r[k], 20);

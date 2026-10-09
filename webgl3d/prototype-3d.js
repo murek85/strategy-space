@@ -175,6 +175,7 @@ function gallery() {
 		{ team: 0, faction: "colonies", types: Object.keys(TYPES).filter((t) => !animal(t) && (!TYPES[t].faction || TYPES[t].faction === "colonies")) },
 		{ team: 1, faction: "dominion", types: Object.keys(TYPES).filter((t) => !animal(t) && (!TYPES[t].faction || TYPES[t].faction === "dominion")) },
 		{ team: 1, faction: "swarm", types: Object.keys(TYPES).filter((t) => !animal(t) && (!TYPES[t].faction || TYPES[t].faction === "swarm")) },
+		{ team: 1, faction: "watchers", types: Object.keys(TYPES).filter((t) => !animal(t) && (!TYPES[t].faction || TYPES[t].faction === "watchers")) },
 		{ team: 2, faction: null, types: Object.keys(TYPES).filter(animal) },
 	];
 	const PER_ROW = 14,
@@ -192,7 +193,7 @@ function gallery() {
 			if (TYPES[type].speed) e.path = [{ x, y: y + 1 }];
 			const el = document.createElement("div");
 			el.className = "tag";
-			el.textContent = (row.faction === "swarm" && RTS.SWARM_NAMES?.[type]) || TYPES[type].name;
+			el.textContent = (row.faction === "swarm" && RTS.SWARM_NAMES?.[type]) || (row.faction === "watchers" && RTS.WATCHERS_NAMES?.[type]) || TYPES[type].name;
 			document.body.appendChild(el);
 			labels.push({ el, e });
 		});

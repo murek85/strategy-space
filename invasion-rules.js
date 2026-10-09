@@ -274,7 +274,8 @@
 				if (I.phase === "orbit") {
 					const left = Math.max(0, I.ends - this.time),
 						clock = `${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, "0")}`;
-					return `Inwazja · faza 1 — orbita: zniszcz stację wroga lub miej silniejszą flotę za ${clock}. Siły: Ty ${Math.round(this.orbitValue(0))} · wróg ${Math.round(this.orbitValue(1))}.`;
+					const me = this.viewer ?? 0;
+					return `Inwazja · faza 1 — orbita: zniszcz stację wroga lub miej silniejszą flotę za ${clock}. Siły: Ty ${Math.round(this.orbitValue(me))} · wróg ${Math.round(this.orbitValue(1 - me))}.`;
 				}
 				const mine = I.owner === (this.viewer ?? 0);
 				return `Inwazja · faza 2 — planeta. Orbita: ${mine ? `TWOJA — kapsuły ${this.podsLeft(I.owner)}, uderzenie z orbity, skan` : `WROGA — wróg ma ${this.podsLeft(I.owner)} kapsuł; baterie przeciwlotnicze je zestrzeliwują`}.`;

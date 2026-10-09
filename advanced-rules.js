@@ -1599,6 +1599,9 @@
 			require("./space-rules.js")(RTS);
 			require("./deposit-rules.js")(RTS);
 			require("./invasion-rules.js")(RTS);
+			require("./watchers-rules.js")(RTS);
+			require("./campaign-act4.js")(RTS);
+			require("./network-modes.js")(RTS);
 		};
 	} else install(root.RTS);
 })(typeof window !== "undefined" ? window : globalThis);

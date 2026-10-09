@@ -23,6 +23,7 @@ test("every entity type has a code-built 3D model for every look, and it animate
 		{ team: 0, faction: "colonies" },
 		{ team: 1, faction: "dominion" },
 		{ team: 1, faction: "swarm" },
+		{ team: 1, faction: "watchers" },
 		{ team: 2 },
 	];
 	for (const type of Object.keys(RTS.TYPES))

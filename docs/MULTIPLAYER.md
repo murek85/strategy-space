@@ -1,4 +1,23 @@
-# Gra wieloosobowa (wersje 0.46–0.49, 0.123 i 0.153)
+# Gra wieloosobowa (wersje 0.46–0.49, 0.123, 0.153 i 0.155)
+
+## Tryby scenariuszy i Inwazja przez sieć (wersja 0.155, 2026-10-09)
+
+**Jak zagrać.** W zasadach (gospodarz; przez kody i przez serwer) pole **Tryb**. Pod nim cel trybu albo wyjaśnienie, czemu tryb jest niedostępny przy tym składzie (wtedy gra się Podbój). Tryby niedostępne są w liście wyszarzone.
+
+| Tryb | Przez kody (1 na 1) | Przez serwer |
+|---|---|---|
+| Podbój, Utrzymanie przekaźników, Król wzgórza, Ekspedycja | tak | tak (1 na 1 i 2 na 2) |
+| Inwazja | tak | 1 na 1 (także przeciw komputerowi) |
+| Obrona, Przetrwanie | — | kooperacja: każde miejsce drugiej strony to komputer |
+
+**Reguły** (`network-modes.js`, ostatni moduł łańcucha). `RTS.NET_MODES` i `RTS.netModeAllowed(tryb, { lobby, seats, aiFoes })`; tryb, którego bitwa nie dopuszcza, zamienia się w Podbój — tak samo na każdym komputerze (ustawienia są wspólne). Tryby liczą wynik jak dotąd z perspektywy pierwszego gracza (`resultFor` odwraca go dla drugiej strony); komunikaty, stan trybu (`modeStatus`) i raport (`modeResult`) mówią o stronie danego gracza (`announce`, `rivalSides` w `scenario-modes.js`). Ekspedycja: zasady wypraw komputera nie przejmują jednostek gracza. Desant i uderzenie z orbity (`orbitalDrop`, `orbitStrike`) to polecenia sieciowe.
+
+**Inwazja.** Bitwa zaczyna się na orbicie mapy planety (`invasionOrbitMap`). Gdy orbita się rozstrzygnie (stacja padła albo minęło 8 minut), `RTS.nextNetworkPhase(game)` buduje bitwę na planecie z tych samych ustawień i wyniku orbity (właściciel, kapsuły), a lockstep (`netplay.js`, `nextPhase`) przechodzi do niej w tym samym kroku na każdym komputerze; reszta tury nie jest liczona, a polecenia wysłane jeszcze w bitwie orbitalnej (do tury `ignoreUntil`) są pomijane — polecenia systemowe serwera zostają. Strona, którą w chwili przejścia prowadził komputer (gracz bez połączenia), na planecie też jest w jego rękach. Kapitulacja na orbicie kończy całą operację. Strona gry (`app.js`, `networkPhase`) przejmuje nową bitwę bez ekranu ładowania (bitwa trwa) i pokazuje wynik orbity. Powrót do bitwy odtwarza dziennik razem z przejściem.
+
+**Kooperacja.** Obrona: baza trzyma się, dopóki stoi któreś centrum obrońców. Przetrwanie: sojusz obrońców (także w trybie przetrwania — `teams-rules.js`, `coop`), bazy wszystkich graczy zostają, fale idą na najbliższe centrum obrońców, przegrywacie z ostatnim.
+
+**Weryfikacja.** `tests/network-modes.test.js` (6): dostępność trybów; przekaźniki i wzgórze — wygrana gościa, wyniki i komunikaty dla każdego; ekspedycja gościa bez rozkazów komputera; Inwazja przez sieć — dwa locksteppy, przejście w tej samej turze, zgodne sumy kontrolne, odtworzenie dziennika, desant gościa lub gospodarza; kapitulacja na orbicie; Przetrwanie i Obrona w kooperacji 2 na 2. Przeglądarka: pokój 1 na 1 z komputerem, Inwazja — orbita Kharona, przejście na Cichy Horyzont, desant przez serwer.
+
 
 ## Przez serwer: lobby, 2 na 2, powrót do bitwy (wersja 0.153, 2026-10-08 — etap G4)
 
@@ -18,7 +37,7 @@ Plan: [Etap G](ETAP_G.md). Obok połączenia 1 na 1 przez kody (bez zmian, niże
 
 **Weryfikacja.** `tests/lobby.test.js` (5): pokoje, miejsca, komputer na miejscu, zasady, gotowość i start (2 na 2 z komputerem — ludzie, dowódca AI, sojusze); cztery locksteppy przez serwer — tury i rozkazy wszystkich, bez rozsynchronizowania (sumy porównuje serwer); zerwane połączenie — puste tury, przejęcie przez komputer po 20 s u wszystkich, powrót z odtworzeniem dziennika i oddaniem strony, dalej bez rozsynchronizowania; rozsynchronizowanie zgłoszone przez serwer, gracz nie wyśle polecenia systemowego; prawdziwy WebSocket (serwer osobny, hello, gra, ping). Przeglądarka (dwie karty): lista gier, pokój 2 na 2 (dwóch graczy + dwa komputery), start u obu, zerwanie połączenia jednej karty → „Łączenie ponownie…” → powrót do bitwy bez rozsynchronizowania. `tests/network.test.js` (1 na 1) bez zmian.
 
-**Ograniczenia.** Serwer w internecie trzeba wystawić samodzielnie (np. `npm run lobby` na serwerze VPS za proxy z `wss://`); bez kont i uwierzytelniania (identyfikator klienta w profilu); dziennik w pamięci serwera (restart serwera kończy trwające bitwy); tryby scenariuszy (przekaźniki, król wzgórza) i znaczniki dla sojusznika na minimapie — propozycje.
+**Ograniczenia.** Serwer w internecie trzeba wystawić samodzielnie (np. `npm run lobby` na serwerze VPS za proxy z `wss://`); bez kont i uwierzytelniania (identyfikator klienta w profilu); dziennik w pamięci serwera (restart serwera kończy trwające bitwy); znaczniki dla sojusznika na minimapie — propozycja. Tryby scenariuszy — od wersji 0.155 (wyżej).
 
 ## 1 na 1 przez kody (wersje 0.46–0.49 i 0.123)
 

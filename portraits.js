@@ -11,8 +11,10 @@ const Portraits = (() => {
 		vale: { skin: "#b98466", hair: "#3a332e", style: "buzz", outfit: "#45596e", trim: "#9cc6f2", stubble: true, scar: true, pads: true },
 		koss: { skin: "#c99a7c", hair: null, style: "bald", outfit: "#b8662f", trim: "#f2a38c", welding: true, tired: true },
 		varn: { skin: "#d6b29a", hair: "#2b2421", style: "slick", outfit: "#5a1f1c", trim: "#e9a17a", highCollar: true, temples: true, insignia: true },
+		// Act IV: the admiral of the Admiralty — silver hair in a bun, a dark uniform, cold eyes.
+		vok: { skin: "#e6c6ae", hair: "#c9ccd2", style: "bun", outfit: "#2a1f24", trim: "#ff8f7a", highCollar: true, insignia: true, scar: true },
 	};
-	const COLORS = { lira: "#9fe3cf", tessa: "#f0cf8a", vale: "#9cc6f2", koss: "#f2a38c", varn: "#e9a17a", dominium: "#e98883", whisper: "#d59cf0" };
+	const COLORS = { lira: "#9fe3cf", tessa: "#f0cf8a", vale: "#9cc6f2", koss: "#f2a38c", varn: "#e9a17a", dominium: "#e98883", whisper: "#d59cf0", vok: "#ff8f7a", gate: "#7fe9ff" };
 	const ell = (c, x, y, rx, ry, color, rot = 0) => {
 		c.fillStyle = color;
 		c.beginPath();
@@ -236,6 +238,27 @@ const Portraits = (() => {
 			c.restore();
 		}
 	}
+	// The Voice of the Gate (act IV): a white diamond of the Watchers in turning rings of light.
+	function gate(c, t, talk) {
+		const pulse = 1 + 0.12 * Math.sin(t * 2.4) + talk * 0.3;
+		const g = c.createRadialGradient(50, 50, 2, 50, 50, 34 * pulse);
+		g.addColorStop(0, "#f2fdff");
+		g.addColorStop(0.35, "#7fe9ffaa");
+		g.addColorStop(1, "#7fe9ff00");
+		c.fillStyle = g;
+		c.fillRect(0, 0, 100, 100);
+		for (let i = 0; i < 3; i++) {
+			c.strokeStyle = i === 1 ? "#e6fcff" : "#7fe9ff";
+			c.lineWidth = 1.4;
+			c.beginPath();
+			c.ellipse(50, 50, 34 - i * 8, (34 - i * 8) * (0.3 + 0.2 * Math.sin(t * 0.8 + i)), t * 0.4 * (i % 2 ? -1 : 1), 0, Math.PI * 2);
+			c.stroke();
+		}
+		poly(c, [[50, 26], [62, 50], [50, 74], [38, 50]], "#e9eef1");
+		poly(c, [[50, 26], [62, 50], [50, 74], [50, 50]], "#b9c4cc");
+		c.fillStyle = "#e6fcff";
+		c.fillRect(42, 49, 16 + talk * 4, 2);
+	}
 	// Draws a portrait into a square: c, who, x, y, size; t time in seconds, talk 0…1 (mouth).
 	function draw(c, who, x, y, size, t = 0, talk = 0) {
 		const color = COLORS[who] || "#c5d7d9";
@@ -248,6 +271,7 @@ const Portraits = (() => {
 		backdrop(c, color, t);
 		if (FACES[who]) human(c, FACES[who], t, talk);
 		else if (who === "whisper") whisper(c, t, talk);
+		else if (who === "gate") gate(c, t, talk);
 		else dominium(c, t);
 		overlay(c, color, t);
 		c.restore();

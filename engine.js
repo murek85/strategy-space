@@ -736,7 +736,7 @@
 		}
 		// A short visual effect (shapes in FxArt); lifetimes per kind.
 		fx(kind, x, y, extra = {}) {
-			const life = { shieldHit: 0.45, heal: 0.9, sparks: 0.45, dust: 0.7, emp: 0.8, artifact: 1.2, flame: 0.3 }[kind] || 0.5;
+			const life = { shieldHit: 0.45, heal: 0.9, sparks: 0.45, dust: 0.7, emp: 0.8, artifact: 1.2, flame: 0.3, rift: 0.7, phase: 0.5 }[kind] || 0.5;
 			this.effects.push({ kind, x, y, life, maxLife: life, ...extra });
 		}
 		get night() {

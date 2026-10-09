@@ -2,7 +2,8 @@
    cruiser. Built with the shape kit of models-detail-3d.js; the Colonies' hulls are rounded with cyan
    drives, the Dominium's six-sided and angular with orange drives. Nose along +X; the renderer lifts
    them over the plane of the battle (RTS.SPACE.hover). The hull bobs and banks a little, turrets follow
-   the target, drive plumes grow while the ship moves, navigation lights blink. */
+   the target, drive plumes grow while the ship moves, navigation lights blink. The side's stripes glow in
+   its colour (0.156: own and enemy ships read apart against any backdrop). */
 export function createShips3D(THREE, { tools, group }) {
 	const { mesh, box, cyl, ball, pipe, loftGeo } = tools;
 	const n2 = (v) => Math.round(v * 100) / 100;
@@ -91,7 +92,7 @@ export function createShips3D(THREE, { tools, group }) {
 			for (const z of [-1, 1]) {
 				mesh(f, hull("corvFin" + z, [[-10, 0.2, 0.6, 0], [-4, 0.2, 0.6, 0]].map(([x, w, h]) => [x * s, w * s, h * s, 0]), 4), k.plate, [0, 0, z * 6 * s], [0, z * 0.5, 0]);
 				box(f, k.plate, [7 * s, 0.6 * s, 5 * s], [-7 * s, 0, z * 4.5 * s], [0, z * 0.35, 0], 0.2 * s);
-				box(f, k.team, [3 * s, 0.7 * s, 2 * s], [-8 * s, 0.1 * s, z * 6.2 * s], [0, z * 0.35, 0], 0.1);
+				box(f, k.glow, [3 * s, 0.7 * s, 2 * s], [-8 * s, 0.1 * s, z * 6.2 * s], [0, z * 0.35, 0], 0.1);
 				p.plumes.push([drive(f, k, [-12 * s, 0, z * 2.4 * s], 1.4 * s), 9 * s]);
 			}
 			ball(f, k.canopy, 1, [5 * s, 1.8 * s, 0], [3 * s, 1.1 * s, 1.4 * s]);
@@ -106,7 +107,7 @@ export function createShips3D(THREE, { tools, group }) {
 			for (const z of [-1, 1]) {
 				mesh(f, hull("frigPod", [[-12, 0.3, 0.3], [-11, 1.8, 1.6], [2, 1.8, 1.6], [5, 0.3, 0.3]].map(([x, w, h]) => [x * s, w * s, h * s, 0]), sides), k.dark, [0, -0.6 * s, z * 7 * s]);
 				box(f, k.metal, [6 * s, 0.8 * s, 3 * s], [-4 * s, -0.4 * s, z * 5 * s], null, 0.2 * s);
-				box(f, k.team, [4 * s, 1.2 * s, 0.4 * s], [-2 * s, -0.4 * s, z * 8.9 * s], null, 0.1);
+				box(f, k.glow, [4 * s, 1.2 * s, 0.4 * s], [-2 * s, -0.4 * s, z * 8.9 * s], null, 0.1);
 				p.plumes.push([drive(f, k, [-12 * s, -0.6 * s, z * 7 * s], 1.3 * s), 8 * s]);
 			}
 			p.plumes.push([drive(f, k, [-13 * s, 0, 0], 2 * s), 12 * s]);
@@ -130,7 +131,7 @@ export function createShips3D(THREE, { tools, group }) {
 			ball(p.charge, k.dominion ? k.fire : k.energy, 1.1 * s, [0, 0, 0]);
 			for (const z of [-1, 1]) {
 				box(f, k.plate, [10 * s, 1 * s, 4 * s], [-9 * s, 0, z * 5.4 * s], [0, z * 0.2, 0], 0.3 * s);
-				box(f, k.team, [3 * s, 1.2 * s, 2.4 * s], [-12 * s, 0.1 * s, z * 6.6 * s], [0, z * 0.2, 0], 0.1);
+				box(f, k.glow, [3 * s, 1.2 * s, 2.4 * s], [-12 * s, 0.1 * s, z * 6.6 * s], [0, z * 0.2, 0], 0.1);
 				p.plumes.push([drive(f, k, [-15 * s, 0, z * 2.6 * s], 1.8 * s), 12 * s]);
 			}
 			box(f, k.metal, [7 * s, 3 * s, 3.6 * s], [-8 * s, 3.6 * s, 0], null, 0.4 * s); // bridge tower
@@ -146,7 +147,7 @@ export function createShips3D(THREE, { tools, group }) {
 			for (const z of [-1, 1]) {
 				box(f, k.dark, [16 * s, 3 * s, 3 * s], [-5 * s, -0.5 * s, z * 8.5 * s], null, 0.4 * s); // hangar flank
 				box(f, k.black, [3 * s, 1.6 * s, 0.4 * s], [1 * s, -0.5 * s, z * 10 * s], null, 0.05); // hangar mouth
-				box(f, k.team, [6 * s, 0.6 * s, 3.2 * s], [-8 * s, 1.1 * s, z * 8.5 * s], null, 0.1);
+				box(f, k.glow, [6 * s, 0.6 * s, 3.2 * s], [-8 * s, 1.1 * s, z * 8.5 * s], null, 0.1);
 				p.plumes.push([drive(f, k, [-15 * s, -0.5 * s, z * 8.5 * s], 1.4 * s), 9 * s]);
 				p.plumes.push([drive(f, k, [-16 * s, 0, z * 3 * s], 2.2 * s), 14 * s]);
 			}
@@ -187,7 +188,7 @@ export function createShips3D(THREE, { tools, group }) {
 			box(f, k.metal, [7 * s, 5 * s, 2.6 * s], [-4 * s, 6.6 * s, 7.4 * s], null, 0.4 * s);
 			box(f, k.metal, [4 * s, 2.4 * s, 2.2 * s], [-4.5 * s, 10.2 * s, 7.4 * s], null, 0.3 * s);
 			windows(f, k, -6 * s, -2 * s, 8.4 * s, 8.75 * s);
-			box(f, k.team, [7.2 * s, 0.8 * s, 2.8 * s], [-4 * s, 5.2 * s, 7.4 * s], null, 0.1);
+			box(f, k.glow, [7.2 * s, 0.8 * s, 2.8 * s], [-4 * s, 5.2 * s, 7.4 * s], null, 0.1);
 			pipe(f, k.steel, [-5 * s, 11.4 * s, 7.4 * s], [-5 * s, 16 * s, 7.4 * s], 0.2 * s, 5);
 			ball(f, k.glass, 0.9 * s, [-3 * s, 12 * s, 7.4 * s], [1, 0.4, 1]);
 			// Side sponsons with point-defence turrets.
@@ -207,7 +208,7 @@ export function createShips3D(THREE, { tools, group }) {
 			mesh(f, hull("ftr", [[-6, 0.2, 0.2], [-5, 1.6, 1], [0, 1.8, 1.1], [4, 0.9, 0.7], [7, 0.15, 0.15]].map(([x, w, h]) => [x * s, w * s, h * s, 0]), sides), k.plate);
 			for (const z of [-1, 1]) {
 				box(f, k.plate, [5 * s, 0.3 * s, 4 * s], [-1.5 * s, 0, z * 3 * s], [0, z * 0.45, 0], 0.1 * s);
-				box(f, k.team, [1.6 * s, 0.35 * s, 1.2 * s], [-2.6 * s, 0.05 * s, z * 4.4 * s], [0, z * 0.45, 0], 0.05);
+				box(f, k.glow, [1.6 * s, 0.35 * s, 1.2 * s], [-2.6 * s, 0.05 * s, z * 4.4 * s], [0, z * 0.45, 0], 0.05);
 				box(f, k.plate, [2 * s, 1.6 * s, 0.2 * s], [-4 * s, 1 * s, z * 1 * s], [z * 0.3, 0, 0], 0.05);
 			}
 			ball(f, k.canopy, 1, [1.4 * s, 0.9 * s, 0], [1.6 * s, 0.6 * s, 0.8 * s]);
@@ -288,7 +289,7 @@ export function createShips3D(THREE, { tools, group }) {
 			sides = k.dominion ? 6 : 10;
 		mesh(frame, hull("miner", [[-6, 0.3, 0.3], [-5, 4.4, 3.2], [1, 5, 3.6], [5, 3.6, 2.6, 0.4], [7.5, 0.4, 0.4, 0.4]], sides), k.plate);
 		ball(frame, k.canopy, 1, [3.2, 2.2, 0], [2.4, 1.4, 2]);
-		box(frame, k.team, [3, 0.5, 6], [-2.5, 3.2, 0], null, 0.1);
+		box(frame, k.glow, [3, 0.5, 6], [-2.5, 3.2, 0], null, 0.1);
 		box(frame, k.dark, [7, 3, 6], [-1, -3.6, 0], null, 0.4); // cargo bay
 		box(frame, k.warn, [7.2, 0.6, 6.2], [-1, -2.2, 0], null, 0.1);
 		const thrusters = [];

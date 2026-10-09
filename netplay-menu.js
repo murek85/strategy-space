@@ -12,7 +12,22 @@
 	const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 	const option = (value, label, selected) => `<option value="${esc(value)}" ${value === selected ? "selected" : ""}>${esc(label)}</option>`;
 	const colorName = { "#b0efd0": "Miętowy", "#72b7ff": "Błękitny", "#d3a0ff": "Fioletowy", "#f0cb70": "Złoty", "#f59caf": "Różowy" };
-	const DEFAULT_RULES = { map: "horizon", seed: 0, size: "medium", resources: "normal", weather: "normal", fauna: "normal", dayLength: "normal", startLevel: "outpost" };
+	const DEFAULT_RULES = { mode: "conquest", map: "horizon", seed: 0, size: "medium", resources: "normal", weather: "normal", fauna: "normal", dayLength: "normal", startLevel: "outpost" };
+	// The scenario mode of a network battle (network-modes.js): every mode listed, the ones this battle cannot have
+	// disabled with the reason; a note when the chosen one falls back to conquest. ctx: { lobby, seats, aiFoes }.
+	function modeField(value, ctx, dis) {
+		const modes = Object.keys(RTS.NET_MODES || { conquest: {} }).filter((m) => RTS.MODES[m]),
+			ok = (m) => !RTS.netModeAllowed || RTS.netModeAllowed(m, ctx),
+			chosen = RTS.MODES[value] ? value : "conquest",
+			on = ok(chosen),
+			map = RTS.MISSIONS[ctx.map];
+		const note = !on
+			? `Przy tym składzie tryb „${RTS.MODES[chosen].name}” jest niedostępny (${RTS.NET_MODES[chosen].note}) — zagracie Podbój.`
+			: chosen === "invasion" && map?.space
+				? "Inwazja wymaga mapy planety — na mapie kosmicznej zagracie Podbój."
+				: RTS.MODES[chosen].objective;
+		return `<label class="menu-setting">Tryb<select id="net-rule-mode" ${dis}>${modes.map((m) => `<option value="${esc(m)}" ${m === chosen ? "selected" : ""} ${ok(m) || m === chosen ? "" : "disabled"}>${esc(RTS.MODES[m].name + (ok(m) ? "" : " — " + RTS.NET_MODES[m].note))}</option>`).join("")}</select></label><p class="net-mode-note${on ? "" : " warn"}">${esc(note)}</p>`;
+	}
 
 	function loadProfile() {
 		let saved = {};
@@ -43,6 +58,7 @@
 	const cleanRules = (r) => {
 		const O = RTS.SCENARIO_OPTIONS;
 		return {
+			mode: RTS.MODES[r?.mode] && (!RTS.NET_MODES || RTS.NET_MODES[r.mode]) ? r.mode : "conquest",
 			map: RTS.MISSIONS[r?.map] && !RTS.MISSIONS[r.map].campaign ? r.map : "horizon",
 			seed: Number.isInteger(r?.seed) && r.seed >= 0 && r.seed <= 999999 ? r.seed : 0,
 			size: RTS.MAP_SIZES[r?.size] ? r.size : "medium",
@@ -274,7 +290,7 @@
 			const hostPlayer = host ? me : n.peer,
 				guestPlayer = host ? n.peer : me;
 			const select = (id, entries, value) => `<select id="net-rule-${id}" ${dis}>${entries.map(([k, label]) => option(k, label, value)).join("")}</select>`;
-			const rules = `<div class="net-fields"><label class="menu-setting">Mapa${select("map", Object.entries(RTS.MISSIONS).filter(([, m]) => !m.campaign).map(([id, m]) => [id, m.name + " / " + m.planet]), r.map)}</label><label class="menu-setting">Rozmiar mapy${select("size", Object.entries(RTS.MAP_SIZES).map(([k, s]) => [k, s.name]), r.size)}</label><label class="menu-setting">Złoża${select("resources", Object.entries(O.resources).map(([k, o]) => [k, o.name]), r.resources)}</label><label class="menu-setting">Pogoda${select("weather", Object.entries(O.weather).map(([k, o]) => [k, o.name]), r.weather)}</label><label class="menu-setting">Fauna${select("fauna", Object.entries(O.fauna).map(([k, o]) => [k, o.name]), r.fauna)}</label><label class="menu-setting">Długość doby${select("dayLength", Object.entries(O.dayLength).map(([k, o]) => [k, o.name]), r.dayLength)}</label><label class="menu-setting">Poziom startowy${select("startLevel", Object.entries(O.startLevel).map(([k, o]) => [k, o.name]), r.startLevel)}</label><label class="menu-setting">Ziarno mapy<span class="net-seed"><input id="net-rule-seed" type="number" min="0" max="999999" value="${r.seed}" ${dis}>${host ? '<button id="net-seed-random" class="net-small">Losuj</button>' : ""}</span></label></div>`;
+			const rules = `<div class="net-fields">${modeField(r.mode, { lobby: false, seats: 2, aiFoes: false, map: r.map }, dis)}<label class="menu-setting">Mapa${select("map", Object.entries(RTS.MISSIONS).filter(([, m]) => !m.campaign).map(([id, m]) => [id, m.name + " / " + m.planet]), r.map)}</label><label class="menu-setting">Rozmiar mapy${select("size", Object.entries(RTS.MAP_SIZES).map(([k, s]) => [k, s.name]), r.size)}</label><label class="menu-setting">Złoża${select("resources", Object.entries(O.resources).map(([k, o]) => [k, o.name]), r.resources)}</label><label class="menu-setting">Pogoda${select("weather", Object.entries(O.weather).map(([k, o]) => [k, o.name]), r.weather)}</label><label class="menu-setting">Fauna${select("fauna", Object.entries(O.fauna).map(([k, o]) => [k, o.name]), r.fauna)}</label><label class="menu-setting">Długość doby${select("dayLength", Object.entries(O.dayLength).map(([k, o]) => [k, o.name]), r.dayLength)}</label><label class="menu-setting">Poziom startowy${select("startLevel", Object.entries(O.startLevel).map(([k, o]) => [k, o.name]), r.startLevel)}</label><label class="menu-setting">Ziarno mapy<span class="net-seed"><input id="net-rule-seed" type="number" min="0" max="999999" value="${r.seed}" ${dis}>${host ? '<button id="net-seed-random" class="net-small">Losuj</button>' : ""}</span></label></div>`;
 			return `<div class="net-players">${card(hostPlayer, "Gospodarz · drużyna 1", "")}${card(guestPlayer, "Gość · drużyna 2", n.peer || !host ? (host ? n.peerReady : n.ready) ? "gotowy" : "czeka" : "")}</div><h2>Ty</h2>${this.profileFields(n.profile, "lobby")}<h2>Zasady ${host ? "" : "<small>(wybiera gospodarz)</small>"}</h2>${rules}<p id="net-status" class="net-status" role="status">${esc(n.status || "")}</p>${host ? this.button("net-start", "Rozpocznij bitwę", true) : this.button("net-ready", n.ready ? "Nie jestem gotowy" : "Jestem gotowy", !n.ready)}${this.button("net-leave", "Rozłącz i wróć")}`;
 		},
 		chatPanelHtml() {
@@ -342,7 +358,7 @@
 					this.show("lobby", "lobby-" + key);
 				};
 			if (host) {
-				for (const key of ["map", "size", "resources", "weather", "fauna", "dayLength", "startLevel", "seed"])
+				for (const key of ["mode", "map", "size", "resources", "weather", "fauna", "dayLength", "startLevel", "seed"])
 					$("net-rule-" + key).onchange = (e) => {
 						n.rules[key] = key === "seed" ? Math.max(0, Math.min(999999, Math.round(Number(e.target.value) || 0))) : e.target.value;
 						n.rules = cleanRules(n.rules);
@@ -476,11 +492,11 @@
 					r.link.send({ k: "rejoin", room: r.resumable.room });
 				};
 		},
-		rulesHtml(r, editable) {
+		rulesHtml(r, editable, ctx = { lobby: true, seats: 2, aiFoes: false }) {
 			const O = RTS.SCENARIO_OPTIONS,
 				dis = editable ? "" : "disabled",
 				select = (id, entries, value) => `<select id="net-rule-${id}" ${dis}>${entries.map(([k, label]) => option(k, label, value)).join("")}</select>`;
-			return `<div class="net-fields"><label class="menu-setting">Mapa${select("map", Object.entries(RTS.MISSIONS).filter(([, m]) => !m.campaign).map(([id, m]) => [id, m.name + " / " + m.planet]), r.map)}</label><label class="menu-setting">Rozmiar mapy${select("size", Object.entries(RTS.MAP_SIZES).map(([k, s]) => [k, s.name]), r.size)}</label><label class="menu-setting">Złoża${select("resources", Object.entries(O.resources).map(([k, o]) => [k, o.name]), r.resources)}</label><label class="menu-setting">Pogoda${select("weather", Object.entries(O.weather).map(([k, o]) => [k, o.name]), r.weather)}</label><label class="menu-setting">Fauna${select("fauna", Object.entries(O.fauna).map(([k, o]) => [k, o.name]), r.fauna)}</label><label class="menu-setting">Długość doby${select("dayLength", Object.entries(O.dayLength).map(([k, o]) => [k, o.name]), r.dayLength)}</label><label class="menu-setting">Poziom startowy${select("startLevel", Object.entries(O.startLevel).map(([k, o]) => [k, o.name]), r.startLevel)}</label><label class="menu-setting">Ziarno mapy<span class="net-seed"><input id="net-rule-seed" type="number" min="0" max="999999" value="${r.seed}" ${dis}>${editable ? '<button id="net-seed-random" class="net-small">Losuj</button>' : ""}</span></label></div>`;
+			return `<div class="net-fields">${modeField(r.mode, { ...ctx, map: r.map }, dis)}<label class="menu-setting">Mapa${select("map", Object.entries(RTS.MISSIONS).filter(([, m]) => !m.campaign).map(([id, m]) => [id, m.name + " / " + m.planet]), r.map)}</label><label class="menu-setting">Rozmiar mapy${select("size", Object.entries(RTS.MAP_SIZES).map(([k, s]) => [k, s.name]), r.size)}</label><label class="menu-setting">Złoża${select("resources", Object.entries(O.resources).map(([k, o]) => [k, o.name]), r.resources)}</label><label class="menu-setting">Pogoda${select("weather", Object.entries(O.weather).map(([k, o]) => [k, o.name]), r.weather)}</label><label class="menu-setting">Fauna${select("fauna", Object.entries(O.fauna).map(([k, o]) => [k, o.name]), r.fauna)}</label><label class="menu-setting">Długość doby${select("dayLength", Object.entries(O.dayLength).map(([k, o]) => [k, o.name]), r.dayLength)}</label><label class="menu-setting">Poziom startowy${select("startLevel", Object.entries(O.startLevel).map(([k, o]) => [k, o.name]), r.startLevel)}</label><label class="menu-setting">Ziarno mapy<span class="net-seed"><input id="net-rule-seed" type="number" min="0" max="999999" value="${r.seed}" ${dis}>${editable ? '<button id="net-seed-random" class="net-small">Losuj</button>' : ""}</span></label></div>`;
 		},
 		roomHtml() {
 			const n = this.net,
@@ -505,7 +521,7 @@
 			const all = room.seats.every((s) => s.taken || s.ai),
 				readyAll = room.seats.every((s) => s.ai || !s.taken || s.ready || s.host);
 			r.canStart = host && all && readyAll;
-			return `<p class="net-server">Serwer: <b>${esc(r.url)}</b> · ${room.size === 4 ? "2 na 2" : "1 na 1"}${host ? " · gospodarz: Ty" : ""}</p>${seats}<h2>Ty</h2>${this.profileFields(n.profile, "room")}<h2>Zasady ${host ? "" : "<small>(wybiera gospodarz)</small>"}</h2>${this.rulesHtml(rules, host)}<p id="net-status" class="net-status" role="status">${esc(host ? (all ? (readyAll ? "Wszyscy gotowi." : "Czekam, aż gracze będą gotowi.") : "Zajmij lub oddaj komputerowi każde miejsce.") : r.status || "")}</p>${host ? this.button("net-room-start", "Rozpocznij bitwę", true) : this.button("net-room-ready", me?.ready ? "Nie jestem gotowy" : "Jestem gotowy", !me?.ready)}${this.button("net-room-leave", host ? "Zamknij grę" : "Opuść grę")}`;
+			return `<p class="net-server">Serwer: <b>${esc(r.url)}</b> · ${room.size === 4 ? "2 na 2" : "1 na 1"}${host ? " · gospodarz: Ty" : ""}</p>${seats}<h2>Ty</h2>${this.profileFields(n.profile, "room")}<h2>Zasady ${host ? "" : "<small>(wybiera gospodarz)</small>"}</h2>${this.rulesHtml(rules, host, { lobby: true, seats: room.size === 4 ? 4 : 2, aiFoes: room.seats.filter((s, i) => (room.size === 4 ? i >= 2 : i === 1)).every((s) => s.ai) })}<p id="net-status" class="net-status" role="status">${esc(host ? (all ? (readyAll ? "Wszyscy gotowi." : "Czekam, aż gracze będą gotowi.") : "Zajmij lub oddaj komputerowi każde miejsce.") : r.status || "")}</p>${host ? this.button("net-room-start", "Rozpocznij bitwę", true) : this.button("net-room-ready", me?.ready ? "Nie jestem gotowy" : "Jestem gotowy", !me?.ready)}${this.button("net-room-leave", host ? "Zamknij grę" : "Opuść grę")}`;
 		},
 		mountRoom() {
 			const n = this.net,
@@ -539,7 +555,7 @@
 			for (const b of this.root.querySelectorAll("[data-ai]")) b.onclick = () => r.link.send({ k: "ai", seat: Number(b.dataset.ai), on: b.dataset.on === "1" });
 			if (host) {
 				const push = (rules) => r.link.send({ k: "rules", rules: cleanRules(rules) });
-				for (const key of ["map", "size", "resources", "weather", "fauna", "dayLength", "startLevel", "seed"])
+				for (const key of ["mode", "map", "size", "resources", "weather", "fauna", "dayLength", "startLevel", "seed"])
 					$("net-rule-" + key).onchange = (e) => push({ ...room.rules, [key]: key === "seed" ? Math.max(0, Math.min(999999, Math.round(Number(e.target.value) || 0))) : e.target.value });
 				$("net-seed-random").onclick = () => push({ ...room.rules, seed: RTS.randomSeed() });
 				$("menu-net-room-start").disabled = !r.canStart;

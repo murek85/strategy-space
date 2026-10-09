@@ -36,7 +36,7 @@
 	let netSession = null;
 	// A player's action: run at once in a single-player battle; in a network battle sent to both computers and run
 	// there a few turns later (the answer is optimistic: counts for the selection, true otherwise).
-	const COUNTED = new Set(["hold", "demolish", "salvage", "sabotage", "board", "setRally", "patrol", "escort"]);
+	const COUNTED = new Set(["hold", "demolish", "salvage", "sabotage", "board", "setRally", "patrol", "escort", "ability", "anchorJump", "mergeWardens"]);
 	function act(name, ...args) {
 		if (!netSession) return game[name](...args);
 		netSession.issue(name, args);
@@ -544,6 +544,13 @@
 				(e) => e.type === "transport" && e.team === (game.viewer ?? 0),
 			);
 			$("load-transport").hidden = !carrier;
+			// Watchers (0.154): abilities, merging, jumps between Anchors, the flying Core.
+			const mine = es.filter((e) => e.team === (game.viewer ?? 0) && e.hp > 0),
+				anchors = game.entities.filter((e) => e.type === "anchor" && e.team === (game.viewer ?? 0) && e.hp > 0 && !e.constructionLeft);
+			$("watcher-ability").hidden = !mine.some((e) => e.type === "spark" || e.type === "warden");
+			$("watcher-merge").hidden = mine.filter((e) => e.type === "warden").length < 2;
+			$("watcher-jump").hidden = anchors.length < 2 || !mine.some((e) => RTS.TYPES[e.type].speed && anchors.some((a) => Math.hypot(a.x - e.x, a.y - e.y) < RTS.WATCHERS.anchor.jumpReach));
+			$("core-relocate").hidden = !(mine.length === 1 && mine[0].type === "hq" && mine[0].faction === "watchers");
 			$("unload-transport").hidden = !carrier;
 			$("load-transport").disabled =
 				!carrier || (carrier.passengers || []).length >= 4;
@@ -865,7 +872,7 @@
 	function act2Report(victory) {
 		const r = game.act2Summary(),
 			speakers = RTS.ACT2_SPEAKERS;
-		return `<ul class="act2-objectives">${r.objectives.map((o) => `<li class="${o.done ? "done" : o.failed ? "failed" : ""}${o.secondary ? " secondary" : ""}">${o.text}</li>`).join("")}</ul><div class="briefing-controls act2-summary"><span><b>${timeLabel(r.time)}</b>Czas operacji</span><span><b>${r.kills}</b>Zniszczonych celów</span><span><b>${r.losses}</b>Utraconych jednostek</span><span><b>${Math.round(r.lostValue)}</b>Metalu w stratach</span><span><b>${r.secondary ? "◆ zdobyta" : "—"}</b>Odznaka celu dodatkowego</span><span><b>${r.bonus === 200 ? "+200 metalu" : r.bonus === "salvage" ? "odzysk 400 metalu" : r.bonus === "armor" ? "pancerz kompozytowy" : r.bonus === "weapons" ? "broń plazmowa" : r.bonus === "metal" ? "300 metalu" : "—"}</b>Premia</span></div>${victory && r.secondary && !["colony6", "colony9"].includes(game.missionId) ? "<p>Odznaka da +200 metalu na start następnego rozdziału.</p>" : ""}`;
+		return `<ul class="act2-objectives">${r.objectives.map((o) => `<li class="${o.done ? "done" : o.failed ? "failed" : ""}${o.secondary ? " secondary" : ""}">${o.text}</li>`).join("")}</ul><div class="briefing-controls act2-summary"><span><b>${timeLabel(r.time)}</b>Czas operacji</span><span><b>${r.kills}</b>Zniszczonych celów</span><span><b>${r.losses}</b>Utraconych jednostek</span><span><b>${Math.round(r.lostValue)}</b>Metalu w stratach</span><span><b>${r.secondary ? "◆ zdobyta" : "—"}</b>Odznaka celu dodatkowego</span><span><b>${r.bonus === 200 ? "+200 metalu" : r.bonus === "salvage" ? "odzysk 400 metalu" : r.bonus === "armor" ? "pancerz kompozytowy" : r.bonus === "weapons" ? "broń plazmowa" : r.bonus === "metal" ? "300 metalu" : "—"}</b>Premia</span></div>${victory && r.secondary && !["colony6", "colony9", "colony14"].includes(game.missionId) ? "<p>Odznaka da +200 metalu na start następnego rozdziału.</p>" : ""}`;
 	}
 	// Battle chat (network): recent lines over the battlefield, a line opened with Enter.
 	const CHAT_SHOW = 15;
@@ -1099,17 +1106,38 @@
 			relay: !!relay,
 			onDesync: () => networkOver("Rozsynchronizowanie gry", "Symulacje graczy przestały się zgadzać — bitwa została przerwana. Zgłoś to twórcy gry (mapa, frakcje, co działo się tuż przed)."),
 			onClose: () => (relay ? relayLost() : networkOver("Połączenie zerwane", "Drugi gracz opuścił bitwę albo połączenie zostało przerwane.")),
+			onPhase: networkPhase,
 			pump: advanceHidden,
 		});
 		if (resume) netSession.replay(resume.log, resume.from, resume.release);
+		// (The log may have carried the battle into its next phase — the landing of an Inwazja.)
+		const current = netSession.game;
 		// The lobby conversation continues in the battle (and from one battle to its rematch).
 		if (!again) chatLog = (menu.net?.chat || []).slice(-6).map((e) => ({ ...e, at: performance.now() }));
 		chatHud().hidden = false;
 		menu.hide();
-		restart(prepared.missionId, null, prepared);
+		restart(current.missionId, null, current);
 		const mine = Object.entries(game.players).filter(([t]) => game.allied(team, Number(t)) || Number(t) === team).map(([, p]) => p.name),
-			theirs = foes(team).map((p) => p.name);
-		toast(resume ? "Powrót do bitwy — dogoniono jej przebieg." : `${again ? "Rewanż" : "Bitwa sieciowa"}: ${mine.join(" i ")} kontra ${theirs.join(" i ")}. Zniszcz ${theirs.length > 1 ? "wszystkie centra dowodzenia przeciwników" : "centrum dowodzenia przeciwnika"}.`);
+			theirs = foes(team).map((p) => p.name),
+			mode = game.modeState?.mode || "conquest",
+			// The goal: the scenario mode's (network-modes.js), the orbit of an Inwazja, or the enemy centres.
+			goal =
+				game.invasion?.phase === "orbit"
+					? "Inwazja — faza 1: zdobądź orbitę (zniszcz stację wroga albo miej silniejszą flotę po 8 minutach), potem lądowanie."
+					: mode !== "conquest" && game.modeObjective
+						? `${RTS.MODES[mode]?.name || ""}: ${game.modeObjective()}`
+						: `Zniszcz ${theirs.length > 1 ? "wszystkie centra dowodzenia przeciwników" : "centrum dowodzenia przeciwnika"}.`;
+		toast(resume ? "Powrót do bitwy — dogoniono jej przebieg." : `${again ? "Rewanż" : "Bitwa sieciowa"}: ${mine.join(" i ")} kontra ${theirs.join(" i ")}. ${goal}`);
+	}
+	// Inwazja through the network: the orbit is decided and every computer has built the ground battle at the same
+	// step — the board takes it at once (the battle goes on, no landing screen to wait on).
+	function networkPhase(next) {
+		const I = next.invasion,
+			O = I?.orbit || {},
+			mine = I?.owner === (next.viewer ?? 0),
+			how = O.decided === "time" ? "Po 8 minutach o orbicie zdecydowała siła flot i stacji." : mine ? "Stacja dowodzenia wroga na orbicie zniszczona." : "Twoja stacja dowodzenia na orbicie zniszczona.";
+		restart(next.missionId, null, next);
+		toast(`Inwazja — faza 2: lądowanie. ${how} ${mine ? `Orbita Twoja: ${O.pods} kapsuł desantowych, uderzenie z orbity i skan (panel orbity).` : `Orbita wroga: ma ${O.pods} kapsuł desantowych — buduj baterie przeciwlotnicze.`}`);
 	}
 	// A lobby battle lost its server: reconnect (every 2 s, for a minute) and come back by the server's log.
 	function relayLost() {
@@ -1206,7 +1234,9 @@
 				others = foes(me),
 				other = { name: others.map((p) => p.name).join(" i ") };
 			$("overlay").hidden = false;
-			$("overlay").innerHTML = `<div class="briefing"><span class="eyebrow">GRA WIELOOSOBOWA / ${timeLabel(game.time)}</span><div class="briefing-symbol">${victory ? "◈" : "⌁"}</div><h2>${victory ? "Zwycięstwo." : "Porażka."}</h2><p>${netRelay ? (victory ? `Wszystkie centra dowodzenia strony ${other.name} zniszczone.` : `Strona ${other.name} zniszczyła wszystkie centra dowodzenia Twojej strony.`) : victory ? `Centrum dowodzenia gracza ${other.name} zniszczone.` : `${other.name} zniszczył Twoje centrum dowodzenia.`}</p><div class="briefing-controls"><span><b>${game.sideOf(me).kills}</b>Twoje zniszczone cele</span><span><b>${others.reduce((n, p) => n + (game.sideOf(p.team)?.kills || 0), 0)}</b>Cele zniszczone przez przeciwnika</span><span><b>${game.nodes.filter((n) => n.owner === (game.sideLeader?.(me) ?? me)).length} / ${game.nodes.length}</b>Twoje przekaźniki</span></div><p id="rematch-status" class="rematch-status" role="status"></p>${netRelay ? "" : '<button id="rematch" class="primary-button">REWANŻ <span>↻</span></button>'}<button id="end-menu" class="primary-button end-secondary">MENU GŁÓWNE <span>↗</span></button></div>`;
+			// A scenario mode ends with its own account (worded for this player); conquest with the centres.
+			const modeText = game.modeResult?.();
+			$("overlay").innerHTML = `<div class="briefing"><span class="eyebrow">GRA WIELOOSOBOWA / ${timeLabel(game.time)}</span><div class="briefing-symbol">${victory ? "◈" : "⌁"}</div><h2>${victory ? "Zwycięstwo." : "Porażka."}</h2><p>${modeText ? modeText : netRelay ? (victory ? `Wszystkie centra dowodzenia strony ${other.name} zniszczone.` : `Strona ${other.name} zniszczyła wszystkie centra dowodzenia Twojej strony.`) : victory ? `Centrum dowodzenia gracza ${other.name} zniszczone.` : `${other.name} zniszczył Twoje centrum dowodzenia.`}</p><div class="briefing-controls"><span><b>${game.sideOf(me).kills}</b>Twoje zniszczone cele</span><span><b>${others.reduce((n, p) => n + (game.sideOf(p.team)?.kills || 0), 0)}</b>Cele zniszczone przez przeciwnika</span><span><b>${game.nodes.filter((n) => n.owner === (game.sideLeader?.(me) ?? me)).length} / ${game.nodes.length}</b>Twoje przekaźniki</span></div><p id="rematch-status" class="rematch-status" role="status"></p>${netRelay ? "" : '<button id="rematch" class="primary-button">REWANŻ <span>↻</span></button>'}<button id="end-menu" class="primary-button end-secondary">MENU GŁÓWNE <span>↗</span></button></div>`;
 			// The connection stays for a rematch; the lockstep stops a moment later (the other computer still gets
 			// the last turn).
 			const ended = netSession;
@@ -1224,7 +1254,8 @@
 			};
 			return;
 		}
-		if (game.invasion?.phase === "orbit" && game.invasionResult?.()) return showInvasionLanding();
+		// (A campaign chapter in orbit ends with its report; its pods go to the next chapter.)
+		if (game.invasion?.phase === "orbit" && game.invasionResult?.() && !MISSIONS[game.missionId].campaign) return showInvasionLanding();
 		// Survival keeps the best time per map and level.
 		let modeText = game.modeResult?.() || null;
 		if (modeText && game.modeState?.mode === "survival" && RTS.recordSurvival) {
@@ -1239,7 +1270,7 @@
 		$("overlay").hidden = false;
 		if (game.act2) {
 			$("overlay").innerHTML =
-				`<div class="briefing act2-report"><span class="eyebrow">RAPORT Z OPERACJI / ${MISSIONS[game.missionId].name}</span><div class="briefing-symbol">${victory ? "◈" : "⌁"}</div><h2>${victory ? (game.missionId === "colony6" ? "Koniec<br>aktu II." : game.missionId === "colony9" ? "Koniec<br>aktu III." : "Rozdział<br>ukończony.") : "Misja<br>nieudana."}</h2><p>${victory ? game.act2Epilogue() + " " + (campaignSaved ? "Postęp kampanii zapisano." : "Nie można zapisać postępu kampanii na tym urządzeniu.") : game.act2.failReason || "Centrum dowodzenia zostało zniszczone. Odbuduj siły i spróbuj ponownie."}</p>${act2Report(victory)}<button id="play-again" class="primary-button">NOWA OPERACJA <span>↗</span></button></div>`;
+				`<div class="briefing act2-report"><span class="eyebrow">RAPORT Z OPERACJI / ${MISSIONS[game.missionId].name}</span><div class="briefing-symbol">${victory ? "◈" : "⌁"}</div><h2>${victory ? (game.missionId === "colony6" ? "Koniec<br>aktu II." : game.missionId === "colony9" ? "Koniec<br>aktu III." : game.missionId === "colony14" ? "Koniec<br>aktu IV." : "Rozdział<br>ukończony.") : "Misja<br>nieudana."}</h2><p>${victory ? game.act2Epilogue() + " " + (campaignSaved ? "Postęp kampanii zapisano." : "Nie można zapisać postępu kampanii na tym urządzeniu.") : game.act2.failReason || "Centrum dowodzenia zostało zniszczone. Odbuduj siły i spróbuj ponownie."}</p>${act2Report(victory)}<button id="play-again" class="primary-button">NOWA OPERACJA <span>↗</span></button></div>`;
 			if (!victory) {
 				const retry = document.createElement("button");
 				retry.className = "primary-button";
@@ -1264,6 +1295,11 @@
 			colony3: "colony4",
 			colony4: "colony5",
 			colony5: "colony6",
+			colony9: "colony10",
+			colony10: "colony11",
+			colony11: "colony12",
+			colony12: "colony13",
+			colony13: "colony14",
 		}[game.missionId];
 		if (victory && MISSIONS[game.missionId].campaign && nextChapter) {
 			const button = document.createElement("button");
@@ -1271,7 +1307,9 @@
 			button.textContent =
 				nextChapter === "colony4"
 					? "AKT II: CENA ŚWITU →"
-					: "NASTĘPNY ROZDZIAŁ →";
+					: nextChapter === "colony10"
+						? "AKT IV: INWAZJA →"
+						: "NASTĘPNY ROZDZIAŁ →";
 			button.onclick = () => {
 				menu.selectedMission = nextChapter;
 				menu.missionOrigin = "campaign";
@@ -1320,6 +1358,8 @@
 				? "Cena świtu"
 				: m.act === 3
 					? "Przebudzenie Roju"
+					: m.act === 4
+					? "Inwazja"
 					: m.campaign
 					? "Odzyskany Świt"
 					: "Przejmij pogranicze.";
@@ -1368,6 +1408,8 @@
 		if (!prepared) game.applyCampaignLevel?.(campaign.difficulty);
 		game.applyAct2Bonus?.(campaign.badges);
 		// Act III: the consequences of the act II decision (Hefajstos).
+		// Act IV: what the previous chapter left (the pods of X for XI).
+		game.applyCampaignCarry?.(campaign.carry);
 		game.applyCampaignChoices?.(campaign.choices);
 		choiceOpen = false;
 		$("overlay").classList.remove("end-overlay");
@@ -1491,6 +1533,21 @@
 			camera.zoom = Math.max(1.8, camera.zoom);
 			fit();
 		} else toast("Złoże jest obecnie poza widocznym terenem.");
+		updateHud();
+	}
+	// Watchers (0.154): the ability of the selection — Sparks need a point (the next left click), Wardens phase at once.
+	function watcherAbility() {
+		const ids = [...selected].filter((id) => game.get(id)?.team === (game.viewer ?? 0));
+		if (ids.some((id) => game.get(id)?.type === "spark")) return beginTarget("blink", "Skok: wskaż LPM punkt (do 260). PPM lub Esc — anuluj.");
+		const n = act("ability", ids);
+		toast(n ? `Faza: ${n} ${n === 1 ? "strażnik" : "strażników"} bez obrażeń przez 3 s.` : "Umiejętność jeszcze się odnawia.");
+	}
+	// A pointed order (the next left click): pods, strikes, blinks, jumps, the Core's flight.
+	function beginTarget(mode, text) {
+		building = attackMode = orderMode = false;
+		strikeMode = null;
+		orbitMode = mode;
+		toast(text);
 		updateHud();
 	}
 	// DOW-01: the next right click patrols to a point or escorts a unit.
@@ -1981,6 +2038,18 @@
 					["colossus", "Kolos", "Regenerujący się tytan · fabryka", "⬢", ""],
 				],
 			},
+			watchers: {
+				build: [
+					["anchor", "Kotwica", "Strefa budowy, szczeliny i teleporty · wszędzie przy bazie", "⟐", ""],
+					["resonator", "Rezonator", "Dochód ze złoża lub przekaźnika — zamiast górników", "◎", ""],
+				],
+				army: [
+					["spark", "Iskra", "Szybka · Skok co 10 s (⇧Q) · kuźnia fazowa", "✦", ""],
+					["prism", "Pryzmat", "Wiązka narasta na jednym celu · wielka kuźnia", "◇", ""],
+					["arc", "Łuk", "Wyładowanie łańcuchowe · wielka kuźnia", "⌒", ""],
+					["warden", "Strażnik", "Faza 3 s (⇧Q); dwóch scala się w konstrukt · wielka kuźnia", "⬢", ""],
+				],
+			},
 			dominion: {
 				build: [["uplink", "Stacja orbitalna", "Uderzenie orbitalne co 100 s · 40 mocy", "⊕", ""]],
 				army: [
@@ -2290,7 +2359,7 @@
 			.querySelector(".selection-actions")
 			.insertAdjacentHTML(
 				"beforeend",
-				'<button id="inspect-army">Statystyki</button><div class="formation-control" id="army-formation" role="radiogroup" aria-label="Formacja oddziału"><span class="formation-label">Formacja</span><div class="formation-options"><button type="button" role="radio" data-formation="line" title="Linia — jeden szereg w poprzek kierunku marszu: cały oddział strzela naraz"><svg viewBox="0 0 16 10" aria-hidden="true"><circle cx="2" cy="5" r="1.5"/><circle cx="6" cy="5" r="1.5"/><circle cx="10" cy="5" r="1.5"/><circle cx="14" cy="5" r="1.5"/></svg>Linia</button><button type="button" role="radio" data-formation="column" title="Kolumna — dwójkami, wąski szyk na przejścia i mosty"><svg viewBox="0 0 16 10" aria-hidden="true"><circle cx="6" cy="1.6" r="1.3"/><circle cx="10" cy="1.6" r="1.3"/><circle cx="6" cy="5" r="1.3"/><circle cx="10" cy="5" r="1.3"/><circle cx="6" cy="8.4" r="1.3"/><circle cx="10" cy="8.4" r="1.3"/></svg>Kolumna</button><button type="button" role="radio" data-formation="spread" title="Rozproszenie — siatka z dużymi odstępami"><svg viewBox="0 0 16 10" aria-hidden="true"><circle cx="2" cy="1.6" r="1.3"/><circle cx="8" cy="1.6" r="1.3"/><circle cx="14" cy="1.6" r="1.3"/><circle cx="2" cy="8.4" r="1.3"/><circle cx="8" cy="8.4" r="1.3"/><circle cx="14" cy="8.4" r="1.3"/></svg>Rozprosz.</button></div></div><button id="load-transport" hidden>Załaduj</button><button id="unload-transport" hidden>Wyładuj</button><button id="hold-position">Pozycja <kbd>⇧S</kbd></button><button id="patrol-order" title="Patrol: PPM wskazuje drugi koniec trasy — oddział krąży między nim a obecną pozycją, walcząc po drodze.">Patrol <kbd>⇧P</kbd></button><button id="escort-order" title="Eskorta: PPM na własnej jednostce lub budynku — oddział trzyma się przy nim i go broni.">Eskorta <kbd>⇧E</kbd></button><button id=toggle-gate hidden>Otwórz / zamknij</button><button id="module-a" hidden></button><button id="module-b" hidden></button><button id="orbital-strike" hidden>Uderzenie orbitalne</button><button id="demolish" hidden title="Zwrot: do 50% za budowlę, 100% za fundament. Centrum nie można rozebrać.">Rozbierz</button>',
+				'<button id="inspect-army">Statystyki</button><div class="formation-control" id="army-formation" role="radiogroup" aria-label="Formacja oddziału"><span class="formation-label">Formacja</span><div class="formation-options"><button type="button" role="radio" data-formation="line" title="Linia — jeden szereg w poprzek kierunku marszu: cały oddział strzela naraz"><svg viewBox="0 0 16 10" aria-hidden="true"><circle cx="2" cy="5" r="1.5"/><circle cx="6" cy="5" r="1.5"/><circle cx="10" cy="5" r="1.5"/><circle cx="14" cy="5" r="1.5"/></svg>Linia</button><button type="button" role="radio" data-formation="column" title="Kolumna — dwójkami, wąski szyk na przejścia i mosty"><svg viewBox="0 0 16 10" aria-hidden="true"><circle cx="6" cy="1.6" r="1.3"/><circle cx="10" cy="1.6" r="1.3"/><circle cx="6" cy="5" r="1.3"/><circle cx="10" cy="5" r="1.3"/><circle cx="6" cy="8.4" r="1.3"/><circle cx="10" cy="8.4" r="1.3"/></svg>Kolumna</button><button type="button" role="radio" data-formation="spread" title="Rozproszenie — siatka z dużymi odstępami"><svg viewBox="0 0 16 10" aria-hidden="true"><circle cx="2" cy="1.6" r="1.3"/><circle cx="8" cy="1.6" r="1.3"/><circle cx="14" cy="1.6" r="1.3"/><circle cx="2" cy="8.4" r="1.3"/><circle cx="8" cy="8.4" r="1.3"/><circle cx="14" cy="8.4" r="1.3"/></svg>Rozprosz.</button></div></div><button id="load-transport" hidden>Załaduj</button><button id="unload-transport" hidden>Wyładuj</button><button id="hold-position">Pozycja <kbd>⇧S</kbd></button><button id="watcher-ability" hidden title="Umiejętność: iskry skaczą we wskazany punkt (LPM), strażnicy wchodzą w fazę.">Umiejętność <kbd>⇧Q</kbd></button><button id="watcher-merge" hidden title="Dwaj strażnicy obok siebie scalają się w konstrukt.">Scal</button><button id="watcher-jump" hidden title="Jednostki przy kotwicy przeskakują do wskazanej kotwicy (LPM).">Do kotwicy</button><button id="core-relocate" hidden title="Rdzeń wznosi się i leci na wskazane miejsce (LPM), co 120 s.">Przenieś rdzeń</button><button id="patrol-order" title="Patrol: PPM wskazuje drugi koniec trasy — oddział krąży między nim a obecną pozycją, walcząc po drodze.">Patrol <kbd>⇧P</kbd></button><button id="escort-order" title="Eskorta: PPM na własnej jednostce lub budynku — oddział trzyma się przy nim i go broni.">Eskorta <kbd>⇧E</kbd></button><button id=toggle-gate hidden>Otwórz / zamknij</button><button id="module-a" hidden></button><button id="module-b" hidden></button><button id="orbital-strike" hidden>Uderzenie orbitalne</button><button id="demolish" hidden title="Zwrot: do 50% za budowlę, 100% za fundament. Centrum nie można rozebrać.">Rozbierz</button>',
 			);
 		// The shortcut also in the tooltip (a narrow panel hides the key badges).
 		for (const button of document.querySelectorAll(".selection-actions button"))
@@ -2349,6 +2418,13 @@
 			selected = new Set([...selected].filter((id) => game.get(id)));
 			updateHud();
 		};
+		$("watcher-ability").onclick = () => watcherAbility();
+		$("watcher-merge").onclick = () => {
+			const n = act("mergeWardens", [...selected]);
+			if (!n) toast("Strażnicy muszą stać obok siebie (do 140).");
+		};
+		$("watcher-jump").onclick = () => beginTarget("jump", "Do kotwicy: wskaż LPM kotwicę docelową. PPM lub Esc — anuluj.");
+		$("core-relocate").onclick = () => beginTarget("core", "Przenieś rdzeń: wskaż LPM miejsce lądowania (widoczny, wolny teren, do 1100). PPM lub Esc — anuluj.");
 		$("patrol-order").onclick = () => beginOrder("patrol");
 		$("escort-order").onclick = () => beginOrder("escort");
 		$("hold-position").onclick = () => {
@@ -2569,7 +2645,16 @@
 			if (orbitMode) {
 				const mode = orbitMode;
 				orbitMode = null;
-				act(mode === "drop" ? "orbitalDrop" : "orbitStrike", p.x, p.y);
+				const ids = [...selected];
+				if (mode === "blink") {
+					const n = act("ability", ids, p.x, p.y);
+					if (!n) toast("Skok jeszcze się odnawia.");
+				} else if (mode === "jump") {
+					const anchor = game.entities.filter((e) => e.type === "anchor" && e.team === (game.viewer ?? 0) && e.hp > 0).sort((a, b) => Math.hypot(a.x - p.x, a.y - p.y) - Math.hypot(b.x - p.x, b.y - p.y))[0];
+					const n = anchor && Math.hypot(anchor.x - p.x, anchor.y - p.y) < 90 ? act("anchorJump", ids, anchor.id) : 0;
+					if (!n) toast("Wskaż kotwicę docelową; skaczą jednostki stojące przy innej kotwicy (co 8 s).");
+				} else if (mode === "core") act("relocateCore", ids[0], p.x, p.y);
+				else act(mode === "drop" ? "orbitalDrop" : "orbitStrike", p.x, p.y);
 				updateHud();
 				return;
 			}
@@ -2772,6 +2857,7 @@
 		keys.add(key);
 		if (e.repeat || !started) return;
 		if (e.shiftKey && (key === "p" || key === "e")) beginOrder(key === "p" ? "patrol" : "escort");
+		else if (e.shiftKey && key === "q" && selected.size) watcherAbility();
 		else if (key === " ") togglePause();
 		else if (key === "/") {
 			camera.yaw = 0;
@@ -2998,6 +3084,7 @@
 		campaignDetails: () => ({
 			badges: campaign.badges,
 			choices: campaign.choices,
+			carry: campaign.carry,
 			difficulty: campaign.difficulty,
 		}),
 		setCampaignDifficulty: (level) => campaign.setDifficulty(level),

@@ -8,7 +8,11 @@
      Milky Way with dust lanes, coloured nebulae, the sun's disc and corona;
    - an anamorphic lens streak through the sun when it is in view.
    Everything is parallax: the planet is thousands of units below the battle, so it slides slowly under
-   it as the camera moves. All procedural (no textures). */
+   it as the camera moves. All procedural (no textures).
+   Readability (0.156): the scenery is kept quieter than the battle — CALM dims the planet, its halo and
+   rings, the black hole, the Milky Way, the nebulae and the sun's glow; the rocks of the deep field lie
+   deeper and half see-through; a dark veil with soft edges lies just under the plane of the battle, so ships
+   and stations stand out against any backdrop. */
 const SPACE_NOISE = `
 	float sHash(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
 	float sNoise(vec3 x) {
@@ -25,6 +29,8 @@ const SPACE_NOISE = `
 `;
 
 export function createSpace3D(THREE) {
+	// How bright the scenery is next to the battle (1 = as painted before 0.156).
+	const CALM = { planet: 0.55, halo: 0.45, rings: 0.5, blackHole: 0.6, milkyWay: 0.55, nebula: 0.5, sunGlow: 0.4, veil: 0.5 };
 	const group = new THREE.Group();
 	group.visible = false;
 	const sunDir = new THREE.Vector3(-0.6, 0.6, 0.5).normalize(),
@@ -61,14 +67,14 @@ export function createSpace3D(THREE) {
 					float lat = dot(d, axis);
 					float band = exp(-lat * lat / 0.028);
 					float glow = sFbm(d * 3.5) , lanes = smoothstep(0.45, 0.75, sFbm(d * 7.0 + 4.0));
-					col += band * (vec3(0.16, 0.15, 0.2) * (0.5 + glow) + vec3(0.12, 0.09, 0.07) * pow(glow, 3.0) * 2.0) * (1.0 - 0.75 * lanes * band);
+					col += band * (vec3(0.16, 0.15, 0.2) * (0.5 + glow) + vec3(0.12, 0.09, 0.07) * pow(glow, 3.0) * 2.0) * (1.0 - 0.75 * lanes * band) * ${CALM.milkyWay.toFixed(2)};
 					col += exp(-lat * lat / 0.2) * vec3(0.02, 0.025, 0.04);
 					// Nebulae: two coloured clouds in their own parts of the sky.
 					float n1 = smoothstep(0.5, 0.85, sFbm(d * 2.2 + vec3(3.0, 1.0, 7.0))) * smoothstep(0.2, 0.9, dot(d, normalize(vec3(-0.6, -0.3, -0.75))));
 					float n2 = smoothstep(0.52, 0.86, sFbm(d * 2.6 + vec3(9.0, 4.0, 2.0))) * smoothstep(0.1, 0.9, dot(d, normalize(vec3(0.7, -0.2, 0.68))));
 					float fil = sFbm(d * 9.0);
-					col += n1 * mix(neb1a, neb1b, fil) * 0.28;
-					col += n2 * mix(neb2a, neb2b, fil) * 0.28;
+					col += n1 * mix(neb1a, neb1b, fil) * ${(0.28 * CALM.nebula).toFixed(3)};
+					col += n2 * mix(neb2a, neb2b, fil) * ${(0.28 * CALM.nebula).toFixed(3)};
 					// Stars: many faint, fewer bright, a few big; tinted by a hash.
 					float s = stars(d, 180.0, 0.35, 0.09) * 0.5 + stars(d, 90.0, 0.18, 0.08) + stars(d, 34.0, 0.08, 0.06) * 2.2;
 					s *= 1.0 + band * 1.5;
@@ -77,7 +83,7 @@ export function createSpace3D(THREE) {
 					// The sun: a white disc, a corona and a wide glow.
 					float sd = max(0.0, dot(d, sunDir));
 					col += vec3(1.0, 0.96, 0.9) * smoothstep(0.99955, 0.9997, sd) * 30.0;
-					col += vec3(1.0, 0.82, 0.6) * pow(sd, 900.0) * 3.0 + vec3(0.9, 0.7, 0.5) * pow(sd, 40.0) * 0.18;
+					col += (vec3(1.0, 0.82, 0.6) * pow(sd, 900.0) * 3.0 + vec3(0.9, 0.7, 0.5) * pow(sd, 40.0) * 0.18) * ${CALM.sunGlow.toFixed(2)};
 					gl_FragColor = vec4(col, 1.0);
 					#include <colorspace_fragment>
 				}`,
@@ -216,7 +222,7 @@ export function createSpace3D(THREE) {
 					lit += atmo * fres * (0.05 + 1.2 * smoothstep(-0.25, 0.4, ndl));
 					// Twilight band: warm scattering along the terminator.
 					lit += vec3(1.0, 0.45, 0.2) * exp(-ndl * ndl / 0.01) * 0.25;
-					gl_FragColor = vec4(lit, 1.0);
+					gl_FragColor = vec4(lit * ${CALM.planet.toFixed(2)}, 1.0);
 					#include <colorspace_fragment>
 				}`,
 			fog: false,
@@ -235,7 +241,7 @@ export function createSpace3D(THREE) {
 					vec3 n = normalize(vNormal), v = normalize(cameraPosition - vWorld);
 					float rim = pow(1.0 - abs(dot(n, v)), 5.0);
 					float lit = smoothstep(-0.35, 0.5, dot(n, sunDir));
-					gl_FragColor = vec4(haloColor * 0.8 * rim * (0.2 + 1.6 * lit), rim);
+					gl_FragColor = vec4(haloColor * ${(0.8 * CALM.halo).toFixed(2)} * rim * (0.2 + 1.6 * lit), rim);
 				}`,
 			side: THREE.BackSide,
 			transparent: true,
@@ -277,7 +283,7 @@ export function createSpace3D(THREE) {
 					vec3 o = vWorld - planetCentre;
 					float bb = dot(o, sunDir), cc = dot(o, o) - planetRadius * planetRadius;
 					float shadow = (bb < 0.0 && bb * bb - cc > 0.0) ? 0.08 : 1.0;
-					gl_FragColor = vec4(col * (0.25 + 1.0 * shadow), clamp(d, 0.0, 1.0) * ringAlpha);
+					gl_FragColor = vec4(col * (0.25 + 1.0 * shadow) * ${CALM.rings.toFixed(2)}, clamp(d, 0.0, 1.0) * ringAlpha * ${(0.5 + CALM.rings * 0.5).toFixed(2)});
 					#include <colorspace_fragment>
 				}`,
 			side: THREE.DoubleSide,
@@ -358,7 +364,7 @@ export function createSpace3D(THREE) {
 						// Fade the edge of the picture.
 						col *= smoothstep(7.0, 5.5, r);
 						// Premultiplied: the shadow blocks what lies behind, the light adds.
-						gl_FragColor = vec4(col, shadow * (1.0 - cover));
+						gl_FragColor = vec4(col * ${CALM.blackHole.toFixed(2)}, shadow * (1.0 - cover));
 					}`,
 				transparent: true,
 				blending: THREE.CustomBlending,
@@ -453,13 +459,14 @@ export function createSpace3D(THREE) {
 	group.add(deep);
 	// The deep asteroid field: rocks at many depths under the battle, tumbling slowly.
 	const DEBRIS = 420;
-	const debris = new THREE.InstancedMesh(rockGeo, hazed(new THREE.MeshStandardMaterial({ color: "#77706a", roughness: 0.95, metalness: 0.05, flatShading: true })), DEBRIS);
+	// (Half see-through: dark rocks seen past the units read as obstacles on the board — 0.156.)
+	const debris = new THREE.InstancedMesh(rockGeo, hazed(new THREE.MeshStandardMaterial({ color: "#77706a", roughness: 0.95, metalness: 0.05, flatShading: true, transparent: true, opacity: 0.5, depthWrite: false })), DEBRIS);
 	debris.frustumCulled = false;
 	deep.add(debris);
 	const rocks = [];
 	// Ice and dust specks between them.
 	const specksGeo = new THREE.BufferGeometry(),
-		specks = new THREE.Points(specksGeo, new THREE.PointsMaterial({ color: "#a9bcd6", size: 5, sizeAttenuation: true, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
+		specks = new THREE.Points(specksGeo, new THREE.PointsMaterial({ color: "#a9bcd6", size: 5, sizeAttenuation: true, transparent: true, opacity: 0.3, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
 	deep.add(specks);
 	// Distant convoys: lines of small ships low over the planet, with engine glows and blinking lights.
 	const CONVOY_SHIPS = 18;
@@ -501,7 +508,7 @@ export function createSpace3D(THREE) {
 		for (let i = 0; i < DEBRIS; i++) {
 			// Deep enough not to be mistaken for the asteroid fields of the battle; the deeper the bigger
 			// (so they still show), a few big ones.
-			const depth = 700 + Math.pow(rnd(), 1.2) * 3600,
+			const depth = 1400 + Math.pow(rnd(), 1.2) * 3600,
 				size = (3 + rnd() * 9) * (1 + depth / 600) * (rnd() < 0.05 ? 2.5 : 1);
 			rocks.push({ x: -W * 0.6 + rnd() * W * 2.2, y: -depth, z: -H * 0.9 + rnd() * H * 2.8, s: size, sy: 0.6 + rnd() * 0.5, rx: rnd() * 6, ry: rnd() * 6, spin: (rnd() - 0.5) * 0.12 });
 		}
@@ -568,7 +575,7 @@ export function createSpace3D(THREE) {
 		}
 		const g = new THREE.BufferGeometry();
 		g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-		return new THREE.Points(g, new THREE.PointsMaterial({ color: "#d8d0c4", size: 45, sizeAttenuation: true, transparent: true, opacity: 0.6, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
+		return new THREE.Points(g, new THREE.PointsMaterial({ color: "#d8d0c4", size: 45, sizeAttenuation: true, transparent: true, opacity: 0.6 * CALM.rings, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
 	})();
 	rings.add(ringDust);
 
@@ -653,7 +660,7 @@ export function createSpace3D(THREE) {
 	function buildNebula(centre, radii, colours, seed) {
 		let sd = seed;
 		const r = () => (sd = (Math.imul(sd, 1664525) + 1013904223) >>> 0) / 4294967296;
-		const glowMats = colours.map((c) => new THREE.SpriteMaterial({ map: cloudTex, color: c, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+		const glowMats = colours.map((c) => new THREE.SpriteMaterial({ map: cloudTex, color: c, transparent: true, opacity: 0.16 * CALM.nebula, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
 		const dustMat = new THREE.SpriteMaterial({ map: cloudTex, color: "#05060a", transparent: true, opacity: 0.55, depthWrite: false, fog: false });
 		for (let i = 0; i < 90; i++) {
 			const u = r() * 2 - 1,
@@ -846,11 +853,34 @@ export function createSpace3D(THREE) {
 			ghostAt.set(sunNdc.x * (1 - g.at * 2), sunNdc.y * (1 - g.at * 2), 0.5).unproject(camera).sub(camera.position).normalize();
 			g.s.position.copy(camera.position).addScaledVector(ghostAt, 400);
 			g.s.scale.setScalar(400 * g.size * 2);
-			g.s.material.opacity = strength * 0.35;
+			g.s.material.opacity = strength * 0.35 * CALM.sunGlow;
 		}
 	}
 
 	const view = new THREE.Vector3();
+	// ---- the veil (0.156): a dark layer just under the plane of the battle, fading out past the map's edge ----
+	const veilUniforms = { size: { value: new THREE.Vector2(1, 1) }, margin: { value: 700 }, strength: { value: CALM.veil } };
+	const veil = new THREE.Mesh(
+		new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2),
+		new THREE.ShaderMaterial({
+			uniforms: veilUniforms,
+			vertexShader: `varying vec2 vXY;
+				void main() { vec4 w = modelMatrix * vec4(position, 1.0); vXY = w.xz; gl_Position = projectionMatrix * viewMatrix * w; }`,
+			fragmentShader: `varying vec2 vXY; uniform vec2 size; uniform float margin; uniform float strength;
+				void main() {
+					// Distance outside the board (0 inside it), soft to the edge of the veil.
+					vec2 out2 = max(max(-vXY, vXY - size), 0.0);
+					float k = 1.0 - smoothstep(0.0, margin, length(out2));
+					gl_FragColor = vec4(0.008, 0.012, 0.025, strength * k);
+				}`,
+			transparent: true,
+			depthWrite: false,
+			fog: false,
+		}),
+	);
+	veil.frustumCulled = false;
+	group.add(veil);
+
 	return {
 		group,
 		// Placement for a map: the planet far below the battle, south of it (towards the default camera),
@@ -865,6 +895,10 @@ export function createSpace3D(THREE) {
 			// the battle, volcanic moon, or a black hole instead of a planet; colours of sky, nebulae, rings.
 			const look = RTS.MISSIONS[game.missionId].look || {},
 				kind = look.planet || "gas";
+			const M = veilUniforms.margin.value;
+			veil.position.set(game.W / 2, -30, game.H / 2);
+			veil.scale.set(game.W + M * 2, 1, game.H + M * 2);
+			veilUniforms.size.value.set(game.W, game.H);
 			const PAL = {
 				gas: { c: ["#54331f", "#8c4d2e", "#c78c54", "#edd4a8"], amp: 1, atmo: "#73b3ff", rings: ["#9e8c78", "#f2e6d1"], ringAlpha: 0.6 },
 				ice: { c: ["#24607e", "#3a88a8", "#68b8cf", "#b4e4ee"], amp: 0.35, atmo: "#8fe0ff", rings: ["#8aa6b8", "#eef8ff"], ringAlpha: 0.75 },
@@ -967,7 +1001,7 @@ export function createSpace3D(THREE) {
 			streak.position.copy(camera.position).addScaledVector(sunDir, camera.far * 0.8);
 			streak.scale.set(camera.far * 0.7, camera.far * 0.012, 1);
 			const inFront = camera.getWorldDirection(view).dot(sunDir);
-			streak.material.opacity = Math.max(0, (inFront - 0.75) / 0.25) * 0.55;
+			streak.material.opacity = Math.max(0, (inFront - 0.75) / 0.25) * 0.55 * CALM.sunGlow;
 			streak.visible = streak.material.opacity > 0.01;
 			updateFlare(camera, inFront);
 		},

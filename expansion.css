@@ -1421,3 +1421,10 @@
 .economy-dashboard .eco-alert.warning {
 	margin-top: 8px;
 }
+/* Watchers (0.154): their orders in the fourth row, shown only when the selection can use them. */
+#watcher-ability,
+#watcher-merge,
+#watcher-jump,
+#core-relocate {
+	order: 8;
+}

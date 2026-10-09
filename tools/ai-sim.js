@@ -15,7 +15,7 @@ const args = process.argv.slice(2),
 	minutes = Number(args.find((a) => /^\d+$/.test(a)) || 15),
 	mapsArg = args[args.indexOf("--maps") + 1],
 	MAPS = args.includes("--maps") ? (mapsArg === "all" ? Object.keys(RTS.MISSIONS).filter((k) => !RTS.MISSIONS[k].campaign && !RTS.MISSIONS[k].space) : mapsArg.split(",")) : ["horizon", "frost", "ember"];
-const FACTIONS = ["colonies", "dominion", "swarm"],
+const FACTIONS = ["colonies", "dominion", "swarm", "watchers"],
 	LEVELS = ["easy", "normal", "hard"];
 
 function buildUp(map, difficulty, faction) {
@@ -54,6 +54,7 @@ const POOL = {
 	colonies: ["trooper", "rocket", "tank", "raider", "grenadier", "heavy"],
 	dominion: ["trooper", "rocket", "tank", "sentinel", "destroyer", "flamer", "heavy"],
 	swarm: ["crawler", "spitter", "colossus"],
+	watchers: ["spark", "prism", "arc", "warden"],
 };
 function duel(faction, doctrine, seed) {
 	const g = new Game(seed, "horizon");

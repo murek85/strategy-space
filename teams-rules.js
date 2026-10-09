@@ -19,7 +19,8 @@
 
 		Object.assign(Game.prototype, {
 			configureSkirmish(input = {}) {
-				const duo = input.teams === "duo" && input.mode !== "survival" && (!MISSIONS[this.missionId]?.campaign || MISSIONS[this.missionId].act === 3);
+				// Survival has no enemy side — except a co-op network battle (network-modes.js), where the defenders are allies.
+				const duo = input.teams === "duo" && (input.mode !== "survival" || input.coop) && (!MISSIONS[this.missionId]?.campaign || MISSIONS[this.missionId].act === 3);
 				// Two sides of two: four bases, placed so that teams 0 and 3 share one edge (corner order in placeCornerBases).
 				// Sides are known before the bases are set up (factions, commanders, vision).
 				this.alliances = duo ? { ...SIDES } : null;

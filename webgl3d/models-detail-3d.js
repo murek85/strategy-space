@@ -1854,7 +1854,7 @@ float mdWear = 0.0, mdLine = 0.0, mdGrime = 0.0;
 // Surface detail (0.128): armour plates with seams and slightly different shades, paint chipped off the
 // bevelled edges down to bare metal, dust and dirt of the planet low on the model and streaks running down
 // the walls. In the model's own frame (it does not slide when the model moves), faded with the distance.
-if (surfaceOn > 0.5 && vFinish.z < 0.5 && dot(vGlow, vec3(1.0)) < 0.02) {
+if (surfaceOn > 0.5 && vFinish.z < 0.2 && dot(vGlow, vec3(1.0)) < 0.02) {
 	vec3 n = normalize(vObjN), an = abs(n);
 	float near = 1.0 - smoothstep(1000.0, 2600.0, length(vViewPosition));
 	vec2 uv = an.x >= an.y && an.x >= an.z ? vObjPos.zy : an.y >= an.z ? vObjPos.xz : vObjPos.xy;
@@ -1935,8 +1935,9 @@ export function createBaker(THREE) {
 			if (painted)
 				for (let i = at; i < at + vertices; i++) {
 					col.set([m.color.r, m.color.g, m.color.b], i * 3);
-					// Finish: roughness, metalness, and 1 for windows (lit only at night).
-					fin.set([m.roughness, m.metalness, m.userData.nightOnly ? 1 : 0], i * 3);
+					// Finish: roughness, metalness, and 1 for windows (lit only at night), 0.25 for clean surfaces
+					// (no plates, wear or grime — the Watchers' smooth stone; weather still settles on them).
+					fin.set([m.roughness, m.metalness, m.userData.nightOnly ? 1 : m.userData.clean ? 0.25 : 0], i * 3);
 					glo.set([m.emissive.r * k, m.emissive.g * k, m.emissive.b * k], i * 3);
 				}
 			at += vertices;

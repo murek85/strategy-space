@@ -1,6 +1,6 @@
 # Plan rozwoju prototypu
 
-Aktualizacja: 2026-10-08. Aktualna wersja: 0.153.
+Aktualizacja: 2026-10-08. Aktualna wersja: 0.156.
 
 Ten plik jest punktem wejścia do dokumentacji: opisuje bieżący stan, otwarte kierunki i historię wersji. Instrukcja gry i sterowanie: [README](../README.md).
 
@@ -34,6 +34,7 @@ Gra zawiera trzy frakcje (Wolne Kolonie, Dominium, Rój Kryształowy), osiem map
 | [Wersja 0.12](WERSJA_0_12.md), [0.13](WERSJA_0_13.md), [0.14](WERSJA_0_14.md) | Notatki wydań | Wdrożone |
 | [Etap G](ETAP_G.md) | Plan (2026-10-08) | Ukończony: G1 (AI nowych mechanik) 0.150, G3 (aplikacja Electron) 0.151, G2 (desant z orbity) 0.152, G4 (lobby, 2 na 2, powrót do bitwy) 0.153 |
 | [Desant z orbity](DESANT_Z_ORBITY.md) | Opis wdrożenia | Tryb „Inwazja” (0.152) |
+| [Akt IV „Inwazja”](AKT_IV.md) | Plan (2026-10-08) | Pięć rozdziałów X–XIV: Admiralicja Dominium (adm. Vok) i Wartownicy Otchłani. H3 (frakcja Wartowników) ukończony w 0.154, H1–H2 (rozdziały X–XI) w 0.156; H4–H7 — do realizacji |
 | [Aplikacja na Windows](APLIKACJA.md) | Opis wdrożenia | Electron, instalator, zapisy do pliku (0.151) |
 | [Pomysły](POMYSLY.md) | Lista możliwości | Aktualne statusy pomysłów |
 | [Gospodarka i rozwój](GOSPODARKA_I_ROZWOJ.md) | Koncepcja z 0.3–0.8 | Historyczna; niemal całość wdrożona |
@@ -288,6 +289,10 @@ Przy każdym kolejnym etapie należy uruchomić pełny zestaw, nie tylko testy u
 | 0.152 | Etap G2: desant z orbity — tryb „Inwazja” (orbita, potem planeta; kapsuły, uderzenie i skan z orbity) — [opis](DESANT_Z_ORBITY.md) |
 | 0.152.1 | Szuflada celów bez poziomego przewijania, ukryta pod raportem końca — [opis](KAMPANIA_OPRAWA.md) |
 | 0.153 | Etap G4: serwer lobby, lista gier, 2 na 2 przez sieć z komputerem na wolnym miejscu, powrót do bitwy po zerwaniu połączenia — [opis](MULTIPLAYER.md) |
+| 0.156 | Akt IV, kroki H1–H2: rozdziały X–XIV na liście kampanii, X (Blokada Eos) i XI (Kapsuły nad Eos) pełne, wynik orbity X → kapsuły XI — [opis](AKT_IV.md) |
+| 0.155.1 | Czytelność map w kosmosie: spokojniejsze tło, ciemna warstwa pod polem bitwy, świecące paski stron statków — [opis](BITWA_NA_ORBICIE.md) |
+| 0.155 | Inwazja i tryby scenariuszy w grze sieciowej (przez kody i przez serwer), Obrona i Przetrwanie w kooperacji — [opis](MULTIPLAYER.md) |
+| 0.154 | Akt IV, krok H3: Wartownicy Otchłani — czwarta frakcja (reguły, umiejętności, teleporty, scalanie, mobilny Rdzeń, grafika 2D i 3D, efekty, AI, baza wiedzy, balans) — [opis](AKT_IV.md) |
 
 Wersja 0.7 nie ma osobnych notatek w dokumentacji.
 

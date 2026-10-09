@@ -94,12 +94,17 @@
 				this.nextWave = this.time + SURVIVAL.first;
 				Object.assign(this.modeState, { next: this.nextWave, spawned: 0, lastWave: 0 });
 			},
+			// What the waves go for: the player's command centre, else any of its buildings (network co-op: the
+			// nearest defenders' centre, network-modes.js).
+			survivalTarget() {
+				return this.hq(0) || this.entities.find((e) => e.team === 0 && e.hp > 0 && !TYPES[e.type].speed) || null;
+			},
 			survivalWave() {
 				const s = this.modeState,
 					n = ++this.wave,
 					scale = SURVIVAL.difficulty[this.scenario.difficulty] || 1,
 					count = Math.min(SURVIVAL.most, Math.round((SURVIVAL.base + SURVIVAL.perWave * (n - 1)) * scale)),
-					target = this.hq(0) || this.entities.find((e) => e.team === 0 && !TYPES[e.type].speed);
+					target = this.survivalTarget();
 				s.lastWave = n;
 				s.next = this.time + Math.max(SURVIVAL.minInterval, SURVIVAL.interval - n);
 				this.nextWave = s.next;
@@ -130,14 +135,16 @@
 					entries.push(sides[at.side]);
 					for (let i = gi; i < count; i += groups) {
 						const p = { x: clamp(at.x + ((i % 5) - 2) * 26, 40, this.W - 40), y: clamp(at.y + (Math.floor(i / 5) % 4) * 26 * (at.y > this.H / 2 ? -1 : 1), 40, this.H - 40) };
-						const e = this.spawn(types(i), 1, p.x, p.y);
+						const e = this.spawn(types(i), 1, p.x, p.y),
+							goal = this.survivalTarget(e) || target;
 						e.modeTagged = true;
-						e.order = { kind: "attackMove", x: target.x, y: target.y };
-						e.path = this.pathTo(e, target);
+						e.order = { kind: "attackMove", x: goal.x, y: goal.y };
+						e.path = this.pathTo(e, goal);
 					}
 				}
 				s.spawned += count;
-				this.notify(`Fala ${n}: ${count} jednostek nadciąga ${[...new Set(entries)].join(" i ")}.`, "alarm");
+				const text = `Fala ${n}: ${count} jednostek nadciąga ${[...new Set(entries)].join(" i ")}.`;
+				this.announce(() => [text, "alarm"]);
 			},
 			modeTick(dt) {
 				const s = this.modeState;
@@ -145,13 +152,14 @@
 					if (this.time >= s.next) this.survivalWave();
 					// Idle attackers (after destroying a target) look for the next building.
 					if (Math.floor(this.time) !== Math.floor(this.time - dt)) {
-						const target = this.hq(0) || this.entities.find((e) => e.team === 0 && e.hp > 0 && !TYPES[e.type].speed);
-						if (target)
-							for (const e of this.entities)
-								if (e.team === 1 && e.hp > 0 && TYPES[e.type].speed && !e.order && !e.target) {
+						for (const e of this.entities)
+							if (e.team === 1 && e.hp > 0 && TYPES[e.type].speed && !e.order && !e.target) {
+								const target = this.survivalTarget(e);
+								if (target) {
 									e.order = { kind: "attackMove", x: target.x, y: target.y };
 									e.path = this.pathTo(e, target);
 								}
+							}
 					}
 					s.lastWave = this.wave;
 				}
@@ -164,10 +172,12 @@
 				if (!hill || hill.owner < 0 || hill.owner === 2) return;
 				s.scores[hill.owner] = (s.scores[hill.owner] || 0) + dt;
 				if (s.scores[hill.owner] >= s.target) {
-					s.winner = hill.owner;
-					s.outcome = hill.owner === 0 ? "hill-won" : "hill-lost";
-					this.result = hill.owner === 0 ? "victory" : "defeat";
-					this.notify(hill.owner === 0 ? "Szczyt utrzymany — zwycięstwo." : this.sideName(hill.owner) + " utrzymuje Szczyt do końca.", this.result);
+					const winner = hill.owner;
+					s.winner = winner;
+					// Kept for the first human's side; every player hears about its own.
+					s.outcome = this.allied(this.humans[0] ?? 0, winner) ? "hill-won" : "hill-lost";
+					this.result = s.outcome === "hill-won" ? "victory" : "defeat";
+					this.announce((h, r) => (r === "victory" ? ["Szczyt utrzymany — zwycięstwo.", "victory"] : [this.sideName(winner) + " utrzymuje Szczyt do końca.", "defeat"]));
 				}
 			},
 			// Classic waves in the hill mode go for the hill.
@@ -189,16 +199,19 @@
 				const s = this.modeState;
 				if (s?.mode === "hill") {
 					const hill = this.hillNode(),
-						rivals = [...new Set(this.enemyBases().map((b) => this.sideLeader(b.team)))];
-					return `Szczyt: ${hill ? (hill.owner === 0 ? "Twój" : hill.owner > 0 && hill.owner !== 2 ? this.sideName(hill.owner) : "wolny") : "—"} · Ty ${clock(s.scores[0] || 0)} / ${clock(s.target)}${rivals.map((t) => " · " + this.sideName(t) + " " + clock(s.scores[t] || 0)).join("")}`;
+						own = this.sideLeader(this.me),
+						rivals = this.rivalSides();
+					return `Szczyt: ${hill ? (hill.owner === own ? "Twój" : hill.owner >= 0 && hill.owner !== 2 ? this.sideName(hill.owner) : "wolny") : "—"} · Ty ${clock(s.scores[own] || 0)} / ${clock(s.target)}${rivals.map((t) => " · " + this.sideName(t) + " " + clock(s.scores[t] || 0)).join("")}`;
 				}
 				if (s?.mode === "survival") return `Fala ${this.wave} · przetrwano ${clock(this.time)} · następna fala za ${Math.max(0, Math.ceil(s.next - this.time))} s`;
 				return old.modeStatus.call(this);
 			},
 			modeResult() {
 				const s = this.modeState;
-				if (s?.outcome === "hill-won") return `Szczyt w Twoich rękach przez ${clock(s.target)}. Sektor należy do Kolonii.`;
-				if (s?.outcome === "hill-lost") return `${this.sideName(s.winner)}: Szczyt utrzymany przez ${clock(s.target)}. Odbijaj go wcześniej i broń dłużej.`;
+				if (s?.outcome === "hill-won" || s?.outcome === "hill-lost")
+					return this.resultFor(this.me) === "victory"
+						? `Szczyt w Twoich rękach przez ${clock(s.target)}. Sektor należy do Twojej strony.`
+						: `${this.sideName(s.winner)}: Szczyt utrzymany przez ${clock(s.target)}. Odbijaj go wcześniej i broń dłużej.`;
 				if (s?.mode === "survival" && this.result === "defeat") return `Przetrwano ${clock(this.time)} i ${Math.max(0, this.wave - 1)} pełnych fal; zniszczonych przeciwników: ${this.kills}.`;
 				return old.modeResult.call(this);
 			},

@@ -219,7 +219,13 @@
 				players: 2,
 				difficulty: "normal",
 				enemy: "waves",
-				mode: "conquest",
+				// The scenario mode (network-modes.js checks which ones the battle allows) and its settings.
+				mode: settings.mode || "conquest",
+				invasion: settings.invasion,
+				pointsPerRelay: settings.pointsPerRelay,
+				hillTime: settings.hillTime,
+				defenseTime: settings.defenseTime,
+				coop: settings.coop,
 				size: settings.size,
 				resources: settings.resources,
 				weather: settings.weather,
@@ -234,6 +240,7 @@
 			g.nextWave = Infinity;
 			g.enemyAi = null;
 			g.network = true;
+			g.netSettings = settings;
 			g.netPause = null;
 			g.pausesLeft = { 0: PAUSE.count, 1: PAUSE.count };
 			for (const e of g.entities) {
@@ -275,7 +282,13 @@
 				teams: four ? "duo" : "ffa",
 				difficulty: ["easy", "normal", "hard"].includes(settings.difficulty) ? settings.difficulty : "normal",
 				enemy: "commander",
-				mode: "conquest",
+				// The scenario mode (network-modes.js checks which ones the battle allows) and its settings.
+				mode: settings.mode || "conquest",
+				invasion: settings.invasion,
+				pointsPerRelay: settings.pointsPerRelay,
+				hillTime: settings.hillTime,
+				defenseTime: settings.defenseTime,
+				coop: settings.coop,
 				size: settings.size,
 				resources: settings.resources,
 				weather: settings.weather,
@@ -293,6 +306,7 @@
 			if (g.enemyAi && !Object.keys(g.enemyAi.teams).length) g.enemyAi = null;
 			g.nextWave = g.enemyAi ? g.aiNextAttack() : Infinity;
 			g.network = true;
+			g.netSettings = settings;
 			g.teamBattle = true;
 			g.netPause = null;
 			g.pausesLeft = Object.fromEntries(humans.map((t) => [t, PAUSE.count]));

@@ -22,7 +22,9 @@ test("act III: three chapters after act II, on the terrain of scenario maps", ()
 		ref.configureSkirmish({});
 		assert.deepEqual(g.waters.map((w) => [w.x, w.y]), ref.waters.map((w) => [w.x, w.y]), id + " terrain");
 	}
-	assert.deepEqual(CHAPTERS.slice(-3), ["colony7", "colony8", "colony9"]);
+	// Act III follows act II (act IV comes after it).
+	const at = CHAPTERS.indexOf("colony7");
+	assert.deepEqual(CHAPTERS.slice(at - 1, at + 3), ["colony6", "colony7", "colony8", "colony9"]);
 });
 
 test("chapter setups: the Swarm as the enemy, Varn's Dominium as the ally, the orbital uplink in the finale", () => {

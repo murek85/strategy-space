@@ -45,6 +45,11 @@
 				{ id: "doctrineTide", name: "Doktryna: Nawała", effect: "Produkcja o 30% szybsza, jednostki +10% szybkości.", speed: 1.1, production: 1.3 },
 				{ id: "doctrineCarapace", name: "Doktryna: Pancerz chitynowy", effect: "Jednostki i budynki otrzymują o 17% mniej obrażeń (jak +20% wytrzymałości).", armor: 0.83 },
 			],
+			// The Watchers of the Abyss (watchers-rules.js, 0.154).
+			watchers: [
+				{ id: "doctrineGatelight", name: "Doktryna: Światło Bramy", effect: "Pojazdy, statki i budynki obronne zadają o 20% więcej obrażeń.", heavy: 1.2 },
+				{ id: "doctrineAbyssWard", name: "Doktryna: Tarcze Otchłani", effect: "Wszystkie jednostki i budynki otrzymują o 15% mniej obrażeń.", armor: 0.85 },
+			],
 		});
 		const ALL = Object.entries(DOCTRINES).flatMap(([faction, list]) => list.map((d) => ({ ...d, faction })));
 		const BY_ID = Object.fromEntries(ALL.map((d) => [d.id, d]));

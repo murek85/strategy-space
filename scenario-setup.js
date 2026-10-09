@@ -452,7 +452,8 @@
 					X = EXPEDITION;
 				let carrier = this.artifactCarrier();
 				if (a.carrier != null && (!carrier || carrier.hp <= 0)) {
-					this.notify(a.team === 0 ? "Utraciliśmy artefakt — leży na ziemi. Odzyskaj go!" : "Niosący artefakt padł — artefakt leży na ziemi.", a.team === 0 ? "alarm" : "ready");
+					const lost = a.team;
+					this.announce((h) => (this.allied(h, lost) ? ["Utraciliśmy artefakt — leży na ziemi. Odzyskaj go!", "alarm"] : ["Niosący artefakt padł — artefakt leży na ziemi.", "ready"]));
 					a.carrier = null;
 					a.team = -1;
 					a.claimant = -1;
@@ -467,12 +468,13 @@
 					carrier.stealth = false;
 					const home = this.nearestHq(carrier.team, carrier);
 					if (home && dist(home, carrier) < TYPES.hq.radius + X.deliver) {
-						// A delivery by the player's ally is a shared victory.
-						const ours = this.allied(0, carrier.team);
+						// A delivery by the player's ally is a shared victory (kept for the first human's side).
+						const ours = this.allied(this.humans[0] ?? 0, carrier.team),
+							by = carrier.team;
 						s.outcome = ours ? "artifact-won" : "artifact-lost";
-						s.winner = carrier.team;
+						s.winner = by;
 						this.result = ours ? "victory" : "defeat";
-						this.notify(ours ? (carrier.team === 0 ? "Artefakt w centrum dowodzenia — ekspedycja zakończona sukcesem." : "Sojusznik dowiózł artefakt do swojej bazy — wspólne zwycięstwo.") : this.sideName(carrier.team) + " dostarcza artefakt do swojej bazy.", this.result);
+						this.announce((h, r) => (r === "victory" ? [by === h ? "Artefakt w centrum dowodzenia — ekspedycja zakończona sukcesem." : "Sojusznik dowiózł artefakt do swojej bazy — wspólne zwycięstwo.", "victory"] : [this.sideName(by) + " dostarcza artefakt do swojej bazy.", "defeat"]));
 						return;
 					}
 				} else {
@@ -490,8 +492,8 @@
 							this.fx("artifact", a.x, a.y);
 							a.team = e.team;
 							a.progress = 0;
-							this.notify(e.team === 0 ? `${TYPES[e.type].name} niesie artefakt. Doprowadź go do centrum dowodzenia.` : this.sideName(e.team) + " przejmuje artefakt!", e.team === 0 ? "ready" : "alarm");
-							if (e.team !== 0) this.steerExpedition(true);
+							this.announce((h) => (e.team === h ? [`${TYPES[e.type].name} niesie artefakt. Doprowadź go do centrum dowodzenia.`, "ready"] : this.allied(h, e.team) ? [this.sideName(e.team) + " niesie artefakt — osłaniaj go!", "ready"] : [this.sideName(e.team) + " przejmuje artefakt!", "alarm"]));
+							if (!this.isHuman(e.team)) this.steerExpedition(true);
 						}
 					} else if (!teams.length) a.progress = Math.max(0, a.progress - dt);
 				}
@@ -502,7 +504,8 @@
 				const a = this.modeState.artifact,
 					carrier = this.artifactCarrier();
 				a.aiClock = 2;
-				const rivals = [...new Set(this.enemyBases().map((b) => b.team))];
+				// Only the computer's sides are steered (network play: a human rival leads its own expedition).
+				const rivals = [...new Set(this.enemyBases().map((b) => b.team))].filter((t) => !this.isHuman(t));
 				if (!a.aiSent && this.time >= EXPEDITION.aiStart) {
 					a.aiSent = true;
 					for (const t of rivals) {
@@ -515,7 +518,7 @@
 					}
 				}
 				for (const e of this.entities) {
-					if (!e.expedition || e.hp <= 0 || e.team === 0 || e.team === 2) continue;
+					if (!e.expedition || e.hp <= 0 || this.isHuman(e.team) || e.team === 0 || e.team === 2) continue;
 					if (carrier === e) {
 						const h = this.nearestHq(e.team, e);
 						if (h && (e.order?.kind !== "move" || dist(e.order, h) > 5 || now)) {
@@ -535,7 +538,7 @@
 			reinforceWave() {
 				const fresh =
 					this.modeState?.mode === "expedition" && this.time >= EXPEDITION.aiStart
-						? this.entities.filter((e) => e.team !== 0 && e.team !== 2 && TYPES[e.type].speed && e.order?.kind === "attackMove" && !e.modeTagged)
+						? this.entities.filter((e) => e.team !== 0 && e.team !== 2 && !this.isHuman(e.team) && TYPES[e.type].speed && e.order?.kind === "attackMove" && !e.modeTagged)
 						: [];
 				old.reinforceWave.call(this);
 				fresh.forEach((e, i) => {
@@ -559,7 +562,7 @@
 				if (s?.mode !== "expedition" || !s.artifact) return old.modeStatus.call(this);
 				const a = s.artifact,
 					carrier = this.artifactCarrier(),
-					home = this.nearestHq(0, a);
+					home = this.nearestHq(this.me, a);
 				if (carrier) {
 					const h = this.nearestHq(carrier.team, carrier);
 					return `Artefakt niesie: ${this.sideName(carrier.team)} (${TYPES[carrier.type].name}) · do centrum ${h ? Math.round(dist(h, carrier)) : "—"}`;
@@ -569,8 +572,10 @@
 			},
 			modeResult() {
 				const s = this.modeState;
-				if (s?.outcome === "artifact-won") return "Artefakt obcych dotarł do centrum dowodzenia. Badacze Kolonii przejmują znalezisko.";
-				if (s?.outcome === "artifact-lost") return this.sideName(s.winner) + ": artefakt wywieziony do bazy przeciwnika. Przechwytuj niosącego, zanim dotrze do celu.";
+				if (s?.outcome === "artifact-won" || s?.outcome === "artifact-lost")
+					return this.resultFor(this.me) === "victory"
+						? "Artefakt obcych dotarł do centrum dowodzenia. Badacze Twojej strony przejmują znalezisko."
+						: this.sideName(s.winner) + ": artefakt wywieziony do bazy przeciwnika. Przechwytuj niosącego, zanim dotrze do celu.";
 				return old.modeResult.call(this);
 			},
 		});

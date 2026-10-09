@@ -313,47 +313,52 @@
 			modeObjective() {
 				return MODES[this.mode()].objective;
 			},
+			// A message to every human side, worded for it: fn(team, the outcome for that team) → [text, sound].
+			// (One player: the player; network play: each player gets the message about its own side.)
+			announce(fn) {
+				for (const h of this.humans)
+					this.as(h, () => {
+						const [text, sound] = fn(h, this.resultFor(h));
+						this.notify(text, sound);
+					});
+			},
+			// The side leaders the viewing (acting) side fights — those with a command centre.
+			rivalSides() {
+				return [
+					...new Set(
+						this.entities
+							.filter((e) => e.type === "hq" && e.hp > 0 && e.team !== 2 && !this.allied(this.me, e.team))
+							.map((b) => this.sideLeader(b.team)),
+					),
+				];
+			},
+			// Whether the first human's side still has a command centre (defense: the base held).
+			modeHomeAlive() {
+				return !!this.hq(this.humans[0] ?? 0);
+			},
 			modeStatus() {
 				const s = this.modeState;
 				if (!s) return "";
+				const own = this.sideLeader(this.me);
 				if (s.mode === "relays") {
-					const rivals = [
-						...new Set(
-							this.enemyBases().map((b) =>
-								this.sideLeader ? this.sideLeader(b.team) : b.team,
-							),
-						),
-					];
 					return (
 						"Punkty kontroli: Ty " +
-						Math.floor(s.scores[0] || 0) +
+						Math.floor(s.scores[own] || 0) +
 						" / " +
 						s.target +
 						" · " +
-						rivals
-							.map(
-								(t) =>
-									this.sideName(t) +
-									" " +
-									Math.floor(s.scores[t] || 0),
-							)
+						this.rivalSides()
+							.map((t) => this.sideName(t) + " " + Math.floor(s.scores[t] || 0))
 							.join(" · ") +
 						" · przekaźniki " +
-						this.nodes.filter((n) => n.owner === 0).length +
+						this.nodes.filter((n) => n.owner === own).length +
 						"/" +
 						this.nodes.length
 					);
 				}
 				if (s.mode === "defense") {
 					const left = Math.max(0, s.duration - this.time);
-					return (
-						"Przetrwaj jeszcze " +
-						Math.floor(left / 60) +
-						":" +
-						String(Math.floor(left % 60)).padStart(2, "0") +
-						" · desant " +
-						this.wave
-					);
+					return "Przetrwaj jeszcze " + Math.floor(left / 60) + ":" + String(Math.floor(left % 60)).padStart(2, "0") + " · desant " + this.wave;
 				}
 				return "";
 			},
@@ -361,44 +366,21 @@
 				const s = this.modeState;
 				if (!s || this.result) return;
 				if (s.mode === "relays") {
-					for (const n of this.nodes)
-						if (n.owner >= 0 && n.owner !== 2)
-							s.scores[n.owner] = (s.scores[n.owner] || 0) + dt;
-					if ((s.scores[0] || 0) >= s.target) {
-						s.outcome = "relays-won";
-						this.result = "victory";
-						this.notify(
-							"Sieć przekaźników pod kontrolą — zwycięstwo punktowe.",
-							"victory",
-						);
-						return;
-					}
-					const winner = Object.entries(s.scores).find(
-						([team, v]) => team !== "0" && v >= s.target,
-					);
-					if (winner) {
-						s.outcome = "relays-lost";
-						s.winner = Number(winner[0]);
-						this.result = "defeat";
-						this.notify(
-							this.sideName(s.winner) +
-								" zdobywa pulę punktów kontroli.",
-							"defeat",
-						);
+					for (const n of this.nodes) if (n.owner >= 0 && n.owner !== 2) s.scores[n.owner] = (s.scores[n.owner] || 0) + dt;
+					// The result is kept for the first human's side (team 0); every player is told about its own.
+					const winner = (s.scores[0] || 0) >= s.target ? 0 : Number(Object.entries(s.scores).find(([team, v]) => team !== "0" && v >= s.target)?.[0] ?? -1);
+					if (winner >= 0) {
+						s.outcome = winner === 0 ? "relays-won" : "relays-lost";
+						s.winner = winner;
+						this.result = winner === 0 ? "victory" : "defeat";
+						this.announce((h, r) => (r === "victory" ? ["Sieć przekaźników pod kontrolą — zwycięstwo punktowe.", "victory"] : [this.sideName(winner) + " zdobywa pulę punktów kontroli.", "defeat"]));
 						return;
 					}
 				}
-				if (
-					s.mode === "defense" &&
-					this.time >= s.duration &&
-					this.hq(0)
-				) {
+				if (s.mode === "defense" && this.time >= s.duration && this.modeHomeAlive()) {
 					s.outcome = "defense-won";
 					this.result = "victory";
-					this.notify(
-						"Baza przetrwała oblężenie. Obrona zakończona.",
-						"victory",
-					);
+					this.announce((h, r) => (r === "victory" ? ["Baza przetrwała oblężenie. Obrona zakończona.", "victory"] : ["Obrońcy przetrwali oblężenie.", "defeat"]));
 					return;
 				}
 				if (this.wave !== s.lastWave) {
@@ -460,25 +442,12 @@
 			modeResult() {
 				const s = this.modeState;
 				if (!s) return null;
-				if (s.outcome === "relays-won")
-					return (
-						"Twoje oddziały utrzymały sieć przekaźników i zebrały " +
-						s.target +
-						" punktów kontroli."
-					);
-				if (s.outcome === "relays-lost")
-					return (
-						this.sideName(s.winner) +
-						" — pierwsza pełna pula: " +
-						s.target +
-						" punktów kontroli. Przejmuj i broń więcej przekaźników."
-					);
-				if (s.outcome === "defense-won")
-					return (
-						"Centrum dowodzenia przetrwało " +
-						Math.round(s.duration / 60) +
-						" minut oblężenia."
-					);
+				const won = this.resultFor(this.me) === "victory";
+				if (s.outcome === "relays-won" || s.outcome === "relays-lost")
+					return won
+						? "Twoje oddziały utrzymały sieć przekaźników i zebrały " + s.target + " punktów kontroli."
+						: this.sideName(s.winner ?? 0) + " — pierwsza pełna pula: " + s.target + " punktów kontroli. Przejmuj i broń więcej przekaźników.";
+				if (s.outcome === "defense-won") return "Centrum dowodzenia przetrwało " + Math.round(s.duration / 60) + " minut oblężenia.";
 				return null;
 			},
 			tick(dt) {
