@@ -385,7 +385,10 @@ export function createPost3D(THREE, renderer) {
 		},
 		// The environment from the sky's colours (linear) and the sun; renewed only when they change visibly.
 		environment(sky) {
-			const key = [sky.zenith, sky.horizon, sky.ground, sky.sunColor].map((c) => c.getHexString()).join("") + sky.sunDir.toArray().map((v) => v.toFixed(1)).join();
+			// Colours in steps of 1/24 (0.171.15: in steps of 1/255 the key changed at almost every check through the
+			// day and the weather, and the environment — six faces and their blur, a new target each time — was
+			// rebuilt twice a second).
+			const key = [sky.zenith, sky.horizon, sky.ground, sky.sunColor].map((c) => [c.r, c.g, c.b].map((v) => Math.round(v * 24)).join(",")).join("|") + "|" + sky.sunDir.toArray().map((v) => v.toFixed(1)).join();
 			if (key === envKey && envTarget) return envTarget.texture;
 			envKey = key;
 			envUniforms.zenith.value.copy(sky.zenith);

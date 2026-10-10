@@ -2,6 +2,20 @@
 
 Aktualizacja: 2026-09-27. Realizuje pomysły [AI-01–AI-05](POMYSLY.md): gospodarkę, płatną produkcję, obronę, przejmowanie przekaźników, odbudowę i poziomy trudności. Reguły są w `enemy-ai.js` (ładowany jako ostatni moduł reguł); wszystkie liczby w `RTS.AI_LEVELS` i `RTS.AI`.
 
+## Poprawki rozgrywki z przeglądu gry (wersja 0.171.11, 2026-10-10)
+
+Błędy znalezione symulacjami bez grafiki (każdy ma test w `tests/gameplay-fixes.test.js`):
+
+- **Atak z marszem po pościgu** (`engine.js`, ruch jednostek): pościg za celem poza zasięgiem zastępował trasę do punktu rozkazu; gdy cel padł, jednostka szła tam, gdzie padł, i rozkaz znikał (żołnierz zatrzymywał się 1259 px przed celem). Teraz pościg jest zaznaczany (`chased`), a po nim jednostka wyznacza trasę z powrotem do punktu rozkazu. Grupy komputera nie utykają już na takich punktach. Skutek uboczny: w trybie przekaźników oddziały komputera docierają do przekaźników i przeciw biernemu graczowi wygrywają w ok. 200 s (test trybów sprawdza teraz po 120 s).
+- **Opancerzenie** (`Game.armored`): wszystkie budynki i wszystkie pojazdy naziemne — co się porusza po ziemi i nie jest piechotą, fauną, robotnikiem ani statkiem. Rakiety ×2 (dotąd tylko 15 typów z pierwszej wersji gry; reszta, np. wartownik, niszczyciel, kolos, strażnik, konstrukt, pryzmat, transporter, bateria, warsztat, monolit, kotwica, baza piratów, liczyła się jak lekka: ×0,65), żołnierze ×0,45, działo przeciwpancerne ×1,5 (`support-rules.js`). Pojedynki o równym koszcie: 16 rakiet pokonuje 6 wartowników i 3 kolosy (dotąd przegrywały bez strat przeciwnika).
+- **Komputer bez robotników** (`aiThink`): przy mniej niż 2 robotnikach najpierw zamawia robotnika i nie zaczyna nowych budów (dotąd płacił za place, których nikt nie stawiał, i nie odbudowywał gospodarki).
+- **Ruda poza stroną** (`aiPickOre`): gdy żadne złoże nie spełnia warunków (po stronie komputera, do 1100 od centrum, nie przy cudzej bazie), robotnicy biorą najbliższe złoże gdziekolwiek, byle nie w promieniu 350 od cudzego centrum (dotąd stali przy centrum do końca bitwy).
+- **Przekaźniki strony** (`engine.js`, `doctrine-rules.js`): przekaźniki należą do lidera strony; dochód, widok, budowanie przy przekaźniku i doktryna „utrzymanie terenu” liczą teraz przekaźniki całej strony (drugi gracz w 2 na 2 miał 8 dochodu zamiast 18).
+- **Zabójstwa** (`applyDamage`): liczą się graczowi albo graczowi, którego sojusznik je zadał; walki komputer–komputer i wybuchy bez sprawcy nie trafiają już na konto pierwszego gracza.
+- **Widok komputera w zapisie** (`aiVision`): siatka i czasy ostatniego zobaczenia każdej komórki są zapisywane (`aiSight`), bo od nich zależy, dokąd idzie zwiad; po wczytaniu bitwa rozchodziła się z oryginałem po ok. 25 s (Popielny Szlak, Lumeria), teraz nie.
+
+Zostaje z przeglądu: koszt kroku symulacji rośnie z kwadratem liczby jednostek (szukanie celów co krok, rozpychanie), `blocked()` i szukanie ścieżki dają skoki do kilkuset ms; komputer gromadzi metal po osiągnięciu limitu armii.
+
 ## Twierdza, doktryny, patrole i eskorta (wersja 0.150, 2026-10-08 — etap G1)
 
 Plan: [Etap G](ETAP_G.md). Dotyczy dowódcy scenariuszy na poziomie średnim i trudnym; łatwy poziom i rozdziały kampanii (`campaignAi`) bez zmian — kampania była strojona bez tych mechanik.

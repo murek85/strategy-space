@@ -41,7 +41,7 @@ const FinaleFilm = (() => {
 	function fates() {
 		const parts = ["Lira prowadzi sieć latarni pogranicza, dr Tessa bada uśpione artefakty, a kpt. Vale wozi konwoje między światami."];
 		if (saved()) parts.push("Koss i technicy z Hefajstosa pracują dla Kolonii.");
-		else if (burnt()) parts.push("Koss nie zapomniał Hefajstosa — ale został.");
+		else if (burnt()) parts.push("Koss, który przeżył wybuch Hefajstosa, został z Koloniami — i nie zapomniał tych, którzy nie zdążyli uciec.");
 		if (varnTrusted()) parts.push("Varn zasiada w radzie rozejmu.");
 		else parts.push("Varn strzeże Nivalis z daleka.");
 		if (truce()) parts.push("Adm. Vok dowodzi flotą rozejmu.");

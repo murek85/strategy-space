@@ -79,6 +79,17 @@ Decyzja właściciela (2026-10-08): pełna frakcja — własne modele, jednostki
 | H6 | Rozdział XIV: finał przy Bramie; sceny łączności aktu, prolog i epilog | **0.159 — ukończony** |
 | H7 | Symulacje balansu rozdziałów, testy, dokumentacja | **0.160 — ukończony** |
 
+## Poprawki kampanii z przeglądu gry (wersja 0.171.12, 2026-10-10)
+
+- **Kapsuły X → XI:** `campaignCarry` zapisuje liczbę już ograniczoną do limitu XI (`carriedPods`: od `INVASION.minPods` do `TUNE.colony11.drop.cap` = 6) — epilog X i odprawa XI obiecywały 8, a XI dawało 6. Teksty bez odmiany liczebnika („kapsuły desantowe: 3”; było „3 kapsuł”).
+- **Decyzja „stocznia” (XII → XIII):** Vok traci ok. jedną trzecią kapsuł (`max(1, round(n × 0,3))`: 4 → 3, na trudnym 7 → 5; było 3 mniej, co zostawiało 1), a jej uderzenia z orbity ładują się o 35% dłużej przez cały rozdział (było jednorazowe 60 s, choć radio mówiło o wolniejszym ładowaniu).
+- **Technicy z Hefajstosa** — jedna wersja: ludzie Dominium zmuszeni do pracy w kompleksie. Po ewakuacji zostają z Koloniami i przebudowują Hefajstos (Varn jest wdzięczny, że żyją); po zniszczeniu wybuch przeżywają Koss i dwoje techników (epilog VI, finał), reszta ginie. Prolog aktu III nie mówi już, że „odlecieli” do Dominium.
+- **Propozycja Varna (VIII):** „bastiony i pierwszeństwo przy stacji orbitalnej (uderzenie ładuje się szybciej)” zamiast „pełnego dostępu do stacji”, który w IX jest i tak.
+- **Akt IV:** Vok w XI mówi o Wypalonej Dolinie (nie o „Horyzoncie”); Lira w XII — że Admiralicji zostanie flota i ostatnia kwatera na Nivalis; epilog XII — garnizon Varna staje obok Kolonii na Nivalis (ludzie i bateria, nie okręty „nad Glacjalis”); cel XIV wszędzie „Brama” (było też „Rdzeń Wartowników”); tytuł epilogu z Varnem u boku: „Z VARNEM U BOKU” (było „SAMI PRZECIW CIEMNOŚCI”).
+- **Odprawa XIV:** blok „Sojusznicy przy Bramie” — okręty Varna (z VIII albo XII), flota Vok albo metal po klęsce Admiralicji, i uwaga, że na trudnym poziomie sojusznicy mogą przesądzić o bitwie.
+- **Prolog aktu II:** nie wymienia Hefajstosa ani Vulkana IX przed rozdziałem V („ślad z archiwum”), nie mówi o prądzie na Khepri IV (akt I toczy się na Eos, Vesperze i Nadirze); w akcie III odłamek jest z artefaktu Hefajstosa (nie „z Khepri”).
+- **Drobne:** barwy Dominium dla fregaty Varna w X i bastionów z zaufania w IX; licznik Szczytu w VIII i chwila propozycji Varna liczą najlepszy czas strony (czas Varna też wygrywa rozdział); opis premii za ewakuację (pancerz, broń plazmowa albo 300 metalu) i skutku jeńców; „III · Świt nad Nadirem”, „Ty/Twoich”, nazwy decyzji na kartach rozdziałów z wielką literą nazw własnych („rozejm z Vok”); notatki w kodzie i w tym dokumencie zgodne z kodem (zamykanie szczelin 30 s, fale co 120 s, kapsuły Vok 4/4/7, decyzja o Hefajstosie w akcie II).
+
 ## Nowy film finału — co stało się na koniec (wersja 0.170, 2026-10-09)
 
 Film finału (`campaign-finale.js`) opowiada teraz, co stało się po zamknięciu Bramy: 13 ujęć o własnych długościach (`LENGTHS`), razem 122 s (ok. 2 minut). Napisy i część obrazów zależą od decyzji kampanii (`prepare(choices)`).
@@ -90,7 +101,7 @@ Film finału (`campaign-finale.js`) opowiada teraz, co stało się po zamknięci
 | 3 | Powrót z Erebusa | 9 s | flota Kolonii wraca | XIII: okręty Vok obok (rozejm) albo dymiące wraki Admiralicji (klęska); VIII/XII: fregata Varna |
 | 4 | Eos | 10 s | flota nad Eos, doki pracują, promy schodzą na planetę | — |
 | 5 | Latarnia | 9 s | Lira w Stacji Ciszy zapala latarnię — ciemną wieżę z prologu; światło biegnie po latarniach horyzontu | — |
-| 6 | Hefajstos | 9 s | ruiny w popiele i żarze albo odbudowany kompleks zasilający Kolonie | VI (akt III): popiół / wdzięczność Dominium |
+| 6 | Hefajstos | 9 s | ruiny w popiele i żarze albo odbudowany kompleks zasilający Kolonie | VI (akt II): popiół / wdzięczność Dominium |
 | 7 | Serce Roju | 10 s | uśpione Serce pod magmą, stacja badawcza dr Tessy | — |
 | 8 | Rada rozejmu | 9 s | holostół z godłami Kolonii, Dominium i Admiralicji, podpisy | VIII/XII: Varn przy stole albo puste miejsce; XIII: Vok podpisuje albo Admiralicji nie ma |
 | 9 | Sieć pogranicza | 9 s | osiem światów połączonych światłem | — |
@@ -143,7 +154,7 @@ Rozdział XI toczy się w Wypalonej Dolinie (Dolina Latarni z rozdziału I po de
 
 Po zwycięstwie w rozdziale XIV raport końcowy (app.js `showEnd`) ma przycisk „FINAŁ KAMPANII ▶”. Otwiera ekran menu `finale`, który odtwarza film `FinaleFilm` (`campaign-finale.js`, zestaw `CampaignFilm.kit`; od 0.170 — 13 ujęć, ok. 2 minut, opis wyżej; wersja 0.161 miała 40 s i osiem ujęć po 5 s):
 
-1. Latarnie Eos (akt I). 2. Hefajstos — płonący albo z ewakuowanymi myśliwcami (decyzja aktu III). 3. Wygaszone Serce Roju. 4. Rozbita Brama przy Erebusie (`Act4Film.parts.blackHole`). 5. Holomapa ośmiu światów. 6. Losy bohaterów (portrety Liry, Tessy, Vale’a, Kossa, Varna oraz Vok przy rozejmie). 7. Lista podjętych decyzji (nazwy z `RTS.CAMPAIGN_DECISIONS`). 8. Świt — „POGRANICZE GALAKTYKI / KONIEC KAMPANII”.
+1. Latarnie Eos (akt I). 2. Hefajstos — płonący albo z ewakuowanymi myśliwcami (decyzja aktu II). 3. Wygaszone Serce Roju. 4. Rozbita Brama przy Erebusie (`Act4Film.parts.blackHole`). 5. Holomapa ośmiu światów. 6. Losy bohaterów (portrety Liry, Tessy, Vale’a, Kossa, Varna oraz Vok przy rozejmie). 7. Lista podjętych decyzji (nazwy z `RTS.CAMPAIGN_DECISIONS`). 8. Świt — „POGRANICZE GALAKTYKI / KONIEC KAMPANII”.
 
 `FinaleFilm.prepare(choices)` buduje napisy według wyborów z `CampaignProgress`. Muzyka (od 0.168.3): własny motyw zwycięstwa w stylu „Interstellar”, zsynchronizowany z ujęciami — [AUDIO.md](AUDIO.md). Po ukończeniu XIV ekran kampanii ma przycisk „Finał kampanii” (na końcu listy rozdziałów) do ponownego obejrzenia; „Zakończ film” wraca do kampanii.
 
@@ -155,7 +166,7 @@ Po zwycięstwie w rozdziale XIV raport końcowy (app.js `showEnd`) ma przycisk �
 - Dowódca AI w X i XI miał na starcie kilka jednostek, a bot w 1,5–2 minuty zbierał 30–36 jednostek (w XI 7 kapsuł od pierwszej sekundy) i niszczył bazę → **garnizony i wieże według poziomu** (`RTS.ACT4_TUNE`), wytrzymalsze centrum w X i XI (×2,2), w XI pierwszy desant po 90 s, kapsuły co 55 s, najwyżej 6 z floty.
 - Dowódca AI brał garnizony i straż szczelin do swoich zadań — w XIV na trudnym fregaty z garnizonu Bramy szły na przekaźnik przy bazie gracza i niszczyły ją w 76 s → **rola „guard”**: garnizony i straż stoją na miejscu (bronią się w zasięgu), dowódca ich nie przydziela.
 - XII na średnim: Twierdza z doktryną Silniejsze osłony była nie do ruszenia (natarcia ginęły, zanim tknęły centrum) → **doktryna Twierdzy tylko na trudnym**, armia jej dowódcy ×0,7, wieże według poziomu.
-- XIII: uderzenia Vok z orbity w nacierające grupy i wąska przełęcz Białego Przesmyku → **kapsuły Vok według poziomu** (4/5/7), pierwsza kapsuła i pierwsze uderzenie po 150 s, kapsuły co 100 s, uderzenia co 180 s, a po desancie (flota wyczerpana) co 300 s; armia jej dowódcy ×0,7, ataki rzadsze (×1,2) i mniejsze (×0,85).
+- XIII: uderzenia Vok z orbity w nacierające grupy i wąska przełęcz Białego Przesmyku → **kapsuły Vok według poziomu** (4/4/7), pierwsza kapsuła i pierwsze uderzenie po 150 s, kapsuły co 100 s, uderzenia co 180 s, a po desancie (flota wyczerpana) co 300 s; armia jej dowódcy ×0,7, ataki rzadsze (×1,2) i mniejsze (×0,85).
 - XIV: szczeliny zamykane za szybko → straż według poziomu, zamykanie 30 s, fale co 120 s (od 100 s; fregaty od 8. minuty), Brama ×3, garnizon Bramy.
 - `invasion-rules.js`: odstępy desantu, uderzeń i desantu dowódcy AI mogą być ustawione przez rozdział (`dropCooldown`, `strikeCooldown`, `aiDropEvery`).
 
@@ -177,9 +188,9 @@ XIII z decyzją „walcz do końca”: łatwy — zwycięstwo 5:05, średni — 
 
 ## H6 — rozdział XIV, prolog i epilog (wersja 0.159, 2026-10-09)
 
-**XIV · Brama** (Wrota Pustki, Erebus; przeciwnik — dowódca AI Wartowników). Trzy szczeliny rozstawione między Bramą a bazą gracza (w 42% drogi, w rozstawie ±0,75 rad), każda ze strażnikami (korweta i fregata, na poziomie trudnym także niszczyciel); otwarta szczelina wypuszcza falę co 140 s (od 2. minuty: dwie korwety, od 10. minuty także fregata), idącą na najbliższą budowlę gracza. Brama to centrum Wartowników (nazwa „Brama”): dopóki choć jedna szczelina jest otwarta, nie można jej namierzyć ani zranić (także obrażeniami obszarowymi i uderzeniem orbitalnym). Znaczniki szczelin z postępem zamykania na planszy.
+**XIV · Brama** (Wrota Pustki, Erebus; przeciwnik — dowódca AI Wartowników). Trzy szczeliny rozstawione między Bramą a bazą gracza (w 42% drogi, w rozstawie ±0,75 rad), każda ze strażnikami (korweta i fregata, na poziomie trudnym także niszczyciel); otwarta szczelina wypuszcza falę co 120 s (od 0.160; pierwotnie 140 s) (od 2. minuty: dwie korwety, od 10. minuty także fregata), idącą na najbliższą budowlę gracza. Brama to centrum Wartowników (nazwa „Brama”): dopóki choć jedna szczelina jest otwarta, nie można jej namierzyć ani zranić (także obrażeniami obszarowymi i uderzeniem orbitalnym). Znaczniki szczelin z postępem zamykania na planszy.
 
-**Odstępstwo od planu.** Plan mówił o zamykaniu szczelin wieżami. W kosmosie budowa zależy od strefy przy stacjach, więc szczelinę zamyka utrzymanie przy niej własnych okrętów (do 170) przez 20 s bez wrogich jednostek w promieniu 260 — postęp cofa się, gdy szczelina jest sporna.
+**Odstępstwo od planu.** Plan mówił o zamykaniu szczelin wieżami. W kosmosie budowa zależy od strefy przy stacjach, więc szczelinę zamyka utrzymanie przy niej własnych okrętów (do 170) przez 30 s (od 0.160; pierwotnie 20 s) bez wrogich jednostek w promieniu 260 — postęp cofa się, gdy szczelina jest sporna.
 
 **Sojusznicy z decyzji.** Rozejm w XIII — 2 fregaty i krążownik Vok; zaufanie w VIII albo ocalony garnizon w XII — fregata i korweta Varna (z jego komunikatem); klęska Admiralicji — 600 metalu. Cel dodatkowy: zwycięstwo przed 25. minutą. Epilog rozdziału według decyzji.
 
@@ -209,7 +220,7 @@ XIII z decyzją „walcz do końca”: łatwy — zwycięstwo 5:05, średni — 
 
 **Wartownicy.** Szczeliny w 5., 12. i 19. minucie (jak w XI: drużyna 4, cele po obu stronach).
 
-**Decyzja** (`RTS.CAMPAIGN_DECISIONS.colony12`, okno i zapis jak dotychczasowe decyzje kampanii): po uruchomieniu uplinku Varn prosi o ratunek dla garnizonu. Ratunek — od razu 2 niszczyciele i bastion Varna, w XIII 2 fregaty i korweta (w wyglądzie Dominium). Stocznia — dowódca Admiralicji traci 500 metalu, w XIII bez krążowników i lotniskowca, stacja o 25% słabsza. Skutek w odprawie XIII, w epilogu XII i na karcie rozdziału (karty pokazują teraz nazwę każdej decyzji).
+**Decyzja** (`RTS.CAMPAIGN_DECISIONS.colony12`, okno i zapis jak dotychczasowe decyzje kampanii): po uruchomieniu uplinku Varn prosi o ratunek dla garnizonu. Ratunek — od razu 2 niszczyciele i bastion Varna, w XIII 2 niszczyciele, bastion i druga bateria przeciwlotnicza (w wyglądzie Dominium; po H5/H7 XIII toczy się na ziemi). Stocznia — dowódca Admiralicji traci 500 metalu, w XIII Vok ma ok. jedną trzecią kapsuł mniej (od 0.171.12; wcześniej 3 mniej), uderzenia z orbity ładują się o 35% dłużej, a kwatera jest o 25% słabsza. Skutek w odprawie XIII, w epilogu XII i na karcie rozdziału (karty pokazują teraz nazwę każdej decyzji).
 
 **Poprawki przy okazji.** Dowódca AI włączał się w kampanii tylko dla aktu III (`enemy-ai.js`, `teams-rules.js`: `act === 3`) — w X i XI (0.156) Admiralicja nie budowała, nie zbierała i nie atakowała według poziomu, a w XI nie stawiała baterii przeciwlotniczych; teraz akt III i dalsze. Zdarzenia „raz na sekundę” aktu IV liczone z zapamiętanej sekundy (`floor(time − dt)` potrafiło przez zaokrąglenie pominąć sekundę).
 

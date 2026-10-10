@@ -406,3 +406,26 @@ body.overlay-open .sidebar,
 body.overlay-open .orbit-panel {
 	visibility: hidden;
 }
+/* Narrow windows (0.171.13): the compact HUD's widths had no breakpoints and, more specific, overrode the
+   narrower ones of style.css — the command bar overflowed below 1180 px. */
+@media (max-width: 1180px) {
+	body .sidebar {
+		width: 230px;
+	}
+	body .selection-panel {
+		width: 240px;
+		flex: 0 0 240px;
+	}
+	body .command-bar {
+		gap: 10px;
+	}
+}
+@media (max-width: 850px) {
+	body .selection-panel {
+		width: 170px;
+		flex: 0 0 170px;
+	}
+	body .command-bar {
+		gap: 8px;
+	}
+}

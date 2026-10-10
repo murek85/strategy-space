@@ -112,6 +112,12 @@
 				mix(this.seed);
 				mix(this.nextId);
 				mix(this.time);
+				// Orders and targets too (0.171.16): a difference showed only once it moved a unit or cost hit points.
+				const word = (s) => {
+					let w = 0;
+					for (let i = 0; i < s.length; i++) w = (Math.imul(w, 31) + s.charCodeAt(i)) | 0;
+					return w / 64;
+				};
 				for (const e of this.entities) {
 					mix(e.id);
 					mix(e.team);
@@ -120,6 +126,9 @@
 					mix(e.hp);
 					mix(e.constructionLeft || 0);
 					mix(e.cargo || 0);
+					mix(e.order ? word(e.order.kind || "") : -1);
+					mix(e.order?.targetId ?? -1);
+					mix(e.target ?? -1);
 				}
 				for (const team of this.humans) {
 					const s = this.sides[team];
@@ -128,6 +137,7 @@
 					mix(s.crystals);
 					mix(s.queue.length);
 					mix(s.research ? s.research.left : -1);
+					for (const [k, on] of Object.entries(s.upgrades || {})) if (on) mix(word(k));
 				}
 				for (const n of this.nodes) {
 					mix(n.owner);

@@ -72,7 +72,7 @@
 		const LEGACY = (RTS.ACT3_LEGACY = {
 			evacuate: {
 				name: "Wdzięczność Dominium",
-				summary: "Uratowani technicy byli ludźmi Dominium. Varn spłaca dług: Twoja fabryka buduje niszczyciele czołgów Dominium, w rozdziale VIII jego baza ma posiłki (2 niszczyciele i bastion), a w IX dołącza do Ciebie eskorta 2 niszczycieli.",
+				summary: "Uratowani technicy byli ludźmi Dominium, zmuszonymi do pracy w kompleksie — zostali z Koloniami. Varn spłaca dług: Twoja fabryka buduje niszczyciele czołgów Dominium, w rozdziale VIII jego baza ma posiłki (2 niszczyciele i bastion), a w IX dołącza do Ciebie eskorta 2 niszczycieli.",
 				units: ["destroyer"],
 				radio: {
 					colony7: ["tessa", "Technicy uratowani z Hefajstosa przekazali nam plany niszczyciela czołgów Dominium. Fabryka może je budować."],
@@ -289,7 +289,7 @@
 					];
 				if (this.missionId === "colony8")
 					return [
-						{ text: `Utrzymaj Szczyt łącznie przez 3 min (${Math.floor(mode?.scores?.[0] || 0)} / ${mode?.target || 180} s) albo zniszcz oba gniazda Roju`, done: won },
+						{ text: `Utrzymaj Szczyt łącznie przez 3 min (${Math.floor(Math.max(0, ...Object.entries(mode?.scores || {}).filter(([t]) => this.allied(0, Number(t))).map(([, v]) => v)))} / ${mode?.target || 180} s) albo zniszcz oba gniazda Roju`, done: won },
 						{ text: "Cel dodatkowy: baza Varna przetrwa", secondary: true, done: won && !!this.hq(3), failed: !this.hq(3) },
 					];
 				return [

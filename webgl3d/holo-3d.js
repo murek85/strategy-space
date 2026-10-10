@@ -1,7 +1,7 @@
 /* Holograms of the interface on the 3D board (0.144.3):
    - Selection: a subtle holographic ring at the foot of every selected unit or building (a thin outer
-     line, dashes running round inside it, four brackets turning); over buildings also a short column of
-     light rising from it, with a scan line climbing up (units have none since 0.147.8).
+     line, dashes running round inside it, four brackets turning). The column of light that rose from it
+     (units lost it in 0.147.8, buildings in 0.171.1) is gone: its rim and scan line read as a white ring.
    - Orders of the selected units: dashes flowing along the ground from each unit to where it goes, a
      hologram diamond bobbing over the spot with a ring pulsing under it (mint for a move, amber for an
      attack move); an attack: red dashes to the target and a red reticle turning round it, pulsing.
@@ -30,8 +30,7 @@ export function createHolo3D(THREE, { world, heightAt }) {
 	const basic = (color, opacity = 1) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false });
 
 	// ---------- selection ----------
-	const ringGeometry = new THREE.RingGeometry(0.76, 1.02, 72, 1).rotateX(-Math.PI / 2),
-		columnGeometry = new THREE.CylinderGeometry(1, 1, 1, 48, 1, true).translate(0, 0.5, 0);
+	const ringGeometry = new THREE.RingGeometry(0.76, 1.02, 72, 1).rotateX(-Math.PI / 2);
 	const RING_FS = `void main() {
 			float r = length(vP.xz), a = atan(vP.z, vP.x) / 6.28318 + 0.5;
 			float outer = smoothstep(0.95, 0.975, r) * (1.0 - smoothstep(0.995, 1.02, r));
@@ -40,25 +39,16 @@ export function createHolo3D(THREE, { world, heightAt }) {
 			// Subtle (0.147.8): it marks the unit without outshining it.
 			gl_FragColor = vec4(color * (outer * 0.8 + dash * 0.35 + corner * 0.6) * alpha * 0.6, 1.0);
 			#include <colorspace_fragment>
-		}`,
-		COLUMN_FS = `void main() {
-			float v = vUv.y;
-			float base = pow(1.0 - v, 2.5) * 0.2;
-			float scan = exp(-pow((v - fract(time * 0.5)) / 0.04, 2.0)) * 0.35 * (1.0 - v);
-			float lines = 0.7 + 0.3 * step(0.5, fract(v * 16.0 - time * 1.4));
-			gl_FragColor = vec4(color * (base + scan) * lines * alpha, 1.0);
-			#include <colorspace_fragment>
 		}`;
 	const selections = [];
 	function selection(i) {
 		if (!selections[i]) {
 			const ring = new THREE.Mesh(ringGeometry, shader(RING_FS)),
-				column = new THREE.Mesh(columnGeometry, shader(COLUMN_FS, THREE.DoubleSide)),
 				root = new THREE.Group();
-			ring.renderOrder = column.renderOrder = 9;
-			root.add(ring, column);
+			ring.renderOrder = 9;
+			root.add(ring);
 			group.add(root);
-			selections[i] = { root, ring, column };
+			selections[i] = { root, ring };
 		}
 		return selections[i];
 	}
@@ -173,7 +163,7 @@ export function createHolo3D(THREE, { world, heightAt }) {
 				ri = 0;
 			const targets = new Map();
 			for (const id of selected) {
-				const e = game.entities.find((u) => u.id === id);
+				const e = game.get ? game.get(id) : game.entities.find((u) => u.id === id); // (0.171.15: by id, not a scan of all)
 				if (!e || e.hp <= 0 || hidden(e)) continue;
 				const s = types[e.type];
 				if (!s) continue;
@@ -185,11 +175,6 @@ export function createHolo3D(THREE, { world, heightAt }) {
 				sel.root.position.set(e.x, g + 2.5, e.y);
 				sel.ring.scale.setScalar(r);
 				sel.ring.material.uniforms.color.value.set(c);
-				sel.column.material.uniforms.color.value.set(c);
-				// The column of light only over buildings (0.147.8): over vehicles, infantry and ships its rim
-				// read as a white ring over the unit and hid it.
-				sel.column.visible = !s.speed;
-				if (!s.speed) sel.column.scale.set(r * 0.98, Math.min(70, r * 0.9), r * 0.98);
 				// Orders: where it goes (the end of its path, or the order's point), or its target.
 				const o = e.order;
 				if (!o || !s.speed) continue;
@@ -198,7 +183,8 @@ export function createHolo3D(THREE, { world, heightAt }) {
 					ty,
 					target = null;
 				if (o.kind === "attack" && o.targetId) {
-					target = game.entities.find((u) => u.id === o.targetId && u.hp > 0);
+					target = (game.get ? game.get(o.targetId) : game.entities.find((u) => u.id === o.targetId)) || null;
+					if (target && target.hp <= 0) target = null;
 					if (!target || hidden(target)) continue;
 					kind = "attack";
 					tx = target.x;

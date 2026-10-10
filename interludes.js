@@ -62,12 +62,12 @@ const Interludes = (() => {
 		],
 		colony11: [
 			["lira", "Orbita nasza. Kapsuły czekają w lukach — pora zejść na Eos."],
-			["vok", "Baterie przeciwlotnicze stoją na całym Horyzoncie. Każda kapsuła spłonie, zanim dotknie piasku."],
+			["vok", "Baterie przeciwlotnicze stoją w całej Wypalonej Dolinie. Każda kapsuła spłonie, zanim dotknie ziemi."],
 			["gate", "…OGRÓD MILCZY… KTO TRZYMA LATARNIE…"],
 			["lira", "Znowu ten sygnał. Artefakt pod piaskiem odpowiada — i to nie jest Rój."],
 		],
 		colony12: [
-			["lira", "Vok wycofała się do twierdzy na Popielnym Szlaku. Jeśli ją zdobędziemy, Admiralicja straci ostatnią bazę na powierzchni."],
+			["lira", "Vok wycofała się do twierdzy na Popielnym Szlaku. Jeśli ją zdobędziemy, Admiralicji zostanie tylko flota i ostatnia kwatera na Nivalis."],
 			["vok", "Moja twierdza wytrzymała już niejedno oblężenie. Wasze też przetrwa."],
 			["gate", "…KAŻDY, KTO TRZYMA LATARNIE, ODPOWIE…"],
 		],
@@ -79,7 +79,7 @@ const Interludes = (() => {
 		colony14: [
 			["gate", "…OGRÓD MILCZY… WY GO UCISZYLIŚCIE… BRAMA OTWARTA…"],
 			["lira", "Wszystkie szczeliny prowadzą tutaj — do Bramy przy horyzoncie Erebusa."],
-			["lira", "Rdzeń Wartowników stoi przy samej krawędzi. Zniszczmy go, zanim przejdzie ich więcej."],
+			["lira", "Brama stoi przy samej krawędzi. Zniszczmy ją, zanim przejdzie ich więcej."],
 		],
 	};
 	// The world under the scene: by the map's theme, else its biome — [surface, night, air].

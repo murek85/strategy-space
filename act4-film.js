@@ -27,6 +27,11 @@ const Act4Film = (() => {
 		"Wszystkie szczeliny prowadzą do Bramy przy czarnej dziurze Erebus. Tam rozstrzygnie się ta wojna.",
 		"Najpierw jednak Eos. Ocalała flota Kolonii zbiera się, by przełamać blokadę.",
 	];
+	// Voices (0.171.9): Vok refusing the truce, Lira as the fleet gathers.
+	const lines = {
+		1: ["vok", "Rozejm Varna nie obowiązuje Admiralicji. Orbita Eos zostaje zamknięta."],
+		7: ["lira", "Flota gotowa, dowódco. Przełammy blokadę Eos."],
+	};
 	const places = ["PYRRHOS · ORBITA", "KANAŁ ADMIRALICJI · SZYFR VOK", "EOS · ORBITA", "EOS · ARTEFAKT NA ORBICIE", "POGRANICZE · SZCZELINA", "NIVALIS · ORBITA", "EREBUS · HORYZONT ZDARZEŃ", "EOS · PUNKT ZBORNY FLOTY"];
 	const K = CampaignFilm.kit,
 		{ W, H, rnd, clamp01, ease, poly, glow, flare, stars, nebula, planet, capital, fighter, beam, trail, holo } = K;
@@ -303,6 +308,7 @@ const Act4Film = (() => {
 			return SPEC ? SPEC.captions : captions();
 		},
 		parts: { watcher, rift, blackHole },
+		lines,
 	};
 	return api;
 })();

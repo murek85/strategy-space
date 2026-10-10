@@ -17,10 +17,10 @@ const Act3Film = (() => {
 		burnt()
 			? "Hefajstos runął w ogniu. Blokada pogranicza upadła razem z nim, a ruiny kompleksu płonęły jeszcze przez wiele dni."
 			: saved()
-				? "Hefajstos zgasł. Technicy Dominium odlecieli wahadłowcami, a blokada pogranicza upadła razem z kompleksem."
+				? "Hefajstos zgasł. Wahadłowce zabrały techników z kompleksu, a blokada pogranicza upadła razem z nim."
 				: "Hefajstos zgasł, a blokada pogranicza upadła razem z nim. Na Vulkanie IX zapadła cisza.",
 		"Tej samej nocy artefakty obcych w całym pograniczu zaczęły bić jednym rytmem. Coś odpowiadało na ich wezwanie.",
-		"Dr Tessa zbadała odłamek z Khepri. Wzór w krysztale nie był maszyną. Był żywy — i rósł.",
+		"Dr Tessa zbadała odłamek artefaktu z Hefajstosa. Wzór w krysztale nie był maszyną. Był żywy — i rósł.",
 		"Na mapach sektora pojawiły się fioletowe plamy. Rój budził się świat po świecie, zaczynając od Lumerii V.",
 		burnt()
 			? "Komandor Varn nie wybaczył Hefajstosa. Ale Rój pożerał jego światy — a wróg mojego wroga to jeszcze nie przyjaciel."
@@ -31,6 +31,18 @@ const Act3Film = (() => {
 		"A pod rzekami magmy Pyrrhosa bije Serce Roju. Uciszysz je — albo pogranicze stanie się jego gniazdem.",
 		"Najpierw Lumeria V, gdzie sygnał jest najsilniejszy. Zdobądź artefakt, zanim zabierze go Rój.",
 	];
+	// Voices (0.171.9): Tessa over the living crystal, Varn's call as the act II decision made it.
+	const lines = () => ({
+		2: ["tessa", "Ten wzór w krysztale nie jest zapisem. On rośnie. To coś żyje."],
+		4: [
+			"varn",
+			burnt()
+				? "Zniszczyliście Hefajstosa. Ale Rój zniszczy nas wszystkich — musimy walczyć razem."
+				: saved()
+					? "Moi technicy żyją dzięki wam. Teraz to ja proszę o pomoc."
+					: "Kolonie, tu komandor Varn. Rój pożera moje światy. Proponuję sojusz.",
+		],
+	});
 	const places = ["VULKAN IX · ORBITA", "SEKTOR 07 · SIEĆ ARTEFAKTÓW", "STACJA CISZY · LABORATORIUM", "SEKTOR 07 · MAPA TAKTYCZNA", "KANAŁ DOMINIUM · SZYFR VARNA", "NIVALIS · ORBITA", "PYRRHOS · SERCE ROJU", "LUMERIA V · GĄSZCZ SZEPTÓW"];
 	const K = CampaignFilm.kit,
 		{ W, H, rnd, clamp01, ease, poly, glow, flare, stars, nebula, planet, capital, fighter, freighter, beam, dropship, holo } = K;
@@ -307,7 +319,7 @@ const Act3Film = (() => {
 			c.restore();
 			c.font = "10px monospace";
 			c.fillStyle = "rgba(240,210,160,0.9)";
-			c.fillText("ODŁAMEK · KHEPRI IV", 240, 110);
+			c.fillText("ODŁAMEK · VULKAN IX", 240, 110);
 			c.fillText(`WZROST STRUKTURY +${Math.round(grow * 340)}%`, 440, 110);
 			if (grow > 0.7) {
 				c.fillStyle = "#ff9aff";
@@ -324,8 +336,9 @@ const Act3Film = (() => {
 			const spread = reduced ? 0.8 : clamp01(local / (span - 1.5));
 			let lost = 0;
 			WORLDS.forEach(([x, y, name], i) => {
+				// Eos holds (0.171.9): the Colonies' home is never taken on the map.
 				const d = Math.hypot(x - 230, y - 250) / 600,
-					hit = clamp01((spread - d) * 3);
+					hit = name === "EOS" ? 0 : clamp01((spread - d) * 3);
 				if (hit > 0) glow(c, x, y, 30 + hit * 70, "#9a3aff", 0.5 * hit);
 				if (hit > 0.5) lost++;
 				glow(c, x, y, 8, hit > 0.5 ? "#ff7aff" : "#7fe7ff", 0.9);
@@ -337,6 +350,8 @@ const Act3Film = (() => {
 			c.font = "11px monospace";
 			c.fillStyle = "rgba(255,170,255,0.95)";
 			c.fillText(`ŚWIATY ZARAŻONE: ${lost}/${WORLDS.length}`, 620, 92);
+			c.fillStyle = "rgba(170,240,230,0.9)";
+			c.fillText("EOS: LINIA OBRONY", 620, 106);
 		},
 		// 5 · Varn's call: the commander on the Dominium channel, his flagship behind, the offer typed out.
 		(c, t, local, reduced, span) => {
@@ -395,6 +410,9 @@ const Act3Film = (() => {
 		titles,
 		get captions() {
 			return SPEC ? SPEC.captions : captions();
+		},
+		get lines() {
+			return lines();
 		},
 	};
 	return api;

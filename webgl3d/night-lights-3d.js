@@ -58,7 +58,7 @@ export function nightLightShade(shader) {
 	);
 }
 
-export function createNightLights(THREE, { world }) {
+export function createNightLights(THREE, { world, ground = null }) {
 	const MAX = 128,
 		G = 48,
 		PER = 24,
@@ -76,23 +76,36 @@ export function createNightLights(THREE, { world }) {
 	NIGHT_LIGHTS.nlGrid.value = gridTex;
 
 	// Visible beams: an open cone along +X from the lamp, fading with length and towards its rim; the
-	// instance colour is the tint × the haze.
+	// instance colour is the tint × the haze. Soft near the ground (0.171.3): a beam aimed down cuts into
+	// the terrain, and in rain and dust that cut showed as a hard-edged wedge on the ground — each pixel
+	// fades out as it nears the ground under it (the weather's height map, bilinear by hand).
+	const heightUniforms = ground ? { heightMap: ground.heightMap, heightInfo: ground.heightInfo } : { heightMap: { value: null }, heightInfo: { value: new THREE.Vector4(1, 1, 12, 0) } };
 	const beams = new THREE.InstancedMesh(
 		new THREE.ConeGeometry(1, 1, 18, 1, true).translate(0, -0.5, 0).rotateZ(Math.PI / 2),
 		new THREE.ShaderMaterial({
-			vertexShader: `varying float vAlong; varying vec3 vNormal; varying vec3 vView; varying vec3 vTint;
+			uniforms: heightUniforms,
+			vertexShader: `varying float vAlong; varying vec3 vNormal; varying vec3 vView; varying vec3 vTint; varying vec3 vWorld;
 				void main() {
 					vAlong = position.x;
 					vTint = instanceColor;
+					vWorld = (modelMatrix * instanceMatrix * vec4(position, 1.0)).xyz;
 					vec4 mv = modelViewMatrix * instanceMatrix * vec4(position, 1.0);
 					vNormal = normalize(normalMatrix * mat3(instanceMatrix) * normal);
 					vView = normalize(-mv.xyz);
 					gl_Position = projectionMatrix * mv;
 				}`,
-			fragmentShader: `varying float vAlong; varying vec3 vNormal; varying vec3 vView; varying vec3 vTint;
+			fragmentShader: `uniform sampler2D heightMap; uniform vec4 heightInfo;
+				varying float vAlong; varying vec3 vNormal; varying vec3 vView; varying vec3 vTint; varying vec3 vWorld;
+				float groundUnder(vec2 p) {
+					vec2 g = p / heightInfo.z, i = floor(g), f = g - i, t = 1.0 / heightInfo.xy;
+					float a = texture2D(heightMap, (i + 0.5) * t).r, b = texture2D(heightMap, (i + vec2(1.5, 0.5)) * t).r;
+					float c = texture2D(heightMap, (i + vec2(0.5, 1.5)) * t).r, d = texture2D(heightMap, (i + 1.5) * t).r;
+					return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+				}
 				void main() {
 					float core = pow(abs(dot(normalize(vNormal), normalize(vView))), 1.4);
 					float a = core * pow(1.0 - clamp(vAlong, 0.0, 1.0), 1.6) * smoothstep(0.0, 0.08, vAlong);
+					if (heightInfo.w > -0.5 && heightInfo.x > 1.0) a *= smoothstep(2.0, 40.0, vWorld.y - groundUnder(vWorld.xz));
 					gl_FragColor = vec4(vTint * a, 1.0);
 				}`,
 			transparent: true,
@@ -122,7 +135,8 @@ export function createNightLights(THREE, { world }) {
 	return {
 		beams,
 		begin() {
-			pool = pool.concat(list);
+			// Back into the pool in place (0.171.15: a new array every frame).
+			for (const l of list) pool.push(l);
 			list.length = 0;
 		},
 		// A spot light at (x, y) h high (world height), aimed at (tx, ty) on the ground th high; angle the

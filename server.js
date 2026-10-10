@@ -25,7 +25,10 @@ const server = http.createServer((req, res) => {
 		root,
 		"." + (pathname === "/" ? "/index.html" : pathname),
 	);
-	if (!file.startsWith(root + path.sep)) {
+	// Inside the folder, and not its hidden folders (.git: the remote's address may hold a password) nor the
+	// packages (0.171.16: the whole repository was served).
+	const parts = path.relative(root, file).split(path.sep);
+	if (!file.startsWith(root + path.sep) || parts.some((p) => p.startsWith(".") || p === "node_modules")) {
 		res.writeHead(403).end();
 		return;
 	}
@@ -43,6 +46,7 @@ const server = http.createServer((req, res) => {
 	});
 });
 mountLobby(server);
+// (The port it really got: PORT=0 lets the system choose one — the tests do.)
 server.listen(port, process.env.HOST || "127.0.0.1", () =>
-	console.log(`Pogranicze Galaktyki: http://127.0.0.1:${port}`),
+	console.log(`Pogranicze Galaktyki: http://127.0.0.1:${server.address().port}`),
 );

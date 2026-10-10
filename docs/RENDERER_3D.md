@@ -1,4 +1,95 @@
-# Renderer 3D (wersje 0.52–0.96, 0.125–0.147.9)
+# Renderer 3D (wersje 0.52–0.96, 0.125–0.147.9, 0.171.1–0.171.17)
+
+## Testy i narzędzia (wersja 0.171.17, 2026-10-10)
+
+- **`tests/render-3d-browser.html`:** sprawdzenia idą krok po kroku (`step`: przerwa `setTimeout` między scenami i etapami), z linią postępu „Sprawdzanie… n/15 · scena” i ostrzeżeniem, gdy strona jest w tle (przeglądarka może wtedy wstrzymywać WebGL). Jeden długi przebieg wyglądał na zawieszony.
+- **`tests/game-scripts.js`:** `loadGameScripts(skip)` czyta listę skryptów z `index.html` i wczytuje je po kolei; `tests/weather-browser.html` korzysta z niej zamiast własnej kopii listy (rozjeżdżała się przy każdym nowym pliku reguł).
+- **`tests/tools.test.js`:** `weatherCloseness` (0 daleko, 1 blisko, monotoniczne, własne progi), `closestTo` z `app.js` (element, węzeł tekstowy, dokument, okno, brak), zgodność reguł w `render-3d-browser.html` z kolejnością w `index.html`, brak skopiowanej listy w podglądzie burz, serwer `server.js` uruchamiany na wolnym porcie (`PORT=0`; podaje teraz rzeczywisty port): gra 200, `/.git/config`, `/node_modules/`, `/.claude/launch.json` i `..`-ścieżka do `.git` — 403.
+
+## Poprawki grafiki z przeglądu gry (wersja 0.171.15, 2026-10-10)
+
+- **Nakładka po zmianie rozmiaru** (`setOverlay`): nowa tekstura także przy zmianie rozmiaru tego samego płótna. Three r170 alokuje niezmienny magazyn przy pierwszym wysłaniu, więc po powiększeniu okna lub F11 wysyłanie kończyło się błędem i nakładka (podgląd budowy, zbiórka, zasięgi) stała w miejscu. Sprawdzone: renderowanie 800 → 1400 → 600 px bez błędów WebGL.
+- **Rozrzut pod budynkami** (`scatter-3d.js`): punkty w siatce komórek 120 j. (raz na mapę), budynki też; po zmianie zbioru budynków przeliczane są tylko punkty w zasięgu budynków, które doszły albo zniknęły, każdy wobec budynków obok. Dotąd każda zmiana (plac budowy, zniszczenie, także wroga) liczyła wszystkie punkty × wszystkie budynki (40 tys. × 60 ≈ 100 ms), a klucz był napisem z identyfikatorów budowanym co klatkę (teraz liczba i skrót).
+- **Zwalnianie przy zmianie mapy:** materiały trzech warstw mgły wojny; kopie materiałów wysokich obiektów sceny (`scene-life-3d.js`, `drop`); materiał cokołu i poświata skoku z nadprzestrzeni (`releaseRecord`); wyglądy modeli (`looks`: tekstura i materiał każdego stanu).
+- **Środowisko oświetlenia** (`post-3d.js`): klucz z kolorów w krokach 1/24 (było 1/255 — prawie każde sprawdzenie co 0,5 s przebudowywało PMREM z nowym celem).
+- **Mniej pracy na klatkę:** zaznaczenie (`holo-3d.js`) bierze jednostki przez `game.get`; kolory pierścieni z pamięci (`colorOf`), kierunek słońca w jednym wektorze; światła nocne wracają do puli bez nowej tablicy; błysk nieba (kierunkowe światło stale o zerowej mocy) usunięty ze sceny — błysk niesie światło półsfery; usunięte `signature`/`refreshTiles` (sprawdzanie kafli co 0,5 s, które nigdy nic nie przemalowało).
+
+Zostaje z przeglądu: nakładka wysyłana na kartę co klatkę, odbicie w wodzie renderujące całą scenę drugi raz, `antialias` przy obrazie kinowym (wymaga odtworzenia kontekstu), niewystawiona w menu opcja cieni chmur.
+
+## Wskazywanie terenu marszem po mapie wysokości (wersja 0.171.10, 2026-10-10)
+
+`screenToMap` (`three-renderer.js`) rzucał promień na kafle terenu (`raycaster.intersectObject(terrain, true)`): bez BVH Three.js sprawdzał każdy trójkąt kafla, którego sferę przetnie promień — na mapie 3360 × 2160 ok. 400 tys. trójkątów. Obrys widoku na minimapie to 4 takie promienie co klatkę, do tego kursor przy każdym ruchu: 18–28 ms CPU na klatkę według przeglądu. Teraz promień idzie po mapie wysokości (`heightAt`, ta sama, z której zbudowany jest teren): od wysokości najwyższego punktu mapy w dół, krokiem jednej komórki (6 j.) w poziomie, a pierwsze przejście pod ziemię jest dokładane 14 razy połowieniem. Pomiar: ok. 0,003 ms na trafienie przy każdym przybliżeniu i pochyleniu. Test „kursor → plansza → kursor” w `tests/render-3d-browser.html`: błąd 0,000 px (było 0,014 i 0,060). Najniższa i najwyższa wysokość mapy są liczone raz w `buildTerrain`.
+
+## Testy grafiki 3D i odporność (wersja 0.171.8, 2026-10-10)
+
+- **`tests/render-3d-browser.html`** ładuje teraz wszystkie reguły z `index.html` (z kosmosem) i ma sześć nowych scen: śnieżyca, ulewa i burza piaskowa przy największym przybliżeniu, burza jonowa na Orbicie Kharona, Szkarłatna Mgławica i niebo kosmosu nad horyzontem (kamera pochylona, obrócona ku mgławicy). Nowe sprawdzenia: jasność górnej ćwiartki klatki w scenie nieba (> 4; z działającym shaderem ok. 28) i brak błędów kompilacji shaderów — test przechwytuje `console.error` Three.js (`WebGLProgram`, `VALIDATE_STATUS`) na czas sprawdzania i podaje linię błędu. Sprawdzone na celowo zepsutym shaderze nieba (podwójna deklaracja jak w 0.171.6): oba sprawdzenia dają FAIL (jasność 3,1; „'lanes' : redefinition”).
+- **`tests/weather-browser.html`:** podgląd planszy 3D na dowolnej mapie z pogodą lub w kosmosie: wybór mapy i pory (trzy burze albo bez burzy), suwaki przybliżenia, pochylenia i obrotu kamery, pasek z nazwą burzy, jej siłą i odległością kamery. Parametry także w adresie (`?map=frost&t=120&z=5.5&tilt=0&yaw=0&cx=…&cy=…`).
+- **`app.js`:** `closestTo(target, selector)` zamiast `e.target.closest(...)` w obsłudze kliknięć i klawiszy — cel zdarzenia nie zawsze jest elementem (zdarzenie wysłane do dokumentu lub okna, węzeł tekstowy), a wtedy `closest` nie istniało i gra wyrzucała `TypeError`.
+
+## Kosmos i pogoda — poprawki (wersja 0.171.7, 2026-10-10)
+
+Kosmos:
+
+- **Mgławice nieba** (`space-3d.js`): kolory nasycone (`nebSat`, 1,9×), serce jaśniejsze, a Droga Mleczna przygaszona o 60% tam, gdzie leży mgławica (`overNeb`) — jej szarość wypierała kolor niebieskiej mgławicy.
+- **Zatłoczone chmury** (`three-renderer.js`, `buildNebula`): każda chmura bledsza o `1/√(1 + 0,45 × sąsiedzi)`; duże chmury mapy (promień > 260, Szkarłatna Mgławica ma ich 24) mają 9 warstw zamiast 14 i po dwa ciemne pasma pyłu (zwykłe mieszanie), więc pole mgławicy rozpada się na obłoki i przerwy.
+- **Siatka pod mgławicą:** `buildNebula` wypala mapę gęstości chmur 96 × ~60 (`nebulaMap`, tekstura 1 × 1 poza kosmosem); shader terenu w kosmosie wygasza nią siatkę taktyczną o 80% i ramkę mapy o 55%.
+- **Spirala gazu** (`models-3d.js`): trzy ostatnie kłęby każdego ramienia mają bledszy materiał `gasPuffFaint` i są coraz cieńsze, więc ramię kończy się smugą zamiast okrągłego płata.
+
+Pogoda:
+
+- **Wspólna funkcja** `weatherCloseness(distance, far = 1500, near = 700)` w `weather-3d.js`, używana też przez snopy reflektorów w `scene-fx-3d.js` (dotąd ten sam wzór był wpisany w obu miejscach).
+- **Średnie przybliżenie:** zasłony i przyziemna zamieć, ściany deszczu, chmury pyłu, mgła burzy i zamglenie rzedną już od 2600 j. (pełnia przy 900); smugi i cząstki — jak dotąd od 1500 j. Przy dystansie ok. 1350 białe zasłony zamieci zakrywały planszę.
+- **Noc:** zwykłe (nie addytywne) warstwy pogody mnożone przez `weatherLit = 0,32 + 0,68 × dzień + 0,7 × błysk` — w nocnej burzy piaskowej ziarna i zasłony miały stały, jasny kolor i świeciły bladą mgłą. Świecące warstwy (zorza jonowa, wiatr słoneczny, meteory) bez zmian.
+- **Reflektory budynków:** snop w powietrzu z bliska słabszy o połowę (`1 − 0,5 × zbliżenie`); światło na ziemi bez zmian.
+
+## Mgławice nieba w kosmosie (wersja 0.171.6, 2026-10-10)
+
+`space-3d.js`:
+
+- **Sfera nieba:** obie mgławice (kolory `look.sky`) liczone są z szumu zawiniętego przez samego siebie (domain warp: trzy fbm przesuwają współrzędne czwartego) — kłęby i włókna zamiast szarawych smug. Każda ma jaśniejsze serce w drugim kolorze i ciemne pasma pyłu (`dustLanes`), jasność 0,4 × `CALM.nebula` (było 0,28). Kierunki podniesione nad horyzont (y −0,3 → 0,22 i −0,2 → 0,28): dotąd leżały pod płaszczyzną bitwy, zakryte planetą i pierścieniami, a po pochyleniu kamery niebo nad bitwą było czarne.
+- **Przestrzenne mgławice** (`buildNebula`): tekstura obłoku ma 256 px w dwóch wariantach, z kłębami wewnątrz płótna, okrągłą maską i włóknami (128 px z kłębami poza brzegiem dawało proste, ucięte krawędzie). Warstwy nie są już rozrzucone w prostopadłościanie: sześć dużych warstw serca i 96 wzdłuż trzech zakrzywionych ramion (większe i bledsze ku końcom, kolor przechodzi w następny), 26 ciemnych pasm pyłu wzdłuż ramion. Każda warstwa powoli się obraca (`driftNebulae`, 0,004–0,012 rad/s). Dalsza mgławica (za planetą) podniesiona z −2000 na 1500 j., więc wznosi się nad horyzontem.
+
+Poprawka do 0.171.5: chmury przy złożach mają znów test głębi. Teren w kosmosie nie zapisuje głębi, więc nic ich nie ucinało — linia przez mgławicę to siatka taktyczna, a bez testu głębi chmury kładły się na planetę i statki.
+
+## Miękkie chmury mgławicy przy złożach (wersja 0.171.5, 2026-10-10)
+
+Szersza chmura wokół złóż gazu (i własnych chmur mapy, `nebulaClouds`) to sprite'y w `three-renderer.js` (`buildNebula`) na kilku wysokościach nad i pod płaszczyzną bitwy:
+
+- tekstura obłoku: dotąd 90 kłębów sięgało poza płótno 256 px i sprite'y miały proste, ucięte brzegi. Teraz są dwa warianty, kłęby trzymają się wewnątrz, całość przycina okrągła maska z miękkim spadkiem, a pięć cienkich łuków drobnych kłębów daje włókna;
+- 14 warstw na chmurę zamiast 12: dwie trzecie obłoków, jedna trzecia miękkiej poświaty; im dalej od środka, tym większe i bledsze, więc chmura rzednie ku brzegowi zamiast kończyć się płaską plamą;
+- każda warstwa obraca się powoli w swoją stronę (`spinNebula`, 0,012–0,028 rad/s), więc mgławica dryfuje;
+Pozioma i pionowa linia przecinające mgławicę to celowa siatka taktyczna planszy (co 400 j.), nie krawędź chmury.
+
+Na planszy 2D (`space-art.js`, `ground`) chmura przy złożu to zamiast sześciu dużych okrągłych plam świecący środek i trzy płaty po sześć mniejszych kłębów, przecięte dwoma rozmytymi, ciemnymi pasmami pyłu. W 3D tego tła nie widać (zakrywa je niebo kosmosu).
+
+## Miękkie chmury gazu (wersja 0.171.4, 2026-10-10)
+
+Złoże gazu w kosmosie (`models-3d.js`, `spaceDeposit("gas")`) to jasne jądro, otoczka i dwa ramiona spirali z kłębów — półprzezroczystych, spłaszczonych elipsoid. Każda miała ostry brzeg, więc z bliska spirala wyglądała jak zestaw płaskich, nakładających się krążków. Materiały `gasHalo`, `gasPuff` i `gasPuffBlue` świecą teraz addytywnie, a ich przezroczystość maleje ku sylwetce (`alpha × |n · v|^2,2` w shaderze, `onBeforeCompile`): kłęby zlewają się w jedną miękką chmurę. Jądro, iskry i lód zostają bez zmian, tak jak szersza chmura mgławicy wokół złoża (`buildNebula`, sprite'y w `three-renderer.js`).
+
+## Deszcz i piasek na przybliżeniu (wersja 0.171.3, 2026-10-10)
+
+Sprawdzone ulewa (Popielny Szlak, `ember`) i burza piaskowa (Cichy Horyzont, `horizon`) przy największym przybliżeniu, w nocy i w dzień. Zmiany z 0.171.2 (rzadsze ściany deszczu i chmury pyłu, bledsze cząstki, słabsza mgła) działały, ale w nocnej burzy zostawały jasne, płaskie kliny przy każdej jednostce i budynku: widoczne snopy reflektorów (`night-lights-3d.js`, stożki w powietrzu), które pogoda wzmacnia (`haze + weather × 0,22–0,3`). Z góry stożek wygląda jak płaski trójkąt światła, a skierowany w dół wchodzi w teren z ostrą krawędzią.
+
+- `night-lights-3d.js`: snop gaśnie łagodnie przy gruncie — każdy piksel według wysokości nad terenem pod nim (od 2 do 40 j.; mapa wysokości pogody `weather3d.ground`, interpolowana ręcznie jak w miękkich cząstkach), podana przez `createNightLights(THREE, { world, ground })`.
+- `scene-fx-3d.js` (`nightLights`): dodatek pogody do snopów maleje przy zbliżeniu o 75% (ten sam współczynnik co w `weather-3d.js`: 0 przy 1500 j. odległości kamery, 1 przy 700 j.).
+
+W dzień snopów nie ma, a burza piaskowa na przybliżeniu jest czytelna.
+
+## Burze na przybliżeniu (wersja 0.171.2, 2026-10-10)
+
+Przy największym przybliżeniu kamera stoi ok. 600 j. nad ziemią: patrzy przez całą burzę naraz, a mgła zamieci (`fog.near = 1,6 × odległość × (1 − 0,8 × haze)`) zaczynała się tuż przy planszy — obraz był mleczny. `weather-3d.js` liczy teraz współczynnik zbliżenia z odległości kamery (`focus.distance`, rig renderera): 0 przy 1500 j. i dalej, 1 przy 700 j. i bliżej (gładko). Przy zbliżeniu:
+
+- zasłony i smugi śniegu, przyziemna zamieć, ściany deszczu i chmury pyłu: do 30% liczby (smugi śniegu do 15%);
+- płatki, krople i ziarna piasku: do 60%;
+- wszystkie cząstki pogody bledsze o 40% (`intensity`);
+- mgła przy gruncie słabsza o 70%;
+- zamglenie (`haze`) słabsze o 65% — mgła odsuwa się od planszy, a słońce mniej gaśnie.
+
+Przy oddalonej kamerze nic się nie zmienia.
+
+## Zaznaczenie budynków bez kolumny światła (wersja 0.171.1, 2026-10-10)
+
+- `holo-3d.js`: usunięta kolumna światła (otwarty walec z linią skanu), która od 0.147.8 została już tylko nad budynkami. Z góry jej górna krawędź (na wysokości `min(70, 0,9 × promień)`) i wędrująca linia skanu w kolorze strony, dodane do jasnego terenu, wyglądały jak biała, kropkowana elipsa nad budynkiem. Zaznaczenie to teraz dla wszystkich ten sam delikatny pierścień u podstawy (obwódka, biegnące kreski, cztery obracające się klamry).
 
 ## Delikatniejsze paski życia (wersja 0.147.9, 2026-10-08)
 

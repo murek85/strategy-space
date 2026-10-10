@@ -1,25 +1,30 @@
 /* Act II prologue "Cena świtu" (0.106; retold in 0.171 as a story of about 75 seconds leading to chapter IV), in the
    style of the campaign films (campaign-film.js — its kit and director: letterbox, camera push, HUD, typed titles,
-   grade, grain). Eight shots of their own lengths (LENGTHS): after the dawn — Khepri IV lit again, the aid coming in;
+   grade, grain). Eight shots of their own lengths (LENGTHS): after the dawn — the beacons lit again, the aid convoys going on into the frontier;
    a repeated signal in the band of the beacons; Lira decoding it — a research team cut off on Khepri; the Dominium's
-   drills on the dunes at dusk and the burrowers waking; under the sand — a drill reaching an ancient probe; the source
-   of the blockade — the Hefajstos complex draining Vulkan IX; the convoy that will have to cross the pass of Vesper;
+   drills on the dunes at dusk and the burrowers waking; under the sand — a drill reaching an ancient probe; the trace in its archive
+   of the blockade — something draining a whole planet (not named yet: chapter V finds Vulkan IX); the convoy that will have to cross the pass of Vesper;
    the commander's dropship landing on Khepri IV by the research station, the act's title. */
 const Act2Film = (() => {
 	const LENGTHS = [9, 9, 10, 10, 9, 10, 9, 10];
 	const duration = LENGTHS.reduce((n, l) => n + l, 0);
-	const titles = ["PO ŚWICIE", "SYGNAŁ", "ZAGINIONA EKIPA", "KHEPRI IV", "POD PIASKIEM", "HEFAJSTOS", "SZLAK PRZEZ LÓD", "AKT II · CENA ŚWITU"];
+	const titles = ["PO ŚWICIE", "SYGNAŁ", "ZAGINIONA EKIPA", "KHEPRI IV", "POD PIASKIEM", "ŹRÓDŁO BLOKADY", "SZLAK PRZEZ LÓD", "AKT II · CENA ŚWITU"];
 	const captions = [
-		"Latarnie znów świeciły. Na Khepri IV wrócił prąd, a transporty pomocy nadlatywały jeden po drugim.",
+		"Latarnie znów świeciły nad Eos, Vesperem i Nadirem, a konwoje pomocy ruszyły dalej w pogranicze.",
 		"Ale w paśmie latarni pojawił się cichy, powtarzany sygnał — za słaby na wezwanie, za regularny na przypadek.",
 		"Lira odszyfrowała go po trzech dniach: ekipa badawcza z Khepri IV, odcięta od czterdziestu dni, wciąż żyje.",
 		"Na wydmach Khepri Dominium postawiło wiertnie. Ich hałas obudził paszczaki w skalnych jamach.",
 		"Dominium kopało w ruinach dawnej sondy — a w jej archiwum zapisano, skąd naprawdę płynie energia blokady.",
-		"Ze wszystkich śladów wyłonił się jeden adres: kompleks Hefajstos na Vulkanie IX, który wysysa energię planety.",
+		"Archiwum sondy kryło ślad: blokadę zasila coś daleko w pograniczu — coś, co wysysa energię całej planety.",
 		"Droga tam wiedzie przez rdzenie energetyczne ukryte za lodową przełęczą Vesperu. Ktoś będzie musiał je przewieźć.",
 		"Najpierw jednak Khepri IV: badacze, ich archiwum i rdzeń danych. Świt ma swoją cenę. Ty zdecydujesz, kto ją zapłaci.",
 	];
-	const places = ["KHEPRI IV · ORBITA", "SEKTOR 07 · SIEĆ LATARNI: 100%", "STACJA CISZY · EOS", "KHEPRI IV · POLA JAM", "KHEPRI IV · POD WYDMAMI", "VULKAN IX · KOMPLEKS HEFAJSTOS", "VESPER · PRZEŁĘCZ SZRONU", "KHEPRI IV · STACJA BADAWCZA"];
+	// Voices (0.171.9, as in the campaign's prologue): Lira when she has decoded the call, and at the landing.
+	const lines = {
+		2: ["lira", "Odszyfrowałam sygnał z Khepri IV. Ekipa badawcza dr Tessy żyje — i wzywa pomocy."],
+		7: ["lira", "Lądujemy przy stacji badawczej. Znajdź ich, zanim zrobi to Dominium."],
+	};
+	const places = ["SEKTOR 07 · SZLAKI POMOCY", "SEKTOR 07 · SIEĆ LATARNI: 100%", "STACJA CISZY · EOS", "KHEPRI IV · POLA JAM", "KHEPRI IV · POD WYDMAMI", "SEKTOR 07 · ŚLAD Z ARCHIWUM", "VESPER · PRZEŁĘCZ SZRONU", "KHEPRI IV · STACJA BADAWCZA"];
 	const K = CampaignFilm.kit,
 		{ W, H, rnd, clamp01, ease, poly, glow, flare, stars, nebula, planet, freighter, capital, fighter, beam, beacon, dropship, holoLira } = K;
 
@@ -305,18 +310,19 @@ const Act2Film = (() => {
 		},
 	];
 	const SHOTS = [
-		// 1 · After the dawn: Khepri IV lit again on its night side, the aid convoys coming down to it.
+		// 1 · After the dawn: a world of the frontier lit again on its night side, the aid convoys coming down to it.
 		(c, t, local, reduced, span) => {
 			nebula(c, t, [[260, 110, 260, "#1f4a5a", 0.45, 1]]);
 			stars(c, t, 4, 200, 201);
-			planet(c, 600, 400, 300, { base: "#c69a5c", dark: "#2a1c12", atmo: "#ffd29a", light: 2.3, cities: 0.2 + clamp01(local / (span - 2)) * 0.8, clouds: 0.3, t, seed: 201 });
+			// (0.171.9: higher and smaller, the whole lit limb in the frame.)
+			planet(c, 600, 330, 220, { base: "#c69a5c", dark: "#2a1c12", atmo: "#ffd29a", light: 2.3, cities: 0.2 + clamp01(local / (span - 2)) * 0.8, clouds: 0.3, t, seed: 201 });
 			for (let i = 0; i < 5; i++) {
 				const p = clamp01((local - i * 0.9) / 6);
 				if (p > 0 && p < 1) freighter(c, 80 + i * 50 + p * 420, 80 + i * 22 + p * 150, 1 - p * 0.5, t, i);
 			}
 			c.font = "10px monospace";
 			c.fillStyle = "rgba(255,220,160,0.85)";
-			c.fillText(`KHEPRI IV · ZASILANIE MIAST ${Math.round(20 + clamp01(local / (span - 2)) * 80)}%`, 90, 330);
+			c.fillText(`SIEĆ LATARNI · ZASILANIE KOLONII ${Math.round(20 + clamp01(local / (span - 2)) * 80)}%`, 90, 330);
 		},
 		// 2 · The signal in the band of the beacons.
 		PART[0],
@@ -352,9 +358,10 @@ const Act2Film = (() => {
 		// 5 · Under the sand: a cross-section, a drill reaching the ancient probe in a cave, the burrowers' tunnels.
 		(c, t, local, reduced, span) => {
 			const g = c.createLinearGradient(0, 0, 0, H);
-			g.addColorStop(0, "#a8553a");
-			g.addColorStop(0.18, "#5a3424");
-			g.addColorStop(1, "#1a0e0a");
+			// (0.171.9: lighter strata, the cave lit by the drill and the waking probe — it read as black.)
+			g.addColorStop(0, "#b8653f");
+			g.addColorStop(0.18, "#6e4430");
+			g.addColorStop(1, "#33201a");
 			c.fillStyle = g;
 			c.fillRect(0, 0, W, H);
 			for (let k = 0; k < 5; k++) {
@@ -372,10 +379,11 @@ const Act2Film = (() => {
 			c.fillRect(470, 40, 20, depth - 40);
 			glow(c, 480, depth, 30, "#ffb06a", 0.6 + 0.3 * Math.sin(t * 9));
 			// The probe: an ancient pod in a cave, its lights waking as the drill comes near.
-			c.fillStyle = "#0e0806";
+			c.fillStyle = "#24160f";
 			c.beginPath();
 			c.ellipse(480, 300, 150, 50, 0, 0, Math.PI * 2);
 			c.fill();
+			glow(c, 480, 300, 170, "#ffb070", 0.18 + 0.3 * clamp01((depth - 150) / 100));
 			poly(c, [[420, 310], [450, 270], [510, 270], [540, 310], [510, 330], [450, 330]], "#5a5650");
 			const wake = clamp01((depth - 180) / 60);
 			for (let i = 0; i < 5; i++) glow(c, 445 + i * 18, 300, 8, "#ffe0a0", wake * (0.5 + 0.5 * Math.sin(t * 3 + i)));
@@ -440,5 +448,5 @@ const Act2Film = (() => {
 	function draw(c, time, reduced = false) {
 		return K.render(c, time, reduced, SPEC);
 	}
-	return { draw, captions, titles, duration, lengths: LENGTHS };
+	return { draw, captions, titles, duration, lengths: LENGTHS, lines };
 })();

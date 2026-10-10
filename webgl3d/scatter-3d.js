@@ -459,7 +459,11 @@ export function createScatter3D(THREE, { world, heightAt, fogged }) {
 				];
 
 	let batches = [],
-		buildingsKey = "";
+		buildingsKey = "",
+		// The spots in a grid of cells (built once per map), and the buildings standing now (id → building).
+		spotGrid = null,
+		standing = null;
+	const SPOT_CELL = 120;
 	function clear() {
 		for (const b of batches) {
 			group.remove(b.mesh);
@@ -467,6 +471,23 @@ export function createScatter3D(THREE, { world, heightAt, fogged }) {
 		}
 		batches = [];
 		buildingsKey = "";
+		spotGrid = null;
+		standing = null;
+	}
+	function spotsGrid() {
+		if (spotGrid) return spotGrid;
+		const cells = new Map();
+		let biggest = 0;
+		batches.forEach(({ spots }, bi) =>
+			spots.forEach((o, i) => {
+				const k = Math.floor(o.x / SPOT_CELL) + "," + Math.floor(o.y / SPOT_CELL);
+				let list = cells.get(k);
+				if (!list) cells.set(k, (list = []));
+				list.push(bi, i);
+				biggest = Math.max(biggest, o.size || 0);
+			}),
+		);
+		return (spotGrid = { cells, biggest });
 	}
 	// density: share of the full count (graphics settings: terrain detail).
 	function setGame(game, density = 1) {
@@ -624,18 +645,75 @@ export function createScatter3D(THREE, { world, heightAt, fogged }) {
 			mesh.instanceMatrix.needsUpdate = true;
 		}
 		buildingsKey = null;
+		standing = null;
 	}
+	// The spots under buildings are hidden (0.171.15: every change of the buildings — a site placed, one destroyed,
+	// also the enemy's — went through every spot against every building, 40 000 × 60, about 100 ms; and the key was
+	// a string of all their ids built every frame). Now only the spots round the buildings that came or went are
+	// looked at again, each against the buildings near it.
 	function update(game) {
 		blasts(game);
-		const buildings = game.entities.filter((e) => e.hp > 0 && !RTS.TYPES[e.type]?.speed);
-		const key = buildings.map((b) => b.id).join(",");
+		const list = [];
+		let hash = 0;
+		for (const e of game.entities)
+			if (e.hp > 0 && !RTS.TYPES[e.type]?.speed) {
+				list.push(e);
+				hash = (Math.imul(hash, 31) + e.id) | 0;
+			}
+		const key = list.length + ":" + hash;
 		if (key === buildingsKey) return;
+		const full = !buildingsKey || !standing;
 		buildingsKey = key;
-		const under = (o) => buildings.some((b) => Math.hypot(o.x - b.x, o.y - b.y) < RTS.TYPES[b.type].radius * 1.25 + o.size);
-		for (const { mesh, spots } of batches) {
-			spots.forEach((o, i) => mesh.setMatrixAt(i, under(o) ? hidden : o.matrix));
-			mesh.instanceMatrix.needsUpdate = true;
+		const now = new Map(list.map((e) => [e.id, e])),
+			changed = full ? list : [...list.filter((e) => !standing.has(e.id)), ...[...standing.values()].filter((e) => !now.has(e.id))];
+		standing = now;
+		// The buildings in cells, for the check of a spot against those near it.
+		const near = new Map();
+		let widest = 0;
+		for (const e of list) {
+			const k = Math.floor(e.x / SPOT_CELL) + "," + Math.floor(e.y / SPOT_CELL);
+			let cell = near.get(k);
+			if (!cell) near.set(k, (cell = []));
+			cell.push(e);
+			widest = Math.max(widest, RTS.TYPES[e.type].radius * 1.25);
 		}
+		const G = spotsGrid(),
+			reach = Math.ceil((widest + G.biggest) / SPOT_CELL);
+		const under = (o) => {
+			const cx = Math.floor(o.x / SPOT_CELL),
+				cy = Math.floor(o.y / SPOT_CELL);
+			for (let dy = -reach; dy <= reach; dy++)
+				for (let dx = -reach; dx <= reach; dx++)
+					for (const e of near.get(cx + dx + "," + (cy + dy)) || []) if (Math.hypot(o.x - e.x, o.y - e.y) < RTS.TYPES[e.type].radius * 1.25 + o.size) return true;
+			return false;
+		};
+		const dirty = new Set();
+		const look = (bi, i) => {
+			const { mesh, spots } = batches[bi],
+				o = spots[i];
+			mesh.setMatrixAt(i, under(o) ? hidden : o.matrix);
+			dirty.add(mesh);
+		};
+		if (full)
+			batches.forEach(({ spots }, bi) => spots.forEach((o, i) => look(bi, i)));
+		else {
+			// Every spot within the reach of a building that came or went.
+			const seen = new Set();
+			for (const e of changed) {
+				const r = Math.ceil((RTS.TYPES[e.type].radius * 1.25 + G.biggest) / SPOT_CELL),
+					cx = Math.floor(e.x / SPOT_CELL),
+					cy = Math.floor(e.y / SPOT_CELL);
+				for (let dy = -r; dy <= r; dy++)
+					for (let dx = -r; dx <= r; dx++) {
+						const k = cx + dx + "," + (cy + dy);
+						if (seen.has(k)) continue;
+						seen.add(k);
+						const cell = G.cells.get(k);
+						if (cell) for (let j = 0; j < cell.length; j += 2) look(cell[j], cell[j + 1]);
+					}
+			}
+		}
+		for (const mesh of dirty) mesh.instanceMatrix.needsUpdate = true;
 	}
 	// Each frame: the wind (time, and how hard it blows: a breeze, a gale in storms).
 	function tick(time, weather = {}, push = []) {

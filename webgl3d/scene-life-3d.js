@@ -237,6 +237,12 @@ export function createSceneLife3D(THREE, { world, heightAt, models3d, hiddenLaye
 
 	// tall: a tall thing that may stand between the camera and the units (floating islands, spires, giant
 	// mushrooms). It is drawn on its own with its own materials, so it can fade out (see fadeTall).
+	// A record leaves the scene with the copies of its materials (0.171.15: the clones made for tall things — islands,
+	// spires, groves — were never released and grew with every mission played).
+	function drop(r) {
+		group.remove(r.holder);
+		for (const [copy] of r.materials || []) copy.dispose();
+	}
 	function make(key, build, tall = false) {
 		let r = records.get(key);
 		if (!r) {
@@ -515,7 +521,7 @@ export function createSceneLife3D(THREE, { world, heightAt, models3d, hiddenLaye
 			if (!r.seen) {
 				// Wrecks and fish come and go; animals and birds keep their model for the next time they show.
 				if (key.startsWith("wreck|") || key.startsWith("deposit|") || key.startsWith("relay|") || key.startsWith("salvage|")) {
-					group.remove(r.holder);
+					drop(r);
 					records.delete(key);
 				} else r.holder.visible = false;
 			}
@@ -526,7 +532,7 @@ export function createSceneLife3D(THREE, { world, heightAt, models3d, hiddenLaye
 			game = next;
 			brains.clear();
 			lastTime = null;
-			for (const r of records.values()) group.remove(r.holder);
+			for (const r of records.values()) drop(r);
 			records.clear();
 			islands = typeof MapArt !== "undefined" && MapArt.islands ? MapArt.islands(game) : [];
 		},

@@ -40,7 +40,6 @@
 		});
 		// Existing damage rules treat the new types like their closest relatives.
 		const ALIAS = { skyguard: "tank", drone: "interceptor", saboteur: "trooper", medbay: "barracks", shieldgen: "barracks", salvageYard: "depot" };
-		const VEHICLES = new Set(["tank", "heavy", "artillery", "transport", "skyguard", "sentinel", "raider"]);
 		const old = {};
 		for (const k of ["productionType", "developmentRequirement", "canTarget", "damage", "applyDamage", "updateVisionOf", "tick", "enqueue", "isProducer", "workTick", "serialize", "combatReport"]) old[k] = Game.prototype[k];
 		const fromSave = Game.fromSave;
@@ -76,7 +75,7 @@
 			damage(attacker, target) {
 				let n = old.damage.call(this, attacker, aliasOf(target));
 				if (attacker.type === "skyguard" && !TYPES[target.type]?.flying) n *= SUPPORT.skyguard.ground;
-				if (attacker.type === "turret" && attacker.module === "antiArmor") n *= VEHICLES.has(target.type) || !TYPES[target.type]?.speed ? 1.5 : 0.7;
+				if (attacker.type === "turret" && attacker.module === "antiArmor") n *= this.armored(target) || target.type === "raider" ? 1.5 : 0.7; // armoured: Game.armored (0.171.11)
 				if (attacker.veteran) n *= 1.1;
 				if (attacker.heavyArms) n *= 1.15;
 				return n;

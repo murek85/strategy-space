@@ -38,7 +38,8 @@
 		<p>
 			Renderer 3D z <code>webgl3d/three-game-renderer.js</code> (Three.js) rysuje te same sceny co testy rendererów Canvas 2D i WebGL. Sprawdzenia automatyczne: każda scena
 			rysuje się bez błędu i niepusto, noc ciemniejsza od dnia, kursor → plansza → kursor w to samo miejsce (także z obróconą kamerą), każdy obiekt ma model 3D, duża
-			bitwa w małej liczbie rysowań (instancing), brak przyrostu tekstur przy zmianie map, zwalnianie zasobów. Strona musi być podana przez serwer (<code>npm start</code>).
+			bitwa w małej liczbie rysowań (instancing), brak przyrostu tekstur przy zmianie map, zwalnianie zasobów; burze z bliska i kosmos (burza jonowa,
+			Szkarłatna Mgławica), niebo kosmosu nad horyzontem nie jest czarne, wszystkie shadery kompilują się bez błędów. Podgląd burz i kosmosu z dowolnej odległości: <a href="weather-browser.html">weather-browser.html</a>. Strona musi być podana przez serwer (<code>npm start</code>).
 		</p>
 		<button id="run">Sprawdź renderer</button><select id="scene"></select><button id="show">Pokaż</button>
 		<div id="out" role="status"></div>
@@ -60,6 +61,20 @@
 		<script src="../factions-rules.js"></script>
 		<script src="../swarm-rules.js"></script>
 		<script src="../campaign-act3.js"></script>
+		<script src="../campaign-ai.js"></script>
+		<script src="../campaign-events.js"></script>
+		<script src="../campaign-choices.js"></script>
+		<script src="../trade-rules.js"></script>
+		<script src="../network-rules.js"></script>
+		<script src="../doctrine-rules.js"></script>
+		<script src="../patrol-rules.js"></script>
+		<script src="../space-rules.js"></script>
+		<script src="../world-rules.js"></script>
+		<script src="../deposit-rules.js"></script>
+		<script src="../invasion-rules.js"></script>
+		<script src="../watchers-rules.js"></script>
+		<script src="../campaign-act4.js"></script>
+		<script src="../network-modes.js"></script>
 		<script src="../scene-fx.js"></script>
 		<script src="../art.js"></script>
 		<script src="../planet-art.js"></script>
@@ -69,6 +84,7 @@
 		<script src="../fx-art.js"></script>
 		<script src="../faction-art.js"></script>
 		<script src="../swarm-art.js"></script>
+		<script src="../watchers-art.js"></script>
 		<script src="../map-art.js"></script>
 		<script src="../themed-art.js"></script>
 		<script src="../world-art.js"></script>
@@ -96,7 +112,27 @@
 				g.explored.fill(1);
 				return { name: "Bitwa · 200 jednostek", game: g, camera: { x: cx, y: cy, zoom: 2.2 }, selected: [] };
 			})();
-			const scenes = [...list, battle];
+			// Storms close in and space (0.171.8): a blizzard, a rainstorm and a sandstorm at the closest zoom, an
+			// ion storm in orbit, the Crimson Nebula, and the sky of space with the camera tilted to the horizon
+			// (a sky shader that does not compile leaves it black).
+			const at = (map, t, zoom, extra = {}) => {
+				const g = new RTS.Game(42, map);
+				g.configureSkirmish({ players: 2 });
+				g.explored.fill(1);
+				g.time = t;
+				g.tick(0.1);
+				const hq = g.entities.find((e) => e.team === 0 && e.type === "hq") || g.entities.find((e) => e.team === 0);
+				return { game: g, camera: { x: hq.x + 150, y: hq.y + 80, zoom, ...extra } };
+			};
+			const weather = [
+				{ name: "Śnieżyca z bliska", ...at("frost", 120, 5.5) },
+				{ name: "Ulewa z bliska", ...at("ember", 120, 5.5) },
+				{ name: "Burza piaskowa z bliska", ...at("horizon", 120, 5.5) },
+				{ name: "Kosmos · burza jonowa", ...at("orbit", 120, 3) },
+				{ name: "Kosmos · Szkarłatna Mgławica", ...at("crimson", 30, 1.5) },
+			];
+			const skyScene = { name: "Kosmos · niebo nad horyzontem", ...at("orbit", 30, 1, { tilt: 1, yaw: 0.675 }) };
+			const scenes = [...list, battle, ...weather, skyScene];
 			$("scene").innerHTML = scenes.map((s, i) => `<option value="${i}">${s.name}</option>`).join("");
 			function view(scene, extra = {}) {
 				const g = scene.game,
@@ -132,6 +168,22 @@
 				}
 				return sum / n;
 			}
+			// Mean brightness of the top quarter of the frame (the rows read last: WebGL counts from the bottom).
+			function skyBrightness(board) {
+				const gl = board.canvas.getContext("webgl2"),
+					w = gl.drawingBufferWidth,
+					h = gl.drawingBufferHeight,
+					rows = Math.floor(h / 4),
+					px = new Uint8Array(w * rows * 4);
+				gl.readPixels(0, h - rows, w, rows, gl.RGBA, gl.UNSIGNED_BYTE, px);
+				let sum = 0,
+					n = 0;
+				for (let i = 0; i < px.length; i += 4 * 31) {
+					sum += px[i] * 0.3 + px[i + 1] * 0.55 + px[i + 2] * 0.15;
+					n++;
+				}
+				return sum / n;
+			}
 			function draw(board, scene, { night, yaw } = {}) {
 				const g = scene.game,
 					own = Object.getOwnPropertyDescriptor(g, "night");
@@ -151,11 +203,26 @@
 				const out = [],
 					check = (ok, text) => out.push(`<p>${ok ? "✅ PASS" : "❌ FAIL"} — ${text}</p>`) && ok;
 				$("out").innerHTML = "<p>Sprawdzanie…</p>";
+				// The checks go step by step with a progress line (0.171.17: one long run looked hung — and behind other
+				// windows the browser may hold WebGL back, which the line now says).
+				const step = async (label) => {
+					$("out").innerHTML = `<p>Sprawdzanie… ${label}${document.hidden ? " · strona w tle — przeglądarka może wstrzymywać WebGL, pokaż okno" : ""}</p>` + out.join("");
+					await new Promise((r) => setTimeout(r, 0));
+				};
+				// Shader errors (Three.js reports them on the console and draws nothing with that material).
+				const shaderErrors = [],
+					consoleError = console.error;
+				console.error = (...a) => {
+					const text = a.map(String).join(" ");
+					if (/shader|VALIDATE_STATUS|WebGLProgram/i.test(text)) shaderErrors.push(text.split("\n").find((l) => /ERROR/.test(l)) || text.slice(0, 160));
+					consoleError.apply(console, a);
+				};
 				const board = createThreeGameRenderer({ gameCanvas: canvas, canvasRenderer });
 				try {
 					for (const k of ["setGame", "refreshFog", "render", "toFlat", "fromFlat", "destroy"]) check(typeof board[k] === "function", `interfejs: ${k}()`);
 					// Every scene draws, not empty; every entity has a model.
-					for (const scene of scenes) {
+					for (const [i, scene] of scenes.entries()) {
+						await step(`${i + 1}/${scenes.length} · ${scene.name}`);
 						let error = null;
 						try {
 							draw(board, scene, { night: 0 });
@@ -168,11 +235,16 @@
 						check(s.looks === 0, `${scene.name}: każdy obiekt ma model 3D (tektur: ${s.looks})`);
 					}
 					// Night darker than day.
+					await step("noc i dzień");
 					draw(board, scenes[0], { night: 0 });
 					const day = brightness(board);
 					draw(board, scenes[0], { night: 1 });
 					const night = brightness(board);
 					check(night < day * 0.8, `noc ciemniejsza od dnia (${night.toFixed(0)} wobec ${day.toFixed(0)})`);
+					// The sky of space over the horizon is not black (its shader compiles, the nebulae show).
+					draw(board, skyScene);
+					const sky = skyBrightness(board);
+					check(sky > 4, `niebo kosmosu nad horyzontem nie jest czarne (jasność ${sky.toFixed(1)})`);
 					// Pointer → flat frame → screen, straight and turned camera.
 					for (const yaw of [0, 1.2]) {
 						draw(board, battle, { yaw });
@@ -189,13 +261,16 @@
 					const s = board.stats();
 					check(s.calls < 250, `bitwa ${s.models} modeli: ${s.calls} rysowań (instancing, ${s.batches} paczek)`);
 					// Changing maps does not leak textures.
+					await step("zmiana map");
 					for (let i = 0; i < 2; i++) for (const scene of scenes) draw(board, scene);
 					const before = board.stats().textures;
 					for (let i = 0; i < 3; i++) for (const scene of scenes) draw(board, scene);
 					const after = board.stats().textures;
 					check(after <= before + 4, `zmiana map bez przyrostu tekstur (${before} → ${after})`);
+					check(!shaderErrors.length, `shadery kompilują się bez błędów${shaderErrors.length ? " — " + shaderErrors.slice(0, 3).join(" | ") : ""}`);
 				} finally {
 					board.destroy();
+					console.error = consoleError;
 				}
 				check(!document.querySelector(".three-board"), "destroy() usuwa planszę 3D");
 				$("out").innerHTML = out.join("");

@@ -99,6 +99,12 @@
 				this.retireBand();
 				this.updateAmbience(null, false);
 			} else if (this.context?.state === "running" && !this.hq) this.setupQuality();
+			// The effects' reverb only in the high quality (0.171.14: "classic" still fed it).
+			if (this.hq?.effectsSend && this.effectsGain)
+				try {
+					if (this._quality === "classic") this.effectsGain.disconnect(this.hq.effectsSend);
+					else this.effectsGain.connect(this.hq.effectsSend);
+				} catch {}
 		},
 		hqOn() {
 			return this.quality === "high" && !!this.hq;
@@ -350,12 +356,14 @@
 						}
 					return { voices, release: options.envelope?.release ?? 0.5 };
 				};
+				// (0.171.14: strings 12 voices, bells 10 — with 8 and 6 a new note took a voice still ringing out in
+				// the busier themes, and its release was cut.)
 				const instruments = {
 					pad: make(T.Synth, { oscillator: { type: "fatsawtooth", count: 2, spread: 22 }, envelope: { attack: 0.9, decay: 0.6, sustain: 0.7, release: 2.4 } }, 8, { volume: -16, filter: 1300, wide: true, verb: 0.45 }),
-					strings: make(T.Synth, { oscillator: { type: "fattriangle", count: 2, spread: 16 }, envelope: { attack: 0.55, decay: 0.4, sustain: 0.75, release: 1.9 } }, 8, { volume: -18, filter: 2200, wide: true, verb: 0.4 }),
+					strings: make(T.Synth, { oscillator: { type: "fattriangle", count: 2, spread: 16 }, envelope: { attack: 0.55, decay: 0.4, sustain: 0.75, release: 1.9 } }, 12, { volume: -18, filter: 2200, wide: true, verb: 0.4 }),
 					brass: make(T.FMSynth, { harmonicity: 1, modulationIndex: 2.6, envelope: { attack: 0.14, decay: 0.3, sustain: 0.6, release: 0.7 }, modulationEnvelope: { attack: 0.25, decay: 0.3, sustain: 0.5, release: 0.6 } }, 5, { volume: -15, filter: 1800, pan: -0.15, verb: 0.35 }),
 					lead: make(T.FMSynth, { harmonicity: 2, modulationIndex: 1.4, oscillator: { type: "sine" }, envelope: { attack: 0.06, decay: 0.3, sustain: 0.5, release: 0.9 } }, 3, { volume: -15, pan: 0.15, verb: 0.35, delay: 0.25 }),
-					bell: make(T.FMSynth, { harmonicity: 3.01, modulationIndex: 11, envelope: { attack: 0.002, decay: 1.3, sustain: 0, release: 1.6 }, modulationEnvelope: { attack: 0.002, decay: 0.45, sustain: 0, release: 0.5 } }, 6, { volume: -12, pan: 0.25, verb: 0.5, delay: 0.3 }),
+					bell: make(T.FMSynth, { harmonicity: 3.01, modulationIndex: 11, envelope: { attack: 0.002, decay: 1.3, sustain: 0, release: 1.6 }, modulationEnvelope: { attack: 0.002, decay: 0.45, sustain: 0, release: 0.5 } }, 10, { volume: -12, pan: 0.25, verb: 0.5, delay: 0.3 }),
 					pluck: make(T.Synth, { oscillator: { type: "triangle" }, envelope: { attack: 0.003, decay: 0.28, sustain: 0, release: 0.35 } }, 6, { volume: -14, pan: -0.25, verb: 0.3, delay: 0.15 }),
 					arp: make(T.Synth, { oscillator: { type: "fatsquare", count: 2, spread: 12 }, envelope: { attack: 0.005, decay: 0.18, sustain: 0.1, release: 0.25 } }, 5, { volume: -20, filter: 2400, pan: 0.3, verb: 0.3, delay: 0.3 }),
 					bass: make(T.MonoSynth, { oscillator: { type: "sawtooth" }, filter: { Q: 1.2, type: "lowpass", rolloff: -24 }, filterEnvelope: { attack: 0.01, decay: 0.25, sustain: 0.35, baseFrequency: 90, octaves: 2.4 }, envelope: { attack: 0.01, decay: 0.3, sustain: 0.65, release: 0.45 } }, 3, { volume: -22, verb: 0.08 }),
@@ -488,6 +496,19 @@
 		updateAmbience(game, active) {
 			const amb = active ? this.ambience() : this.hq?.ambience;
 			if (!amb) return;
+			// Off the battle the four loops fade and stop (0.171.14: they ran on at no volume, in the menu and in
+			// "classic"); the next battle starts them again.
+			if (!active) {
+				const t = this.context.currentTime;
+				for (const layer of Object.values(amb)) {
+					layer.gain.gain.setTargetAtTime(0, t, 0.3);
+					try {
+						layer.source.stop(t + 2);
+					} catch {}
+				}
+				this.hq.ambience = null;
+				return;
+			}
 			const t = this.context.currentTime,
 				level = active && !this.muted ? this.channels.ambient : 0,
 				biome = root.RTS?.MISSIONS?.[game?.missionId]?.biome || "dust",

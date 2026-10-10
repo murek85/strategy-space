@@ -16,9 +16,9 @@
      spent, or 10 minutes), then destroy her headquarters; rifts in the middle of the battle; secondary — shoot down
      3 of her pods. A decision when her headquarters is broken: a truce (the chapter is won, her fleet comes to XIV)
      or her rout (fight on; 600 metal in XIV). The decision of XII: Varn's garrison (destroyers, a bastion
-     and a second flak battery) or the burnt shipyard (3 pods fewer, a slower strike, a weaker headquarters).
+     and a second flak battery) or the burnt shipyard (a third of her pods fewer, slower strikes, a weaker headquarters).
    - XIV · Brama (H6, 0.159): the finale at the black hole Erebus against the Watchers. Three rifts guarded by their
-     ships, each sending waves while open; a rift closes when the player's ships hold it (no enemy near) for 20 s.
+     ships, each sending waves while open; a rift closes when the player's ships hold it (no enemy near) for 30 s.
      The Gate (the Watchers' centre) is shielded while any rift is open. Allies by the decisions: Vok's fleet (truce
      in XIII), Varn's ships (trust in VIII or his garrison saved in XII); 600 metal after her rout. Secondary —
      before the 25th minute. The act's epilogue film (epilogue-films.js) follows the decisions VIII, XII and XIII.
@@ -118,7 +118,7 @@
 				enemyPods: 8,
 				// The landing is over when her pods are spent — or after this long.
 				surviveTime: 600,
-				// The secondary goal by the level, never more than her pods less one (the burnt shipyard of XII takes 3).
+				// The secondary goal by the level, never more than her pods less one (the burnt shipyard of XII takes about a third).
 				podsGoal: { easy: 2, normal: 2, hard: 3 },
 				rifts: [
 					{ at: 330, units: ["spark", "spark", "prism", "arc"] },
@@ -191,6 +191,9 @@
 				garrison: { easy: ["frigate", "frigate"], normal: ["frigate", "frigate", "lancer"], hard: ["frigate", "frigate", "frigate", "frigate", "lancer", "lancer", "cruiser", "cruiser"] },
 			},
 		});
+		// The pods X's fleet gives XI: between the invasion's least and XI's cap.
+		const carriedPods = (n) => Math.max(RTS.INVASION?.minPods ?? 2, Math.min(TUNE.colony11.drop.cap, n));
+		RTS.ACT4_POD_CAP = TUNE.colony11.drop.cap;
 		// The decision of chapter XII (shown and kept by campaign-choices.js): when the uplink works, Varn's garrison
 		// calls for help — and the uplink could instead strike the Admiralty's shipyard.
 		if (RTS.CAMPAIGN_DECISIONS) {
@@ -210,7 +213,7 @@
 					},
 					shipyard: {
 						label: "UDERZ NA STOCZNIĘ",
-						text: "Uderzenie z uplinku pali zapasy Admiralicji (500 metalu mniej), a w rozdziale XIII Vok ma 3 kapsuły mniej, wolniejsze uderzenie z orbity i kwaterę o 25% słabszą. Garnizon Varna zostaje sam.",
+						text: "Uderzenie z uplinku pali zapasy Admiralicji (500 metalu mniej), a w rozdziale XIII Vok ma mniej kapsuł (około jednej trzeciej), uderzenie z orbity ładuje się o jedną trzecią dłużej, a jej kwatera jest o 25% słabsza. Garnizon Varna zostaje sam.",
 						name: "Stocznia w ogniu",
 						radio: { colony13: ["lira", "Stocznia Admiralicji wciąż płonie — Vok ma mniej kapsuł i jej orbita ładuje się wolniej."] },
 					},
@@ -298,7 +301,7 @@
 			],
 			colony14: [
 				["gate", "…OGRÓD MILCZY… WY GO UCISZYLIŚCIE… BRAMA OTWARTA…"],
-				["lira", "To tutaj. Rdzeń Wartowników przy horyzoncie zdarzeń — zniszczmy go, zanim przejdzie ich więcej."],
+				["lira", "To tutaj. Brama Wartowników przy horyzoncie zdarzeń — zniszczmy ją, zanim przejdzie ich więcej."],
 			],
 		};
 		const near = (g, team, type, angle, distance) => {
@@ -611,11 +614,12 @@
 						});
 				return done;
 			},
-			// The pods X leaves for XI (kept in the campaign progress).
+			// The pods X leaves for XI (kept in the campaign progress): as many as XI takes — at most its cap (0.171.12:
+			// the epilogue and the briefing promised 8 while XI gave 6).
 			campaignCarry() {
 				if (this.missionId !== "colony10" || this.result !== "victory") return null;
 				const C = this.invasionResult?.();
-				return C && C.owner === 0 ? { pods: C.pods } : null;
+				return C && C.owner === 0 ? { pods: carriedPods(C.pods) } : null;
 			},
 			// XI: the pods carried over from X (at the start of the chapter, once).
 			applyCampaignCarry(carry = {}) {
@@ -623,8 +627,8 @@
 				this.act4.carried = true;
 				const pods = Number(carry.colony10?.pods);
 				if (!Number.isInteger(pods) || !this.invasion?.pods) return null;
-				this.invasion.pods[0] = Math.max(RTS.INVASION.minPods, Math.min(TUNE.colony11.drop.cap, pods));
-				this.say("lira", `Flota z blokady Eos daje nam ${this.invasion.pods[0]} kapsuł desantowych.`, false);
+				this.invasion.pods[0] = carriedPods(pods);
+				this.say("lira", `Flota z blokady Eos daje nam kapsuły desantowe: ${this.invasion.pods[0]}.`, false);
 				return this.invasion.pods[0];
 			},
 			// The decision of chapter VIII in X and XI.
@@ -648,9 +652,15 @@
 					} else if (d === "shipyard") {
 						this.act4.decision12 = d;
 						const I = this.invasion;
+						// About a third of her pods (0.171.12: 3 fewer left her 1 of 4 on easy and normal, and XIII was
+						// over in 4 minutes), and her strikes from orbit charge slower for the whole chapter (it was
+						// one delay of 60 s, though the radio says the orbit charges slower).
 						if (I?.pods) {
-							I.pods[1] = Math.max(0, (I.pods[1] || 0) - 3);
+							const n = I.pods[1] || 0;
+							I.pods[1] = Math.max(1, n - Math.max(1, Math.round(n * 0.3)));
 							this.act4.vokPods = I.pods[1];
+							this.act4.strikeSlow = 1.35;
+							I.strikeCooldown = (I.strikeCooldown || RTS.INVASION.strikeCooldown) * this.act4.strikeSlow;
 							I.strikeReady += 60;
 						}
 						const hq = this.hq(1);
@@ -688,7 +698,11 @@
 				if (!line) return r;
 				this.act4.varn = key;
 				if (key === "trust") {
-					if (this.missionId === "colony10") near(this, 0, "frigate", toward(this, 0) + 0.6, 150);
+					if (this.missionId === "colony10") {
+						// Varn's frigate, in the Dominium's colours like his other ships (0.171.12).
+						const e = near(this, 0, "frigate", toward(this, 0) + 0.6, 150);
+						if (e) e.faction = "dominion";
+					}
 					if (this.missionId === "colony11" && this.invasion?.pods) this.invasion.pods[0] = Math.min(RTS.INVASION.maxPods, (this.invasion.pods[0] || 0) + 1);
 				} else this.credits += this.missionId === "colony10" ? 250 : 300;
 				this.say(line[0], line[1], false);
@@ -822,7 +836,7 @@
 						const I = this.invasion,
 							every = TUNE.colony13.strikesAfter[this.campaignLevel];
 						if (I && every) {
-							I.strikeCooldown = every;
+							I.strikeCooldown = every * (A.strikeSlow || 1);
 							I.strikeReady = Math.max(I.strikeReady || 0, this.time + 120);
 						} else if (I) {
 							I.strikeReady = 1e9;
@@ -902,7 +916,7 @@
 					];
 				}
 				return [
-					{ text: "Zniszcz Rdzeń Wartowników", done: won },
+					{ text: "Zniszcz Bramę", done: won },
 					{ text: `Cel dodatkowy: zwycięż przed ${Math.round(ch.secondaryTime / 60)}. minutą`, secondary: true, done: won && this.time <= ch.secondaryTime, failed: !won && this.time > ch.secondaryTime },
 				];
 			},
@@ -920,7 +934,7 @@
 				const id = this.missionId;
 				if (id === "colony10") {
 					const C = this.invasionResult?.();
-					return `Stacja blokady milknie, a nad Eos znów przelatują statki Kolonii. Z ocalałej floty powstaje ${C?.pods ?? "kilka"} kapsuł desantowych. Tylko artefakt na orbicie wciąż nadaje — w rytmie, którego nikt nie zna.`;
+					return `Stacja blokady milknie, a nad Eos znów przelatują statki Kolonii. Z ocalałej floty powstaną kapsuły desantowe${C?.pods != null ? ": " + carriedPods(C.pods) : ""}. Tylko artefakt na orbicie wciąż nadaje — w rytmie, którego nikt nie zna.`;
 				}
 				if (id === "colony11")
 					return "Baza Admiralicji w Dolinie Latarni upada. Ale to nie Vok jest największym zmartwieniem: szczeliny przy artefaktach otwierają się na całym pograniczu, a maszyny, które z nich wychodzą, nie odróżniają Kolonii od Dominium. Lira nazywa je Wartownikami.";
@@ -943,10 +957,10 @@
 					return (
 						"Twierdza Admiralicji pada, a Vok ucieka na orbitę z resztą floty. " +
 						(choice === "garrison"
-							? "Garnizon Varna wyszedł z okrążenia Wartowników — jego okręty dołączą do Kolonii nad Glacjalis."
+							? "Garnizon Varna wyszedł z okrążenia Wartowników — jego ludzie i bateria przeciwlotnicza staną obok Kolonii na Nivalis."
 							: choice === "shipyard"
-								? "Uderzenie z uplinku spaliło stocznię Admiralicji: flota Vok nad Glacjalis będzie słabsza. Garnizon Varna milczy."
-								: "Nad Glacjalis czeka ją ostatnia bitwa — a szczeliny otwierają się coraz bliżej.")
+								? "Uderzenie z uplinku spaliło stocznię Admiralicji: flota, którą Vok zbiera pod pierścieniami Glacjalis, będzie słabsza. Garnizon Varna milczy."
+								: "Na Nivalis czeka ją ostatnia bitwa — a szczeliny otwierają się coraz bliżej.")
 					);
 				}
 				return "Admiralicja traci kolejną pozycję. Vok cofa się, a szczeliny wciąż się otwierają.";

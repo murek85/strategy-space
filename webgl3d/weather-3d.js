@@ -9,6 +9,13 @@
    - Sandstorm: grains racing low over the ground and wide curtains of dust.
    - Thunderstorm: a branching bolt strikes the ground near the view, lighting the scene for a moment.
    The ground's wetness and snow cover are returned to the renderer, whose ground shader uses them. */
+// How close the camera is to the ground for the weather (0.171.7, one function for weather-3d.js and the
+// night lights of scene-fx-3d.js): 0 at `far` units of camera distance and further, 1 at `near` and closer,
+// smooth between. Close in, the storm thins out so the board stays readable.
+export function weatherCloseness(distance, far = 1500, near = 700) {
+	const k = Math.max(0, Math.min(1, (far - (distance ?? far)) / (far - near)));
+	return k * k * (3 - 2 * k);
+}
 export function createWeather3D(THREE, { world, heightAt }) {
 	const group = new THREE.Group();
 	world.add(group);
@@ -21,6 +28,9 @@ export function createWeather3D(THREE, { world, heightAt }) {
 			intensity: { value: 0 },
 			// Gusts of a blizzard (0 lull … 1 whiteout), a slow uneven pulse (update).
 			gust: { value: 0 },
+			// The light on the weather (0.171.7): grains, flakes, drops and veils darken at night (they
+			// glowed as a pale haze in a night storm); a lightning flash lights them up.
+			weatherLit: { value: 1 },
 			heightMap: { value: null },
 			heightInfo: { value: heightInfo },
 		};
@@ -83,7 +93,7 @@ gl_FragColor.a *= smoothstep(0.0, ${reach.toFixed(1)}, vSoftWorld.y - softGround
 			// conversion, so they look the same on the plain screen and in the high-range frame of the
 			// cinematic image (where raw values came out pale and the grains as white lines). The mist takes
 			// its colour from the sky (already linear).
-			fragmentShader: fragment.includes("mistColor") ? fragment : fragment.replace(/\}\s*$/, "\ngl_FragColor.rgb = pow(max(gl_FragColor.rgb, 0.0), vec3(2.2));\n#include <colorspace_fragment>\n}"),
+			fragmentShader: fragment.includes("mistColor") ? fragment : (blending === THREE.NormalBlending ? "uniform float weatherLit;\n" : "") + fragment.replace(/\}\s*$/, "\ngl_FragColor.rgb = pow(max(gl_FragColor.rgb, 0.0), vec3(2.2))" + (blending === THREE.NormalBlending ? " * weatherLit" : "") + ";\n#include <colorspace_fragment>\n}"),
 			transparent: true,
 			depthWrite: false,
 			blending,
@@ -469,7 +479,9 @@ gl_FragColor.a *= smoothstep(0.0, ${reach.toFixed(1)}, vSoftWorld.y - softGround
 	// The whole storm lit from above for an instant (no shadows).
 	const skyFlash = new THREE.DirectionalLight("#bcd0ff", 0);
 	skyFlash.position.set(0, 1, 0.3);
-	group.add(flashLight, skyFlash, skyFlash.target);
+	// The sky's flash is in the renderer's hemisphere light (three-renderer.js, weatherLight): a directional light
+	// kept at zero in the scene made every lit fragment of the board count one light more (0.171.15).
+	group.add(flashLight);
 	let boltCycle = -1,
 		strikeAt = null;
 	function buildBolt(x, z, seed) {
@@ -516,36 +528,46 @@ gl_FragColor.a *= smoothstep(0.0, ${reach.toFixed(1)}, vSoftWorld.y - softGround
 	let wetness = 0,
 		snowCover = 0,
 		sandCover = 0;
-	function update(game, time, dt, { focus, span, density = 1, flashes = true, mist: mistLevel = 0, mistTint }) {
+	function update(game, time, dt, { focus, span, density = 1, flashes = true, mist: mistLevel = 0, mistTint, night = 0 }) {
 		const w = game.weather,
 			kind = w.kind,
 			k = w.intensity;
 		shared.time.value = time;
 		shared.focus.value.set(focus.x, focus.y);
 		shared.span.value = span;
-		shared.intensity.value = Math.min(1, k * 1.2);
 		// Gusts: two slow waves together, so the blizzard swells and slackens unevenly.
 		const gust = Math.max(0, Math.min(1, 0.5 + 0.35 * Math.sin(time * 0.31) + 0.25 * Math.sin(time * 0.137 + 1.7)));
 		shared.gust.value = gust;
+		// Zoomed in (0.171.2): the camera close to the ground (focus.distance, the rig's) looks through the whole
+		// storm at once, and the board went milky. Close in, the veils, streaks and mist thin out and the haze
+		// draws back (0 at 1500 units and further, 1 at 700 and closer).
+		// The veils (curtains, drifts, rain sheets, dust) thin out from further away (0.171.7: at a middle zoom the
+		// blizzard's white curtains still hid the board), the particles only close in.
+		const close = weatherCloseness(focus.distance),
+			wide = weatherCloseness(focus.distance, 2600, 900),
+			thin = 1 - 0.7 * wide,
+			fewer = 1 - 0.4 * close;
+		// Every particle of the weather a little paler close in, too.
+		shared.intensity.value = Math.min(1, k * 1.2) * (1 - 0.4 * close);
 		const show = (l, on, share = 1) => {
 			l.mesh.visible = on && k > 0.02;
 			l.mesh.geometry.instanceCount = l.mesh.visible ? Math.floor(l.count * k * density * share) : 0;
 		};
-		show(rain, kind === "rain");
+		show(rain, kind === "rain", fewer);
 		show(splashes, kind === "rain");
-		show(snow, kind === "snow");
-		show(snowStreaks, kind === "snow");
-		show(snowCurtains, kind === "snow");
-		show(snowDrift, kind === "snow");
+		show(snow, kind === "snow", fewer);
+		show(snowStreaks, kind === "snow", thin * (1 - 0.5 * close));
+		show(snowCurtains, kind === "snow", thin);
+		show(snowDrift, kind === "snow", thin);
 		show(ionCurtains, kind === "ion");
 		show(solarWind, kind === "solar");
 		show(meteors, kind === "meteor");
-		show(sand, kind === "sand");
-		show(curtains, kind === "sand", 1);
-		show(sheets, kind === "rain");
+		show(sand, kind === "sand", fewer);
+		show(curtains, kind === "sand", thin);
+		show(sheets, kind === "rain", thin);
 		// Mist: in rain and snow, and a little at night everywhere (its own amount, not the weather's).
 		// Ground mist of a storm (0.147.2: lighter in rain and snow, the board stays readable).
-		const mistAmount = Math.max(mistLevel, kind === "rain" ? k * 0.6 : kind === "snow" ? k * 0.45 : 0);
+		const mistAmount = Math.max(mistLevel, (kind === "rain" ? k * 0.6 : kind === "snow" ? k * 0.45 : 0) * thin);
 		mist.mesh.visible = mistAmount > 0.03;
 		mist.mesh.geometry.instanceCount = mist.mesh.visible ? Math.floor(mist.count * density) : 0;
 		mistIntensity.value = mistAmount;
@@ -575,13 +597,14 @@ gl_FragColor.a *= smoothstep(0.0, ${reach.toFixed(1)}, vSoftWorld.y - softGround
 		bolt.visible = boltGlow.visible = on && flash > 0.12;
 		bolt.material.opacity = bolt.visible ? Math.min(1, 0.4 + flash) : 0;
 		boltGlow.material.opacity = bolt.visible ? 0.05 + flash * 0.12 : 0;
+		shared.weatherLit.value = Math.min(1, 0.32 + 0.68 * (1 - night) + flash * 0.7);
 		flashLight.intensity = flash * 7;
 		skyFlash.intensity = flash * 2.4;
 		// Haze closes the distance, but a storm must not hide the units in view.
 		// A blizzard's haze breathes with the gusts (towards a whiteout, never hiding the units in view).
 		// Solar storm: slow surges of light (flares), handled by the renderer as a warm glow.
 		const solar = kind === "solar" ? k * (0.55 + 0.45 * Math.pow(Math.max(0, Math.sin(time * 0.45)), 3)) : 0;
-		return { kind, intensity: k, solar, flash: kind === "ion" ? ionFlash : kind === "solar" || kind === "meteor" ? 0 : flash, haze: kind === "ion" || kind === "solar" || kind === "meteor" ? 0 : kind === "sand" ? k * 0.45 : kind === "snow" ? k * (0.3 + 0.12 * gust) : k * 0.25, wetness, snowCover, sandCover, strike: struck };
+		return { kind, intensity: k, solar, flash: kind === "ion" ? ionFlash : kind === "solar" || kind === "meteor" ? 0 : flash, haze: (kind === "ion" || kind === "solar" || kind === "meteor" ? 0 : kind === "sand" ? k * 0.45 : kind === "snow" ? k * (0.3 + 0.12 * gust) : k * 0.25) * (1 - 0.65 * wide), wetness, snowCover, sandCover, strike: struck };
 	}
 	return {
 		setTerrain,

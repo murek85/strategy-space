@@ -214,7 +214,7 @@ test("music and effects volume are independent and persisted", () => {
 	assert.equal(r.musicVolume, 1);
 	assert.equal(r.volume, 0.8);
 });
-test("the opening (0.168.4): an Interstellar-like departure, 30 s and 20 s, ending on a question", () => {
+test("the opening (0.168.4): an Interstellar-like departure, 30 s, ending on a question", () => {
 	const a = new GameAudio(),
 		notes = [];
 	a.musicMode = "intro";
@@ -225,10 +225,10 @@ test("the opening (0.168.4): an Interstellar-like departure, 30 s and 20 s, endi
 	assert.ok(new Set(notes.map((n) => n[0])).size >= 6);
 	assert.ok(notes.every((n) => n.slice(1).every(Number.isFinite)));
 	// The parts at their times: the piano call and the slow clock, the figure, the build, the cut, the last note.
-	for (const [total, length] of [[60, 30], [40, 20]]) {
+	for (const [total, length] of [[60, 30]]) {
 		const b = new GameAudio(),
 			at = [];
-		b.musicMode = total === 60 ? "intro" : "intro:20";
+		b.musicMode = "intro";
 		b.instrument = (kind, freq, start) => at.push({ kind, freq, start });
 		let time = 0;
 		for (let step = 0; step < total + 10; step++) time += b.musicStep(step, time);
@@ -538,4 +538,94 @@ test("the prologues of acts II-IV: their scores in step with the films", () => {
 	assert.notEqual(four("trust")[0], four("distance")[0]);
 	assert.equal(four("trust").length, 8);
 	assert.equal(typeof ctx.L.prologue4.parts.blackHole, "function", "the finale and the epilogues borrow its pieces");
+	// 0.171.9: a quiet part after a loud one begins with a drone dying away (act III, the call of Varn at 37 s).
+	const a3 = new GameAudio(),
+		n3 = [];
+	a3.musicMode = "prologue3";
+	a3.instrument = (kind, freq, start) => n3.push({ kind, start });
+	let t3 = 0;
+	for (let step = 0; step < 180; step++) t3 += a3.musicStep(step, t3);
+	assert.ok(n3.some((n) => n.kind === "drone" && n.start >= 37 && n.start < 37.1), "a drone as the quiet begins");
+	// The voices: Lira in act II, Tessa and Varn (by the Hefajstos decision) in act III, Vok and Lira in act IV.
+	assert.deepEqual(Object.keys(ctx.L.prologue2.lines).map(Number), [2, 7]);
+	assert.equal(ctx.L.prologue3.prepare({ colony6: "evacuate" }).lines[4][0], "varn");
+	assert.notEqual(ctx.L.prologue3.prepare({ colony6: "evacuate" }).lines[4][1], ctx.L.prologue3.prepare({ colony6: "destroy" }).lines[4][1]);
+	assert.deepEqual(Object.values(ctx.L.prologue4.lines).map((l) => l[0]), ["vok", "lira"]);
+});
+
+// 0.171.14: a fake Web Audio context for the sound's own logic.
+function fakeContext() {
+	const param = () => ({ value: 1, setValueAtTime() {}, linearRampToValueAtTime() {}, exponentialRampToValueAtTime() {}, setTargetAtTime() {}, cancelScheduledValues() {} });
+	const node = () => {
+		const n = { connect() {}, disconnect() {}, start() {}, stop(t) { n.stopAt = t ?? 0; }, onended: null, curve: null, buffer: null, type: "", oversample: "" };
+		for (const k of ["gain", "frequency", "detune", "Q", "pan", "threshold", "knee", "ratio", "attack", "release", "delayTime", "playbackRate"]) n[k] = param();
+		return n;
+	};
+	return {
+		state: "running",
+		currentTime: 1,
+		sampleRate: 48000,
+		destination: node(),
+		createGain: node,
+		createOscillator: node,
+		createBiquadFilter: node,
+		createStereoPanner: node,
+		createDynamicsCompressor: node,
+		createWaveShaper: node,
+		createDelay: node,
+		createBufferSource: node,
+		createConvolver: node,
+		createBuffer: (channels, length, sampleRate) => ({ length, sampleRate, getChannelData: () => new Float32Array(length) }),
+		async resume() {
+			this.state = "running";
+		},
+		async suspend() {
+			this.state = "suspended";
+		},
+	};
+}
+
+test("radio speech has its own voices, a new line cuts the old one, Vok and the Gate have voices of their own", async () => {
+	require("../audio-radio.js");
+	const a = new GameAudio({ contextFactory: fakeContext });
+	assert.ok(await a.unlock());
+	a.stopMusic(0);
+	const long = "Tu admirał Selen Vok. Varn to zdrajca, a jego rozejm to papier. Każdy statek Kolonii na tej orbicie zostanie zatopiony.";
+	const before = a.effectVoices();
+	assert.ok(a.speak("koss", long));
+	assert.ok(a.speechNodes.size > 20, "the line's syllables");
+	assert.ok(a.effectVoices() - before < 3, "not counted against the effects");
+	const first = [...a.speechNodes];
+	assert.ok(a.speak("lira", "Druga linia."));
+	assert.ok(first.every((n) => n.stopAt > 0), "the line on the air is cut");
+	for (const who of ["vok", "gate"]) {
+		assert.ok(GameAudio.RADIO_VOICES[who], who);
+		assert.ok(GameAudio.RADIO_MOTIFS[who], who);
+	}
+	assert.notDeepEqual(GameAudio.RADIO_VOICES.vok, GameAudio.RADIO_VOICES.lira);
+});
+
+test("battle themes go on where they were after the menu; a replay starts over; no notes below hearing; one noise buffer", async () => {
+	const a = new GameAudio({ contextFactory: fakeContext });
+	assert.ok(await a.unlock());
+	a.setMusicMode("game:dust");
+	for (let i = 0; i < 20; i++) {
+		a.context.currentTime += 0.3;
+		clearTimeout(a.musicTimer);
+		a.musicTimer = null;
+		a.scheduleMusic();
+	}
+	const beat = a.musicBeat;
+	assert.ok(beat > 10);
+	a.setMusicMode("menu");
+	a.setMusicMode("game:dust");
+	assert.ok(a.musicBeat >= beat && a.musicBeat <= beat + 3, `taken up again (${beat} → ${a.musicBeat})`);
+	a.restartMusic("intro");
+	assert.ok(a.musicBeat < 6, "the replay from its start");
+	let heard = null;
+	a.cinematic = (kind, freq) => (heard = freq);
+	a.instrument("organ", 20.6, 1, 1, 0.1);
+	assert.ok(heard >= 38, `an octave (or two) up: ${heard}`);
+	assert.equal(a.noiseBuffer(0.3), a.noiseBuffer(1.2));
+	a.stopMusic(0);
 });

@@ -2,6 +2,14 @@
 
 Najnowsze zmiany na górze. Zakres: portrety i sceny łączności, wybory, głosy, intro, prologi i epilogi, ekrany końca i ładowania, menu, pauza, ekrany menu, interfejs gry, drzewo rozwoju, panel badań, ekran kampanii, odblokowanie do testów, filmy na pełnym ekranie.
 
+## Głosy i szlif prologów aktów II–IV (wersja 0.171.9, 2026-10-10)
+
+- **Głosy** (`lines` jak w prologu kampanii, ujęcia liczone od zera; menu `playIntro` odtwarza je przez `api.speak` z motywem mówiącego przy pierwszej kwestii):
+  - akt II: Lira w ujęciu 3 („Odszyfrowałam sygnał z Khepri IV…”) i 8 („Lądujemy przy stacji badawczej…”);
+  - akt III: dr Tessa w ujęciu 3 (żywy kryształ) i komandor Varn w ujęciu 5 — `lines` jest getterem zależnym od decyzji z rozdziału VI (ewakuacja: wdzięczny, zniszczenie: chłodny, bez decyzji: neutralny);
+  - akt IV: adm. Vok w ujęciu 2 i Lira w ujęciu 8.
+- **Ujęcia:** akt II, ujęcie 1 — planeta wyżej i mniejsza, cały oświetlony brzeg w kadrze; ujęcie 5 — jaśniejsze warstwy gruntu, jaskinia rozświetlona przez wiertło i budzącą się sondę (była czarna); akt III, ujęcie 4 — Eos nigdy nie zostaje zarażona („EOS: LINIA OBRONY”), licznik kończy na 5/6.
+
 ## Nowe prologi aktów II–IV (wersja 0.171, 2026-10-09)
 
 Prologi aktów II, III i IV (`act2-film.js`, `act3-film.js`, `act4-film.js`) były 20-sekundowymi zapowiedziami w 4 ujęciach. Teraz każdy opowiada historię prowadzącą do pierwszego rozdziału aktu: 8 ujęć o własnych długościach (`LENGTHS`, `lengths` w specyfikacji reżysera `CampaignFilm.kit.render`), razem 76 s. Ujęcia z poprzednich prologów zostały częściami nowych historii (`PART`), a tytuł aktu pojawia się dopiero w ostatnim ujęciu. Każdy prolog ma własną muzykę (`prologue2`–`prologue4`, zob. `docs/AUDIO.md`). Ekrany menu `intro2`–`intro4` biorą długość paska postępu z `duration` filmu, a podpis brzmi „Prolog aktu … · ok. 75 sekund”.

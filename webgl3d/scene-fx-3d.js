@@ -19,7 +19,7 @@
      welling up from Aerion's chasms, sand blown over the dune maps, motes over the derelict fields and the
      frozen hive.
    - Shots (called by the renderer): muzzle flashes, rocket smoke trails, impact sparks. */
-import { createWeather3D } from "./weather-3d.js";
+import { createWeather3D, weatherCloseness } from "./weather-3d.js";
 import { createNightLights } from "./night-lights-3d.js";
 
 export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
@@ -481,7 +481,7 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 	// batteries, fire at the forge, white at the medical post.
 	const BUILDING_LIGHT = { lab: "#cfe8ff", uplink: "#cfe8ff", reactor: "#9ff2ff", battery: "#9ff2ff", shieldgen: "#9ff2ff", forge: "#ff9a4a", medbay: "#f4f8ff" };
 	const buildingLight = (type) => BUILDING_LIGHT[type] || "#ffcf8a";
-	const lights = createNightLights(THREE, { world });
+	const lights = createNightLights(THREE, { world, ground: weather3d.ground });
 	// A lamp on the front of an entity (reach ahead of its centre, height over the ground), aimed along its
 	// facing at the ground len ahead.
 	function headlamp(e, { len, reach, height, angle, color, power, range, haze }) {
@@ -501,7 +501,10 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 			if (strength > 0.02) place(pools, g.x, g.y, 0, g.r, g.r, g.color, strength);
 		}
 		lights.begin();
-		const weather = weatherNow.kind ? weatherNow.intensity : 0,
+		// Beams in the air grow in rain, snow and dust — less close in (0.171.3: zoomed in, their cones read as
+		// flat light wedges over the board; 0 at 1500 units of camera distance and further, 1 at 700 and closer).
+		const close = weatherCloseness(focus.distance),
+			weather = (weatherNow.kind ? weatherNow.intensity : 0) * (1 - 0.75 * close),
 			reach = span * 1.3;
 		if (night > 0.05)
 			for (const e of game.entities) {
@@ -524,7 +527,9 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 							fy = e.y + side * r * 0.72,
 							tx = fx + Math.cos(a) * len,
 							ty = fy + Math.sin(a) * len;
-						lights.spot(fx, fy, h, tx, ty, heightAt(tx, ty), { angle: 0.62, soft: 0.8, color: tint, power: night * 1500, range: len * 1.9, haze: night * (0.07 + weather * 0.3) });
+						// Close in the floodlights' beams in the air fade by half (0.171.7: by the headquarters they still
+						// lit up a pale glow in the rain); their light on the ground stays.
+						lights.spot(fx, fy, h, tx, ty, heightAt(tx, ty), { angle: 0.62, soft: 0.8, color: tint, power: night * 1500, range: len * 1.9, haze: night * (0.07 + weather * 0.3) * (1 - 0.5 * close) });
 					}
 					lights.point(e.x + r * 1.25 + 8, e.y, heightAt(e.x, e.y) + Math.max(14, r * 0.42), { color: tint, power: night * 480, range: r * 2 + 70 });
 				} else if (s.flying)
@@ -1367,7 +1372,7 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 			fire.material.uniforms.time.value = time;
 			smoke.material.uniforms.light.value = light;
 			const n = smoke.update(dt) + fire.update(dt);
-			const state = weather3d.update(game, time, dt, { focus, span, density, flashes: quality.flashes !== false, mist: Math.max(night * 0.3, mistLevel || 0), mistTint: sky });
+			const state = weather3d.update(game, time, dt, { focus, span, density, flashes: quality.flashes !== false, mist: Math.max(night * 0.3, mistLevel || 0), mistTint: sky, night });
 			// Where the lightning strikes: sparks and a puff of smoke.
 			if (state.strike) {
 				const { x, y, ground } = state.strike;

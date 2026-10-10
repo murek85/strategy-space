@@ -133,7 +133,7 @@
 			// Near one of its side's buildings or relays (Fortyfikacja przyczółków).
 			holdingGround(e, radius) {
 				return (
-					(this.nodes || []).some((n) => n.owner === e.team && dist(n, e) < radius) ||
+					(this.nodes || []).some((n) => n.owner != null && this.sideLeader(n.owner) === this.sideLeader(e.team) && dist(n, e) < radius) ||
 					this.entities.some((o) => o.team === e.team && o.hp > 0 && !TYPES[o.type].speed && !o.constructionLeft && dist(o, e) < radius + TYPES[o.type].radius)
 				);
 			},

@@ -1,5 +1,26 @@
 # Dźwięk i muzyka
 
+## Wersja 0.171.14 — poprawki z przeglądu gry (2026-10-10)
+
+- **Mowa radiowa** (`audio-radio.js`): `speak()` planowało od razu wszystkie sylaby (do 69 źródeł na linię), a każde liczyło się do limitu efektów (40) — przez ok. 4 s gasły strzały, wybuchy i kliknięcia, a druga linia była odrzucana. Źródła linii są teraz osobno (`speechNodes`, `effectVoices()` = głosy bez muzyki i mowy). Nowa linia wycisza poprzednią w 0,1 s i zaczyna się zaraz po niej.
+- **Głosy Vok i Bramy:** Vok — niski, twardy głos z przerywanym kanałem Admiralicji; Brama — powolny, szklisty (obie mówiły głosem Liry). Każde ma własny motyw.
+- **Zmiana motywu:** nuty grającego utworu idą przez jego szynę (`musicBus`), która przy zmianie wycisza się w 0,25 s, a nuty kończą się po niej (dotąd `stop()` od razu — cięcie z trzaskiem przy każdym `menu.show()`, pauzie i końcu sceny).
+- **Wyjście z okna:** `suspend()` wstrzymuje kontekst dźwięku (blur, ukryta karta), a powrót (`focus`, widoczna karta) go wznawia. Filmy z menu i epilogi mają zegar, który idzie tylko przy oknie na wierzchu (`menu.js` `playIntro`, `app.js` epilogi), więc muzyka i ujęcia zostają razem. Dotąd `silence()` zatrzymywało muzykę, a wracała ona od początku dopiero przy kliknięciu.
+- **Pauza:** motywy bitew pamiętają krok (`musicBeats`) i po menu pauzy grają dalej; filmy i menu zaczynają od początku, nowa bitwa też.
+- **Powtórka epilogu:** `restartMusic("intro")` — tryb się nie zmieniał i powtórka była cicha.
+- **Muzyka bitewna** wchodzi w następnym takcie (nastrój zmieniał się co dwa takty: do 12 s opóźnienia przy 48 uderzeniach na minutę).
+- **Bas:** nuty poniżej ok. 38 Hz idą oktawę wyżej, a niższe głosy organów, burdonu i uderzenia blachy grają tylko nad 38 Hz (do 45% poziomu niektórych motywów leżało poniżej 30 Hz — niesłyszalne w głośnikach, a obciążało ogranicznik).
+- **Szczyty:** po kompresorze łagodne obcięcie (tanh, nadpróbkowanie 2×).
+- **Szum efektów:** jeden bufor, powiększany w razie potrzeby (był tworzony i wypełniany przy każdym strzale i wybuchu).
+- **Jakość wysoka (Tone.js):** smyczki 12 głosów, dzwony 10 (zabierały wybrzmienia).
+- **Jakość „klasyczna”:** efekty nie trafiają już do pogłosu, muzyka nie wysyła do pogłosu muzyki, a cztery pętle otoczenia poza bitwą wyciszają się i zatrzymują (działały bez przerwy z zerową głośnością).
+
+Testy (`tests/audio.test.js`, sztuczny kontekst Web Audio): mowa nie zajmuje głosów efektów, nowa linia ucina poprzednią, Vok i Brama mają głosy i motywy, motyw bitwy wraca w tym samym miejscu po menu, restart od początku, brak nut poniżej 38 Hz, jeden bufor szumu. Zostaje: różnica głośności między motywami (do 19 dB) — do wyrównania na słuch.
+
+## Wersja 0.171.9 — przejścia w muzyce prologów (2026-10-10)
+
+`storyStep` (prologi aktów II–IV): gdy po części głośnej (bitwa, zagrożenie, misja) zaczyna się spokojna, w jej pierwszym takcie gra cichnący burdon i jeden długi dźwięk smyczków — dotąd muzyka urywała się z bębnów do samotnego fortepianu (np. akt III, 37 s: suma głośności 0,22 → 0,05, teraz 0,22 → 0,08). W ostatnim takcie przed częścią głośniejszą albo tytułem narastają smyczki. Test sprawdza burdon na początku spokojnej części (akt III, 37 s). Usunięty skrót `intro:20` (20-sekundowa wersja otwarcia), którego od 0.171 nic nie używało. Muzyka sprawdzona liczbowo (głośność nut w każdej sekundzie), bez odsłuchu.
+
 ## Wersja 0.171 — muzyka prologów aktów II–IV (2026-10-09)
 
 Każdy z nowych prologów aktów II–IV trwa 76 s i ma własną partyturę w stylu „Interstellar” (`audio.js`, `storyStep`, tryby `prologue2`, `prologue3`, `prologue4`; plany w `STORIES`: tonika, części w sekundach na ujęciach filmu z nastrojem, koniec — test pilnuje zgodności z `Act2Film.lengths`, `Act3Film.lengths` i `Act4Film.lengths`). Krok to ósemka przy 120 na minutę (0,5 s), takt — 4 s. Wcześniej prologi grały skrócone otwarcie `intro:20`, które zostało w kodzie.

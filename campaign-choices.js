@@ -57,7 +57,7 @@
 					},
 					prisoners: {
 						label: "OCAL JEŃCÓW",
-						text: "Oficerowie zdradzą słabe punkty: budynki wroga w rozdziałach IV–VI mają o 10% mniej wytrzymałości, a posiłki mogą nadejść dwa razy.",
+						text: "Oficerowie zdradzą słabe punkty: wieże i budynki Dominium w rozdziałach IV–VI mają o 10% mniej wytrzymałości (najwięcej znaczy to w kompleksie Hefajstos), a posiłki z orbity mogą nadejść dwa razy.",
 						name: "Rozmowy z jeńcami",
 						radio: { colony4: ["tessa", "Jeńcy z Nadiru wskazali słabe punkty budowli Dominium. I obiecali, że ich ludzie nie strzelą do ewakuacji."], colony5: ["vale", "Wiemy od jeńców, gdzie Dominium oszczędza na pancerzu. A orbita ma dla nas dwa zrzuty posiłków."], colony6: ["koss", "Słyszałem, że oszczędziliście oficerów z Nadiru. Może jednak można wam ufać."] },
 					},
@@ -66,8 +66,9 @@
 			colony8: {
 				eyebrow: "DECYZJA DOWÓDCY / PROPOZYCJA VARNA",
 				title: "Zaufać<br>Varnowi?",
-				prompt: "Varn proponuje wspólne dowództwo w ostatnim natarciu: jego eskorta i pełny dostęp do stacji orbitalnej — w zamian za kody Liry. Decyzja zmienia rozdział IX i epilog kampanii.",
-				when: (g) => (g.modeState?.scores?.[0] ?? 0) >= 60 || g.time >= 300,
+				prompt: "Varn proponuje wspólne dowództwo w ostatnim natarciu: jego bastiony i pierwszeństwo przy stacji orbitalnej (uderzenie ładuje się szybciej) — w zamian za kody Liry. Decyzja zmienia rozdział IX i epilog kampanii.",
+				// The side's best time on the hill: the player's or Varn's (0.171.12; his time wins the chapter too).
+				when: (g) => Math.max(0, ...Object.entries(g.modeState?.scores || {}).filter(([t]) => g.allied(0, Number(t))).map(([, v]) => v)) >= 60 || g.time >= 300,
 				radio: ["varn", "Kolonie… mam propozycję, zanim pójdziemy na Pyrrhos."],
 				affects: ["colony9"],
 				options: {
@@ -168,8 +169,8 @@
 							}
 						if (this.campaignEvents) this.campaignEvents.reinforceLeft = 2;
 					} else if (choice === "trust") {
-						near("sentinel");
-						near("sentinel");
+						// Varn's bastions, in the Dominium's colours (0.171.12).
+						for (const e of [near("sentinel"), near("sentinel")]) if (e) e.faction = "dominion";
 						this.strikeBoost = 0.7;
 					} else if (choice === "distance") {
 						this.credits += 400;

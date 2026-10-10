@@ -42,11 +42,23 @@
 	}
 
 	// Replaces the game's keys with the file's (the ones missing from the file are removed). Returns readSaves' result.
+	// All or nothing (0.171.16): the file's keys are written first, the old ones removed only after every write
+	// worked; a failed write (no room left) puts the old saves back — they used to be gone by then.
 	function importSaves(storage, text) {
 		const r = readSaves(text);
 		if (!r.ok) return r;
-		for (const k of keysOf(storage)) if (!(k in r.data)) storage.removeItem(k);
-		for (const [k, v] of Object.entries(r.data)) storage.setItem(k, v);
+		const before = new Map(keysOf(storage).map((k) => [k, storage.getItem(k)]));
+		try {
+			for (const [k, v] of Object.entries(r.data)) storage.setItem(k, v);
+		} catch (e) {
+			for (const k of Object.keys(r.data)) if (!before.has(k)) storage.removeItem(k);
+			for (const [k, v] of before)
+				try {
+					storage.setItem(k, v);
+				} catch {}
+			throw e;
+		}
+		for (const k of before.keys()) if (!(k in r.data)) storage.removeItem(k);
 		return r;
 	}
 

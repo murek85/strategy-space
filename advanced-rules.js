@@ -243,7 +243,7 @@
 				"Dane Liry prowadzą do zapomnianego archiwum na Vesperze. Dominium odcięło szlak zaopatrzenia między lodowymi jeziorami. Zabezpiecz dwa przekaźniki i dwa magazyny, a następnie odbierz port. W archiwum czeka klucz do sieci oraz prawda: blackout miał zmusić Kolonie do kapitulacji.",
 		});
 		Object.assign(RTS.MISSIONS.colony3, {
-			name: "III · Świt nad Nadir",
+			name: "III · Świt nad Nadirem",
 			planet: "Nadir — Cytadela Węzła",
 			description:
 				"Klucz z Vesperu może przywrócić zasilanie całemu pograniczu. Musisz przejąć węzły sieci przy złożach na Nadirze i rozbić centrum blokady. Lira potrzebuje czasu: przygotuj ciężką maszynę i artylerię. Zwycięstwo zapali latarnie i otworzy szlak dla transportów pomocy.",

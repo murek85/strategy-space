@@ -5,6 +5,18 @@
 Data: 2026-09-21. Punkt wyjścia: prototyp 0.4.
 Status: pierwszy zakres wdrożony w 0.5 (2026-09-21). Na życzenie użytkownika pozycja Nowa operacja od razu nosi nazwę Gra jednoosobowa. Poniższa koncepcja zachowuje pierwotne nazewnictwo; kampania, multiplayer i pozostałe rozszerzenia nadal są propozycjami.
 
+## Poprawki interfejsu z przeglądu gry (wersja 0.171.13, 2026-10-10)
+
+- **Klawisze** (`app.js`): przy otwartych statystykach armii albo oknie potwierdzenia klawisze należą do okna (Esc je zamyka; dotąd otwierał pod nim menu pauzy). M w menu nie wycisza dźwięku, gdy fokus jest w polu tekstowym albo liście (pola kodów gry sieciowej). Spacja i Enter na przycisku HUD-u naciskają go. Usunięty podwójny i martwy kod Esc. (Decyzja fabularna blokuje wznowienie od 0.171.10.)
+- **Populacja** (`app.js`, `engine.js`): HUD, cel „armia” i blokada produkcji liczą armię gracza, który patrzy (`game.viewer`), nie drużyny 0; limit w jednej stałej `RTS.POP_CAP` (60).
+- **Import zapisów** (`menu.js`, `app.js`): po udanym imporcie `api.holdSaves()` wstrzymuje zapis do przeładowania — wcześniej opuszczenie strony zapisywało trwającą bitwę na zaimportowany autozapis.
+- **Panel gospodarki** (`economy-panel.js`): przycisk z fokusem odnajdywany po wszystkich polach `data-*` (handel, ilość), więc fokus nie spada na stronę przy każdym odświeżeniu.
+- **Okna potwierdzenia** (`game-dialog.js`): zamknięcie zastąpionego okna nie kasuje informacji o nowym (`GameDialog.isOpen()`).
+- **Wąskie okna** (`hud-compact.css`): progi 1180 px (panel oddziału 240 px, boczny 230 px) i 850 px (panel 170 px) — reguły kompaktowego HUD-u miały wyższą specyficzność niż te w `style.css` i nie miały progów.
+- **Mniej pracy na klatkę:** panel oddziału przebudowywany tylko przy zmianie danych (był ok. 8 razy na sekundę, także ukryty); licznik rysowania zapamiętany i zapisywany tylko, gdy widać; tło menu sprawdza widoczność dwa razy na sekundę; kursor szuka otwartych okien tylko po zmianie w drzewie dokumentu.
+- **Dźwięk:** nasłuch odblokowania dźwięku znika po pierwszym udanym odblokowaniu; muzyka wraca po powrocie do okna (fokus, widoczna karta), bez czekania na kliknięcie.
+- **Wersja gry:** stała `GAME_VERSION` w `menu.js` dla stopki i eksportu zapisów (stopka miała martwe „0.16” nadpisywane ręcznie wpisaną wersją); `tests/version.test.js` sprawdza zgodność z `package.json`.
+
 ## Intro kampanii raz, potem z przycisku (wersja 0.168.5, 2026-10-09)
 
 - Intro kampanii (film „Odzyskany Świt”, 30 s) odtwarza się tylko przy pierwszym wejściu w „Kampania: Odzyskany Świt”; potem przycisk prowadzi od razu do mapy kampanii. Obejrzenie zapamiętuje urządzenie (`localStorage`, klucz `pogranicze-intro-v1`, jak sceny łączności) — przenosi je też eksport i import zapisów.

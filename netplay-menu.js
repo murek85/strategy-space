@@ -207,7 +207,7 @@
 				n.link.on("open", () => {
 					n.phase = "lobby";
 					n.status = "";
-					n.link.send({ k: "hello", v: RTS.NET.version, player: cleanPlayer(n.profile) });
+					n.link.send({ k: "hello", v: RTS.NET.version, game: typeof GAME_VERSION !== "undefined" ? GAME_VERSION : "", player: cleanPlayer(n.profile) });
 					if (n.role === "host") n.link.send({ k: "settings", rules: n.rules });
 					this.show("lobby");
 				});
@@ -354,7 +354,7 @@
 				$("lobby-" + key).onchange = (e) => {
 					n.profile[key] = e.target.value;
 					saveProfile(n.profile);
-					n.link?.send({ k: "hello", v: RTS.NET.version, player: cleanPlayer(n.profile) });
+					n.link?.send({ k: "hello", v: RTS.NET.version, game: typeof GAME_VERSION !== "undefined" ? GAME_VERSION : "", player: cleanPlayer(n.profile) });
 					this.show("lobby", "lobby-" + key);
 				};
 			if (host) {
@@ -406,7 +406,7 @@
 			n.relay?.link?.close();
 			const r = (n.relay = { url, link: new NetPlay.RelayLink(url), rooms: [], room: null, you: -1, status: "Łączenie z " + url + "…", note });
 			n.chat = [];
-			r.link.on("open", () => r.link.send({ k: "hello", v: 1, client: n.profile.clientId, player: cleanPlayer(n.profile) }));
+			r.link.on("open", () => r.link.send({ k: "hello", v: 1, game: typeof GAME_VERSION !== "undefined" ? GAME_VERSION : "", client: n.profile.clientId, player: cleanPlayer(n.profile) }));
 			r.link.on("message", (msg) => this.relayMessage(msg));
 			r.link.on("close", () => {
 				if (n.relay !== r || n.battle) return;
@@ -431,6 +431,8 @@
 				const first = !r.room;
 				r.room = msg.room;
 				r.you = msg.you;
+				// Whether this client hosts the room (the server no longer sends the host's client id, 0.171.10).
+				r.host = !!msg.host;
 				if (first || this.screen !== "room") return this.show("room");
 			} else if (msg.k === "closed") {
 				r.room = null;
@@ -460,7 +462,7 @@
 				? `<div class="net-rooms">${r.rooms
 						.map(
 							(g) =>
-								`<div class="net-room"><span><b>${esc(g.name)}</b><small>${esc(maps(g.map))} · ${g.size === 4 ? "2 na 2" : "1 na 1"} · gracze ${g.players}/${g.size}${g.started ? " · bitwa trwa" : g.free ? ` · wolne miejsca: ${g.free}` : " · komplet"}</small></span><button class="net-small" data-room="${esc(g.id)}" ${g.started || !g.free ? "disabled" : ""}>Dołącz</button></div>`,
+								`<div class="net-room"><span><b>${esc(g.name)}</b><small>${esc(maps(g.map))} · ${Number(g.size) === 4 ? "2 na 2" : "1 na 1"} · gracze ${Number(g.players) || 0}/${Number(g.size) || 0}${g.started ? " · bitwa trwa" : g.free ? ` · wolne miejsca: ${Number(g.free) || 0}` : " · komplet"}</small></span><button class="net-small" data-room="${esc(g.id)}" ${g.started || !g.free ? "disabled" : ""}>Dołącz</button></div>`,
 						)
 						.join("")}</div>`
 				: `<p class="net-empty">${r.welcomed ? "Na serwerze nie ma jeszcze gier — utwórz pierwszą." : "Łączenie…"}</p>`;
@@ -503,7 +505,7 @@
 				r = n.relay,
 				room = r?.room;
 			if (!room) return "";
-			const host = room.host === r.client,
+			const host = !!r.host,
 				me = room.seats[r.you],
 				rules = cleanRules({ ...DEFAULT_RULES, ...room.rules });
 			const seat = (s, i) => {
@@ -512,7 +514,8 @@
 					state = s.ai ? "komputer" : !s.taken ? "wolne" : s.host ? "gospodarz" : s.ready ? "gotowy" : "czeka";
 				const actions = [
 					!s.taken && !s.ai && !mine ? `<button class="net-small" data-seat="${i}">Zajmij</button>` : "",
-					host && !s.taken ? `<button class="net-small" data-ai="${i}" data-on="${s.ai ? 0 : 1}">${s.ai ? "Usuń komputer" : "Komputer"}</button>` : "",
+					// (The computer never on the first seat: the server refuses it, 0.171.16.)
+					host && !s.taken && i > 0 ? `<button class="net-small" data-ai="${i}" data-on="${s.ai ? 0 : 1}">${s.ai ? "Usuń komputer" : "Komputer"}</button>` : "",
 				].join("");
 				return `<div class="net-player${mine ? " mine" : ""}"><span class="net-swatch" style="${p ? `background:${esc(p.color)}` : ""}"></span><span><b>${p ? esc(p.name) + (mine ? " (Ty)" : "") : "Wolne miejsce"}</b><small>${p ? esc(RTS.FACTIONS[p.faction]?.name || "") : "czeka na gracza lub komputer"}</small></span><em>${state}</em>${actions ? `<span class="net-seat-actions">${actions}</span>` : ""}</div>`;
 			};
@@ -529,7 +532,7 @@
 				room = r?.room,
 				$ = (id) => this.root.querySelector("#" + id);
 			if (!room) return this.show("rooms");
-			const host = room.host === r.client;
+			const host = !!r.host;
 			this.renderChat();
 			const send = () => {
 				const text = NetPlay.sendChat(r.link, $("net-chat-input").value);
@@ -576,7 +579,8 @@
 			const n = this.net;
 			if (!n) return;
 			if (msg.k === "hello") {
-				if (msg.v !== RTS.NET.version) {
+				// The game's build too (0.171.16): other rules fall out of step mid-battle.
+				if (msg.v !== RTS.NET.version || (typeof GAME_VERSION !== "undefined" && msg.game !== GAME_VERSION)) {
 					n.status = "Drugi gracz ma inną wersję gry — zaktualizujcie ją oboje.";
 					n.link.close();
 				}

@@ -51,8 +51,14 @@ const NetPlay = (() => {
 			this.channel = null;
 			this.handlers = {};
 			this.open = false;
+			// "disconnected" often passes by itself: the link is lost only if it does not come back within 8 s
+			// (0.171.16: a moment of a weak signal ended the battle); "failed" and "closed" end it at once.
 			this.pc.onconnectionstatechange = () => {
-				if (["failed", "closed", "disconnected"].includes(this.pc.connectionState) && this.open) this.lost();
+				const state = this.pc.connectionState;
+				clearTimeout(this.dropTimer);
+				if (!this.open) return;
+				if (state === "failed" || state === "closed") this.lost();
+				else if (state === "disconnected") this.dropTimer = setTimeout(() => this.pc.connectionState === "disconnected" && this.open && this.lost(), 8000);
 			};
 		}
 		on(type, fn) {
@@ -139,7 +145,7 @@ const NetPlay = (() => {
 	class Lockstep {
 		// game: from RTS.createNetworkGame; team: this player's team (0 host, 1 guest); link: an open Link.
 		// pump: called when a turn arrives while the page is hidden (timers are then throttled hard; messages are not).
-		constructor(game, team, link, { onDesync, onClose, onPhase, pump, teams = [0, 1], relay = false } = {}) {
+		constructor(game, team, link, { onDesync, onClose, onPhase, pump, teams = [0, 1], relay = false, resuming = false } = {}) {
 			const NET = RTS.NET;
 			this.game = game;
 			this.team = team;
@@ -168,6 +174,9 @@ const NetPlay = (() => {
 			// Turns up to this one were issued in an earlier phase of the battle: their commands are dropped.
 			this.ignoreUntil = -1;
 			this.pump = pump;
+			// Coming back to a lobby battle: the server's empty turns for this team are taken from the start, also
+			// those that arrive before the replay (0.171.16).
+			this.catching = relay && resuming;
 			this.handler = (msg) => this.receive(msg);
 			this.closeHandler = () => this.onClose?.();
 			link.on("message", this.handler);
@@ -188,13 +197,25 @@ const NetPlay = (() => {
 		receive(msg) {
 			if (msg.k === "turn" && Number.isInteger(msg.t) && Array.isArray(msg.c)) {
 				const from = this.relay ? msg.team : this.other();
-				if (!this.teams.includes(from) || from === this.team) return;
+				if (!this.teams.includes(from)) return;
+				// The own team's turns come only while catching up after a return: the server's empty turns.
+				if (from === this.team) {
+					if (this.relay && this.catching) {
+						this.store(from, msg.t, msg.c);
+						this.sent = Math.max(this.sent, msg.t);
+					}
+					return;
+				}
 				this.store(from, msg.t, msg.c);
 				if (!this.relay && Array.isArray(msg.h)) this.compare(msg.h[0], msg.h[1], true);
 				if (typeof document !== "undefined" && document.hidden) this.pump?.();
 			} else if (msg.k === "desync" && this.relay && !this.desync) {
 				this.desync = true;
 				this.onDesync?.(msg.t);
+			} else if (msg.k === "go" && this.catching && Number.isInteger(msg.t)) {
+				// Caught up: this player's own turns go on after the server's last empty one.
+				this.sent = Math.max(this.sent, msg.t);
+				this.catching = false;
 			} else if (msg.k === "ping") this.link.send({ k: "pong", at: msg.at });
 			else if (msg.k === "pong" && Number.isFinite(msg.at)) this.ping = Math.round(performance.now() - msg.at);
 		}
@@ -219,6 +240,7 @@ const NetPlay = (() => {
 		}
 		// Sends this player's commands for turn t + delay (once), with a checksum of the state at turn t.
 		sendFor(t) {
+			if (this.catching) return;
 			const target = t + this.NET.delay;
 			if (target <= this.sent) return;
 			// A gap (after coming back to a lobby battle) holds empty turns of this team — the server fills it the same way.
@@ -320,6 +342,12 @@ const NetPlay = (() => {
 			}
 			this.sub = 0;
 			this.clock = 0;
+			// The server goes on with empty turns for this team until it hears it has caught up (0.171.16: the others
+			// had waited for the whole replay — minutes after a long battle).
+			if (this.relay) {
+				this.catching = true;
+				this.link.send({ k: "caught" });
+			}
 			return this.turn;
 		}
 		stop() {

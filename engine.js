@@ -3,7 +3,9 @@
 	const W = 3360,
 		H = 2160,
 		CELL = 40,
-		CRATER_LIFE = 300;
+		CRATER_LIFE = 300,
+		// The army limit of a side (units and their queue); the HUD shows it too.
+		POP_CAP = 60;
 	// Shared shoreline geometry keeps drawing and navigation in agreement.
 	function waterRadius(w, angle) {
 		const phase = w.x * 0.003 + w.y * 0.005;
@@ -1122,8 +1124,9 @@
 					y: e.y,
 					r: TYPES[e.type].sight || (e.type === "hq" ? 370 : e.type === "worker" ? 210 : 300),
 				}));
+			// Relays of the side (they belong to its leader, 0.171.11: an allied player had no sight from them).
 			this.nodes
-				.filter((n) => n.owner === team)
+				.filter((n) => n.owner != null && this.sideLeader(n.owner) === this.sideLeader(team))
 				.forEach((n) => sources.push({ ...n, r: 240 }));
 			const cols = this.W / CELL,
 				rows = this.H / CELL;
@@ -2411,7 +2414,7 @@
 				this.notify("Za mało metalu. Przejmij przekaźniki.");
 				return false;
 			}
-			if (this.population(this.me) + this.queue.length >= 60) {
+			if (this.population(this.me) + this.queue.length >= POP_CAP) {
 				this.notify("Osiągnięto limit 60 jednostek.");
 				return false;
 			}
@@ -2459,7 +2462,7 @@
 				!!base &&
 				(dist(base, { x, y }) < 380 ||
 					this.nodes.some(
-						(n) => n.owner === this.me && dist(n, { x, y }) < 240,
+						(n) => n.owner != null && this.sideLeader(n.owner) === this.sideLeader(this.me) && dist(n, { x, y }) < 240,
 					)) &&
 				this.isVisible(x, y) &&
 				!this.blocked(x, y, radius + 8) &&
@@ -2575,49 +2578,22 @@
 		buildTurret(x, y) {
 			return this.buildStructure("turret", x, y);
 		}
+		// Armoured (0.171.11): every building, and every ground vehicle — whatever moves on the ground and is not
+		// infantry, a creature, a worker or a ship. Rockets hit them twice as hard, troopers at less than half. (The
+		// rule had two fixed lists of the first types; every vehicle and building added since — sentinel,
+		// destroyer, colossus, warden, construct, prism, hauler; battery, workshop, hangar, outpost, uplink,
+		// monolith, anchor, resonator, pirate base — counted as light: 16 rockets lost to 6 sentinels.)
+		armored(target) {
+			const s = TYPES[target.type];
+			if (!s) return false;
+			if (!s.speed) return true;
+			if (s.flying || s.ship || s.threat || (RTS.INFANTRY_TYPES || ["trooper", "rocket", "raider"]).includes(target.type)) return false;
+			return !["worker", "beast", "scientist", "technician"].includes(target.type);
+		}
 		damage(attacker, target) {
 			let multiplier = 1;
-			if (attacker.type === "rocket")
-				multiplier = [
-					"tank",
-					"heavy",
-					"artillery",
-					"transport",
-					"flak",
-					"hq",
-					"turret",
-					"barracks",
-					"factory",
-					"depot",
-					"extractor",
-					"reactor",
-					"lab",
-					"wall",
-					"gate",
-				].includes(target.type)
-					? 2
-					: 0.65;
-			if (
-				attacker.type === "trooper" &&
-				[
-					"tank",
-					"heavy",
-					"artillery",
-					"transport",
-					"flak",
-					"hq",
-					"turret",
-					"barracks",
-					"factory",
-					"depot",
-					"extractor",
-					"reactor",
-					"lab",
-					"wall",
-					"gate",
-				].includes(target.type)
-			)
-				multiplier = 0.45;
+			if (attacker.type === "rocket") multiplier = this.armored(target) ? 2 : 0.65;
+			if (attacker.type === "trooper" && this.armored(target)) multiplier = 0.45;
 			if (
 				attacker.type === "tank" &&
 				["trooper", "rocket"].includes(target.type)
@@ -2693,8 +2669,11 @@
 				life: 0.65,
 				maxLife: 0.65,
 			});
-			const scorer = attacker && this.isHuman(attacker.team) ? attacker.team : this.humans[0];
-			if (target.team !== 2 && !this.allied(scorer, target.team)) this.sides[scorer].kills++;
+			// The kill goes to the human side that made it — the player, or the player whose ally (a computer) did
+			// (0.171.11: every kill without a human attacker went to the first player, also one computer army
+			// killing another in a free-for-all, and crawlers bursting).
+			const scorer = !attacker ? null : this.isHuman(attacker.team) ? attacker.team : this.humans.find((h) => this.allied(h, attacker.team));
+			if (scorer != null && this.sides[scorer] && target.team !== 2 && !this.allied(scorer, target.team)) this.sides[scorer].kills++;
 			if (target.type === "hq") {
 				this.result =
 					target.team === this.humans[0]
@@ -2808,8 +2787,10 @@
 		}
 		// Income, production and research of the acting human side.
 		sideTick(dt) {
+			// Relays of the acting side count (they belong to its leader; 0.171.11: a second player of the side had
+			// none of their income).
 			this.income =
-				8 + this.nodes.filter((n) => n.owner === this.me).length * 5;
+				8 + this.nodes.filter((n) => n.owner != null && this.sideLeader(n.owner) === this.sideLeader(this.me)).length * 5;
 			this.credits += this.income * dt;
 			this.recordIncome("passive", this.income * dt);
 			// Legacy queues without a surviving producer wait for a replacement.
@@ -3107,9 +3088,16 @@
 					if (target && e.repath <= 0) {
 						e.path = this.pathTo(e, target);
 						e.repath = 0.8;
+						e.chased = true;
 					} else if (e.order?.kind === "attack" && !target) {
 						e.order = null;
 						e.path = [];
+					} else if (!target && e.chased && e.order?.kind === "attackMove") {
+						// The chase is over (the target died or got away): back on the way to the order's point. The
+						// chase had replaced the route, and the unit stopped where the target fell, its order dropped
+						// (0.171.11; the computer's groups stuck on such a point too).
+						e.chased = false;
+						e.path = this.pathTo(e, { x: e.order.x, y: e.order.y });
 					}
 					if (e.path.length) {
 						const p = e.path[0],
@@ -3235,6 +3223,7 @@
 		H,
 		CELL,
 		CRATER_LIFE,
+		POP_CAP,
 		dist,
 		clamp,
 		waterRadius,

@@ -102,7 +102,7 @@
 				act: 2,
 				requires: "colony4",
 				description:
-					"Archiwum wskazało, gdzie Dominium ukryło rdzenie energetyczne dawnej sieci. Trzy konwojowce muszą przejść przez lodową przełęcz do latarni Kestrel. Konwój jedzie sam; ty utrzymujesz postoje, naprawiasz pojazdy i odpierasz napady w śnieżycach.",
+					"Archiwum wskazało, gdzie Dominium ukryło rdzenie energetyczne dawnej sieci. Trzy konwojowce muszą przejść przez lodową przełęcz do latarni Kestrel. Konwój jedzie sam; Ty utrzymujesz postoje, naprawiasz pojazdy i odpierasz napady w śnieżycach.",
 				objective:
 					"Doprowadź co najmniej 2 z 3 konwojowców do latarni Kestrel przez postoje ALFA i BETA. Dodatkowo: zachowaj wszystkie pojazdy konwoju.",
 				facts: [
@@ -1421,7 +1421,7 @@
 						" Pomiary wskazują źródło blokady: Vulkan IX."
 					);
 				return s.choice === "destroy"
-					? "Serce popiołu przestało istnieć. Dominium straciło źródło energii blokady, lecz razem z kompleksem zniknęła wiedza o sieci. Pogranicze jest wolne — i ostrożne wobec własnej siły."
+					? "Serce popiołu przestało istnieć. Dominium straciło źródło energii blokady, lecz razem z kompleksem zniknęła wiedza o sieci. Koss i dwoje techników zdążyli uciec przed wybuchem — reszta nie. Pogranicze jest wolne — i ostrożne wobec własnej siły."
 					: "Kompleks Hefajstos ucichł, a sześcioro techników pomaga Lirze przebudować go w elektrownię dla Kolonii. Tam, gdzie była blokada, powstaje wspólna sieć. Świt ma swoją cenę, ale nie zapłacili jej niewinni.";
 			},
 			act2Summary() {

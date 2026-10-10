@@ -164,6 +164,10 @@
 					this.musicGain = this.context.createGain();
 					this.musicGain.gain.value = 0.65 * this.musicVolume;
 					this.musicGain.connect(this.master);
+					// The notes of the piece playing go through its own bus, which fades out when the music changes
+					// (0.171.14: every change of theme cut the sounding notes, with clicks).
+					this.musicBus = this.context.createGain();
+					this.musicBus.connect(this.musicGain);
 					this.setupMusicSpace();
 					const limiter = this.context.createDynamicsCompressor();
 					limiter.threshold.value = -12;
@@ -172,7 +176,15 @@
 					limiter.attack.value = 0.003;
 					limiter.release.value = 0.15;
 					this.master.connect(limiter);
-					limiter.connect(this.context.destination);
+					// A soft clip after the compressor (0.171.14): its 3 ms attack let the peaks of a dense battle
+					// through, above full scale.
+					const clip = this.context.createWaveShaper(),
+						curve = new Float32Array(1024);
+					for (let i = 0; i < curve.length; i++) curve[i] = Math.tanh((i / (curve.length - 1)) * 4 - 2);
+					clip.curve = curve;
+					clip.oversample = "2x";
+					limiter.connect(clip);
+					clip.connect(this.context.destination);
 				}
 				if (this.context.state === "suspended" && this.context.resume)
 					await this.context.resume();
@@ -223,6 +235,7 @@
 			if (this.musicPreview) return;
 			if (this.scoreGame !== game) {
 				this.scoreGame = game;
+				this.musicBeats = {};
 				this.musicMood = "explore";
 				this.pendingMood = "explore";
 				this.combatSince = null;
@@ -294,19 +307,16 @@
 				);
 			this.settings();
 		}
+		// The music fades out (and remembers where a battle theme was), the effects stop.
 		silence() {
-			if (this.musicTimer) {
-				clearTimeout(this.musicTimer);
-				this.musicTimer = null;
-			}
-			for (const node of [...this.nodes]) {
-				try {
-					node.stop();
-				} catch {}
-			}
-			this.musicNodes.clear();
-			this.musicNextTime = 0;
-			this.musicBeat = 0;
+			this.stopMusic();
+			this.silenceEffects();
+		}
+		// Window left or the tab hidden (0.171.14): the whole sound waits where it is and goes on when the player comes
+		// back (unlock) — silence() had stopped the music, and it came back from its start only at the next press; a
+		// film's score then no longer matched its shots.
+		suspend() {
+			if (this.context?.state === "running") this.context.suspend?.();
 		}
 		silenceEffects() {
 			for (const node of [...this.nodes]) {
@@ -317,25 +327,61 @@
 				}
 			}
 		}
-		stopMusic() {
+		// Battle themes are taken up again where they were (0.171.14: every visit to the pause menu restarted them,
+		// and the space themes only reach their full organ after a minute); the films and the menu start over.
+		resumable(mode) {
+			return !!mode && mode !== "menu" && !mode.startsWith("intro") && !mode.startsWith("prologue") && mode !== "finale";
+		}
+		stopMusic(fade = 0.25) {
 			if (this.musicTimer) {
 				clearTimeout(this.musicTimer);
 				this.musicTimer = null;
 			}
-			for (const node of [...this.musicNodes]) {
-				try {
-					node.stop();
-				} catch {}
-			}
+			if (this.resumable(this.musicMode)) (this.musicBeats ||= {})[this.musicMode] = this.musicBeat;
+			const c = this.context;
+			if (c && this.musicBus && fade > 0 && c.state === "running") {
+				// The sounding notes fade out with their bus; the next piece gets a new one.
+				const old = this.musicBus,
+					t = c.currentTime;
+				old.gain.cancelScheduledValues(t);
+				old.gain.setValueAtTime(old.gain.value, t);
+				old.gain.linearRampToValueAtTime(0.0001, t + fade);
+				for (const node of [...this.musicNodes]) {
+					try {
+						node.stop(t + fade + 0.02);
+					} catch {}
+				}
+				setTimeout(() => {
+					try {
+						old.disconnect();
+					} catch {}
+				}, (fade + 0.3) * 1000)?.unref?.();
+				this.musicBus = c.createGain();
+				this.musicBus.connect(this.musicGain);
+			} else
+				for (const node of [...this.musicNodes]) {
+					try {
+						node.stop();
+					} catch {}
+				}
 			this.musicNodes.clear();
 			this.musicNextTime = 0;
+			this.musicBeat = this.musicBeats?.[this.musicMode] || 0;
+		}
+		// The current theme from its first step (a replayed epilogue: the mode did not change, so nothing played).
+		restartMusic(mode) {
+			this.stopMusic();
+			if (this.musicBeats) delete this.musicBeats[mode];
+			this.musicMode = null;
 			this.musicBeat = 0;
+			this.setMusicMode(mode);
 		}
 		// Listening from the settings: a theme (menu, intro, game:dust/sun/ice/ash) in a chosen mood, held until
 		// stopPreview() (or another theme). The intro loops.
 		previewMusic(mode, mood = "explore") {
 			this.musicPreview = { mode, mood };
 			this.pendingMood = this.musicMood = mood;
+			if (this.musicBeats) delete this.musicBeats[mode];
 			if (this.musicMode === mode) {
 				this.stopMusic();
 				this.musicMode = null;
@@ -355,6 +401,7 @@
 			if (this.musicMode !== mode) {
 				this.stopMusic();
 				this.musicMode = mode;
+				this.musicBeat = this.musicBeats?.[mode] || 0;
 			}
 			this.scheduleMusic();
 		}
@@ -367,7 +414,7 @@
 			type = "sine",
 			pan = 0,
 		) {
-			if (this.voices - this.musicNodes.size >= this.maxVoices) return;
+			if (this.effectVoices() >= this.maxVoices) return;
 			const c = this.context,
 				t = c.currentTime + delay,
 				source = c.createOscillator(),
@@ -391,20 +438,10 @@
 			source.stop(t + duration + 0.02);
 		}
 		noise(duration, level, pan = 0) {
-			if (this.voices - this.musicNodes.size >= this.maxVoices) return;
+			if (this.effectVoices() >= this.maxVoices) return;
 			const c = this.context,
 				t = c.currentTime,
-				buffer = c.createBuffer(
-					1,
-					Math.ceil(c.sampleRate * duration),
-					c.sampleRate,
-				),
-				data = buffer.getChannelData(0);
-			let seed = 731;
-			for (let i = 0; i < data.length; i++) {
-				seed = (seed * 1664525 + 1013904223) >>> 0;
-				data[i] = (seed / 4294967296) * 2 - 1;
-			}
+				buffer = this.noiseBuffer(duration);
 			const source = c.createBufferSource(),
 				filter = c.createBiquadFilter(),
 				gain = c.createGain();
@@ -422,6 +459,28 @@
 			source.start(t);
 			source.stop(t + duration + 0.02);
 		}
+		// Voices of the effects: all but the music's and the radio speech's (0.171.14: a radio line scheduled up to 69
+		// syllables at once and every effect — shots, blasts, clicks — fell silent for its 4 s).
+		effectVoices() {
+			return this.voices - this.musicNodes.size - (this.speechNodes?.size || 0);
+		}
+		// White noise for the effects: one buffer, grown when a longer one is asked for (it was made and filled anew
+		// for every shot and blast).
+		noiseBuffer(duration) {
+			const c = this.context,
+				need = Math.ceil(c.sampleRate * Math.max(duration, 2));
+			if (!this._noise || this._noise.length < need || this._noise.sampleRate !== c.sampleRate) {
+				const buffer = c.createBuffer(1, need, c.sampleRate),
+					data = buffer.getChannelData(0);
+				let seed = 731;
+				for (let i = 0; i < data.length; i++) {
+					seed = (seed * 1664525 + 1013904223) >>> 0;
+					data[i] = (seed / 4294967296) * 2 - 1;
+				}
+				this._noise = buffer;
+			}
+			return this._noise;
+		}
 		connect(gain, pan) {
 			if (this.context.createStereoPanner) {
 				const p = this.context.createStereoPanner();
@@ -437,11 +496,14 @@
 			this.voices++;
 			this.nodes.add(source);
 			if (music) this.musicNodes.add(source);
+			// A radio line marks its sources while it is being scheduled (audio-radio.js).
+			if (this.trackingSpeech) (this.speechNodes ||= new Set()).add(source);
 			source.onended = () => {
 				source.disconnect();
 				cleanup.forEach((node) => node?.disconnect());
 				this.nodes.delete(source);
 				this.musicNodes.delete(source);
+				this.speechNodes?.delete(source);
 				this.voices = Math.max(0, this.voices - 1);
 			};
 		}
@@ -467,6 +529,8 @@
 			}
 		}
 		instrument(kind, freq, start, duration, level, pan = 0) {
+			// Below about 38 Hz a note is felt more than heard and only fills the limiter (0.171.14): an octave up.
+			while (freq > 0 && freq < 38) freq *= 2;
 			if (CINEMATIC.has(kind)) return this.cinematic(kind, freq, start, duration, level, pan);
 			if (this.musicNodes.size >= 96) return;
 			const c = this.context,
@@ -533,9 +597,9 @@
 				const stereo = c.createStereoPanner();
 				stereo.pan.value = pan;
 				gain.connect(stereo);
-				stereo.connect(this.musicGain);
+				stereo.connect(this.musicBus || this.musicGain);
 				cleanup.push(stereo);
-			} else gain.connect(this.musicGain);
+			} else gain.connect(this.musicBus || this.musicGain);
 			if (
 				[
 					"pad",
@@ -598,7 +662,7 @@
 				echo = false;
 			if (kind === "organ") {
 				// Pipe organ: 8', 4' and 2' ranks, slightly out of tune with each other, a soft wind attack.
-				for (const [m, g, type, d] of [[1, 1, "sine", 0], [2, 0.55, "sine", 3], [4, 0.2, "triangle", -4], [0.5, freq > 160 ? 0 : 0.45, "sine", 0]]) if (g) into(osc(type, freq * m, d), env, g);
+				for (const [m, g, type, d] of [[1, 1, "sine", 0], [2, 0.55, "sine", 3], [4, 0.2, "triangle", -4], [0.5, freq > 160 || freq < 76 ? 0 : 0.45, "sine", 0]]) if (g) into(osc(type, freq * m, d), env, g);
 				shape(0.07, 0.22, 0.95);
 				send = 0.55;
 			} else if (kind === "choir" || kind === "chant") {
@@ -640,7 +704,7 @@
 				mix.connect(drive);
 				drive.connect(filter);
 				into(filter, env, 0.5);
-				into(osc("sine", freq * 0.5), env, 0.9);
+				if (freq >= 76) into(osc("sine", freq * 0.5), env, 0.9);
 				nodes.push(mix, drive, filter);
 				shape(0.12, duration * 0.6, 0.7);
 				send = 0.6;
@@ -691,7 +755,7 @@
 				lfo(0.13, 180, filter.frequency);
 				for (const d of [-6, 7]) osc("sawtooth", freq, d).connect(filter);
 				into(filter, env, 0.8);
-				into(osc("sine", freq * 0.5), env, 0.7);
+				if (freq >= 76) into(osc("sine", freq * 0.5), env, 0.7);
 				nodes.push(filter);
 				shape(Math.min(2.5, duration * 0.3), Math.min(2.5, duration * 0.3), 0.9);
 				send = 0.45;
@@ -842,9 +906,10 @@
 				nodes.push(stereo);
 				out = stereo;
 			}
-			out.connect(this.musicGain);
+			out.connect(this.musicBus || this.musicGain);
 			if (echo && this.musicDelay) into(out, this.musicDelay, 0.6);
-			if (send && this.hq?.musicReverb) into(out, this.hq.musicReverb, send);
+			// The music reverb only in the high quality (0.171.14: also in "classic").
+			if (send && this.hq?.musicReverb && this.hqOn?.() !== false) into(out, this.hq.musicReverb, send);
 			sources.forEach((src, k) => {
 				this.track(src, k ? [] : nodes, true);
 				src.start(start);
@@ -856,9 +921,9 @@
 		// the ice and in the menu. Moods (explore, develop, tension, battle, recovery) add and remove layers.
 		musicStep(step, t) {
 			const hz = (root, n) => root * 2 ** (n / 12);
-			// The films' opening (0.168.4): "intro" under the radio scenes and the epilogues, "intro:20" a shorter cut of
-			// it (the prologues of acts II-IV until 0.171, which have their own scores in STORIES now).
-			if (this.musicMode === "intro" || this.musicMode === "intro:20") return this.introStep(step, t, this.musicMode === "intro" ? 60 : 40);
+			// The films' opening (0.168.4): "intro" under the radio scenes and the epilogues (its 20 s cut "intro:20",
+			// under the prologues of acts II-IV until 0.171, is gone since 0.171.9: they have their own scores).
+			if (this.musicMode === "intro") return this.introStep(step, t, 60);
 			if (this.musicMode === "prologue") return this.prologueStep(step, t);
 			if (STORIES[this.musicMode]) return this.storyStep(step, t, STORIES[this.musicMode]);
 			if (this.musicMode === "finale") return this.finaleStep(step, t);
@@ -873,7 +938,8 @@
 				meter = 8,
 				bar = Math.floor(step / meter),
 				pulse = step % meter;
-			if (!menu && step % (meter * 2) === 0) this.musicMood = this.pendingMood || "explore";
+			// The mood changes every two bars — into battle already at the next bar (0.171.14: up to 12 s late).
+			if (!menu && (step % (meter * 2) === 0 || (step % meter === 0 && this.pendingMood === "battle" && this.musicMood !== "battle"))) this.musicMood = this.pendingMood || "explore";
 			const mood = menu ? "explore" : this.musicMood,
 				soft = { explore: 0.85, develop: 0.95, tension: 0.9, battle: 1, recovery: 0.75 }[mood] || 0.85;
 			const play = (kind, root, n, duration, level, pan = 0, delay = 0) => this.instrument(kind, hz(root, n), t + delay, duration, level * soft, pan);
@@ -1013,6 +1079,16 @@
 				if (mood === "battle") play("braam", -12, beat * 6, 0.045);
 			}
 			if (mood === "threat" && within === 0) play("braam", -12, beat * 8, 0.035);
+			// Transitions (0.171.9): after a loud part a quiet one begins with a soft drone dying away (the music
+			// dropped from drums to a lone piano at once); in the last bar before a louder part the strings swell.
+			const LOUD = ["battle", "threat", "mission"],
+				before = P.parts[index - 1]?.[1],
+				after = P.parts[index + 1]?.[1];
+			if (within === 0 && LOUD.includes(before) && !LOUD.includes(mood) && mood !== "title") {
+				play("drone", -12, beat * 10, 0.02);
+				play("strings", chord[2], beat * 8, 0.008, -0.3);
+			}
+			if (pulse === 0 && next - s <= 4 && next - s > 0 && (LOUD.includes(after) || after === "title") && !LOUD.includes(mood)) play("strings", chord[2] + 12, 4, 0.009, 0.3);
 			// Hope: the piano arpeggio.
 			if (mood === "hope" && pulse % 2 === 0) play("piano", arp[pulse / 2] + 24, beat * 2.5, 0.02, pulse % 4 ? 0.25 : -0.25);
 			// Mystery: signal-like bells high up, a beat of three then a rest.

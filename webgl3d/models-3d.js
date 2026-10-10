@@ -711,6 +711,8 @@ export function createModels3D(THREE) {
 		gasHalo: std("#e0c0ff", { emissive: "#c890ff", emissiveIntensity: 1.4, roughness: 1, transparent: true, opacity: 0.2, flatShading: false, depthWrite: false }),
 		gasPuff: std("#b27aee", { emissive: "#8a48d8", emissiveIntensity: 1.0, roughness: 1, transparent: true, opacity: 0.15, flatShading: false, depthWrite: false }),
 		gasPuffBlue: std("#7aa8f0", { emissive: "#3f70d8", emissiveIntensity: 0.9, roughness: 1, transparent: true, opacity: 0.13, flatShading: false, depthWrite: false }),
+		// The last puffs of each arm, fainter, so the spiral ends in a wisp (0.171.7).
+		gasPuffFaint: std("#a07ae8", { emissive: "#6a48c8", emissiveIntensity: 0.8, roughness: 1, transparent: true, opacity: 0.07, flatShading: false, depthWrite: false }),
 		spark: std("#ffffff", { emissive: "#f0e0ff", emissiveIntensity: 2.4 }),
 		ice: std("#c6d6e2", { roughness: 0.45, metalness: 0.05 }),
 		oreRock: std("#4c4540", { roughness: 0.92, metalness: 0.08 }),
@@ -722,7 +724,20 @@ export function createModels3D(THREE) {
 		panel: std("#24476e", { roughness: 0.25, metalness: 0.4, emissive: "#0c2240", emissiveIntensity: 0.5 }),
 		strut: std("#4a5458", { roughness: 0.5, metalness: 0.4 }),
 	};
-	for (const m of ["gasCore", "gasHalo", "gasPuff", "gasPuffBlue", "spark", "metal", "vein", "crystal"]) glowing.push([SPACE_DEP[m], SPACE_DEP[m].emissiveIntensity]);
+	for (const m of ["gasCore", "gasHalo", "gasPuff", "gasPuffBlue", "gasPuffFaint", "spark", "metal", "vein", "crystal"]) glowing.push([SPACE_DEP[m], SPACE_DEP[m].emissiveIntensity]);
+	// Soft gas (0.171.4): the halo and the puffs of the nebula pocket were translucent ellipsoids with a hard
+	// rim — close in they read as flat overlapping discs. Each fades out towards its silhouette (the more
+	// the surface turns from the camera, the clearer), so they melt into one glowing cloud.
+	for (const m of [SPACE_DEP.gasHalo, SPACE_DEP.gasPuff, SPACE_DEP.gasPuffBlue, SPACE_DEP.gasPuffFaint]) {
+		m.blending = THREE.AdditiveBlending;
+		m.onBeforeCompile = (shader) => {
+			shader.fragmentShader = shader.fragmentShader.replace(
+				"#include <opaque_fragment>",
+				"diffuseColor.a *= pow(abs(dot(normalize(normal), normalize(vViewPosition))), 2.2);\n#include <opaque_fragment>",
+			);
+		};
+		m.customProgramCacheKey = () => "softGas";
+	}
 	// Ore: a big asteroid of dark stone set with nuggets of copper-gold metal and glowing veins, a train of
 	// smaller chunks round it; gas: a pocket of nebula — a bright knot with a halo and two spiral arms of
 	// soft glowing gas round it, sparks and ice caught in the swirl (the wider cloud: buildNebula,
@@ -768,7 +783,10 @@ export function createModels3D(THREE) {
 							a = arm + t * 3.4,
 							d = (7 + t * 36) * k,
 							s = (4 + t * 10) * k;
-						mesh(root, sphereGeo(1, 14, 10), j % 3 === 2 ? SPACE_DEP.gasPuffBlue : SPACE_DEP.gasPuff, [Math.cos(a) * d, H + Math.sin(t * 6 + arm) * 3, Math.sin(a) * d * 0.85]).scale.set(s * 1.3, s * 0.6, s);
+						// The last three thinner and fainter: the arm tapers into a wisp instead of a round lobe.
+						const tip = j >= 9,
+							w = tip ? s * (1 - (j - 8) * 0.18) : s;
+						mesh(root, sphereGeo(1, 14, 10), tip ? SPACE_DEP.gasPuffFaint : j % 3 === 2 ? SPACE_DEP.gasPuffBlue : SPACE_DEP.gasPuff, [Math.cos(a) * d, H + Math.sin(t * 6 + arm) * 3, Math.sin(a) * d * 0.85]).scale.set(w * 1.5, w * 0.45, w * 0.8);
 					}
 				// Sparks: new stars lighting up in the cloud.
 				for (let i = 0; i < 8; i++) {

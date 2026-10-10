@@ -258,7 +258,8 @@
 					.map(([id, s]) => ({ id: Number(id), ...s }));
 			},
 			// The side's sight: a grid of the cells its units, buildings and relays see now, and when each cell
-			// was last seen. Not saved (rebuilt after loading).
+			// was last seen. Saved since 0.171.11 (the scouts go where the side has not looked for longest: rebuilt
+			// after loading, it sent them elsewhere and the loaded battle went another way).
 			aiVision(team, force = false) {
 				const cols = Math.ceil(this.W / CELL),
 					rows = Math.ceil(this.H / CELL),
@@ -518,17 +519,15 @@
 					rival = this.aiFoeHq(T.team, hq),
 					load = new Map();
 				for (const w of this.entities) if (w.team === T.team && w.type === "worker" && w.hp > 0 && w !== e && w.aiTask?.oreId) load.set(w.aiTask.oreId, (load.get(w.aiTask.oreId) || 0) + 1);
-				const drops = this.aiDropoffs(T.team);
-				return this.ores
-					.filter(
-						(o) =>
-							o.amount > 0 &&
-							(!rival || dist(o, hq) < dist(o, rival) * 0.95) &&
-							this.entities.every((b) => b.type !== "hq" || b.team === T.team || b.hp <= 0 || dist(b, o) > 500) &&
-							dist(o, hq) < 1100,
-					)
-					.map((o) => ({ o, cost: Math.min(...drops.map((d) => dist(d, o))) + (load.get(o.id) || 0) * 140 }))
-					.sort((a, b) => a.cost - b.cost)[0]?.o;
+				const drops = this.aiDropoffs(T.team),
+					best = (list) => list.map((o) => ({ o, cost: Math.min(...drops.map((d) => dist(d, o))) + (load.get(o.id) || 0) * 140 })).sort((a, b) => a.cost - b.cost)[0]?.o;
+				const near = (o, r) => this.entities.some((b) => b.type === "hq" && b.team !== T.team && b.hp > 0 && dist(b, o) <= r);
+				return (
+					best(this.ores.filter((o) => o.amount > 0 && (!rival || dist(o, hq) < dist(o, rival) * 0.95) && !near(o, 500) && dist(o, hq) < 1100)) ||
+					// When the ore on its side runs out, the nearest field left anywhere, not beside another base
+					// (0.171.11: the workers stood idle at the centre for the rest of the battle).
+					best(this.ores.filter((o) => o.amount > 0 && !near(o, 350)))
+				);
 			},
 			aiWorkers(T, dt, L) {
 				for (const e of this.entities) {
@@ -677,10 +676,17 @@
 						T.metal -= cost;
 						T.spent += cost;
 					};
+				// Without builders a new worker first, and no new projects until there is one (0.171.11: with every
+				// worker dead it kept paying for sites nobody could build and never got its economy back).
+				const short = workers.length < Math.min(2, L.workers);
+				if (short && !hq.aiQueue && !disabled(this, hq) && T.metal >= this.aiCost("worker", T.team)) {
+					pay(this.aiCost("worker", T.team));
+					hq.aiQueue = { type: "worker", left: TYPES.worker.build * L.prodTime };
+				}
 				// Construction: one project at a time (two on hard), each with a builder.
 				const wants = this.aiWants(T, L);
 				let reserve = 0;
-				if (projects.length < L.projects && wants.length) {
+				if (!short && projects.length < L.projects && wants.length) {
 					const type = wants.find((w) => !projects.some((p) => p.type === w)) || null,
 						cost = type && this.aiCost(type, T.team);
 					if (type && T.metal >= cost) {
@@ -1164,7 +1170,8 @@
 				});
 			},
 			serialize() {
-				return { ...old.serialize.call(this), enemyAi: this.enemyAi || null };
+				const vision = this._aiVision && Object.fromEntries(Object.entries(this._aiVision).map(([team, V]) => [team, { cols: V.cols, rows: V.rows, at: V.at, grid: Array.from(V.grid), seen: Array.from(V.seen) }]));
+				return { ...old.serialize.call(this), enemyAi: this.enemyAi || null, aiSight: vision || null };
 			},
 		});
 
@@ -1187,6 +1194,12 @@
 			)
 				throw Error("Uszkodzony zapis przeciwnika");
 			g.enemyAi = JSON.parse(JSON.stringify(s));
+			// The sides' sight (0.171.11; older saves rebuild it). Grids of another size are left out.
+			const cols = Math.ceil(g.W / CELL),
+				rows = Math.ceil(g.H / CELL);
+			for (const [team, V] of Object.entries(state.aiSight || {}))
+				if (V && V.cols === cols && V.rows === rows && Number.isFinite(V.at) && Array.isArray(V.grid) && V.grid.length === cols * rows && Array.isArray(V.seen) && V.seen.length === cols * rows && V.seen.every(Number.isFinite))
+					(g._aiVision ||= {})[team] = { cols, rows, at: V.at, grid: Uint8Array.from(V.grid), seen: Float32Array.from(V.seen) };
 			for (const T of Object.values(g.enemyAi.teams)) {
 				if (FOG.on && (!T.intel || typeof T.intel !== "object" || !T.intel.structures)) {
 					const foes = g.aiFoes(T.team);

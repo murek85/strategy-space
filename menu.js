@@ -1,4 +1,6 @@
 /* Navigation owns screens; the application retains a single simulation loop. */
+// The game's version: the menu's footer and the saves' export (0.171.13: one place; it was written twice by hand).
+const GAME_VERSION = "0.171.17";
 // Listening to the music in the settings: themes (audio.js music modes) and the game's moods.
 const MUSIC_THEMES = [
 	["menu", "Menu — Odległe światło"],
@@ -133,7 +135,7 @@ class CommandMenu {
 		if (screen !== "settings") this.api.audio?.()?.stopPreview?.();
 		this.api.music?.(
 			// The campaign's finale has its own victory cue (audio.js, finaleStep).
-			// The prologues of acts II-IV last 20 s: their own length of the opening cue (audio.js, introStep).
+			// The prologues of acts II-IV (about 75 s) have their own scores (audio.js, STORIES).
 			screen === "intro" ? "prologue" : screen === "finale" ? "finale" : ["intro2", "intro3", "intro4"].includes(screen) ? "prologue" + screen.slice(-1) : screen === "interlude" ? "intro" : "menu",
 		);
 		this.gameElements.forEach((e) => (e.inert = true));
@@ -226,7 +228,7 @@ class CommandMenu {
 					choices: {},
 				},
 				card = ([id, m]) =>
-					`<button class="menu-action mission-card" data-mission="${id}" ${m.requires && !progress[m.requires] ? "disabled" : ""}><span><b>${m.name}${details.badges[id] ? ' <i class="act2-badge" title="Cel dodatkowy wykonany">◆</i>' : ""}</b><small>${m.planet} · ${progress[id] ? "Ukończono" + (details.choices[id] ? (details.choices[id] === "destroy" ? " · kompleks zniszczony" : details.choices[id] === "evacuate" ? " · personel ewakuowany" : " · " + (RTS.CAMPAIGN_DECISIONS?.[id]?.options?.[details.choices[id]]?.name || "").toLowerCase()) : "") : m.requires && !progress[m.requires] ? "Ukończ: " + RTS.MISSIONS[m.requires].name : "Gotowa do rozpoczęcia"}</small></span><span>↗</span></button>`,
+					`<button class="menu-action mission-card" data-mission="${id}" ${m.requires && !progress[m.requires] ? "disabled" : ""}><span><b>${m.name}${details.badges[id] ? ' <i class="act2-badge" title="Cel dodatkowy wykonany">◆</i>' : ""}</b><small>${m.planet} · ${progress[id] ? "Ukończono" + (details.choices[id] ? (details.choices[id] === "destroy" ? " · kompleks zniszczony" : details.choices[id] === "evacuate" ? " · personel ewakuowany" : " · " + (RTS.CAMPAIGN_DECISIONS?.[id]?.options?.[details.choices[id]]?.name || "").replace(/^./, (c) => c.toLowerCase())) : "") : m.requires && !progress[m.requires] ? "Ukończ: " + RTS.MISSIONS[m.requires].name : "Gotowa do rozpoczęcia"}</small></span><span>↗</span></button>`,
 				missions = Object.entries(RTS.MISSIONS)
 					.filter(([, m]) => !!m.campaign === isCampaign)
 					.sort(([a], [b]) => a.localeCompare(b));
@@ -349,6 +351,23 @@ class CommandMenu {
 				body;
 		if (screen === "news")
 			body =
+				"<h2>0.171.17 / Testy i narzędzia</h2><p>Pewniejsze testy grafiki i serwera — zmiany pod spodem, bez wpływu na rozgrywkę.</p>" +
+				"<h2>0.171.16 / Poprawki gry sieciowej</h2><p>Zerwane połączenie nie zatrzymuje już bitwy innym, powrót do długiej bitwy nikogo nie zamraża, a gracze z różnymi wersjami gry nie trafią do jednej bitwy.</p>" +
+				"<h2>0.171.15 / Poprawki grafiki</h2><p>Plansza 3D płynniej znosi stawianie i niszczenie budynków, nie zamraża podglądu budowy po zmianie rozmiaru okna i nie zostawia śmieci w pamięci przy zmianie mapy.</p>" +
+				"<h2>0.171.14 / Poprawki dźwięku</h2><p>Radio nie zagłusza już bitwy, Vok i Brama mają własne głosy, muzyka zmienia się płynnie i czeka razem z filmem, gdy wyjdziesz z okna, a motyw bitwy po pauzie gra dalej.</p>" +
+				"<h2>0.171.13 / Poprawki interfejsu</h2><p>Esc, Spacja i M działają tam, gdzie powinny, HUD w grze sieciowej pokazuje Twoją armię, import zapisów nie ginie, a wąskie okna mieszczą pasek dowodzenia.</p>" +
+				"<h2>0.171.12 / Poprawki kampanii</h2><p>Spójna historia techników z Hefajstosa, uczciwe liczby kapsuł i skutków decyzji, odprawa XIV z sojusznikami, poprawione teksty aktu IV i prologu aktu II.</p>" +
+				"<h2>0.171.11 / Poprawki rozgrywki</h2><p>Atak z marszem nie urywa się po pościgu, rakiety skutecznie niszczą wszystkie pojazdy i budynki, komputer odbudowuje robotników i szuka rudy, a sojusznik w 2 na 2 korzysta z przekaźników strony.</p>" +
+				"<h2>0.171.10 / Poprawki z przeglądu</h2><p>Bezpieczniejszy serwer lobby, decyzje fabularne naprawdę wstrzymują bitwę, a plansza 3D płynniej reaguje na kursor.</p>" +
+				"<h2>0.171.9 / Głosy w prologach</h2><p>W prologach aktów II–IV mówią Lira, dr Tessa, komandor Varn i adm. Vok, a muzyka płynniej przechodzi między scenami.</p>" +
+				"<h2>0.171.8 / Testy i odporność</h2><p>Testy grafiki sprawdzają burze, kosmos i niebo; gra nie wyrzuca błędu przy zdarzeniach spoza elementów strony.</p>" +
+				"<h2>0.171.7 / Kosmos i pogoda</h2><p>Wyraźniejsze mgławice, Szkarłatna Mgławica z przerwami między obłokami, siatka gaśnie pod chmurami. Burze nie zacierają planszy przy średnim przybliżeniu, a nocą nie świecą bladą mgłą.</p>" +
+				"<h2>0.171.6 / Mgławice nieba</h2><p>Niebo w kosmosie ma kłębiaste mgławice z jasnym sercem i pasmami pyłu — pochyl kamerę (PageUp), by zobaczyć je nad bitwą.</p>" +
+				"<h2>0.171.5 / Chmury mgławicy</h2><p>Mgławice wokół złóż gazu w kosmosie mają miękkie brzegi, włókna i powoli dryfują — bez prostych krawędzi i płaskich plam.</p>" +
+				"<h2>0.171.4 / Chmury gazu</h2><p>Złoża gazu w kosmosie to teraz miękka, świecąca spirala zamiast płaskich krążków.</p>" +
+				"<h2>0.171.3 / Deszcz i piasek na przybliżeniu</h2><p>W ulewie i burzy piaskowej światła reflektorów nie rysują już płaskich, jasnych klinów na planszy przy przybliżeniu.</p>" +
+				"<h2>0.171.2 / Burze na przybliżeniu</h2><p>Na przybliżeniu burza nie zaciera już planszy: zasłony śniegu, smugi i mgła rzedną, gdy kamera jest blisko ziemi. Z daleka zamieć wygląda jak dawniej.</p>" +
+				"<h2>0.171.1 / Zaznaczenie budynków</h2><p>Zaznaczony budynek na planszy 3D nie ma już białej, kropkowanej obwódki nad sobą — tylko delikatny pierścień u podstawy, jak jednostki.</p>" +
 				"<h2>0.171 / Nowe prologi aktów II–IV</h2><p>Prologi aktów II, III i IV opowiadają dłuższe historie prowadzące do pierwszego rozdziału aktu — po około 75 sekund, z własną muzyką. Prologi aktów III i IV zmieniają się zależnie od Twoich decyzji.</p>" +
 				"<h2>0.170 / Nowy finał kampanii</h2><p>Film finału pokazuje, co stało się na koniec przygody — od pęknięcia Bramy po świt nad Eos z zapaloną latarnią. Około 2 minut, zależnie od Twoich decyzji, z nową muzyką.</p>" +
 				"<h2>0.169 / Nowy prolog kampanii</h2><p>Intro opowiada historię pogranicza w 15 ujęciach (ok. 2,5 minuty) — od pierwszych osad i sieci latarni, przez blokadę Dominium, po lądowanie przy Stacji Ciszy na Eos. Z nową muzyką i głosem Liry.</p>" +
@@ -620,7 +639,7 @@ class CommandMenu {
 		this.root.classList.toggle("reduced-motion", this.reduced);
 		// Films (the intro, the prologues, the radio scenes) take the whole screen.
 		this.root.classList.toggle("film-screen", ["intro", "intro2", "intro3", "intro4", "finale", "interlude"].includes(screen));
-		this.root.innerHTML = `<div class="menu-stars" aria-hidden="true"></div><div class="menu-orbit" aria-hidden="true"><div class="menu-planet"><div class="planet-surface"></div><div class="planet-clouds"></div><div class="planet-shade"></div></div></div><header class="menu-brand"><span>◈</span> POGRANICZE <small>GALAKTYKI / POKŁAD DOWODZENIA</small></header><div class="menu-layout"><section class="menu-content ${["knowledge", "scenarios", "intro", "intro2", "intro3", "intro4", "finale", "interlude", "campaign"].includes(screen) ? "wide" : ""}"><span class="eyebrow">${EYEBROWS[screen] || "WOLNE KOLONIE / SEKTOR 07"}</span><h1 tabindex="-1">${title}</h1>${body}</section>${screen === "pause" ? this.situationHtml() : ""}${screen === "home" ? `<aside class="menu-mission"><span class="eyebrow">${save.valid ? "OSTATNIA OPERACJA" : "SYGNAŁ Z POWIERZCHNI"}</span><h2>${save.valid ? RTS.MISSIONS[save.missionId]?.planet || "Khepri IV" : "Khepri IV"}</h2><p>${save.valid ? RTS.MISSIONS[save.missionId]?.name || "Cichy Horyzont" : "Ekspedycja Wolnych Kolonii"}</p><p>${save.valid ? `Czas bitwy: ${save.time}<br>Zapis: ${save.date}` : "Dominium zajęło północny kompleks.<br>Przywróć kontrolę nad sektorem."}</p><span class="menu-tag">${save.valid ? "ZAPIS GOTOWY DO WZNOWIENIA" : "OCZEKIWANIE NA ROZKAZY"}</span></aside>` : ""}</div><footer class="menu-footer"><span>PROTOTYP 0.16 · ZAPIS LOKALNY</span><button id="menu-news">Co nowego i plany</button><button id="menu-sound">Dźwięk</button></footer>`;
+		this.root.innerHTML = `<div class="menu-stars" aria-hidden="true"></div><div class="menu-orbit" aria-hidden="true"><div class="menu-planet"><div class="planet-surface"></div><div class="planet-clouds"></div><div class="planet-shade"></div></div></div><header class="menu-brand"><span>◈</span> POGRANICZE <small>GALAKTYKI / POKŁAD DOWODZENIA</small></header><div class="menu-layout"><section class="menu-content ${["knowledge", "scenarios", "intro", "intro2", "intro3", "intro4", "finale", "interlude", "campaign"].includes(screen) ? "wide" : ""}"><span class="eyebrow">${EYEBROWS[screen] || "WOLNE KOLONIE / SEKTOR 07"}</span><h1 tabindex="-1">${title}</h1>${body}</section>${screen === "pause" ? this.situationHtml() : ""}${screen === "home" ? `<aside class="menu-mission"><span class="eyebrow">${save.valid ? "OSTATNIA OPERACJA" : "SYGNAŁ Z POWIERZCHNI"}</span><h2>${save.valid ? RTS.MISSIONS[save.missionId]?.planet || "Khepri IV" : "Khepri IV"}</h2><p>${save.valid ? RTS.MISSIONS[save.missionId]?.name || "Cichy Horyzont" : "Ekspedycja Wolnych Kolonii"}</p><p>${save.valid ? `Czas bitwy: ${save.time}<br>Zapis: ${save.date}` : "Dominium zajęło północny kompleks.<br>Przywróć kontrolę nad sektorem."}</p><span class="menu-tag">${save.valid ? "ZAPIS GOTOWY DO WZNOWIENIA" : "OCZEKIWANIE NA ROZKAZY"}</span></aside>` : ""}</div><footer class="menu-footer"><span>PROTOTYP ${GAME_VERSION} · ZAPIS LOKALNY</span><button id="menu-news">Co nowego i plany</button><button id="menu-sound">Dźwięk</button></footer>`;
 		// The living backdrop (menu-backdrop.js), one canvas kept across the screens.
 		if (this.backdrop === undefined) this.backdrop = typeof MenuBackdrop !== "undefined" ? MenuBackdrop.create(this) : null;
 		if (this.backdrop) {
@@ -639,8 +658,6 @@ class CommandMenu {
 		ranges.forEach((r) => r.addEventListener("input", () => fill(r)));
 		queueMicrotask(() => ranges.forEach(fill));
 		if (screen === "knowledge") KnowledgeBase.mount(this.root);
-		this.root.querySelector(".menu-footer span").textContent =
-			"PROTOTYP 0.171 · ZAPIS LOKALNY";
 		if (
 			screen === "scenarios" ||
 			(screen === "briefing" &&
@@ -1386,6 +1403,13 @@ class CommandMenu {
 	// Act IV: Varn after the decision of chapter VIII (X and XI), and the pods the fleet of X left for XI.
 	act4LegacyHtml() {
 		const id = this.selectedMission;
+		// XIV: who flies with the Colonies to the Gate (0.171.12: Varn's ships, from VIII or XII, were never announced).
+		if (id === "colony14") {
+			const c = this.api.campaignDetails?.()?.choices || {},
+				varn = c.colony12 === "garrison" || c.colony8 === "trust",
+				vok = c.colony13 === "truce";
+			return `<div class="menu-legacy"><span class="menu-tag">SOJUSZNICY PRZY BRAMIE</span><p>${varn ? `Okręty Varna (fregata i korweta) lecą z Tobą — ${c.colony12 === "garrison" ? "za ocalony garnizon" : "za wspólne dowództwo"}.` : "Varn zostaje na Nivalis: jego okrętów przy Bramie nie będzie."} ${vok ? "Flota Vok (2 fregaty i krążownik) walczy po Twojej stronie." : c.colony13 === "rout" ? "Admiralicja nie istnieje — zamiast jej floty masz 600 metalu z jej magazynów." : ""}</p><p>Na poziomie trudnym ci sojusznicy mogą przesądzić o bitwie.</p></div>`;
+		}
 		if (!["colony10", "colony11"].includes(id) || !RTS.ACT4_VARN) return "";
 		const details = this.api.campaignDetails?.() || {},
 			V = RTS.ACT4_VARN[details.choices?.colony8],
@@ -1395,7 +1419,7 @@ class CommandMenu {
 			: `<div class="menu-legacy"><span class="menu-tag">SKUTKI DECYZJI · PROPOZYCJA VARNA</span><p>Brak zapisanej decyzji z rozdziału VIII — Varn nie bierze udziału w wojnie z Admiralicją.</p></div>`;
 		const fleet =
 			id === "colony11"
-				? `<div class="menu-legacy"><span class="menu-tag">WYNIK ROZDZIAŁU X · FLOTA</span><p>${Number.isInteger(pods) ? `Ocalała flota z blokady Eos: <b>${pods} kapsuł desantowych</b>.` : `Brak zapisanego wyniku rozdziału X — na start ${RTS.INVASION?.minPods + 2 || 4} kapsuły.`}</p></div>`
+				? `<div class="menu-legacy"><span class="menu-tag">WYNIK ROZDZIAŁU X · FLOTA</span><p>${Number.isInteger(pods) ? `Kapsuły desantowe z ocalałej floty blokady Eos: <b>${Math.min(pods, RTS.ACT4_POD_CAP ?? pods)}</b>.` : `Brak zapisanego wyniku rozdziału X — kapsuły desantowe na start: ${RTS.INVASION?.minPods + 2 || 4}.`}</p></div>`
 				: "";
 		return varn + fleet;
 	}
@@ -1481,7 +1505,7 @@ class CommandMenu {
 		}
 		const exporter = this.root.querySelector("#saves-export");
 		if (!exporter || typeof SaveTransfer === "undefined") return;
-		const version = (document.querySelector(".menu-footer span")?.textContent.match(/PROTOTYP (\S+)/) || [])[1] || "";
+		const version = GAME_VERSION;
 		exporter.onclick = () => {
 			try {
 				const text = SaveTransfer.exportSaves(localStorage, version),
@@ -1521,6 +1545,8 @@ class CommandMenu {
 			if (!(await (typeof GameDialog !== "undefined" ? GameDialog.confirm(question) : Promise.resolve(window.confirm(question.text))))) return;
 			try {
 				SaveTransfer.importSaves(localStorage, text);
+				// The running battle must not be saved over the imported saves before the reload.
+				this.api.holdSaves?.();
 				status.textContent = "Zapisy wczytane. Gra uruchomi się ponownie…";
 				setTimeout(() => location.reload(), 900);
 			} catch {
@@ -1575,17 +1601,22 @@ class CommandMenu {
 		const canvas = this.root.querySelector("#campaign-film"),
 			caption = this.root.querySelector("#film-caption"),
 			progress = this.root.querySelector("#film-progress"),
-			c = canvas.getContext("2d"),
-			start = performance.now();
+			c = canvas.getContext("2d");
 		canvas.width = 1920;
 		canvas.height = 800;
 		c.scale(2, 2);
-		let last = -1;
+		let last = -1,
+			// The film's clock runs only while the window is in front (0.171.14): leaving it holds the sound (app.js,
+			// sound.suspend), and the film waits with it — the score and the shots stay together.
+			t = 0,
+			prev = null;
 		const heard = new Set();
 		const frame = (now) => {
 			if (this.screen !== screen) return;
-			const t = Math.min(duration, (now - start) / 1000),
-				shot = film.draw(c, t, this.reduced);
+			const dt = prev == null ? 0 : (now - prev) / 1000;
+			prev = now;
+			if (document.hasFocus() && !document.hidden) t = Math.min(duration, t + Math.min(dt, 0.1));
+			const shot = film.draw(c, t, this.reduced);
 			if (last !== shot.scene) {
 				caption.textContent = shot.caption;
 				last = shot.scene;

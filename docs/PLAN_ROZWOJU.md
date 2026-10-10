@@ -1,6 +1,6 @@
 # Plan rozwoju prototypu
 
-Aktualizacja: 2026-10-09. Aktualna wersja: 0.171.
+Aktualizacja: 2026-10-09. Aktualna wersja: 0.171.17.
 
 Ten plik jest punktem wejścia do dokumentacji: opisuje bieżący stan, otwarte kierunki i historię wersji. Instrukcja gry i sterowanie: [README](../README.md).
 
@@ -289,6 +289,23 @@ Przy każdym kolejnym etapie należy uruchomić pełny zestaw, nie tylko testy u
 | 0.152 | Etap G2: desant z orbity — tryb „Inwazja” (orbita, potem planeta; kapsuły, uderzenie i skan z orbity) — [opis](DESANT_Z_ORBITY.md) |
 | 0.152.1 | Szuflada celów bez poziomego przewijania, ukryta pod raportem końca — [opis](KAMPANIA_OPRAWA.md) |
 | 0.153 | Etap G4: serwer lobby, lista gier, 2 na 2 przez sieć z komputerem na wolnym miejscu, powrót do bitwy po zerwaniu połączenia — [opis](MULTIPLAYER.md) |
+| 0.171.17 | Testy i narzędzia: test renderera 3D krok po kroku z postępem, podgląd burz z listą skryptów z `index.html`, testy `weatherCloseness`, `closestTo`, listy reguł i ścieżek serwera — [opis](RENDERER_3D.md) |
+| 0.171.16 | Poprawki gry sieciowej z przeglądu: wykrywanie martwych połączeń, powrót przy starym połączeniu i bez zamrażania innych, pierwsze miejsce dla gracza, wersja gry w połączeniu, tekst z serwera, Origin i maska WebSocket, serwer bez `.git`, chwilowe rozłączenia, atomowy import, dokładniejsza suma kontrolna — [opis](MULTIPLAYER.md) |
+| 0.171.15 | Poprawki grafiki 3D z przeglądu: nakładka po zmianie rozmiaru, rozrzut pod budynkami bez zacięć, zwalnianie zasobów przy zmianie mapy, rzadsze odbudowy środowiska, mniej alokacji, bez pustego światła i martwego kodu kafli — [opis](RENDERER_3D.md) |
+| 0.171.14 | Poprawki dźwięku z przeglądu: osobne głosy mowy, jedna linia naraz, głosy Vok i Bramy, wyciszanie przy zmianie motywu, wstrzymanie dźwięku i filmu poza oknem, wznawianie motywu bitwy, muzyka powtórki epilogu, szybsze wejście bitwy, bas, obcięcie szczytów, bufor szumu, pule głosów, jakość „klasyczna” — [opis](AUDIO.md) |
+| 0.171.13 | Poprawki interfejsu z przeglądu: klawisze przy oknach i polach, populacja gracza w HUD-zie, import zapisów, fokus w panelu handlu, okna potwierdzenia, progi kompaktowego HUD-u, mniej pracy na klatkę, jedna wersja gry — [opis](MENU_GLOWNE.md) |
+| 0.171.12 | Poprawki kampanii z przeglądu: kapsuły X → XI, decyzja „stocznia”, losy techników Hefajstosa, propozycja Varna, nazwy w akcie IV, odprawa XIV, prolog aktu II, barwy Dominium, licznik Szczytu, teksty i język — [opis](AKT_IV.md) |
+| 0.171.11 | Poprawki rozgrywki z przeglądu: atak z marszem po pościgu, reguła opancerzenia (rakiety, piechota, działo przeciwpancerne), odbudowa robotników i ruda komputera, przekaźniki strony w 2 na 2, zabójstwa, pamięć widoku komputera w zapisie — [opis](AI_PRZECIWNIKA.md) |
+| 0.171.10 | Z przeglądu gry: serwer lobby odporny na złe wiadomości i przejęcie gospodarza, decyzja fabularna blokuje wznowienie bitwy, wskazywanie terenu w 3D marszem po mapie wysokości — [opis](MULTIPLAYER.md) |
+| 0.171.9 | Głosy w prologach aktów II–IV (Lira, Tessa, Varn wg decyzji, Vok), płynniejsze przejścia muzyki, poprawione ujęcia; bez `intro:20` — [opis](KAMPANIA_OPRAWA.md) |
+| 0.171.8 | Testy grafiki 3D: burze z bliska, kosmos, niebo nad horyzontem, błędy shaderów; podgląd `tests/weather-browser.html`; `closestTo` w `app.js` dla zdarzeń bez elementu — [opis](RENDERER_3D.md) |
+| 0.171.7 | Kosmos i pogoda 3D: nasycone mgławice nieba, przerwy w Szkarłatnej Mgławicy, siatka gaśnie pod chmurami, końce spirali gazu; zasłony burz rzedną od średniego przybliżenia, pogoda ciemnieje nocą, słabsze snopy budynków z bliska, wspólna funkcja zbliżenia — [opis](RENDERER_3D.md) |
+| 0.171.6 | Mgławice nieba w kosmosie: zawinięty szum z jasnym sercem i pasmami pyłu nad horyzontem; przestrzenne mgławice w trzech ramionach, dryfujące, bez uciętych brzegów — [opis](RENDERER_3D.md) |
+| 0.171.5 | Miękkie chmury mgławicy przy złożach gazu: obłoki z okrągłą maską i włóknami, dryfujące warstwy; płaty i pasma pyłu na tle 2D — [opis](RENDERER_3D.md) |
+| 0.171.4 | Miękkie chmury gazu przy złożach w kosmosie (kłęby gasną ku krawędziom, świecą addytywnie) — [opis](RENDERER_3D.md) |
+| 0.171.3 | Snopy reflektorów w deszczu i piasku bez świetlnych klinów na przybliżeniu: miękko przy gruncie, słabsze przy bliskiej kamerze — [opis](RENDERER_3D.md) |
+| 0.171.2 | Wyraźniejszy obraz w burzy na przybliżeniu: zasłony, smugi i mgła rzedną, mgła odsuwa się przy bliskiej kamerze — [opis](RENDERER_3D.md) |
+| 0.171.1 | Zaznaczenie budynków bez kolumny światła (biała kropkowana elipsa nad budynkiem) — [opis](RENDERER_3D.md) |
 | 0.171 | Nowe prologi aktów II–IV: po 8 ujęć, 76 s, historie prowadzące do pierwszego rozdziału aktu, akty III–IV zależne od decyzji; własna muzyka `prologue2`–`prologue4` (`act2-film.js`, `act3-film.js`, `act4-film.js`, `audio.js`, `menu.js`) — [opis](KAMPANIA_OPRAWA.md) |
 | 0.170 | Nowy film finału kampanii: 13 ujęć, 122 s, co stało się po wojnie, zależnie od decyzji; dłuższa muzyka `finale` (`campaign-finale.js`, `audio.js`, `menu.js`) — [opis](AKT_IV.md) |
 | 0.169 | Nowy prolog kampanii: 15 ujęć, 150 s, historia prowadząca do aktu I, głos Liry, muzyka `prologue` (`campaign-film.js`, `audio.js`, `menu.js`) — [opis](KAMPANIA_OPRAWA.md) |

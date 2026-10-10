@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="pl">
+	<head>
+		<meta charset="utf-8" />
+		<title>Podgląd burz i kosmosu 3D</title>
+		<!-- 0.171.8: the board in 3D under any weather, from any distance and angle, for checking how storms and
+		     space look (no game loop: the time only runs for the animation). Parameters in the address too:
+		     ?map=frost&t=120&z=5.5&tilt=0&yaw=0&cx=…&cy=… (cx/cy: where the camera looks, by default by the
+		     player's headquarters). Must be served (npm start). -->
+		<style>
+			body { margin: 0; background: #05080c; color: #cfe3e6; font: 13px "Segoe UI", sans-serif; }
+			#bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 8px 12px; background: #0b141a; }
+			#bar label { display: flex; gap: 6px; align-items: center; }
+			#bar input[type="range"] { width: 120px; }
+			#bar output { min-width: 3em; color: #8fe7cf; }
+			#info { color: #9bb; margin-left: auto; }
+			canvas#game { display: block; width: 100vw; height: calc(100vh - 44px); }
+		</style>
+	</head>
+	<body>
+		<div id="bar">
+			<label>Mapa <select id="map"></select></label>
+			<label>Pora <select id="time">
+				<option value="120">Burza (1.)</option>
+				<option value="330">Burza (2.)</option>
+				<option value="540">Burza (3.)</option>
+				<option value="30">Bez burzy</option>
+			</select></label>
+			<label>Przybliżenie <input id="zoom" type="range" min="1" max="5.5" step="0.1" value="5.5" /><output id="zoomOut"></output></label>
+			<label>Pochylenie <input id="tilt" type="range" min="0" max="1" step="0.05" value="0" /><output id="tiltOut"></output></label>
+			<label>Obrót <input id="yaw" type="range" min="-3.14" max="3.14" step="0.05" value="0" /><output id="yawOut"></output></label>
+			<span id="info"></span>
+		</div>
+		<canvas id="game" width="1280" height="720"></canvas>
+		<canvas id="minimap" width="220" height="135" hidden></canvas>
+		<script src="game-scripts.js"></script>
+		<script type="module">
+			import { createThreeGameRenderer } from "../webgl3d/three-game-renderer.js";
+			// The game's rules and art in index.html's order (game-scripts.js), without the interface.
+			await window.loadGameScripts(["audio.js", "audio-hq.js", "audio-radio.js", "campaign.js", "campaign-film.js", "act2-film.js", "act3-film.js", "act4-film.js", "campaign-finale.js", "epilogue-films.js", "end-screen.js", "loading-screen.js", "interludes.js", "knowledge.js", "galaxy-map.js", "menu-backdrop.js", "menu.js", "netplay.js", "netplay-menu.js", "development.js", "economy-panel.js", "vendor/pixi.min.js", "webgl/ground-native.js", "webgl/models-native.js", "webgl/fauna-native.js", "webgl/canvas-replay.js", "webgl/pixi-game-renderer.js", "app.js", "cursor.js", "game-dialog.js", "save-transfer.js"]);
+			const $ = (id) => document.getElementById(id),
+				q = new URLSearchParams(location.search),
+				canvas = $("game"),
+				canvasRenderer = createCanvasRenderer(canvas, $("minimap"));
+			// Maps with weather: every map with a biome (ice: blizzard, ash: rainstorm, dust: sandstorm) or space.
+			const maps = Object.entries(RTS.MISSIONS).filter(([id, m]) => !/^(colony|training)/.test(id) && (m.biome || m.space));
+			$("map").innerHTML = maps.map(([id, m]) => `<option value="${id}">${m.name}${m.space ? " · kosmos" : m.biome === "ice" ? " · śnieżyca" : m.biome === "ash" ? " · ulewa" : " · burza piaskowa"}</option>`).join("");
+			for (const [k, def] of [["map", "frost"], ["time", "120"], ["zoom", "5.5"], ["tilt", "0"], ["yaw", "0"]]) $(k).value = q.get(k === "time" ? "t" : k === "zoom" ? "z" : k) || def;
+			let game = null,
+				focus = null,
+				board = null;
+			function load() {
+				board?.destroy();
+				game = new RTS.Game(42, $("map").value);
+				game.configureSkirmish({ players: 2 });
+				game.explored.fill(1);
+				game.time = Number($("time").value);
+				game.tick(0.1);
+				const hq = game.entities.find((e) => e.team === 0 && e.type === "hq") || game.entities.find((e) => e.team === 0);
+				focus = q.get("cx") ? { x: Number(q.get("cx")), y: Number(q.get("cy")) } : { x: hq.x + 150, y: hq.y + 80 };
+				board = createThreeGameRenderer({ gameCanvas: canvas, canvasRenderer });
+				board.setGame(game);
+				board.refreshFog(game);
+			}
+			const start = performance.now();
+			function frame() {
+				const zoom = Number($("zoom").value),
+					scale = Math.min(canvas.width / game.W, canvas.height / game.H) * zoom,
+					distance = canvas.height / 2 / (scale * Math.tan((38 * Math.PI) / 360));
+				game.time = Number($("time").value) + ((performance.now() - start) / 1000) % 25;
+				board.render({ game, width: canvas.width, height: canvas.height, dpr: 1, scale, camera: { x: focus.x, y: focus.y, zoom, tilt: Number($("tilt").value), yaw: Number($("yaw").value) }, selected: new Set(), colors: [game.colorFor(0), "#f07d78"], mouse: { x: -1e4, y: -1e4 }, drag: null, building: false, wallDrag: null });
+				const w = game.weather;
+				$("zoomOut").value = zoom.toFixed(1);
+				$("tiltOut").value = Number($("tilt").value).toFixed(2);
+				$("yawOut").value = Number($("yaw").value).toFixed(2);
+				$("info").textContent = `${w.intensity > 0.02 ? w.name + " " + Math.round(w.intensity * 100) + "%" : "bez burzy"} · kamera ${Math.round(distance)} j. od ziemi`;
+				requestAnimationFrame(frame);
+			}
+			$("map").onchange = $("time").onchange = load;
+			load();
+			frame();
+		</script>
+	</body>
+</html>

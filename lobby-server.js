@@ -15,13 +15,29 @@
 const crypto = require("node:crypto");
 const http = require("node:http");
 
+// The game's version (package.json): a client of another build is turned away (0.171.16: only the protocol's number
+// was compared — it has been 1 since 0.153 — and builds with other rules joined and fell out of step mid-battle).
+let GAME_BUILD = "";
+try {
+	GAME_BUILD = require("./package.json").version || "";
+} catch {}
 const LOBBY = {
 	version: 1,
+	game: GAME_BUILD,
+	// A player in a battle who has sent nothing for this long (the game pings every 2 s) is dropped like one who
+	// closed the connection (0.171.16: a connection lost without a close kept the seat "connected" — no empty turns,
+	// no takeover — and the others waited).
+	idle: 8,
 	maxRooms: 50,
 	maxClients: 200,
 	maxMessage: 64 * 1024,
 	takeover: 20,
 	delay: 2,
+	// A turn is 0.1 s (network-rules.js: 3 steps of 1/30 s). A player's turn may run at most this many turns ahead
+	// of the battle's real time (0.171.10: a turn number of 300 000 made the server fill and relay 300 000 empty
+	// turns; around 1e8 it ran out of memory).
+	turnSeconds: 0.1,
+	turnLead: 300,
 	keepEnded: 120,
 	colors: ["#b0efd0", "#72b7ff", "#d3a0ff", "#f0cb70", "#f59caf"],
 	factions: ["colonies", "dominion", "swarm", "watchers"],
@@ -34,7 +50,9 @@ const player = (p) => ({
 	faction: LOBBY.factions.includes(p?.faction) ? p.faction : "colonies",
 });
 const RULE_KEYS = ["mode", "map", "size", "resources", "weather", "fauna", "dayLength", "startLevel"];
-const cleanRules = (r = {}) => {
+// (0.171.10: anything that is not an object counts as no rules — `rules: null` threw and stopped the server.)
+const cleanRules = (r) => {
+	if (!r || typeof r !== "object") r = {};
 	const out = {};
 	for (const k of RULE_KEYS) if (typeof r[k] === "string") out[k] = clean(r[k], 20);
 	out.seed = Number.isInteger(r.seed) && r.seed >= 0 && r.seed <= 999999 ? r.seed : 0;
@@ -56,17 +74,24 @@ class Lobby {
 			socket.close();
 			return { message() {}, close() {} };
 		}
-		const c = { socket, id: null, profile: player({}), room: null };
+		const c = { socket, id: null, profile: player({}), room: null, seen: this.now() };
 		this.clients.set(socket, c);
 		return {
 			message: (text) => {
 				let msg;
+				c.seen = this.now();
 				try {
 					msg = JSON.parse(text);
 				} catch {
 					return;
 				}
-				if (msg && typeof msg.k === "string") this.receive(c, msg);
+				// A message the server cannot handle never stops it (0.171.10): it is answered with an error and dropped.
+				if (msg && typeof msg === "object" && typeof msg.k === "string")
+					try {
+						this.receive(c, msg);
+					} catch {
+						this.send(c, { k: "error", text: "Nieprawidłowa wiadomość." });
+					}
 			},
 			close: () => this.gone(c),
 		};
@@ -92,7 +117,9 @@ class Lobby {
 			id: room.id,
 			name: room.name,
 			size: room.size,
-			host: room.host,
+			// Which seat is the host's — not the host's client id (0.171.10: the id is all a client proves itself
+			// with, and sending it let anyone in the room say hello as the host and take over the room).
+			hostSeat: room.seats.findIndex((s) => s.owner && s.owner === room.host),
 			rules: room.rules,
 			started: !!room.started,
 			seats: room.seats.map((s) => ({ team: s.team, ai: !!s.ai, player: s.player, ready: !!s.ready, taken: !!s.client || !!s.left, connected: !!s.client, host: !!s.owner && s.owner === room.host })),
@@ -103,7 +130,7 @@ class Lobby {
 		for (const c of this.clients.values()) if (c.id && !c.room) this.send(c, { k: "rooms", rooms });
 	}
 	broadcastRoom(room) {
-		for (const s of room.seats) if (s.client) this.send(s.client, { k: "room", room: this.roomState(room), you: room.seats.indexOf(s) });
+		for (const s of room.seats) if (s.client) this.send(s.client, { k: "room", room: this.roomState(room), you: room.seats.indexOf(s), host: s.client.id === room.host });
 		this.broadcastRooms();
 	}
 	toRoom(room, msg, except = null) {
@@ -114,7 +141,9 @@ class Lobby {
 	}
 	receive(c, msg) {
 		if (msg.k === "hello") {
-			if (msg.v !== this.o.version) return this.send(c, { k: "error", text: "Inna wersja gry — zaktualizuj grę." });
+			// Once per connection (0.171.10): a second hello changed the client's id on the fly.
+			if (c.id) return this.send(c, { k: "error", text: "Już przedstawiono się serwerowi." });
+			if (msg.v !== this.o.version || (this.o.game && msg.game !== this.o.game)) return this.send(c, { k: "error", text: `Inna wersja gry (serwer: ${this.o.game || "?"}, Ty: ${clean(msg.game, 20) || "?"}) — zaktualizuj grę.` });
 			c.id = clean(msg.client, 40) || crypto.randomUUID();
 			c.profile = player(msg.player);
 			this.send(c, { k: "welcome", client: c.id });
@@ -162,7 +191,7 @@ class Lobby {
 				this.leave(c);
 				return this.broadcastRooms();
 			case "seat": {
-				const i = Number(msg.seat),
+				const i = Number.isInteger(msg.seat) ? msg.seat : -1,
 					to = room?.seats[i];
 				if (!to || room.started || to.client || to.ai) return;
 				seat.client = null;
@@ -173,8 +202,11 @@ class Lobby {
 				return this.broadcastRoom(room);
 			}
 			case "ai": {
-				const s = room?.seats[Number(msg.seat)];
+				const s = room?.seats[Number.isInteger(msg.seat) ? msg.seat : -1];
 				if (!host || room.started || !s || s.client) return;
+				// Not on seat 0 (0.171.16): the battle's first side is always a player's, and with the computer there the
+				// start hung (the server sent no turns for it, the players' games waited for them).
+				if (room.seats.indexOf(s) === 0 && msg.on) return this.send(c, { k: "error", text: "Pierwsze miejsce należy do gracza — komputer może zająć inne." });
 				s.ai = !!msg.on;
 				s.player = s.ai ? { name: "Komputer", color: LOBBY.colors[(room.seats.indexOf(s) + 2) % LOBBY.colors.length], faction: LOBBY.factions[room.seats.indexOf(s) % 3] } : undefined;
 				return this.broadcastRoom(room);
@@ -192,6 +224,7 @@ class Lobby {
 				if (!host || room.started) return;
 				const humans = room.seats.filter((s) => s.client);
 				if (room.seats.some((s) => !s.client && !s.ai)) return this.send(c, { k: "error", text: "Zajmij lub oddaj komputerowi każde miejsce." });
+				if (!room.seats[0].client) return this.send(c, { k: "error", text: "Pierwsze miejsce musi zająć gracz." });
 				if (humans.some((s) => s.owner !== c.id && !s.ready)) return this.send(c, { k: "error", text: "Nie wszyscy gracze są gotowi." });
 				room.started = true;
 				room.startedAt = this.now();
@@ -212,6 +245,11 @@ class Lobby {
 			}
 			case "turn":
 				return this.turn(c, room, seat, msg);
+			case "caught":
+				if (!seat?.rejoining) return;
+				seat.rejoining = false;
+				delete seat.left;
+				return this.send(c, { k: "go", t: room.last[seat.team] });
 			case "chat": {
 				const text = clean(msg.text, 200);
 				if (room && seat && text) this.toRoom(room, { k: "chat", team: seat.team, name: seat.player?.name, color: seat.player?.color, text, all: !!msg.all || !room.started }, c);
@@ -219,12 +257,25 @@ class Lobby {
 			}
 			case "rejoin": {
 				const r = this.rooms.get(String(msg.room)),
-					s = r?.seats.find((x) => x.owner === c.id && !x.client);
+					s = r?.seats.find((x) => x.owner === c.id && x.client !== c);
 				if (!r || !r.started || r.ended || !s) return this.send(c, { k: "error", text: "Nie można wrócić do tej bitwy." });
 				if (room) this.leave(c);
+				// Its old connection still on the seat (a drop the server had not noticed yet): replaced (0.171.16: the
+				// player could not come back and the battle ended for them).
+				if (s.client) {
+					const stale = s.client;
+					stale.room = null;
+					try {
+						stale.socket.close();
+					} catch {}
+				}
 				s.client = c;
-				delete s.left;
+				s.left ??= this.now();
 				c.room = r;
+				// The others do not wait while the player replays the log: the server goes on sending empty turns for the
+				// team (to the player too) until the player says it has caught up ("caught"), then tells it from which turn
+				// its own go on ("go").
+				s.rejoining = true;
 				const release = s.takenOver;
 				s.takenOver = false;
 				// The client goes on from the last turn the server sent for its team.
@@ -275,11 +326,25 @@ class Lobby {
 		this.clients.delete(c.socket);
 		this.broadcastRooms();
 	}
+	// Players in a battle silent for longer than `idle` seconds are dropped (their connection is gone).
+	sweep() {
+		const now = this.now();
+		for (const c of [...this.clients.values()]) {
+			// (Not one replaying the log after a return: its page is busy and sends nothing until it has caught up.)
+			if (!c.room?.started || c.room.ended || (now - c.seen) / 1000 < this.o.idle || this.seatOf(c)?.rejoining) continue;
+			try {
+				c.socket.close();
+			} catch {}
+			this.gone(c);
+		}
+	}
 	// A player's turn: logged, relayed, checked; dropped teams get empty ("ghost") turns up to it, and the computer
 	// takes a team over after `takeover` seconds.
 	turn(c, room, seat, msg) {
-		if (!room?.started || room.ended || !seat || !Number.isInteger(msg.t) || !Array.isArray(msg.c)) return;
+		if (!room?.started || room.ended || !seat || seat.rejoining || !Number.isInteger(msg.t) || !Array.isArray(msg.c)) return;
 		if (msg.t <= room.last[seat.team]) return;
+		// Not far ahead of the battle's real time (a turn number from a broken or hostile client).
+		if (msg.t > (this.now() - room.startedAt) / 1000 / this.o.turnSeconds + this.o.turnLead) return;
 		// System commands only from the server — except the hand-back a player who came back was told to send (it
 		// must be in its own turn, which the server does not echo to it).
 		const release = seat.releasePending && msg.c.some((x) => Array.isArray(x) && x[0] === "@aiRelease"),
@@ -293,10 +358,10 @@ class Lobby {
 		this.record(room, { team: seat.team, t: msg.t, c: commands });
 		if (Array.isArray(msg.h) && Number.isInteger(msg.h[0]) && typeof msg.h[1] === "string") this.hash(room, seat.team, msg.h[0], msg.h[1]);
 		for (const s of room.seats)
-			if (!s.ai && !s.client && s.left != null)
+			if (!s.ai && (s.rejoining || (!s.client && s.left != null)))
 				for (let t = room.last[s.team] + 1; t <= msg.t; t++) {
 					const c2 = [];
-					if (!s.takenOver && (this.now() - s.left) / 1000 >= this.o.takeover) {
+					if (!s.takenOver && !s.rejoining && (this.now() - s.left) / 1000 >= this.o.takeover) {
 						s.takenOver = true;
 						c2.push(["@aiTakeover", []]);
 						this.toRoom(room, { k: "takeover", team: s.team, name: s.player?.name });
@@ -307,7 +372,9 @@ class Lobby {
 	record(room, entry) {
 		room.log.push(entry);
 		room.last[entry.team] = entry.t;
-		this.toRoom(room, { k: "turn", ...entry }, room.seats.find((s) => s.team === entry.team)?.client);
+		// Not echoed to the team's own player — except one who is catching up after coming back (its empty turns).
+		const own = room.seats.find((s) => s.team === entry.team);
+		this.toRoom(room, { k: "turn", ...entry }, own?.rejoining ? null : own?.client);
 	}
 	hash(room, team, t, h) {
 		const seen = room.hashes.get(t) || {};
@@ -374,6 +441,8 @@ function upgrade(lobby, req, socket) {
 				at = 10;
 			}
 			if (len > lobby.o.maxMessage) return socket.destroy();
+			// A client's frames are always masked (RFC 6455).
+			if (!masked) return socket.destroy();
 			const need = at + (masked ? 4 : 0) + len;
 			if (buffer.length < need) return;
 			const mask = masked ? buffer.subarray(at, at + 4) : null,
@@ -387,6 +456,9 @@ function upgrade(lobby, req, socket) {
 			if (opcode === 9) socket.write(frame(10, data));
 			else if (opcode === 1 || opcode === 0) {
 				parts.push(data);
+				// The whole message is capped too (0.171.10), not only each frame: endless continuation frames
+				// filled the memory.
+				if (parts.reduce((n, p) => n + p.length, 0) > lobby.o.maxMessage) return socket.destroy();
 				if (fin) {
 					const text = Buffer.concat(parts).toString("utf8");
 					parts = [];
@@ -405,12 +477,27 @@ function upgrade(lobby, req, socket) {
 }
 
 // Mounts the lobby on an HTTP server at /lobby.
+// Pages that may open the lobby (0.171.16): the game's own (the same host, or the desktop app) — any other web page
+// the player visits could reach a server on localhost otherwise. Clients without an Origin (Node, tests) pass.
+function originAllowed(req) {
+	const origin = req.headers.origin;
+	if (!origin) return true;
+	if (origin === "app://game" || origin === "null") return true;
+	try {
+		return new URL(origin).host === req.headers.host;
+	} catch {
+		return false;
+	}
+}
 function mountLobby(server, options) {
 	const lobby = new Lobby(options);
 	server.on("upgrade", (req, socket) => {
-		if (new URL(req.url, "http://x").pathname === "/lobby") upgrade(lobby, req, socket);
+		if (new URL(req.url, "http://x").pathname === "/lobby" && originAllowed(req)) upgrade(lobby, req, socket);
 		else socket.destroy();
 	});
+	const sweeper = setInterval(() => lobby.sweep(), 2000);
+	sweeper.unref?.();
+	server.on("close", () => clearInterval(sweeper));
 	return lobby;
 }
 // A standalone lobby server (also the desktop app's local-network server).

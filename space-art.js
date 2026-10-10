@@ -61,14 +61,43 @@ const SpaceArt = (() => {
 				r = 180 + rand() * 320;
 			glowDot(c, x, y, r, i % 3 ? "rgba(80,96,150,.10)" : "rgba(150,110,160,.08)");
 		}
-		// Nebula clouds where the gas is, and the map's own clouds (0.164).
-		for (const f of g.nebulaClouds?.() || g.gasFields || [])
-			for (let k = 0; k < 6; k++) {
-				const a = rand() * TAU,
-					s = (f.r || 230) / 230,
-					d = rand() * 160 * s;
-				glowDot(c, f.x + Math.cos(a) * d, f.y + Math.sin(a) * d, (150 + rand() * 160) * s, look.nebula ? hexA(look.nebula[0][k % 3], k % 2 ? 0.22 : 0.16) : k % 2 ? "rgba(168,84,214,.22)" : "rgba(80,150,230,.16)");
+		// Nebula clouds where the gas is, and the map's own clouds (0.164). Since 0.171.5 not six big round
+		// smudges but three lobes of smaller puffs round a glowing heart, crossed by dark lanes of dust, so the
+		// cloud has a shape and depth.
+		const nebulaColor = (k, a) => (look.nebula ? hexA(look.nebula[0][k % 3], a) : ["rgba(168,84,214,A)", "rgba(80,150,230,A)", "rgba(192,90,216,A)"][k % 3].replace("A", a));
+		for (const f of g.nebulaClouds?.() || g.gasFields || []) {
+			const s = (f.r || 230) / 230;
+			glowDot(c, f.x, f.y, 150 * s, nebulaColor(2, 0.16));
+			for (let lobe = 0; lobe < 3; lobe++) {
+				const la = rand() * TAU,
+					ld = (60 + rand() * 80) * s;
+				for (let k = 0; k < 6; k++) {
+					const a = la + (rand() - 0.5) * 1.3,
+						d = ld * (0.35 + rand() * 0.9);
+					glowDot(c, f.x + Math.cos(a) * d, f.y + Math.sin(a) * d, (60 + rand() * 120) * s, nebulaColor(k + lobe, (0.1 + rand() * 0.07).toFixed(3)));
+				}
 			}
+			c.save();
+			c.lineCap = "round";
+			for (let k = 0; k < 2; k++) {
+				let x = f.x + (rand() - 0.5) * 160 * s,
+					y = f.y + (rand() - 0.5) * 160 * s,
+					a = rand() * TAU;
+				c.strokeStyle = "rgba(3,3,10,.3)";
+				c.lineWidth = (10 + rand() * 14) * s;
+				c.filter = "blur(6px)";
+				c.beginPath();
+				c.moveTo(x, y);
+				for (let j = 0; j < 9; j++) {
+					a += (rand() - 0.5) * 0.7;
+					x += Math.cos(a) * 24 * s;
+					y += Math.sin(a) * 24 * s;
+					c.lineTo(x, y);
+				}
+				c.stroke();
+			}
+			c.restore();
+		}
 		// Stars: many dim ones, some bright with a halo.
 		for (let i = 0; i < 2600 * n; i++) {
 			const x = rand() * g.W,

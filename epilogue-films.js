@@ -371,7 +371,7 @@ const Epilogues = (() => {
 			const truce = game?.act4?.decision13 === "truce",
 				varn = !!game?.act4?.varn14;
 			return {
-				titles: ["BRAMA GAŚNIE", "SZCZELINY SIĘ ZAMYKAJĄ", truce ? "WSPÓLNY POWRÓT" : "SAMI PRZECIW CIEMNOŚCI", "KONIEC INWAZJI"],
+				titles: ["BRAMA GAŚNIE", "SZCZELINY SIĘ ZAMYKAJĄ", truce ? "WSPÓLNY POWRÓT" : varn ? "Z VARNEM U BOKU" : "SAMI PRZECIW CIEMNOŚCI", "KONIEC INWAZJI"],
 				places: ["EREBUS · HORYZONT ZDARZEŃ", "POGRANICZE · SIEĆ SZCZELIN", "EOS · ORBITA", "SEKTOR 07 · ŚWIT"],
 				captions: [
 					"Brama pęka przy horyzoncie zdarzeń. Światło Wartowników gaśnie, a Głos Bramy milknie w pół słowa.",

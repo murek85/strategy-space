@@ -173,7 +173,8 @@ test("hard picks the weakest defended building and pulls back a beaten attack", 
 	T.think = 0;
 	g.enemyAiTick(1 / 30);
 	assert.equal(T.attack, null);
-	assert.ok(group.every((e) => e.aiRole === "defend"));
+	// Pulled back home: defending, or (0.171.11) one of them taking up a free patrol route in the same think.
+	assert.ok(group.every((e) => e.aiRole === "defend" || e.aiRole === "patrol"));
 });
 
 test("normal and hard answer the player's army; easy does not", () => {
@@ -234,7 +235,10 @@ test("every enemy side runs its own commander", () => {
 });
 
 test("modes: relays draw attacks to relays; expedition sends attackers for the artifact", () => {
-	const r = run(peaceful(skirmish({ mode: "relays", difficulty: "normal" })), 200);
+	// (120 s: since 0.171.11 the commander's groups reach the relays they are sent to and, against a player who
+	// does nothing, win the relays mode by about 200 s.)
+	const r = run(peaceful(skirmish({ mode: "relays", difficulty: "normal" })), 120);
+	assert.equal(r.result, null);
 	r.nodes[0].owner = 0;
 	const T = r.enemyAi.teams[1],
 		rally = T.rally;

@@ -59,6 +59,7 @@ export function createSpace3D(THREE) {
 					float tw = 0.75 + 0.25 * sin(time * (1.0 + h.y * 3.0) + h.z * 40.0);
 					return on * smoothstep(size, 0.0, r) * (0.4 + h.y * 0.9) * tw;
 				}
+				vec3 nebSat(vec3 c) { float l = dot(c, vec3(0.3, 0.59, 0.11)); return max(mix(vec3(l), c, 1.9), 0.0); }
 				void main() {
 					vec3 d = normalize(vDir);
 					vec3 col = vec3(0.004, 0.006, 0.014);
@@ -67,14 +68,25 @@ export function createSpace3D(THREE) {
 					float lat = dot(d, axis);
 					float band = exp(-lat * lat / 0.028);
 					float glow = sFbm(d * 3.5) , lanes = smoothstep(0.45, 0.75, sFbm(d * 7.0 + 4.0));
-					col += band * (vec3(0.16, 0.15, 0.2) * (0.5 + glow) + vec3(0.12, 0.09, 0.07) * pow(glow, 3.0) * 2.0) * (1.0 - 0.75 * lanes * band) * ${CALM.milkyWay.toFixed(2)};
-					col += exp(-lat * lat / 0.2) * vec3(0.02, 0.025, 0.04);
-					// Nebulae: two coloured clouds in their own parts of the sky.
-					float n1 = smoothstep(0.5, 0.85, sFbm(d * 2.2 + vec3(3.0, 1.0, 7.0))) * smoothstep(0.2, 0.9, dot(d, normalize(vec3(-0.6, -0.3, -0.75))));
-					float n2 = smoothstep(0.52, 0.86, sFbm(d * 2.6 + vec3(9.0, 4.0, 2.0))) * smoothstep(0.1, 0.9, dot(d, normalize(vec3(0.7, -0.2, 0.68))));
-					float fil = sFbm(d * 9.0);
-					col += n1 * mix(neb1a, neb1b, fil) * ${(0.28 * CALM.nebula).toFixed(3)};
-					col += n2 * mix(neb2a, neb2b, fil) * ${(0.28 * CALM.nebula).toFixed(3)};
+					// Nebulae: two coloured clouds in their own parts of the sky. 0.171.6: the noise is warped by
+					// itself (billowing shapes and curling filaments instead of grey smudges), each cloud has a
+					// brighter heart in its second colour and is crossed by dark lanes of dust; both lie a little above
+					// the horizon (they were below it, hidden under the battle), so a tilted camera sees them.
+					vec3 q1 = d * 2.2 + vec3(3.0, 1.0, 7.0), q2 = d * 2.6 + vec3(9.0, 4.0, 2.0);
+					vec3 w1 = vec3(sFbm(q1 * 1.4), sFbm(q1 * 1.4 + 5.2), sFbm(q1 * 1.4 + 9.1)) - 0.5;
+					vec3 w2 = vec3(sFbm(q2 * 1.4 + 2.3), sFbm(q2 * 1.4 + 7.7), sFbm(q2 * 1.4 + 3.9)) - 0.5;
+					float f1 = sFbm(q1 + w1 * 2.2), f2 = sFbm(q2 + w2 * 2.2);
+					float n1 = smoothstep(0.44, 0.8, f1) * smoothstep(0.05, 0.85, dot(d, normalize(vec3(-0.6, 0.22, -0.75))));
+					float n2 = smoothstep(0.46, 0.82, f2) * smoothstep(0.0, 0.85, dot(d, normalize(vec3(0.7, 0.28, 0.68))));
+					float fil = sFbm(d * 9.0 + w1 * 3.0);
+					float dustLanes = smoothstep(0.52, 0.78, sFbm(d * 6.5 + w2 * 2.5));
+					// 0.171.7: the colours a little more saturated (the blue one read grey), the heart brighter.
+					col += n1 * nebSat(mix(neb1a, neb1b, fil) + neb1b * pow(smoothstep(0.6, 0.92, f1), 2.0) * 1.2) * (1.0 - 0.65 * dustLanes) * ${(0.42 * CALM.nebula).toFixed(3)};
+					col += n2 * nebSat(mix(neb2a, neb2b, fil) + neb2b * pow(smoothstep(0.62, 0.94, f2), 2.0) * 1.2) * (1.0 - 0.65 * dustLanes) * ${(0.42 * CALM.nebula).toFixed(3)};
+					// The Milky Way, dimmed where a nebula lies over it (its grey washed the colour out, 0.171.7).
+					float overNeb = 1.0 - 0.6 * clamp(max(n1, n2) * 1.4, 0.0, 1.0);
+					col += band * (vec3(0.16, 0.15, 0.2) * (0.5 + glow) + vec3(0.12, 0.09, 0.07) * pow(glow, 3.0) * 2.0) * (1.0 - 0.75 * lanes * band) * ${CALM.milkyWay.toFixed(2)} * overNeb;
+					col += exp(-lat * lat / 0.2) * vec3(0.02, 0.025, 0.04) * overNeb;
 					// Stars: many faint, fewer bright, a few big; tinted by a hash.
 					float s = stars(d, 180.0, 0.35, 0.09) * 0.5 + stars(d, 90.0, 0.18, 0.08) + stars(d, 34.0, 0.08, 0.06) * 2.2;
 					s *= 1.0 + band * 1.5;
@@ -632,55 +644,99 @@ export function createSpace3D(THREE) {
 
 	// ---- 0.139: more of the surroundings ----
 	// A soft cloud texture (many blobs) for the nebulae, and a small round dot.
-	const cloudTex = (() => {
+	// 0.171.6: two variants of 256 px, the blobs kept inside and faded by a round mask (they ran past the edge
+	// of the canvas and every layer showed straight, cut edges), with thin arcs of small blobs for wisps.
+	const cloudTexs = [4242, 977].map((start) => {
 		const c = document.createElement("canvas");
-		c.width = c.height = 128;
+		c.width = c.height = 256;
 		const x = c.getContext("2d");
-		let sd = 4242;
+		let sd = start;
 		const r = () => (sd = (Math.imul(sd, 1664525) + 1013904223) >>> 0) / 4294967296;
-		for (let i = 0; i < 60; i++) {
-			const a = r() * Math.PI * 2,
-				d = Math.pow(r(), 0.7) * 44,
-				cx = 64 + Math.cos(a) * d,
-				cy = 64 + Math.sin(a) * d,
-				rr = 8 + r() * 26,
-				g = x.createRadialGradient(cx, cy, 0, cx, cy, rr);
-			g.addColorStop(0, `rgba(255,255,255,${(0.1 + r() * 0.15).toFixed(3)})`);
+		const blob = (cx, cy, rr, alpha) => {
+			const g = x.createRadialGradient(cx, cy, 0, cx, cy, rr);
+			g.addColorStop(0, `rgba(255,255,255,${alpha.toFixed(3)})`);
 			g.addColorStop(1, "rgba(255,255,255,0)");
 			x.fillStyle = g;
 			x.fillRect(cx - rr, cy - rr, rr * 2, rr * 2);
+		};
+		for (let i = 0; i < 60; i++) {
+			const a = r() * Math.PI * 2,
+				d = Math.pow(r(), 0.7) * 60;
+			blob(128 + Math.cos(a) * d, 128 + Math.sin(a) * d, 16 + r() * 44, 0.1 + r() * 0.15);
 		}
+		for (let w = 0; w < 6; w++) {
+			const a0 = r() * Math.PI * 2,
+				d0 = 25 + r() * 55,
+				bend = (r() - 0.5) * 2.6;
+			for (let j = 0; j < 26; j++) {
+				const t = j / 25,
+					a = a0 + bend * t;
+				blob(128 + Math.cos(a) * (d0 + t * 24), 128 + Math.sin(a) * (d0 + t * 24), 4 + r() * 8, 0.08 + 0.08 * Math.sin(t * Math.PI));
+			}
+		}
+		const mask = x.createRadialGradient(128, 128, 0, 128, 128, 128);
+		mask.addColorStop(0, "rgba(0,0,0,1)");
+		mask.addColorStop(0.55, "rgba(0,0,0,0.75)");
+		mask.addColorStop(1, "rgba(0,0,0,0)");
+		x.globalCompositeOperation = "destination-in";
+		x.fillStyle = mask;
+		x.fillRect(0, 0, 256, 256);
 		return new THREE.CanvasTexture(c);
-	})();
+	});
+	const cloudTex = cloudTexs[0];
 	// The volumetric nebulae: two great clouds — one beyond the planet, one deep below the battle — each
 	// built of glowing layers at many depths (they slide apart as the camera moves, so the cloud has
 	// volume), dark lanes of dust in front of them, and young stars burning inside.
 	const nebulae = new THREE.Group();
 	group.add(nebulae);
+	// 0.171.6: the layers lie along three curving arms from a bright heart (not scattered in a box, which read
+	// as a shapeless haze), bigger and fainter out along the arms; each colour shades into the next outwards;
+	// the dust lanes follow the arms; every layer turns slowly (driftNebulae).
+	const drifting = [];
+	function driftNebulae(time) {
+		for (const s of drifting) s.material.rotation = s.userData.turn + time * s.userData.spin;
+	}
 	function buildNebula(centre, radii, colours, seed) {
 		let sd = seed;
 		const r = () => (sd = (Math.imul(sd, 1664525) + 1013904223) >>> 0) / 4294967296;
-		const glowMats = colours.map((c) => new THREE.SpriteMaterial({ map: cloudTex, color: c, transparent: true, opacity: 0.16 * CALM.nebula, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
-		const dustMat = new THREE.SpriteMaterial({ map: cloudTex, color: "#05060a", transparent: true, opacity: 0.55, depthWrite: false, fog: false });
-		for (let i = 0; i < 90; i++) {
-			const u = r() * 2 - 1,
-				v = r() * 2 - 1,
-				w = r() * 2 - 1,
-				k = Math.cbrt(r());
-			const s = new THREE.Sprite(glowMats[i % glowMats.length]);
-			s.position.set(centre.x + u * radii.x * k, centre.y + v * radii.y * k, centre.z + w * radii.z * k);
-			const size = (0.25 + r() * 0.5) * radii.x;
-			s.scale.set(size, size * (0.6 + r() * 0.5), 1);
-			s.material.rotation = r() * 6.28;
+		const layer = (map, color, opacity, blending = THREE.AdditiveBlending) => new THREE.SpriteMaterial({ map, color, transparent: true, opacity, blending, depthWrite: false, fog: false });
+		const arms = [0, 1, 2].map(() => ({ a: r() * Math.PI * 2, bend: (r() - 0.5) * 2.2, tilt: (r() - 0.5) * 0.8 }));
+		const along = (arm, t, spread) => {
+			const a = arm.a + arm.bend * t,
+				x = Math.cos(a) * t + (r() - 0.5) * spread,
+				z = Math.sin(a) * t + (r() - 0.5) * spread,
+				y = arm.tilt * t + (r() - 0.5) * spread * 0.6;
+			return new THREE.Vector3(centre.x + x * radii.x, centre.y + y * radii.y, centre.z + z * radii.z);
+		};
+		const add = (s, size, squash) => {
+			s.scale.set(size, size * squash, 1);
+			s.userData = { turn: r() * 6.28, spin: (r() < 0.5 ? -1 : 1) * (0.004 + r() * 0.008) };
+			s.material.rotation = s.userData.turn;
+			drifting.push(s);
 			nebulae.add(s);
+		};
+		// The heart: a few large, soft layers in the second colour.
+		for (let i = 0; i < 6; i++) {
+			const s = new THREE.Sprite(layer(cloudTexs[i % 2], colours[1 % colours.length], 0.2 * CALM.nebula));
+			s.position.set(centre.x + (r() - 0.5) * radii.x * 0.25, centre.y + (r() - 0.5) * radii.y * 0.25, centre.z + (r() - 0.5) * radii.z * 0.25);
+			add(s, (0.45 + r() * 0.3) * radii.x, 0.7 + r() * 0.4);
 		}
+		// The arms.
+		for (let i = 0; i < 96; i++) {
+			const arm = arms[i % 3],
+				t = Math.pow(r(), 0.8),
+				c = new THREE.Color(colours[i % colours.length]).lerp(new THREE.Color(colours[(i + 1) % colours.length]), t * 0.6);
+			const s = new THREE.Sprite(layer(cloudTexs[i % 2], c, (0.18 - 0.08 * t) * CALM.nebula));
+			s.position.copy(along(arm, t, 0.18 + t * 0.25));
+			add(s, (0.18 + r() * 0.3 + t * 0.2) * radii.x, 0.55 + r() * 0.5);
+		}
+		// Dark lanes of dust along the arms, in front of the glow.
 		for (let i = 0; i < 26; i++) {
-			const s = new THREE.Sprite(dustMat);
-			const t = r() * 2 - 1;
-			s.position.set(centre.x + t * radii.x * 0.8, centre.y + (r() - 0.5) * radii.y * 0.5, centre.z + (r() - 0.5) * radii.z + radii.z * 0.3);
-			const size = (0.12 + r() * 0.25) * radii.x;
-			s.scale.set(size * 1.8, size * 0.5, 1);
-			nebulae.add(s);
+			const arm = arms[i % 3],
+				t = 0.15 + r() * 0.7,
+				s = new THREE.Sprite(layer(cloudTexs[(i + 1) % 2], "#05060a", 0.5, THREE.NormalBlending));
+			s.position.copy(along(arm, t, 0.08)).add(new THREE.Vector3(0, 0, radii.z * 0.25));
+			add(s, (0.12 + r() * 0.22) * radii.x * 1.6, 0.35);
 		}
 		const n = 140,
 			pos = new Float32Array(n * 3);
@@ -961,13 +1017,14 @@ export function createSpace3D(THREE) {
 			derelict.scale.setScalar(620);
 			derelict.rotation.set(0.35, 0.5, 0.18);
 			// 0.139: the nebulae, the ice of the rings, the comet's sky.
+			drifting.length = 0;
 			while (nebulae.children.length) {
 				const c = nebulae.children.pop();
 				c.material?.dispose();
 				if (c.isPoints) c.geometry.dispose();
 			}
 			const neb = look.nebula || [["#c050d8", "#6a4ae0", "#e0607a"], ["#3fa0d8", "#2f6ad0", "#58d0c0"]];
-			buildNebula(new THREE.Vector3(game.W * 1.6, -2000, -26000), new THREE.Vector3(9000, 4500, 5000), neb[0], 777);
+			buildNebula(new THREE.Vector3(game.W * 1.6, 1500, -26000), new THREE.Vector3(9000, 4500, 5000), neb[0], 777);
 			buildNebula(new THREE.Vector3(game.W * 0.7, -21000, game.H * 2.2), new THREE.Vector3(12000, 3500, 9000), neb[1], 991);
 			let sd = 5151;
 			const r = () => (sd = (Math.imul(sd, 1664525) + 1013904223) >>> 0) / 4294967296;
@@ -986,6 +1043,7 @@ export function createSpace3D(THREE) {
 			if (planetUniforms.kind.value > 1.5) planet.rotation.y = 0.6 + time * 0.008;
 			derelictLamps.forEach((l, i) => (l.visible = (time * 0.7 + i * 0.37) % 1 < 0.15));
 			updateSurroundings(time);
+			driftNebulae(time);
 			if (blackHole.visible) blackHole.userData.picture.quaternion.copy(camera.quaternion);
 			if (openRings && !ringsAligned) {
 				// The axis towards the camera, tipped 0.6 rad aside so the rings open as a slightly flat ellipse.

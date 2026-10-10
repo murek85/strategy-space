@@ -18,7 +18,13 @@
 		pointer.popover = "manual";
 		pointer.showPopover();
 	}
+	// The open dialogs are looked up again only after one opens or closes (0.171.13: on every pointer move, which a
+	// gaming mouse sends up to 1000 times a second).
+	let dialogsChanged = true;
+	new MutationObserver(() => (dialogsChanged = true)).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["open"] });
 	const raise = () => {
+		if (!dialogsChanged) return raisedFor;
+		dialogsChanged = false;
 		const modal = [...document.querySelectorAll("dialog[open]")].filter((d) => d.matches(":modal")).at(-1) || null;
 		if (modal === raisedFor) return modal;
 		raisedFor = modal;

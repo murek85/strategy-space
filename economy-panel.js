@@ -172,18 +172,17 @@ class EconomyPanel {
 		const focused = this.content.contains(document.activeElement)
 			? document.activeElement
 			: null;
-		const key = focused?.dataset.role
-			? ["role", focused.dataset.role]
-			: focused?.dataset.x
-				? ["x", focused.dataset.x]
-				: null;
+		// A button is found again by all its data-* fields (0.171.13: the trade and amount buttons of the Trade tab
+		// were not, and the focus fell to the page several times a second while metal came in).
+		const idOf = (b) => JSON.stringify(Object.entries(b.dataset).sort()),
+			key = focused && Object.keys(focused.dataset).length ? idOf(focused) : null;
 		const scroll = this.content.scrollTop;
 		this.content.innerHTML = html;
 		this.content.scrollTop = scroll;
 		if (key) {
 			const replacement = [
 				...this.content.querySelectorAll("button"),
-			].find((b) => b.dataset[key[0]] === key[1]);
+			].find((b) => idOf(b) === key);
 			if (replacement && !replacement.disabled)
 				replacement.focus({ preventScroll: true });
 			else this.content.focus({ preventScroll: true });

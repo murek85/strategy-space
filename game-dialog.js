@@ -57,7 +57,8 @@ const GameDialog = (() => {
 				}
 			});
 			dialog.addEventListener("close", () => {
-				open = null;
+				// Only its own: a dialog replaced by a new one closes later and must not forget the new one (0.171.13).
+				if (open === dialog) open = null;
 				const yes = dialog.returnValue === "ok";
 				dialog.remove();
 				resolve(yes);

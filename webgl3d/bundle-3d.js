@@ -55389,7 +55389,10 @@ function createPost3D(THREE, renderer) {
 		},
 		// The environment from the sky's colours (linear) and the sun; renewed only when they change visibly.
 		environment(sky) {
-			const key = [sky.zenith, sky.horizon, sky.ground, sky.sunColor].map((c) => c.getHexString()).join("") + sky.sunDir.toArray().map((v) => v.toFixed(1)).join();
+			// Colours in steps of 1/24 (0.171.15: in steps of 1/255 the key changed at almost every check through the
+			// day and the weather, and the environment — six faces and their blur, a new target each time — was
+			// rebuilt twice a second).
+			const key = [sky.zenith, sky.horizon, sky.ground, sky.sunColor].map((c) => [c.r, c.g, c.b].map((v) => Math.round(v * 24)).join(",")).join("|") + "|" + sky.sunDir.toArray().map((v) => v.toFixed(1)).join();
 			if (key === envKey && envTarget) return envTarget.texture;
 			envKey = key;
 			envUniforms.zenith.value.copy(sky.zenith);
@@ -55578,7 +55581,7 @@ function nightLightShade(shader) {
 	);
 }
 
-function createNightLights(THREE, { world }) {
+function createNightLights(THREE, { world, ground = null }) {
 	const MAX = 128,
 		G = 48,
 		PER = 24,
@@ -55596,23 +55599,36 @@ function createNightLights(THREE, { world }) {
 	NIGHT_LIGHTS.nlGrid.value = gridTex;
 
 	// Visible beams: an open cone along +X from the lamp, fading with length and towards its rim; the
-	// instance colour is the tint × the haze.
+	// instance colour is the tint × the haze. Soft near the ground (0.171.3): a beam aimed down cuts into
+	// the terrain, and in rain and dust that cut showed as a hard-edged wedge on the ground — each pixel
+	// fades out as it nears the ground under it (the weather's height map, bilinear by hand).
+	const heightUniforms = ground ? { heightMap: ground.heightMap, heightInfo: ground.heightInfo } : { heightMap: { value: null }, heightInfo: { value: new THREE.Vector4(1, 1, 12, 0) } };
 	const beams = new THREE.InstancedMesh(
 		new THREE.ConeGeometry(1, 1, 18, 1, true).translate(0, -0.5, 0).rotateZ(Math.PI / 2),
 		new THREE.ShaderMaterial({
-			vertexShader: `varying float vAlong; varying vec3 vNormal; varying vec3 vView; varying vec3 vTint;
+			uniforms: heightUniforms,
+			vertexShader: `varying float vAlong; varying vec3 vNormal; varying vec3 vView; varying vec3 vTint; varying vec3 vWorld;
 				void main() {
 					vAlong = position.x;
 					vTint = instanceColor;
+					vWorld = (modelMatrix * instanceMatrix * vec4(position, 1.0)).xyz;
 					vec4 mv = modelViewMatrix * instanceMatrix * vec4(position, 1.0);
 					vNormal = normalize(normalMatrix * mat3(instanceMatrix) * normal);
 					vView = normalize(-mv.xyz);
 					gl_Position = projectionMatrix * mv;
 				}`,
-			fragmentShader: `varying float vAlong; varying vec3 vNormal; varying vec3 vView; varying vec3 vTint;
+			fragmentShader: `uniform sampler2D heightMap; uniform vec4 heightInfo;
+				varying float vAlong; varying vec3 vNormal; varying vec3 vView; varying vec3 vTint; varying vec3 vWorld;
+				float groundUnder(vec2 p) {
+					vec2 g = p / heightInfo.z, i = floor(g), f = g - i, t = 1.0 / heightInfo.xy;
+					float a = texture2D(heightMap, (i + 0.5) * t).r, b = texture2D(heightMap, (i + vec2(1.5, 0.5)) * t).r;
+					float c = texture2D(heightMap, (i + vec2(0.5, 1.5)) * t).r, d = texture2D(heightMap, (i + 1.5) * t).r;
+					return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+				}
 				void main() {
 					float core = pow(abs(dot(normalize(vNormal), normalize(vView))), 1.4);
 					float a = core * pow(1.0 - clamp(vAlong, 0.0, 1.0), 1.6) * smoothstep(0.0, 0.08, vAlong);
+					if (heightInfo.w > -0.5 && heightInfo.x > 1.0) a *= smoothstep(2.0, 40.0, vWorld.y - groundUnder(vWorld.xz));
 					gl_FragColor = vec4(vTint * a, 1.0);
 				}`,
 			transparent: true,
@@ -55642,7 +55658,8 @@ function createNightLights(THREE, { world }) {
 	return {
 		beams,
 		begin() {
-			pool = pool.concat(list);
+			// Back into the pool in place (0.171.15: a new array every frame).
+			for (const l of list) pool.push(l);
 			list.length = 0;
 		},
 		// A spot light at (x, y) h high (world height), aimed at (tx, ty) on the ground th high; angle the
@@ -61015,6 +61032,8 @@ function createModels3D(THREE) {
 		gasHalo: std("#e0c0ff", { emissive: "#c890ff", emissiveIntensity: 1.4, roughness: 1, transparent: true, opacity: 0.2, flatShading: false, depthWrite: false }),
 		gasPuff: std("#b27aee", { emissive: "#8a48d8", emissiveIntensity: 1.0, roughness: 1, transparent: true, opacity: 0.15, flatShading: false, depthWrite: false }),
 		gasPuffBlue: std("#7aa8f0", { emissive: "#3f70d8", emissiveIntensity: 0.9, roughness: 1, transparent: true, opacity: 0.13, flatShading: false, depthWrite: false }),
+		// The last puffs of each arm, fainter, so the spiral ends in a wisp (0.171.7).
+		gasPuffFaint: std("#a07ae8", { emissive: "#6a48c8", emissiveIntensity: 0.8, roughness: 1, transparent: true, opacity: 0.07, flatShading: false, depthWrite: false }),
 		spark: std("#ffffff", { emissive: "#f0e0ff", emissiveIntensity: 2.4 }),
 		ice: std("#c6d6e2", { roughness: 0.45, metalness: 0.05 }),
 		oreRock: std("#4c4540", { roughness: 0.92, metalness: 0.08 }),
@@ -61026,7 +61045,20 @@ function createModels3D(THREE) {
 		panel: std("#24476e", { roughness: 0.25, metalness: 0.4, emissive: "#0c2240", emissiveIntensity: 0.5 }),
 		strut: std("#4a5458", { roughness: 0.5, metalness: 0.4 }),
 	};
-	for (const m of ["gasCore", "gasHalo", "gasPuff", "gasPuffBlue", "spark", "metal", "vein", "crystal"]) glowing.push([SPACE_DEP[m], SPACE_DEP[m].emissiveIntensity]);
+	for (const m of ["gasCore", "gasHalo", "gasPuff", "gasPuffBlue", "gasPuffFaint", "spark", "metal", "vein", "crystal"]) glowing.push([SPACE_DEP[m], SPACE_DEP[m].emissiveIntensity]);
+	// Soft gas (0.171.4): the halo and the puffs of the nebula pocket were translucent ellipsoids with a hard
+	// rim — close in they read as flat overlapping discs. Each fades out towards its silhouette (the more
+	// the surface turns from the camera, the clearer), so they melt into one glowing cloud.
+	for (const m of [SPACE_DEP.gasHalo, SPACE_DEP.gasPuff, SPACE_DEP.gasPuffBlue, SPACE_DEP.gasPuffFaint]) {
+		m.blending = THREE.AdditiveBlending;
+		m.onBeforeCompile = (shader) => {
+			shader.fragmentShader = shader.fragmentShader.replace(
+				"#include <opaque_fragment>",
+				"diffuseColor.a *= pow(abs(dot(normalize(normal), normalize(vViewPosition))), 2.2);\n#include <opaque_fragment>",
+			);
+		};
+		m.customProgramCacheKey = () => "softGas";
+	}
 	// Ore: a big asteroid of dark stone set with nuggets of copper-gold metal and glowing veins, a train of
 	// smaller chunks round it; gas: a pocket of nebula — a bright knot with a halo and two spiral arms of
 	// soft glowing gas round it, sparks and ice caught in the swirl (the wider cloud: buildNebula,
@@ -61072,7 +61104,10 @@ function createModels3D(THREE) {
 							a = arm + t * 3.4,
 							d = (7 + t * 36) * k,
 							s = (4 + t * 10) * k;
-						mesh(root, sphereGeo(1, 14, 10), j % 3 === 2 ? SPACE_DEP.gasPuffBlue : SPACE_DEP.gasPuff, [Math.cos(a) * d, H + Math.sin(t * 6 + arm) * 3, Math.sin(a) * d * 0.85]).scale.set(s * 1.3, s * 0.6, s);
+						// The last three thinner and fainter: the arm tapers into a wisp instead of a round lobe.
+						const tip = j >= 9,
+							w = tip ? s * (1 - (j - 8) * 0.18) : s;
+						mesh(root, sphereGeo(1, 14, 10), tip ? SPACE_DEP.gasPuffFaint : j % 3 === 2 ? SPACE_DEP.gasPuffBlue : SPACE_DEP.gasPuff, [Math.cos(a) * d, H + Math.sin(t * 6 + arm) * 3, Math.sin(a) * d * 0.85]).scale.set(w * 1.5, w * 0.45, w * 0.8);
 					}
 				// Sparks: new stars lighting up in the cloud.
 				for (let i = 0; i < 8; i++) {
@@ -61338,6 +61373,13 @@ function createModels3D(THREE) {
    - Sandstorm: grains racing low over the ground and wide curtains of dust.
    - Thunderstorm: a branching bolt strikes the ground near the view, lighting the scene for a moment.
    The ground's wetness and snow cover are returned to the renderer, whose ground shader uses them. */
+// How close the camera is to the ground for the weather (0.171.7, one function for weather-3d.js and the
+// night lights of scene-fx-3d.js): 0 at `far` units of camera distance and further, 1 at `near` and closer,
+// smooth between. Close in, the storm thins out so the board stays readable.
+function weatherCloseness(distance, far = 1500, near = 700) {
+	const k = Math.max(0, Math.min(1, (far - (distance ?? far)) / (far - near)));
+	return k * k * (3 - 2 * k);
+}
 function createWeather3D(THREE, { world, heightAt }) {
 	const group = new THREE.Group();
 	world.add(group);
@@ -61350,6 +61392,9 @@ function createWeather3D(THREE, { world, heightAt }) {
 			intensity: { value: 0 },
 			// Gusts of a blizzard (0 lull … 1 whiteout), a slow uneven pulse (update).
 			gust: { value: 0 },
+			// The light on the weather (0.171.7): grains, flakes, drops and veils darken at night (they
+			// glowed as a pale haze in a night storm); a lightning flash lights them up.
+			weatherLit: { value: 1 },
 			heightMap: { value: null },
 			heightInfo: { value: heightInfo },
 		};
@@ -61412,7 +61457,7 @@ gl_FragColor.a *= smoothstep(0.0, ${reach.toFixed(1)}, vSoftWorld.y - softGround
 			// conversion, so they look the same on the plain screen and in the high-range frame of the
 			// cinematic image (where raw values came out pale and the grains as white lines). The mist takes
 			// its colour from the sky (already linear).
-			fragmentShader: fragment.includes("mistColor") ? fragment : fragment.replace(/\}\s*$/, "\ngl_FragColor.rgb = pow(max(gl_FragColor.rgb, 0.0), vec3(2.2));\n#include <colorspace_fragment>\n}"),
+			fragmentShader: fragment.includes("mistColor") ? fragment : (blending === THREE.NormalBlending ? "uniform float weatherLit;\n" : "") + fragment.replace(/\}\s*$/, "\ngl_FragColor.rgb = pow(max(gl_FragColor.rgb, 0.0), vec3(2.2))" + (blending === THREE.NormalBlending ? " * weatherLit" : "") + ";\n#include <colorspace_fragment>\n}"),
 			transparent: true,
 			depthWrite: false,
 			blending,
@@ -61798,7 +61843,9 @@ gl_FragColor.a *= smoothstep(0.0, ${reach.toFixed(1)}, vSoftWorld.y - softGround
 	// The whole storm lit from above for an instant (no shadows).
 	const skyFlash = new THREE.DirectionalLight("#bcd0ff", 0);
 	skyFlash.position.set(0, 1, 0.3);
-	group.add(flashLight, skyFlash, skyFlash.target);
+	// The sky's flash is in the renderer's hemisphere light (three-renderer.js, weatherLight): a directional light
+	// kept at zero in the scene made every lit fragment of the board count one light more (0.171.15).
+	group.add(flashLight);
 	let boltCycle = -1,
 		strikeAt = null;
 	function buildBolt(x, z, seed) {
@@ -61845,36 +61892,46 @@ gl_FragColor.a *= smoothstep(0.0, ${reach.toFixed(1)}, vSoftWorld.y - softGround
 	let wetness = 0,
 		snowCover = 0,
 		sandCover = 0;
-	function update(game, time, dt, { focus, span, density = 1, flashes = true, mist: mistLevel = 0, mistTint }) {
+	function update(game, time, dt, { focus, span, density = 1, flashes = true, mist: mistLevel = 0, mistTint, night = 0 }) {
 		const w = game.weather,
 			kind = w.kind,
 			k = w.intensity;
 		shared.time.value = time;
 		shared.focus.value.set(focus.x, focus.y);
 		shared.span.value = span;
-		shared.intensity.value = Math.min(1, k * 1.2);
 		// Gusts: two slow waves together, so the blizzard swells and slackens unevenly.
 		const gust = Math.max(0, Math.min(1, 0.5 + 0.35 * Math.sin(time * 0.31) + 0.25 * Math.sin(time * 0.137 + 1.7)));
 		shared.gust.value = gust;
+		// Zoomed in (0.171.2): the camera close to the ground (focus.distance, the rig's) looks through the whole
+		// storm at once, and the board went milky. Close in, the veils, streaks and mist thin out and the haze
+		// draws back (0 at 1500 units and further, 1 at 700 and closer).
+		// The veils (curtains, drifts, rain sheets, dust) thin out from further away (0.171.7: at a middle zoom the
+		// blizzard's white curtains still hid the board), the particles only close in.
+		const close = weatherCloseness(focus.distance),
+			wide = weatherCloseness(focus.distance, 2600, 900),
+			thin = 1 - 0.7 * wide,
+			fewer = 1 - 0.4 * close;
+		// Every particle of the weather a little paler close in, too.
+		shared.intensity.value = Math.min(1, k * 1.2) * (1 - 0.4 * close);
 		const show = (l, on, share = 1) => {
 			l.mesh.visible = on && k > 0.02;
 			l.mesh.geometry.instanceCount = l.mesh.visible ? Math.floor(l.count * k * density * share) : 0;
 		};
-		show(rain, kind === "rain");
+		show(rain, kind === "rain", fewer);
 		show(splashes, kind === "rain");
-		show(snow, kind === "snow");
-		show(snowStreaks, kind === "snow");
-		show(snowCurtains, kind === "snow");
-		show(snowDrift, kind === "snow");
+		show(snow, kind === "snow", fewer);
+		show(snowStreaks, kind === "snow", thin * (1 - 0.5 * close));
+		show(snowCurtains, kind === "snow", thin);
+		show(snowDrift, kind === "snow", thin);
 		show(ionCurtains, kind === "ion");
 		show(solarWind, kind === "solar");
 		show(meteors, kind === "meteor");
-		show(sand, kind === "sand");
-		show(curtains, kind === "sand", 1);
-		show(sheets, kind === "rain");
+		show(sand, kind === "sand", fewer);
+		show(curtains, kind === "sand", thin);
+		show(sheets, kind === "rain", thin);
 		// Mist: in rain and snow, and a little at night everywhere (its own amount, not the weather's).
 		// Ground mist of a storm (0.147.2: lighter in rain and snow, the board stays readable).
-		const mistAmount = Math.max(mistLevel, kind === "rain" ? k * 0.6 : kind === "snow" ? k * 0.45 : 0);
+		const mistAmount = Math.max(mistLevel, (kind === "rain" ? k * 0.6 : kind === "snow" ? k * 0.45 : 0) * thin);
 		mist.mesh.visible = mistAmount > 0.03;
 		mist.mesh.geometry.instanceCount = mist.mesh.visible ? Math.floor(mist.count * density) : 0;
 		mistIntensity.value = mistAmount;
@@ -61904,13 +61961,14 @@ gl_FragColor.a *= smoothstep(0.0, ${reach.toFixed(1)}, vSoftWorld.y - softGround
 		bolt.visible = boltGlow.visible = on && flash > 0.12;
 		bolt.material.opacity = bolt.visible ? Math.min(1, 0.4 + flash) : 0;
 		boltGlow.material.opacity = bolt.visible ? 0.05 + flash * 0.12 : 0;
+		shared.weatherLit.value = Math.min(1, 0.32 + 0.68 * (1 - night) + flash * 0.7);
 		flashLight.intensity = flash * 7;
 		skyFlash.intensity = flash * 2.4;
 		// Haze closes the distance, but a storm must not hide the units in view.
 		// A blizzard's haze breathes with the gusts (towards a whiteout, never hiding the units in view).
 		// Solar storm: slow surges of light (flares), handled by the renderer as a warm glow.
 		const solar = kind === "solar" ? k * (0.55 + 0.45 * Math.pow(Math.max(0, Math.sin(time * 0.45)), 3)) : 0;
-		return { kind, intensity: k, solar, flash: kind === "ion" ? ionFlash : kind === "solar" || kind === "meteor" ? 0 : flash, haze: kind === "ion" || kind === "solar" || kind === "meteor" ? 0 : kind === "sand" ? k * 0.45 : kind === "snow" ? k * (0.3 + 0.12 * gust) : k * 0.25, wetness, snowCover, sandCover, strike: struck };
+		return { kind, intensity: k, solar, flash: kind === "ion" ? ionFlash : kind === "solar" || kind === "meteor" ? 0 : flash, haze: (kind === "ion" || kind === "solar" || kind === "meteor" ? 0 : kind === "sand" ? k * 0.45 : kind === "snow" ? k * (0.3 + 0.12 * gust) : k * 0.25) * (1 - 0.65 * wide), wetness, snowCover, sandCover, strike: struck };
 	}
 	return {
 		setTerrain,
@@ -62406,7 +62464,7 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 	// batteries, fire at the forge, white at the medical post.
 	const BUILDING_LIGHT = { lab: "#cfe8ff", uplink: "#cfe8ff", reactor: "#9ff2ff", battery: "#9ff2ff", shieldgen: "#9ff2ff", forge: "#ff9a4a", medbay: "#f4f8ff" };
 	const buildingLight = (type) => BUILDING_LIGHT[type] || "#ffcf8a";
-	const lights = createNightLights(THREE, { world });
+	const lights = createNightLights(THREE, { world, ground: weather3d.ground });
 	// A lamp on the front of an entity (reach ahead of its centre, height over the ground), aimed along its
 	// facing at the ground len ahead.
 	function headlamp(e, { len, reach, height, angle, color, power, range, haze }) {
@@ -62426,7 +62484,10 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 			if (strength > 0.02) place(pools, g.x, g.y, 0, g.r, g.r, g.color, strength);
 		}
 		lights.begin();
-		const weather = weatherNow.kind ? weatherNow.intensity : 0,
+		// Beams in the air grow in rain, snow and dust — less close in (0.171.3: zoomed in, their cones read as
+		// flat light wedges over the board; 0 at 1500 units of camera distance and further, 1 at 700 and closer).
+		const close = weatherCloseness(focus.distance),
+			weather = (weatherNow.kind ? weatherNow.intensity : 0) * (1 - 0.75 * close),
 			reach = span * 1.3;
 		if (night > 0.05)
 			for (const e of game.entities) {
@@ -62449,7 +62510,9 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 							fy = e.y + side * r * 0.72,
 							tx = fx + Math.cos(a) * len,
 							ty = fy + Math.sin(a) * len;
-						lights.spot(fx, fy, h, tx, ty, heightAt(tx, ty), { angle: 0.62, soft: 0.8, color: tint, power: night * 1500, range: len * 1.9, haze: night * (0.07 + weather * 0.3) });
+						// Close in the floodlights' beams in the air fade by half (0.171.7: by the headquarters they still
+						// lit up a pale glow in the rain); their light on the ground stays.
+						lights.spot(fx, fy, h, tx, ty, heightAt(tx, ty), { angle: 0.62, soft: 0.8, color: tint, power: night * 1500, range: len * 1.9, haze: night * (0.07 + weather * 0.3) * (1 - 0.5 * close) });
 					}
 					lights.point(e.x + r * 1.25 + 8, e.y, heightAt(e.x, e.y) + Math.max(14, r * 0.42), { color: tint, power: night * 480, range: r * 2 + 70 });
 				} else if (s.flying)
@@ -63292,7 +63355,7 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 			fire.material.uniforms.time.value = time;
 			smoke.material.uniforms.light.value = light;
 			const n = smoke.update(dt) + fire.update(dt);
-			const state = weather3d.update(game, time, dt, { focus, span, density, flashes: quality.flashes !== false, mist: Math.max(night * 0.3, mistLevel || 0), mistTint: sky });
+			const state = weather3d.update(game, time, dt, { focus, span, density, flashes: quality.flashes !== false, mist: Math.max(night * 0.3, mistLevel || 0), mistTint: sky, night });
 			// Where the lightning strikes: sparks and a puff of smoke.
 			if (state.strike) {
 				const { x, y, ground } = state.strike;
@@ -63546,6 +63609,12 @@ function createSceneLife3D(THREE, { world, heightAt, models3d, hiddenLayer, spla
 
 	// tall: a tall thing that may stand between the camera and the units (floating islands, spires, giant
 	// mushrooms). It is drawn on its own with its own materials, so it can fade out (see fadeTall).
+	// A record leaves the scene with the copies of its materials (0.171.15: the clones made for tall things — islands,
+	// spires, groves — were never released and grew with every mission played).
+	function drop(r) {
+		group.remove(r.holder);
+		for (const [copy] of r.materials || []) copy.dispose();
+	}
 	function make(key, build, tall = false) {
 		let r = records.get(key);
 		if (!r) {
@@ -63824,7 +63893,7 @@ function createSceneLife3D(THREE, { world, heightAt, models3d, hiddenLayer, spla
 			if (!r.seen) {
 				// Wrecks and fish come and go; animals and birds keep their model for the next time they show.
 				if (key.startsWith("wreck|") || key.startsWith("deposit|") || key.startsWith("relay|") || key.startsWith("salvage|")) {
-					group.remove(r.holder);
+					drop(r);
 					records.delete(key);
 				} else r.holder.visible = false;
 			}
@@ -63835,7 +63904,7 @@ function createSceneLife3D(THREE, { world, heightAt, models3d, hiddenLayer, spla
 			game = next;
 			brains.clear();
 			lastTime = null;
-			for (const r of records.values()) group.remove(r.holder);
+			for (const r of records.values()) drop(r);
 			records.clear();
 			islands = typeof MapArt !== "undefined" && MapArt.islands ? MapArt.islands(game) : [];
 		},
@@ -64311,7 +64380,11 @@ function createScatter3D(THREE, { world, heightAt, fogged }) {
 				];
 
 	let batches = [],
-		buildingsKey = "";
+		buildingsKey = "",
+		// The spots in a grid of cells (built once per map), and the buildings standing now (id → building).
+		spotGrid = null,
+		standing = null;
+	const SPOT_CELL = 120;
 	function clear() {
 		for (const b of batches) {
 			group.remove(b.mesh);
@@ -64319,6 +64392,23 @@ function createScatter3D(THREE, { world, heightAt, fogged }) {
 		}
 		batches = [];
 		buildingsKey = "";
+		spotGrid = null;
+		standing = null;
+	}
+	function spotsGrid() {
+		if (spotGrid) return spotGrid;
+		const cells = new Map();
+		let biggest = 0;
+		batches.forEach(({ spots }, bi) =>
+			spots.forEach((o, i) => {
+				const k = Math.floor(o.x / SPOT_CELL) + "," + Math.floor(o.y / SPOT_CELL);
+				let list = cells.get(k);
+				if (!list) cells.set(k, (list = []));
+				list.push(bi, i);
+				biggest = Math.max(biggest, o.size || 0);
+			}),
+		);
+		return (spotGrid = { cells, biggest });
 	}
 	// density: share of the full count (graphics settings: terrain detail).
 	function setGame(game, density = 1) {
@@ -64476,18 +64566,75 @@ function createScatter3D(THREE, { world, heightAt, fogged }) {
 			mesh.instanceMatrix.needsUpdate = true;
 		}
 		buildingsKey = null;
+		standing = null;
 	}
+	// The spots under buildings are hidden (0.171.15: every change of the buildings — a site placed, one destroyed,
+	// also the enemy's — went through every spot against every building, 40 000 × 60, about 100 ms; and the key was
+	// a string of all their ids built every frame). Now only the spots round the buildings that came or went are
+	// looked at again, each against the buildings near it.
 	function update(game) {
 		blasts(game);
-		const buildings = game.entities.filter((e) => e.hp > 0 && !RTS.TYPES[e.type]?.speed);
-		const key = buildings.map((b) => b.id).join(",");
+		const list = [];
+		let hash = 0;
+		for (const e of game.entities)
+			if (e.hp > 0 && !RTS.TYPES[e.type]?.speed) {
+				list.push(e);
+				hash = (Math.imul(hash, 31) + e.id) | 0;
+			}
+		const key = list.length + ":" + hash;
 		if (key === buildingsKey) return;
+		const full = !buildingsKey || !standing;
 		buildingsKey = key;
-		const under = (o) => buildings.some((b) => Math.hypot(o.x - b.x, o.y - b.y) < RTS.TYPES[b.type].radius * 1.25 + o.size);
-		for (const { mesh, spots } of batches) {
-			spots.forEach((o, i) => mesh.setMatrixAt(i, under(o) ? hidden : o.matrix));
-			mesh.instanceMatrix.needsUpdate = true;
+		const now = new Map(list.map((e) => [e.id, e])),
+			changed = full ? list : [...list.filter((e) => !standing.has(e.id)), ...[...standing.values()].filter((e) => !now.has(e.id))];
+		standing = now;
+		// The buildings in cells, for the check of a spot against those near it.
+		const near = new Map();
+		let widest = 0;
+		for (const e of list) {
+			const k = Math.floor(e.x / SPOT_CELL) + "," + Math.floor(e.y / SPOT_CELL);
+			let cell = near.get(k);
+			if (!cell) near.set(k, (cell = []));
+			cell.push(e);
+			widest = Math.max(widest, RTS.TYPES[e.type].radius * 1.25);
 		}
+		const G = spotsGrid(),
+			reach = Math.ceil((widest + G.biggest) / SPOT_CELL);
+		const under = (o) => {
+			const cx = Math.floor(o.x / SPOT_CELL),
+				cy = Math.floor(o.y / SPOT_CELL);
+			for (let dy = -reach; dy <= reach; dy++)
+				for (let dx = -reach; dx <= reach; dx++)
+					for (const e of near.get(cx + dx + "," + (cy + dy)) || []) if (Math.hypot(o.x - e.x, o.y - e.y) < RTS.TYPES[e.type].radius * 1.25 + o.size) return true;
+			return false;
+		};
+		const dirty = new Set();
+		const look = (bi, i) => {
+			const { mesh, spots } = batches[bi],
+				o = spots[i];
+			mesh.setMatrixAt(i, under(o) ? hidden : o.matrix);
+			dirty.add(mesh);
+		};
+		if (full)
+			batches.forEach(({ spots }, bi) => spots.forEach((o, i) => look(bi, i)));
+		else {
+			// Every spot within the reach of a building that came or went.
+			const seen = new Set();
+			for (const e of changed) {
+				const r = Math.ceil((RTS.TYPES[e.type].radius * 1.25 + G.biggest) / SPOT_CELL),
+					cx = Math.floor(e.x / SPOT_CELL),
+					cy = Math.floor(e.y / SPOT_CELL);
+				for (let dy = -r; dy <= r; dy++)
+					for (let dx = -r; dx <= r; dx++) {
+						const k = cx + dx + "," + (cy + dy);
+						if (seen.has(k)) continue;
+						seen.add(k);
+						const cell = G.cells.get(k);
+						if (cell) for (let j = 0; j < cell.length; j += 2) look(cell[j], cell[j + 1]);
+					}
+			}
+		}
+		for (const mesh of dirty) mesh.instanceMatrix.needsUpdate = true;
 	}
 	// Each frame: the wind (time, and how hard it blows: a breeze, a gale in storms).
 	function tick(time, weather = {}, push = []) {
@@ -65507,6 +65654,7 @@ function createSpace3D(THREE) {
 					float tw = 0.75 + 0.25 * sin(time * (1.0 + h.y * 3.0) + h.z * 40.0);
 					return on * smoothstep(size, 0.0, r) * (0.4 + h.y * 0.9) * tw;
 				}
+				vec3 nebSat(vec3 c) { float l = dot(c, vec3(0.3, 0.59, 0.11)); return max(mix(vec3(l), c, 1.9), 0.0); }
 				void main() {
 					vec3 d = normalize(vDir);
 					vec3 col = vec3(0.004, 0.006, 0.014);
@@ -65515,14 +65663,25 @@ function createSpace3D(THREE) {
 					float lat = dot(d, axis);
 					float band = exp(-lat * lat / 0.028);
 					float glow = sFbm(d * 3.5) , lanes = smoothstep(0.45, 0.75, sFbm(d * 7.0 + 4.0));
-					col += band * (vec3(0.16, 0.15, 0.2) * (0.5 + glow) + vec3(0.12, 0.09, 0.07) * pow(glow, 3.0) * 2.0) * (1.0 - 0.75 * lanes * band) * ${CALM.milkyWay.toFixed(2)};
-					col += exp(-lat * lat / 0.2) * vec3(0.02, 0.025, 0.04);
-					// Nebulae: two coloured clouds in their own parts of the sky.
-					float n1 = smoothstep(0.5, 0.85, sFbm(d * 2.2 + vec3(3.0, 1.0, 7.0))) * smoothstep(0.2, 0.9, dot(d, normalize(vec3(-0.6, -0.3, -0.75))));
-					float n2 = smoothstep(0.52, 0.86, sFbm(d * 2.6 + vec3(9.0, 4.0, 2.0))) * smoothstep(0.1, 0.9, dot(d, normalize(vec3(0.7, -0.2, 0.68))));
-					float fil = sFbm(d * 9.0);
-					col += n1 * mix(neb1a, neb1b, fil) * ${(0.28 * CALM.nebula).toFixed(3)};
-					col += n2 * mix(neb2a, neb2b, fil) * ${(0.28 * CALM.nebula).toFixed(3)};
+					// Nebulae: two coloured clouds in their own parts of the sky. 0.171.6: the noise is warped by
+					// itself (billowing shapes and curling filaments instead of grey smudges), each cloud has a
+					// brighter heart in its second colour and is crossed by dark lanes of dust; both lie a little above
+					// the horizon (they were below it, hidden under the battle), so a tilted camera sees them.
+					vec3 q1 = d * 2.2 + vec3(3.0, 1.0, 7.0), q2 = d * 2.6 + vec3(9.0, 4.0, 2.0);
+					vec3 w1 = vec3(sFbm(q1 * 1.4), sFbm(q1 * 1.4 + 5.2), sFbm(q1 * 1.4 + 9.1)) - 0.5;
+					vec3 w2 = vec3(sFbm(q2 * 1.4 + 2.3), sFbm(q2 * 1.4 + 7.7), sFbm(q2 * 1.4 + 3.9)) - 0.5;
+					float f1 = sFbm(q1 + w1 * 2.2), f2 = sFbm(q2 + w2 * 2.2);
+					float n1 = smoothstep(0.44, 0.8, f1) * smoothstep(0.05, 0.85, dot(d, normalize(vec3(-0.6, 0.22, -0.75))));
+					float n2 = smoothstep(0.46, 0.82, f2) * smoothstep(0.0, 0.85, dot(d, normalize(vec3(0.7, 0.28, 0.68))));
+					float fil = sFbm(d * 9.0 + w1 * 3.0);
+					float dustLanes = smoothstep(0.52, 0.78, sFbm(d * 6.5 + w2 * 2.5));
+					// 0.171.7: the colours a little more saturated (the blue one read grey), the heart brighter.
+					col += n1 * nebSat(mix(neb1a, neb1b, fil) + neb1b * pow(smoothstep(0.6, 0.92, f1), 2.0) * 1.2) * (1.0 - 0.65 * dustLanes) * ${(0.42 * CALM.nebula).toFixed(3)};
+					col += n2 * nebSat(mix(neb2a, neb2b, fil) + neb2b * pow(smoothstep(0.62, 0.94, f2), 2.0) * 1.2) * (1.0 - 0.65 * dustLanes) * ${(0.42 * CALM.nebula).toFixed(3)};
+					// The Milky Way, dimmed where a nebula lies over it (its grey washed the colour out, 0.171.7).
+					float overNeb = 1.0 - 0.6 * clamp(max(n1, n2) * 1.4, 0.0, 1.0);
+					col += band * (vec3(0.16, 0.15, 0.2) * (0.5 + glow) + vec3(0.12, 0.09, 0.07) * pow(glow, 3.0) * 2.0) * (1.0 - 0.75 * lanes * band) * ${CALM.milkyWay.toFixed(2)} * overNeb;
+					col += exp(-lat * lat / 0.2) * vec3(0.02, 0.025, 0.04) * overNeb;
 					// Stars: many faint, fewer bright, a few big; tinted by a hash.
 					float s = stars(d, 180.0, 0.35, 0.09) * 0.5 + stars(d, 90.0, 0.18, 0.08) + stars(d, 34.0, 0.08, 0.06) * 2.2;
 					s *= 1.0 + band * 1.5;
@@ -66080,55 +66239,99 @@ function createSpace3D(THREE) {
 
 	// ---- 0.139: more of the surroundings ----
 	// A soft cloud texture (many blobs) for the nebulae, and a small round dot.
-	const cloudTex = (() => {
+	// 0.171.6: two variants of 256 px, the blobs kept inside and faded by a round mask (they ran past the edge
+	// of the canvas and every layer showed straight, cut edges), with thin arcs of small blobs for wisps.
+	const cloudTexs = [4242, 977].map((start) => {
 		const c = document.createElement("canvas");
-		c.width = c.height = 128;
+		c.width = c.height = 256;
 		const x = c.getContext("2d");
-		let sd = 4242;
+		let sd = start;
 		const r = () => (sd = (Math.imul(sd, 1664525) + 1013904223) >>> 0) / 4294967296;
-		for (let i = 0; i < 60; i++) {
-			const a = r() * Math.PI * 2,
-				d = Math.pow(r(), 0.7) * 44,
-				cx = 64 + Math.cos(a) * d,
-				cy = 64 + Math.sin(a) * d,
-				rr = 8 + r() * 26,
-				g = x.createRadialGradient(cx, cy, 0, cx, cy, rr);
-			g.addColorStop(0, `rgba(255,255,255,${(0.1 + r() * 0.15).toFixed(3)})`);
+		const blob = (cx, cy, rr, alpha) => {
+			const g = x.createRadialGradient(cx, cy, 0, cx, cy, rr);
+			g.addColorStop(0, `rgba(255,255,255,${alpha.toFixed(3)})`);
 			g.addColorStop(1, "rgba(255,255,255,0)");
 			x.fillStyle = g;
 			x.fillRect(cx - rr, cy - rr, rr * 2, rr * 2);
+		};
+		for (let i = 0; i < 60; i++) {
+			const a = r() * Math.PI * 2,
+				d = Math.pow(r(), 0.7) * 60;
+			blob(128 + Math.cos(a) * d, 128 + Math.sin(a) * d, 16 + r() * 44, 0.1 + r() * 0.15);
 		}
+		for (let w = 0; w < 6; w++) {
+			const a0 = r() * Math.PI * 2,
+				d0 = 25 + r() * 55,
+				bend = (r() - 0.5) * 2.6;
+			for (let j = 0; j < 26; j++) {
+				const t = j / 25,
+					a = a0 + bend * t;
+				blob(128 + Math.cos(a) * (d0 + t * 24), 128 + Math.sin(a) * (d0 + t * 24), 4 + r() * 8, 0.08 + 0.08 * Math.sin(t * Math.PI));
+			}
+		}
+		const mask = x.createRadialGradient(128, 128, 0, 128, 128, 128);
+		mask.addColorStop(0, "rgba(0,0,0,1)");
+		mask.addColorStop(0.55, "rgba(0,0,0,0.75)");
+		mask.addColorStop(1, "rgba(0,0,0,0)");
+		x.globalCompositeOperation = "destination-in";
+		x.fillStyle = mask;
+		x.fillRect(0, 0, 256, 256);
 		return new THREE.CanvasTexture(c);
-	})();
+	});
+	const cloudTex = cloudTexs[0];
 	// The volumetric nebulae: two great clouds — one beyond the planet, one deep below the battle — each
 	// built of glowing layers at many depths (they slide apart as the camera moves, so the cloud has
 	// volume), dark lanes of dust in front of them, and young stars burning inside.
 	const nebulae = new THREE.Group();
 	group.add(nebulae);
+	// 0.171.6: the layers lie along three curving arms from a bright heart (not scattered in a box, which read
+	// as a shapeless haze), bigger and fainter out along the arms; each colour shades into the next outwards;
+	// the dust lanes follow the arms; every layer turns slowly (driftNebulae).
+	const drifting = [];
+	function driftNebulae(time) {
+		for (const s of drifting) s.material.rotation = s.userData.turn + time * s.userData.spin;
+	}
 	function buildNebula(centre, radii, colours, seed) {
 		let sd = seed;
 		const r = () => (sd = (Math.imul(sd, 1664525) + 1013904223) >>> 0) / 4294967296;
-		const glowMats = colours.map((c) => new THREE.SpriteMaterial({ map: cloudTex, color: c, transparent: true, opacity: 0.16 * CALM.nebula, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
-		const dustMat = new THREE.SpriteMaterial({ map: cloudTex, color: "#05060a", transparent: true, opacity: 0.55, depthWrite: false, fog: false });
-		for (let i = 0; i < 90; i++) {
-			const u = r() * 2 - 1,
-				v = r() * 2 - 1,
-				w = r() * 2 - 1,
-				k = Math.cbrt(r());
-			const s = new THREE.Sprite(glowMats[i % glowMats.length]);
-			s.position.set(centre.x + u * radii.x * k, centre.y + v * radii.y * k, centre.z + w * radii.z * k);
-			const size = (0.25 + r() * 0.5) * radii.x;
-			s.scale.set(size, size * (0.6 + r() * 0.5), 1);
-			s.material.rotation = r() * 6.28;
+		const layer = (map, color, opacity, blending = THREE.AdditiveBlending) => new THREE.SpriteMaterial({ map, color, transparent: true, opacity, blending, depthWrite: false, fog: false });
+		const arms = [0, 1, 2].map(() => ({ a: r() * Math.PI * 2, bend: (r() - 0.5) * 2.2, tilt: (r() - 0.5) * 0.8 }));
+		const along = (arm, t, spread) => {
+			const a = arm.a + arm.bend * t,
+				x = Math.cos(a) * t + (r() - 0.5) * spread,
+				z = Math.sin(a) * t + (r() - 0.5) * spread,
+				y = arm.tilt * t + (r() - 0.5) * spread * 0.6;
+			return new THREE.Vector3(centre.x + x * radii.x, centre.y + y * radii.y, centre.z + z * radii.z);
+		};
+		const add = (s, size, squash) => {
+			s.scale.set(size, size * squash, 1);
+			s.userData = { turn: r() * 6.28, spin: (r() < 0.5 ? -1 : 1) * (0.004 + r() * 0.008) };
+			s.material.rotation = s.userData.turn;
+			drifting.push(s);
 			nebulae.add(s);
+		};
+		// The heart: a few large, soft layers in the second colour.
+		for (let i = 0; i < 6; i++) {
+			const s = new THREE.Sprite(layer(cloudTexs[i % 2], colours[1 % colours.length], 0.2 * CALM.nebula));
+			s.position.set(centre.x + (r() - 0.5) * radii.x * 0.25, centre.y + (r() - 0.5) * radii.y * 0.25, centre.z + (r() - 0.5) * radii.z * 0.25);
+			add(s, (0.45 + r() * 0.3) * radii.x, 0.7 + r() * 0.4);
 		}
+		// The arms.
+		for (let i = 0; i < 96; i++) {
+			const arm = arms[i % 3],
+				t = Math.pow(r(), 0.8),
+				c = new THREE.Color(colours[i % colours.length]).lerp(new THREE.Color(colours[(i + 1) % colours.length]), t * 0.6);
+			const s = new THREE.Sprite(layer(cloudTexs[i % 2], c, (0.18 - 0.08 * t) * CALM.nebula));
+			s.position.copy(along(arm, t, 0.18 + t * 0.25));
+			add(s, (0.18 + r() * 0.3 + t * 0.2) * radii.x, 0.55 + r() * 0.5);
+		}
+		// Dark lanes of dust along the arms, in front of the glow.
 		for (let i = 0; i < 26; i++) {
-			const s = new THREE.Sprite(dustMat);
-			const t = r() * 2 - 1;
-			s.position.set(centre.x + t * radii.x * 0.8, centre.y + (r() - 0.5) * radii.y * 0.5, centre.z + (r() - 0.5) * radii.z + radii.z * 0.3);
-			const size = (0.12 + r() * 0.25) * radii.x;
-			s.scale.set(size * 1.8, size * 0.5, 1);
-			nebulae.add(s);
+			const arm = arms[i % 3],
+				t = 0.15 + r() * 0.7,
+				s = new THREE.Sprite(layer(cloudTexs[(i + 1) % 2], "#05060a", 0.5, THREE.NormalBlending));
+			s.position.copy(along(arm, t, 0.08)).add(new THREE.Vector3(0, 0, radii.z * 0.25));
+			add(s, (0.12 + r() * 0.22) * radii.x * 1.6, 0.35);
 		}
 		const n = 140,
 			pos = new Float32Array(n * 3);
@@ -66409,13 +66612,14 @@ function createSpace3D(THREE) {
 			derelict.scale.setScalar(620);
 			derelict.rotation.set(0.35, 0.5, 0.18);
 			// 0.139: the nebulae, the ice of the rings, the comet's sky.
+			drifting.length = 0;
 			while (nebulae.children.length) {
 				const c = nebulae.children.pop();
 				c.material?.dispose();
 				if (c.isPoints) c.geometry.dispose();
 			}
 			const neb = look.nebula || [["#c050d8", "#6a4ae0", "#e0607a"], ["#3fa0d8", "#2f6ad0", "#58d0c0"]];
-			buildNebula(new THREE.Vector3(game.W * 1.6, -2000, -26000), new THREE.Vector3(9000, 4500, 5000), neb[0], 777);
+			buildNebula(new THREE.Vector3(game.W * 1.6, 1500, -26000), new THREE.Vector3(9000, 4500, 5000), neb[0], 777);
 			buildNebula(new THREE.Vector3(game.W * 0.7, -21000, game.H * 2.2), new THREE.Vector3(12000, 3500, 9000), neb[1], 991);
 			let sd = 5151;
 			const r = () => (sd = (Math.imul(sd, 1664525) + 1013904223) >>> 0) / 4294967296;
@@ -66434,6 +66638,7 @@ function createSpace3D(THREE) {
 			if (planetUniforms.kind.value > 1.5) planet.rotation.y = 0.6 + time * 0.008;
 			derelictLamps.forEach((l, i) => (l.visible = (time * 0.7 + i * 0.37) % 1 < 0.15));
 			updateSurroundings(time);
+			driftNebulae(time);
 			if (blackHole.visible) blackHole.userData.picture.quaternion.copy(camera.quaternion);
 			if (openRings && !ringsAligned) {
 				// The axis towards the camera, tipped 0.6 rad aside so the rings open as a slightly flat ellipse.
@@ -66462,8 +66667,8 @@ function createSpace3D(THREE) {
 // ---- webgl3d/holo-3d.js ----
 /* Holograms of the interface on the 3D board (0.144.3):
    - Selection: a subtle holographic ring at the foot of every selected unit or building (a thin outer
-     line, dashes running round inside it, four brackets turning); over buildings also a short column of
-     light rising from it, with a scan line climbing up (units have none since 0.147.8).
+     line, dashes running round inside it, four brackets turning). The column of light that rose from it
+     (units lost it in 0.147.8, buildings in 0.171.1) is gone: its rim and scan line read as a white ring.
    - Orders of the selected units: dashes flowing along the ground from each unit to where it goes, a
      hologram diamond bobbing over the spot with a ring pulsing under it (mint for a move, amber for an
      attack move); an attack: red dashes to the target and a red reticle turning round it, pulsing.
@@ -66492,8 +66697,7 @@ function createHolo3D(THREE, { world, heightAt }) {
 	const basic = (color, opacity = 1) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false });
 
 	// ---------- selection ----------
-	const ringGeometry = new THREE.RingGeometry(0.76, 1.02, 72, 1).rotateX(-Math.PI / 2),
-		columnGeometry = new THREE.CylinderGeometry(1, 1, 1, 48, 1, true).translate(0, 0.5, 0);
+	const ringGeometry = new THREE.RingGeometry(0.76, 1.02, 72, 1).rotateX(-Math.PI / 2);
 	const RING_FS = `void main() {
 			float r = length(vP.xz), a = atan(vP.z, vP.x) / 6.28318 + 0.5;
 			float outer = smoothstep(0.95, 0.975, r) * (1.0 - smoothstep(0.995, 1.02, r));
@@ -66502,25 +66706,16 @@ function createHolo3D(THREE, { world, heightAt }) {
 			// Subtle (0.147.8): it marks the unit without outshining it.
 			gl_FragColor = vec4(color * (outer * 0.8 + dash * 0.35 + corner * 0.6) * alpha * 0.6, 1.0);
 			#include <colorspace_fragment>
-		}`,
-		COLUMN_FS = `void main() {
-			float v = vUv.y;
-			float base = pow(1.0 - v, 2.5) * 0.2;
-			float scan = exp(-pow((v - fract(time * 0.5)) / 0.04, 2.0)) * 0.35 * (1.0 - v);
-			float lines = 0.7 + 0.3 * step(0.5, fract(v * 16.0 - time * 1.4));
-			gl_FragColor = vec4(color * (base + scan) * lines * alpha, 1.0);
-			#include <colorspace_fragment>
 		}`;
 	const selections = [];
 	function selection(i) {
 		if (!selections[i]) {
 			const ring = new THREE.Mesh(ringGeometry, shader(RING_FS)),
-				column = new THREE.Mesh(columnGeometry, shader(COLUMN_FS, THREE.DoubleSide)),
 				root = new THREE.Group();
-			ring.renderOrder = column.renderOrder = 9;
-			root.add(ring, column);
+			ring.renderOrder = 9;
+			root.add(ring);
 			group.add(root);
-			selections[i] = { root, ring, column };
+			selections[i] = { root, ring };
 		}
 		return selections[i];
 	}
@@ -66635,7 +66830,7 @@ function createHolo3D(THREE, { world, heightAt }) {
 				ri = 0;
 			const targets = new Map();
 			for (const id of selected) {
-				const e = game.entities.find((u) => u.id === id);
+				const e = game.get ? game.get(id) : game.entities.find((u) => u.id === id); // (0.171.15: by id, not a scan of all)
 				if (!e || e.hp <= 0 || hidden(e)) continue;
 				const s = types[e.type];
 				if (!s) continue;
@@ -66647,11 +66842,6 @@ function createHolo3D(THREE, { world, heightAt }) {
 				sel.root.position.set(e.x, g + 2.5, e.y);
 				sel.ring.scale.setScalar(r);
 				sel.ring.material.uniforms.color.value.set(c);
-				sel.column.material.uniforms.color.value.set(c);
-				// The column of light only over buildings (0.147.8): over vehicles, infantry and ships its rim
-				// read as a white ring over the unit and hid it.
-				sel.column.visible = !s.speed;
-				if (!s.speed) sel.column.scale.set(r * 0.98, Math.min(70, r * 0.9), r * 0.98);
 				// Orders: where it goes (the end of its path, or the order's point), or its target.
 				const o = e.order;
 				if (!o || !s.speed) continue;
@@ -66660,7 +66850,8 @@ function createHolo3D(THREE, { world, heightAt }) {
 					ty,
 					target = null;
 				if (o.kind === "attack" && o.targetId) {
-					target = game.entities.find((u) => u.id === o.targetId && u.hp > 0);
+					target = (game.get ? game.get(o.targetId) : game.entities.find((u) => u.id === o.targetId)) || null;
+					if (target && target.hp <= 0) target = null;
 					if (!target || hidden(target)) continue;
 					kind = "attack";
 					tx = target.x;
@@ -66805,7 +66996,6 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		models3d = createModels3D(THREE),
 		COLORS_ART = ["#9ae5cb", "#ed8277"];
 	const RISE = 70,
-		GROUND_EVERY = 0.5,
 		// Ground tiles of 720 × 720 map units (each with its own painting).
 		TILE_SIZE = 720,
 		TAU = Math.PI * 2;
@@ -66863,7 +67053,6 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 	let game = null,
 		heights = null,
 		tiles = [],
-		groundClock = GROUND_EVERY,
 		timeOfDay = null,
 		clock = 0,
 		frameDt = 0;
@@ -67031,7 +67220,14 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		// The relief of the 3D board (webgl3d/relief-3d.js): hills, mesa cliffs, peaks, beds; bare rock.
 		const built = relief3d.build(game, { relief: quality.relief }),
 			{ cols, rows, cell, data, rock } = built;
-		heights = { cols, rows, cell, data };
+		// The lowest and highest ground: the span a picking ray is marched through (screenToMap).
+		let low = Infinity,
+			high = -Infinity;
+		for (let k = 0; k < data.length; k++) {
+			if (data[k] < low) low = data[k];
+			if (data[k] > high) high = data[k];
+		}
+		heights = { cols, rows, cell, data, low, high };
 		// Where low mist lies: from the 15th percentile of the heights (thick) to the median (none).
 		{
 			const sample = [];
@@ -67116,10 +67312,9 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 				);
 				mesh.receiveShadow = !space;
 				terrain.add(mesh);
-				const tile = { x0, y0, w, h, canvas, texture, mesh, signature: null };
+				const tile = { x0, y0, w, h, canvas, texture, mesh };
 				tiles.push(tile);
 				paintTile(tile);
-				tile.signature = signature(tile);
 			}
 		buildOutskirts();
 		buildNebula();
@@ -67134,7 +67329,11 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 	function buildMist() {
 		if (mist) {
 			world.remove(mist);
-			mist.traverse((o) => o.geometry?.dispose());
+			// Its three shader materials too (0.171.15: they were left behind at every change of map).
+			mist.traverse((o) => {
+				o.geometry?.dispose();
+				o.material?.dispose();
+			});
 		}
 		mist = new THREE.Group();
 		mist.visible = !spaceMap();
@@ -67186,9 +67385,18 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 	let nebula = null,
 		nebulaTexture = null,
 		cloudTexture = null;
+	// The nebula's density over the board (a small texture, buildNebula), black off space maps.
+	const nebulaDensity = { value: new THREE.DataTexture(new Uint8Array(4), 1, 1, THREE.RGBAFormat) };
+	nebulaDensity.value.needsUpdate = true;
+	// The cloud layers turn slowly, each its own way (0.171.5), so the nebula drifts and lives.
+	const nebulaSprites = [];
+	function spinNebula() {
+		for (const sp of nebulaSprites) sp.material.rotation = sp.userData.turn + clock * sp.userData.spin;
+	}
 	function buildNebula() {
 		if (nebula) {
 			world.remove(nebula);
+			nebulaSprites.length = 0;
 			nebula.traverse((o) => {
 				o.material?.dispose();
 				if (o.isPoints) o.geometry.dispose();
@@ -67208,46 +67416,113 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			x.fillRect(0, 0, 128, 128);
 			nebulaTexture = new THREE.CanvasTexture(c);
 			nebulaTexture.colorSpace = THREE.SRGBColorSpace;
-			// A cloud: many soft blobs of different sizes, denser in the middle (0.137).
-			const c2 = document.createElement("canvas");
-			c2.width = c2.height = 256;
-			const y = c2.getContext("2d");
-			let sd = 77;
-			const r2 = () => (sd = (Math.imul(sd, 1664525) + 1013904223) >>> 0) / 4294967296;
-			for (let i = 0; i < 90; i++) {
-				const a = r2() * Math.PI * 2,
-					d = Math.pow(r2(), 0.8) * 90,
-					cx = 128 + Math.cos(a) * d,
-					cy = 128 + Math.sin(a) * d,
-					rr = 12 + r2() * 46,
-					gg = y.createRadialGradient(cx, cy, 0, cx, cy, rr);
-				gg.addColorStop(0, `rgba(255,255,255,${(0.08 + r2() * 0.12).toFixed(3)})`);
-				gg.addColorStop(1, "rgba(255,255,255,0)");
-				y.fillStyle = gg;
-				y.fillRect(cx - rr, cy - rr, rr * 2, rr * 2);
-			}
-			cloudTexture = new THREE.CanvasTexture(c2);
-			cloudTexture.colorSpace = THREE.SRGBColorSpace;
+			// A cloud: many soft blobs of different sizes, denser in the middle (0.137). Since 0.171.5 two
+			// variants, each kept inside the canvas and faded by a round mask (blobs ran past the edge and
+			// the sprites showed straight, cut edges), with wisps — thin arcs of small blobs — for structure.
+			cloudTexture = [77, 191].map((start) => {
+				const c2 = document.createElement("canvas");
+				c2.width = c2.height = 256;
+				const y = c2.getContext("2d");
+				let sd = start;
+				const r2 = () => (sd = (Math.imul(sd, 1664525) + 1013904223) >>> 0) / 4294967296;
+				const blob = (cx, cy, rr, alpha) => {
+					const gg = y.createRadialGradient(cx, cy, 0, cx, cy, rr);
+					gg.addColorStop(0, `rgba(255,255,255,${alpha.toFixed(3)})`);
+					gg.addColorStop(1, "rgba(255,255,255,0)");
+					y.fillStyle = gg;
+					y.fillRect(cx - rr, cy - rr, rr * 2, rr * 2);
+				};
+				for (let i = 0; i < 70; i++) {
+					const a = r2() * Math.PI * 2,
+						d = Math.pow(r2(), 0.8) * 62;
+					blob(128 + Math.cos(a) * d, 128 + Math.sin(a) * d, 14 + r2() * 38, 0.07 + r2() * 0.1);
+				}
+				for (let w = 0; w < 5; w++) {
+					const a0 = r2() * Math.PI * 2,
+						d0 = 30 + r2() * 50,
+						bend = (r2() - 0.5) * 2.4;
+					for (let j = 0; j < 24; j++) {
+						const t = j / 23,
+							a = a0 + bend * t;
+						blob(128 + Math.cos(a) * (d0 + t * 20), 128 + Math.sin(a) * (d0 + t * 20), 5 + r2() * 7, 0.06 + 0.06 * Math.sin(t * Math.PI));
+					}
+				}
+				const mask = y.createRadialGradient(128, 128, 0, 128, 128, 128);
+				mask.addColorStop(0, "rgba(0,0,0,1)");
+				mask.addColorStop(0.55, "rgba(0,0,0,0.75)");
+				mask.addColorStop(1, "rgba(0,0,0,0)");
+				y.globalCompositeOperation = "destination-in";
+				y.fillStyle = mask;
+				y.fillRect(0, 0, 256, 256);
+				const tex = new THREE.CanvasTexture(c2);
+				tex.colorSpace = THREE.SRGBColorSpace;
+				return tex;
+			});
 		}
 		nebula = new THREE.Group();
 		// Layers of cloud from below the plane to over the ships: as the camera moves they slide apart and
 		// the cloud reads as a volume. The clouds round the gas fields and the map's own (0.164).
 		const clouds = game.nebulaClouds?.() || (game.gasFields || []).map((f) => ({ x: f.x, y: f.y, r: RTS.SPACE?.nebula?.radius || 230 }));
+		// 0.171.7: where clouds crowd (the Crimson Nebula has 30, overlapping), each is fainter and the map's own
+		// big clouds have fewer layers and two dark lanes of dust, so the field breaks into clouds and gaps
+		// instead of one red wash.
+		const crowd = clouds.map((f) => clouds.filter((o) => o !== f && Math.hypot(o.x - f.x, o.y - f.y) < (o.r + f.r) * 0.9).length);
 		clouds.forEach((f, i) => {
-			const R = f.r;
-			for (let k = 0; k < 12; k++) {
+			const R = f.r,
+				big = R > 260,
+				thin = 1 / Math.sqrt(1 + crowd[i] * 0.45),
+				layers = big ? 9 : 14;
+			if (big)
+				for (let k = 0; k < 2; k++) {
+					const a = i * 1.7 + k * 3.1,
+						lane = new THREE.Sprite(new THREE.SpriteMaterial({ map: cloudTexture[(i + k) % 2], color: "#050208", transparent: true, opacity: 0.55, depthWrite: false, fog: false })),
+						size = R * (0.9 + k * 0.3);
+					lane.position.set(f.x + Math.cos(a) * R * 0.55, 40 + k * 30, f.y + Math.sin(a) * R * 0.55);
+					lane.scale.set(size * 1.5, size * 0.45, 1);
+					lane.material.rotation = a;
+					lane.userData = { turn: a, spin: (k ? 1 : -1) * 0.006 };
+					nebulaSprites.push(lane);
+					nebula.add(lane);
+				}
+			// 0.171.5: two thirds cloud (two variants), a third the soft round glow; larger and fainter
+			// outwards, so the cloud thins out at its rim instead of ending in a flat patch.
+			for (let k = 0; k < layers; k++) {
 				const a = k * 2.4 + i,
-					d = k ? R * (0.3 + ((k * 37) % 10) / 16) : 0,
+					d = k ? R * (0.25 + ((k * 37) % 10) / 15) : 0,
+					out = d / (R * 0.9),
+					glow = k % 3 === 0,
 					// The map's nebula colours (look, space-rules.js), violet and blue by default.
-					m = new THREE.SpriteMaterial({ map: k % 2 ? cloudTexture : nebulaTexture, color: new THREE.Color((RTS.MISSIONS[game.missionId].look?.nebula?.[0] || ["#8a46e0", "#4f86e6", "#c05ad8"])[k % 3]), transparent: true, opacity: k % 2 ? 0.12 : 0.04, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }),
+					m = new THREE.SpriteMaterial({ map: glow ? nebulaTexture : cloudTexture[k % 2], color: new THREE.Color((RTS.MISSIONS[game.missionId].look?.nebula?.[0] || ["#8a46e0", "#4f86e6", "#c05ad8"])[k % 3]), transparent: true, opacity: (glow ? 0.05 : 0.26) * (1 - 0.45 * out) * thin, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }),
 					sprite = new THREE.Sprite(m),
-					size = R * (0.9 + ((k * 53) % 9) / 10);
+					size = R * (0.9 + ((k * 53) % 9) / 10) * (1 + 0.35 * out);
 				sprite.position.set(f.x + Math.cos(a) * d, -60 + ((k * 29) % 170), f.y + Math.sin(a) * d);
 				sprite.scale.set(size, size, 1);
 				m.rotation = a;
+				sprite.userData = { turn: a, spin: (k % 2 ? 1 : -1) * (0.012 + ((k * 7) % 5) * 0.004) };
+				nebulaSprites.push(sprite);
 				nebula.add(sprite);
 			}
 		});
+		// How dense the nebula is over the board (0…1), for the terrain shader: the tactical grid and the frame
+		// fade under the clouds (0.171.7) instead of cutting straight lines through them.
+		{
+			const w = 96,
+				h = Math.max(8, Math.round((96 * game.H) / game.W)),
+				data = new Uint8Array(w * h * 4);
+			for (let y = 0; y < h; y++)
+				for (let x = 0; x < w; x++) {
+					const px = ((x + 0.5) / w) * game.W,
+						py = ((y + 0.5) / h) * game.H;
+					let d = 0;
+					for (const f of clouds) d += Math.max(0, 1 - Math.hypot(px - f.x, py - f.y) / (f.r * 1.1)) ** 1.5;
+					data[(y * w + x) * 4] = Math.round(Math.min(1, d) * 255);
+				}
+			nebulaDensity.value?.dispose();
+			const t = new THREE.DataTexture(data, w, h, THREE.RGBAFormat);
+			t.magFilter = t.minFilter = THREE.LinearFilter;
+			t.needsUpdate = true;
+			nebulaDensity.value = t;
+		}
 		// Space dust and ice specks at many heights over the plane: they slide against each other and the
 		// painted stars as the camera moves, so the board reads as deep space.
 		const area = (game.W * game.H) / (3360 * 2160),
@@ -67327,7 +67602,7 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 	// Fog of war on the ground: visible 255, explored 110, unknown 25, smoothed (see refreshFog); the
 	// terrain shader darkens and desaturates by it.
 	const fogUniforms = { fogMap: { value: null }, fogSize: { value: new THREE.Vector2(1, 1) }, fogOn: { value: 1 }, fogTime: { value: 0 } },
-		groundWeather = { wetness: { value: 0 }, snowCover: { value: 0 }, rainLevel: { value: 0 }, weatherTime: { value: 0 }, skyTint: { value: new THREE.Color() }, rockTint: { value: new THREE.Color("#7a6a58") }, sandLevel: { value: 0 }, mistLevel: { value: 0 }, mistBand: { value: new THREE.Vector2(0, 40) }, pbrOn: { value: 1 }, pbrBiome: { value: 0 }, spaceGround: { value: 0 }, ionLevel: { value: 0 } };
+		groundWeather = { wetness: { value: 0 }, snowCover: { value: 0 }, rainLevel: { value: 0 }, weatherTime: { value: 0 }, skyTint: { value: new THREE.Color() }, rockTint: { value: new THREE.Color("#7a6a58") }, sandLevel: { value: 0 }, mistLevel: { value: 0 }, mistBand: { value: new THREE.Vector2(0, 40) }, pbrOn: { value: 1 }, pbrBiome: { value: 0 }, spaceGround: { value: 0 }, ionLevel: { value: 0 }, nebulaMap: nebulaDensity };
 	// The vision grid is upsampled FOG_UP times and box-blurred twice, so the edge of sight is a soft
 	// curve instead of 40-unit steps.
 	const FOG_UP = 3;
@@ -67572,7 +67847,7 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			shader.fragmentShader = shader.fragmentShader
 				.replace(
 					"#include <common>",
-					"#include <common>\nvarying vec2 vMapXY;\nuniform float spaceGround;\nuniform float ionLevel;\nuniform sampler2D fogMap;\nuniform float fogOn;\nuniform float fogTime;\nuniform vec2 fogSize;\nuniform sampler2D overlayMap;\nuniform float overlayLinear;\nuniform float overlayOn;\nuniform vec4 overlayFrame;\nuniform vec2 overlaySize;\n" + FOG_NOISE,
+					"#include <common>\nvarying vec2 vMapXY;\nuniform float spaceGround;\nuniform float ionLevel;\nuniform sampler2D fogMap;\nuniform float fogOn;\nuniform float fogTime;\nuniform vec2 fogSize;\nuniform sampler2D overlayMap;\nuniform float overlayLinear;\nuniform float overlayOn;\nuniform vec4 overlayFrame;\nuniform vec2 overlaySize;\nuniform sampler2D nebulaMap;\n" + FOG_NOISE,
 				)
 				.replace(
 					"#include <dithering_fragment>",
@@ -67615,6 +67890,10 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 						float grid = smoothstep(197.0, 199.6, max(cellXY.x, cellXY.y));
 						float edge = min(min(vMapXY.x, vMapXY.y), min(fogSize.x - vMapXY.x, fogSize.y - vMapXY.y));
 						float frame = exp(-max(edge, 0.0) / 7.0) + exp(-max(edge, 0.0) / 60.0) * 0.12;
+						// Under a dense nebula the grid and the frame fade (0.171.7).
+						float inCloud = texture2D(nebulaMap, clamp(vMapXY / fogSize, 0.0, 1.0)).r;
+						grid *= 1.0 - 0.8 * inCloud;
+						frame *= 1.0 - 0.55 * inCloud;
 						vec3 holo = mix(vec3(0.3, 0.75, 0.95), vec3(0.7, 0.4, 1.0), ionLevel);
 						float holoA = (grid * 0.06 * smoothstep(0.4, 0.9, seen) + frame * 0.45) * (1.0 + ionLevel * (0.8 * sin(fogTime * 23.0 + vMapXY.x * 0.01) - 0.2));
 						vec3 base = mix(murk, holo, holoA / max(0.001, holoA + veil));
@@ -67627,21 +67906,9 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		return material;
 	}
 
-	// What on a tile changes the ground painting: nothing any more — tracks, craters, wrecks, habitats,
-	// wall links and map effects are 3D (webgl3d/marks-3d.js and others), deposits and relays are models.
-	// The ground is painted once per map.
-	function signature() {
-		return "";
-	}
-	function refreshTiles() {
-		for (const t of tiles) {
-			const s = signature(t);
-			if (s === t.signature) continue;
-			t.signature = s;
-			paintTile(t);
-			return; // one tile per check keeps frames even
-		}
-	}
+	// The ground is painted once per map: tracks, craters, wrecks, habitats, wall links and map effects are 3D
+	// (webgl3d/marks-3d.js and others), deposits and relays are models. (0.171.15: the repainting check that ran
+	// twice a second and never found anything to repaint is gone.)
 
 	// The board's ground phases (terrain, deposits, relays), painted for one tile.
 	// Captions are not painted on the ground: they stand as signs facing the camera (syncSigns).
@@ -67753,6 +68020,23 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		signs.clear();
 	}
 
+	// An entity's record leaves the board with what it owns alone (0.171.15: the plinth's material and the glare of
+	// the jump from hyperspace stayed behind).
+	// Colours by their CSS text, parsed once (0.171.15: every frame, for every entity); the sun's direction in one
+	// reused vector (it was cloned twice a frame).
+	const colorCache = new Map(),
+		colorOf = (css) => {
+			let c = colorCache.get(css);
+			if (!c) colorCache.set(css, (c = new THREE.Color(css)));
+			return c;
+		},
+		sunDirection = new THREE.Vector3(),
+		sunDirOf = () => sunDirection.copy(sun.position).sub(sun.target.position).normalize();
+	function releaseRecord(r) {
+		world.remove(r.group);
+		r.plinth?.material.dispose();
+		r.warpFx?.glare.material.dispose();
+	}
 	// Model looks: one texture and material per painted state, shared by every model in that state.
 	const painter = createModelLight(),
 		looks = new Map(),
@@ -67989,7 +68273,7 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			}
 			if (d.r.scaffold) d.r.scaffold.root.visible = false;
 			if (k >= 1) {
-				world.remove(d.r.group);
+				releaseRecord(d.r);
 				if (d.broken) endBreak(d);
 				dying.splice(i, 1);
 			}
@@ -68443,7 +68727,7 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			if (n >= MAX_RINGS || e.hp <= 0 || !s?.speed || s.flying || e.team === 2 || hidden(e)) continue;
 			const r = s.radius * 1.15;
 			teamRings.setMatrixAt(n, ringMatrix.makeScale(r, 1, r).setPosition(e.x, heightAt(e.x, e.y) + 1.2, e.y));
-			teamRings.setColorAt(n++, ringColor.set(game.colorFor?.(e.team) || COLORS[e.team] || "#ffffff"));
+			teamRings.setColorAt(n++, ringColor.copy(colorOf(game.colorFor?.(e.team) || COLORS[e.team] || "#ffffff")));
 		}
 		teamRings.count = n;
 		teamRings.instanceMatrix.needsUpdate = true;
@@ -69393,12 +69677,16 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 				overlayUniforms.overlayOn.value = 0;
 				return;
 			}
-			if (overlayUniforms.overlayMap.value?.image !== canvas) {
-				overlayUniforms.overlayMap.value?.dispose();
+			// A new texture for a new canvas — or a new size of the same one (0.171.15: after resizing the window or F11
+			// the upload into the old, fixed-size storage failed and the overlay froze).
+			const old = overlayUniforms.overlayMap.value;
+			if (old?.image !== canvas || old.userData.w !== canvas.width || old.userData.h !== canvas.height) {
+				old?.dispose();
 				// Mixed after the output conversion, so its sRGB values are used as they are (no colour space).
 				const t = new THREE.CanvasTexture(canvas);
 				t.generateMipmaps = false;
 				t.minFilter = THREE.LinearFilter;
+				t.userData = { w: canvas.width, h: canvas.height };
 				overlayUniforms.overlayMap.value = t;
 			}
 			overlayUniforms.overlayMap.value.needsUpdate = true;
@@ -69419,8 +69707,14 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			space3d.setGame(game);
 			applyQuality(this, true);
 			canvasRenderer.setGame(game);
-			for (const r of records.values()) world.remove(r.group);
-			for (const d of dying) world.remove(d.r.group);
+			for (const r of records.values()) releaseRecord(r);
+			for (const d of dying) releaseRecord(d.r);
+			// The painted looks of the last map's models (a texture and a material each) go too.
+			for (const l of looks.values()) {
+				l.material.map?.dispose();
+				l.material.dispose();
+			}
+			looks.clear();
 			for (const d of dying) if (d.broken) endBreak(d);
 			dying.length = 0;
 			clearSigns();
@@ -69441,10 +69735,6 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			applyQuality(this);
 			clock += dt;
 			frameDt = dt;
-			if ((groundClock -= dt) <= 0) {
-				groundClock = GROUND_EVERY;
-				refreshTiles();
-			}
 			if ((fogClock -= dt) <= 0) {
 				fogClock = 0.2;
 				refreshFog();
@@ -69462,7 +69752,7 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 					// leaves (a unit boarding a transport, a building taken down).
 					const boom = r.model && r.group.visible && game.effects.some((ef) => ef.kind === "explosion" && Math.abs(ef.x - r.group.position.x) < 4 && Math.abs(ef.y - r.group.position.z) < 4);
 					if (boom) dying.push({ r, t: 0, building: !!r.building, spin: (id % 7) / 7 - 0.5, space: spaceMap() });
-					else world.remove(r.group);
+					else releaseRecord(r);
 				}
 			collapse(dt);
 			syncMarks();
@@ -69471,7 +69761,7 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			gasView = labelView();
 			scatter.update(game);
 			life.update(game.time, { fog: options.fog, colors: COLORS });
-			marks.update(game, { hidden, sun: sun.position.clone().sub(sun.target.position).normalize() });
+			marks.update(game, { hidden, sun: sunDirOf() });
 			worldFx.update(game);
 			syncGhosts();
 			syncRallies();
@@ -69488,6 +69778,7 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			// The mist of the fog of war takes the colour of the haze, a little lighter, dark at night.
 			mistColor.value.copy(scene.fog.color).lerp(hemi.color, 0.25);
 			updateDustShips();
+			spinNebula();
 			const night = sunOverride?.night ?? 1 - day;
 			// Space: the lights of hulls and stations burn as at night against the dark.
 			models3d.setNight(spaceMap() ? 0.8 : night);
@@ -69506,7 +69797,7 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 				sky: scene.background,
 				// Mist at dawn and dusk (morning fog, evening haze), besides rain, snow and night.
 				mistLevel: dawnMist,
-				sun: { dir: sun.position.clone().sub(sun.target.position).normalize(), color: sun.color, intensity: sun.intensity },
+				sun: { dir: sunDirOf(), color: sun.color, intensity: sun.intensity },
 				quality,
 			});
 			weatherLight(weatherState);
@@ -69536,16 +69827,36 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			}
 			lastFrame = performance.now() - started;
 		},
-		// Screen point (CSS px in the host) → map point, through the terrain.
+		// Screen point (CSS px in the host) → map point, through the terrain. 0.171.10: the ray is marched over the
+		// height map (a step per cell, from the highest ground down to the lowest) and the crossing refined by
+		// halving — the ray cast against every triangle of the terrain tiles (about 400 000 on a big map) cost
+		// 18–28 ms a frame for the minimap outline and the pointer.
 		screenToMap(p) {
 			const rect = host.getBoundingClientRect();
 			ndc.set((p.x / rect.width) * 2 - 1, -(p.y / rect.height) * 2 + 1);
 			raycaster.setFromCamera(ndc, camera);
-			const hit = raycaster.intersectObject(terrain, true)[0];
-			if (hit) return { x: hit.point.x, y: hit.point.z };
-			// Off the map: the plane of height 0 (a ray into the sky: a point far out under it).
-			const t = raycaster.ray.origin.y / Math.max(-raycaster.ray.direction.y, 0.05);
-			return { x: raycaster.ray.origin.x + raycaster.ray.direction.x * t, y: raycaster.ray.origin.z + raycaster.ray.direction.z * t };
+			const o = raycaster.ray.origin,
+				d = raycaster.ray.direction;
+			if (heights && d.y < -1e-4) {
+				const above = (t) => o.y + d.y * t - heightAt(o.x + d.x * t, o.z + d.z * t),
+					step = heights.cell / Math.max(0.2, Math.hypot(d.x, d.z)),
+					far = (o.y - heights.low + 1) / -d.y;
+				let a = Math.max(0, (o.y - heights.high - 1) / -d.y);
+				if (above(a) < 0) a = 0;
+				for (let b = a + step; a < far; a = b, b += step) {
+					if (above(Math.min(b, far)) > 0) continue;
+					b = Math.min(b, far);
+					for (let k = 0; k < 14; k++) {
+						const m = (a + b) / 2;
+						if (above(m) > 0) a = m;
+						else b = m;
+					}
+					return { x: o.x + d.x * b, y: o.z + d.z * b };
+				}
+			}
+			// Off the ground: the plane of height 0 (a ray into the sky: a point far out under it).
+			const t = o.y / Math.max(-d.y, 0.05);
+			return { x: o.x + d.x * t, y: o.z + d.z * t };
 		},
 		// Map point (on the ground, optionally raised) → screen point.
 		mapToScreen(p, lift = 0) {

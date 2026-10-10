@@ -15,6 +15,9 @@
 	const $ = (id) => document.getElementById(id),
 		canvas = $("game"),
 		mini = $("minimap");
+	// The nearest element matching `selector` from an event's target (0.171.8): the target is not always an
+	// element — a key event sent to the document or the window, or a text node — and had no closest().
+	const closestTo = (target, selector) => (target?.nodeType === 1 ? target : target?.parentElement)?.closest?.(selector) || null;
 	let game = new Game(),
 		selected = new Set(
 			game
@@ -49,6 +52,9 @@
 	window.currentMenu = () => menu;
 	// The board's renderer in use: "three", "webgl", "webgpu" or "canvas" (diagnostics, the desktop app's self-check).
 	window.currentRendererMode = () => rendererMode;
+	// The render meter (found once) and what the army inspector shows (rebuilt only when it changes).
+	let renderMeter = null,
+		armyInspectorSignature = null;
 	let choiceOpen = false,
 		act2Signature = "";
 	let width = 1,
@@ -187,13 +193,25 @@
 		updateAudioControls();
 		if (!sound.muted) sound.play("ready", { force: true });
 	}
+	// The first press unlocks the sound; then the listeners go (0.171.13: every click and key of the session went
+	// through the audio and its controls). Coming back to the window brings the music back without a press.
 	const unlockSound = () => {
-		sound.unlock().then(updateAudioControls);
+		sound.unlock().then((on) => {
+			updateAudioControls();
+			if (on) {
+				document.removeEventListener("pointerdown", unlockSound, { capture: true });
+				document.removeEventListener("keydown", unlockSound, { capture: true });
+			}
+		});
 	};
 	document.addEventListener("pointerdown", unlockSound, { capture: true });
 	document.addEventListener("keydown", unlockSound, { capture: true });
+	const soundBack = () => {
+		if (sound.context && !document.hidden) sound.unlock().then(updateAudioControls);
+	};
+	window.addEventListener("focus", soundBack);
 	document.addEventListener("click", (e) => {
-		const button = e.target.closest("button");
+		const button = closestTo(e.target, "button");
 		if (
 			button &&
 			!button.disabled &&
@@ -203,9 +221,11 @@
 		)
 			sound.play("click");
 	});
-	window.addEventListener("blur", () => sound.silence());
+	// Leaving the window holds the whole sound where it is (and the films wait: menu.js); coming back goes on.
+	window.addEventListener("blur", () => sound.suspend());
 	document.addEventListener("visibilitychange", () => {
-		if (document.hidden) sound.silence();
+		if (document.hidden) sound.suspend();
+		else soundBack();
 	});
 	// Drawing lives in render-canvas.js; app.js keeps the camera, input and HUD and hands over a view each frame.
 	const canvasRenderer = createCanvasRenderer(canvas, mini);
@@ -467,7 +487,8 @@
 		$("income").textContent = `+${game.income}/s`;
 		$("income").title =
 			"Dochód pasywny centrum i przekaźników. Pełny dochód: Logistyka → Bilans.";
-		$("population").textContent = `${game.population(0)} / 60`;
+		// The viewer's army (0.171.13: team 0's — a network guest saw the host's).
+		$("population").textContent = `${game.population(game.viewer ?? 0)} / ${RTS.POP_CAP}`;
 		$("clock").textContent = timeLabel(game.time);
 		if (game.network) networkIntel();
 		else {
@@ -482,7 +503,7 @@
 				: "0%";
 		}
 		$("obj-capture").classList.toggle("done", game.captured);
-		$("obj-army").classList.toggle("done", game.population(0) >= 12);
+		$("obj-army").classList.toggle("done", game.population(game.viewer ?? 0) >= 12);
 		$("obj-hq").classList.toggle("done", (game.resultFor?.() ?? game.result) === "victory");
 		const es = [...selected].map((id) => game.get(id)).filter(Boolean);
 		$("selection-title").textContent =
@@ -581,7 +602,11 @@
 			if (carrier && es.length === 1)
 				$("selection-detail").textContent =
 					`${Math.ceil(carrier.hp)} PW · załoga ${(carrier.passengers || []).length}/4 · PPM piechotą: załaduj`;
-			const rows = game.combatReport([...selected]);
+			// Rebuilt only when what it shows changes (0.171.13: about 8 times a second, also hidden).
+			const rows = game.combatReport([...selected]),
+				inspectorSignature = JSON.stringify(rows);
+			if (inspectorSignature !== armyInspectorSignature) {
+			armyInspectorSignature = inspectorSignature;
 			$("army-inspector").innerHTML =
 				'<h3>Wybrany oddział</h3><p class="eco-note">Parametry w obecnej pogodzie. Obrażenia przed premiami przeciw typom celów i ich osłonom; premie badań i frakcji uwzględnione. Porównaj typy, zaznaczając kilka jednostek.</p>' +
 				rows
@@ -590,6 +615,7 @@
 							`<article class="army-stat"><strong>${r.name} × ${r.count}</strong><p>${r.role}</p><dl><dt>Wytrzymałość</dt><dd>${r.hp} / ${r.maxHp}</dd><dt>Zasięg / trafienie</dt><dd>${r.range} / ${r.damage}</dd><dt>Odstęp strzałów</dt><dd>${r.cooldown} s</dd><dt>Ruch / celność</dt><dd>${r.speed} / ${r.accuracy}%</dd><dt>Cena jednostkowa</dt><dd>${r.cost || 0} metalu</dd>${r.type === "transport" ? `<dt>Załoga</dt><dd>${r.passengers} / ${r.count * 4}</dd>` : ""}${r.cover ? `<dt>W osłonie</dt><dd>${r.cover}</dd>` : ""}</dl></article>`,
 					)
 					.join("");
+			}
 		}
 		if ($("demolish"))
 			$("demolish").hidden = !es.some(
@@ -649,7 +675,7 @@
 				game.credits < game.cost(type) ||
 				locked ||
 				full ||
-				game.population(0) + game.queue.length >= 60;
+				game.population(game.viewer ?? 0) + game.queue.length >= RTS.POP_CAP;
 			b.classList.toggle("locked", locked);
 			b.querySelector("small").textContent = requirement
 				? requirement
@@ -804,13 +830,18 @@
 		canvas.width = 1920;
 		canvas.height = 800;
 		c.scale(2, 2);
-		let start = performance.now(),
+		// The film's clock runs only while the window is in front (0.171.14): the sound waits when it is left
+		// (sound.suspend), and the picture waits with it.
+		let t = 0,
+			prev = null,
 			last = -1,
 			running = false;
 		const frame = (now) => {
 			if (!canvas.isConnected) return (running = false);
-			const t = Math.min(end, (now - start) / 1000),
-				shot = f.draw(c, t, reduced);
+			const dt = prev == null ? 0 : (now - prev) / 1000;
+			prev = now;
+			if (document.hasFocus() && !document.hidden) t = Math.min(end, t + Math.min(dt, 0.1));
+			const shot = f.draw(c, t, reduced);
 			if (shot.scene !== last) {
 				caption.textContent = shot.caption;
 				last = shot.scene;
@@ -818,16 +849,19 @@
 			if (t < end) requestAnimationFrame(frame);
 			else running = false;
 		};
-		const play = () => {
-			start = performance.now();
+		const play = (again) => {
+			t = 0;
+			prev = null;
 			last = -1;
 			if (!running) {
 				running = true;
 				requestAnimationFrame(frame);
 			}
+			// A replay starts the music over too (0.171.14: the mode did not change, and the replay was silent).
+			if (again) sound.restartMusic("intro");
 		};
-		wrap.querySelector("button").onclick = play;
-		play();
+		wrap.querySelector("button").onclick = () => play(true);
+		play(false);
 		sound.setMusicMode("intro");
 	}
 	function showChoice() {
@@ -835,7 +869,7 @@
 		paused = true;
 		$("overlay").hidden = false;
 		$("overlay").innerHTML =
-			`<div class="briefing act2-choice"><span class="eyebrow">DECYZJA DOWÓDCY / SERCE POPIOŁU</span><h2>Zniszczyć<br>czy odłączyć?</h2><p>Węzły sterujące są w twoich rękach. Tej decyzji nie można cofnąć; zmienia przebieg misji, premię i epilog.</p><button id="choose-destroy" class="primary-button"><b>ZNISZCZ INSTALACJĘ</b><small>Przeciążenie za 20 s niszczy wszystko w promieniu 380. Wieże Dominium tracą 50% PW, odzysk 400 metalu. Cel dodatkowy: bez strat od wybuchu.</small></button><button id="choose-evacuate" class="primary-button"><b>ODŁĄCZ I EWAKUUJ PERSONEL</b><small>Sześcioro techników musi dotrzeć na lądowisko — co najmniej czworo. Pajęczaki wpadną w szał. Premia: plany pancerza kompozytowego. Cel dodatkowy: ocal wszystkich.</small></button></div>`;
+			`<div class="briefing act2-choice"><span class="eyebrow">DECYZJA DOWÓDCY / SERCE POPIOŁU</span><h2>Zniszczyć<br>czy odłączyć?</h2><p>Węzły sterujące są w Twoich rękach. Tej decyzji nie można cofnąć; zmienia przebieg misji, premię i epilog.</p><button id="choose-destroy" class="primary-button"><b>ZNISZCZ INSTALACJĘ</b><small>Przeciążenie za 20 s niszczy wszystko w promieniu 380. Wieże Dominium tracą 50% PW, odzysk 400 metalu. Cel dodatkowy: bez strat od wybuchu.</small></button><button id="choose-evacuate" class="primary-button"><b>ODŁĄCZ I EWAKUUJ PERSONEL</b><small>Sześcioro techników musi dotrzeć na lądowisko — co najmniej czworo. Pajęczaki wpadną w szał. Premia: plany od techników — pancerz kompozytowy (gdy już go masz: broń plazmowa, a gdy i ją — 300 metalu). Cel dodatkowy: ocal wszystkich.</small></button></div>`;
 		for (const kind of ["destroy", "evacuate"])
 			$("choose-" + kind).onclick = () => {
 				game.act2Choose(kind);
@@ -1125,6 +1159,7 @@
 		netSession = new NetPlay.Lockstep(prepared, team, link, {
 			teams: relay ? prepared.humans.slice() : [0, 1],
 			relay: !!relay,
+			resuming: !!resume,
 			onDesync: () => networkOver("Rozsynchronizowanie gry", "Symulacje graczy przestały się zgadzać — bitwa została przerwana. Zgłoś to twórcy gry (mapa, frakcje, co działo się tuż przed)."),
 			onClose: () => (relay ? relayLost() : networkOver("Połączenie zerwane", "Drugi gracz opuścił bitwę albo połączenie zostało przerwane.")),
 			onPhase: networkPhase,
@@ -1182,14 +1217,22 @@
 			if (++tries > 30) return networkOver("Nie udało się wrócić", "Serwer gry nie odpowiada. Spróbuj później: Gra wieloosobowa → Przez serwer — trwająca bitwa pojawi się na liście.");
 			if ($("relay-status")) $("relay-status").textContent = `Połączenie z serwerem przerwane — próba ${tries} z 30…`;
 			const link = new NetPlay.RelayLink(relay.url);
-			link.on("open", () => link.send({ k: "hello", v: 1, client: relay.client, player: relay.player }));
+			link.on("open", () => link.send({ k: "hello", v: 1, game: typeof GAME_VERSION !== "undefined" ? GAME_VERSION : "", client: relay.client, player: relay.player }));
 			link.on("message", (msg) => {
 				if (msg.k === "welcome") link.send({ k: "rejoin", room: relay.room });
 				else if (msg.k === "resume") {
 					$("overlay").hidden = true;
 					paused = false;
 					startNetwork({ link, team: msg.team ?? team, settings: msg.settings, relay, resume: msg });
-				} else if (msg.k === "error" && netRelay === relay) networkOver("Nie udało się wrócić", msg.text);
+				} else if (msg.k === "error" && netRelay === relay) {
+					// A few more tries (0.171.16: the first refusal ended the battle — e.g. while the server still held
+					// the seat for the lost connection); the server's text is shown as text.
+					if (tries < 5) {
+						link.close();
+						return;
+					}
+					networkOver("Nie udało się wrócić", escHtml(String(msg.text || "")));
+				}
 			});
 			link.on("close", () => {
 				if (netRelay === relay && !netSession) setTimeout(attempt, 2000);
@@ -1216,6 +1259,7 @@
 		}
 		if (menu?.net) menu.net = null;
 	}
+	const escHtml = (s) => s.replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]);
 	function networkOver(title, text) {
 		if (!netSession || finished) {
 			endNetwork();
@@ -1523,7 +1567,8 @@
 		requestAnimationFrame(() => afterFrames(n - 1, fn));
 	}
 	function togglePause() {
-		if (!started || finished) return;
+		// Not while a story decision waits (0.171.10): it holds the battle until one is taken.
+		if (!started || finished || choiceOpen) return;
 		if (netSession) {
 			sharedPause();
 			return;
@@ -1647,8 +1692,11 @@
 			)
 			.sort((a, b) => dist(a, p) - dist(b, p))[0];
 	}
+	// Saves imported from a file wait for the reload (0.171.13: leaving the page saved the running battle over the
+	// imported autosave).
+	let savesHeld = false;
 	function saveGame(silent = false, key = SAVE_KEY) {
-		if (!started) return false;
+		if (!started || savesHeld) return false;
 		// A network battle is never saved — also after it ended or the connection dropped (then netSession is gone,
 		// but leaving the page would otherwise overwrite the single-player save with it).
 		if (netSession || game.network) return true;
@@ -2822,6 +2870,15 @@
 			if (!e.repeat) development?.open();
 			return;
 		}
+		// A story decision on screen holds the battle (0.171.10): Space and Escape resumed it behind the choice. Only
+		// Tab, Enter and Space on its buttons get through (to move between them and take one).
+		if (choiceOpen && !menu?.active) {
+			if (!(["Tab", "Enter", " "].includes(e.key) && closestTo(e.target, "#overlay button"))) e.preventDefault();
+			return;
+		}
+		// An open dialog (army statistics, a confirmation) has the keys first: Escape closes it, not the battle
+		// (0.171.13: Escape opened the pause menu behind the army statistics).
+		if (!menu?.active && (document.querySelector("#army-stats-dialog")?.open || (typeof GameDialog !== "undefined" && GameDialog.isOpen()))) return;
 		if (e.key === "Escape") {
 			e.preventDefault();
 			if (e.repeat) return;
@@ -2830,7 +2887,6 @@
 				building = false;
 				wallDrag = null;
 				attackMode = orderMode = false;
-			orbitMode = null;
 				strikeMode = null;
 				orbitMode = null;
 				$("placement").hidden = true;
@@ -2842,15 +2898,16 @@
 				e.key.toLowerCase() === "m" &&
 				!e.ctrlKey &&
 				!e.metaKey &&
-				!e.target.closest("input")
+				!closestTo(e.target, "input,select,textarea")
 			) {
 				e.preventDefault();
 				if (!e.repeat) toggleSound();
 			}
 			return;
 		}
-		if (document.querySelector("#army-stats-dialog")?.open || (typeof GameDialog !== "undefined" && GameDialog.isOpen())) return;
-		if (e.target.closest("input,select,textarea")) return;
+		if (closestTo(e.target, "input,select,textarea")) return;
+		// Space and Enter press a focused button (0.171.13: Space paused the battle instead).
+		if ((e.key === " " || e.key === "Enter") && closestTo(e.target, "button")) return;
 		if (e.key === "Enter" && netSession && started && !finished) {
 			e.preventDefault();
 			openChat();
@@ -2938,12 +2995,6 @@
 		} else if (key === "a") {
 			attackMode = true;
 			toast("Atak w marszu: wskaż cel prawym przyciskiem myszy.");
-		} else if (key === "escape") {
-			building = false;
-			wallDrag = null;
-			attackMode = orderMode = false;
-			orbitMode = null;
-			$("placement").hidden = true;
 		} else if (key === "h") {
 			const b = game.hq((game.viewer ?? 0));
 			if (b) {
@@ -3155,8 +3206,12 @@
 				: null,
 		sharedPause,
 		surrender: () => act("surrender"),
+		holdSaves: () => {
+			savesHeld = true;
+		},
 		resume: () => {
-			paused = false;
+			// A story decision still on screen keeps the battle held (0.171.10).
+			paused = choiceOpen;
 			sound.setMusicMode(musicModeFor(game));
 			fit();
 			updateHud();
@@ -3266,10 +3321,12 @@
 		const renderStart = performance.now();
 		render();
 		SceneFX.measure(performance.now() - renderStart);
-		const meter = document.querySelector("#render-meter");
+		// The render meter: found once, written only while it is shown (0.171.13: a query and a text every frame).
+		const meter = (renderMeter ||= document.getElementById("render-meter"));
 		if (meter) {
-			meter.hidden = !SceneFX.options.metrics;
-			meter.textContent = `Rysowanie: ${SceneFX.metrics.mean.toFixed(1)} ms · p95 ${SceneFX.metrics.p95.toFixed(1)} ms · ${game.entities.length} obiektów`;
+			const on = !!SceneFX.options.metrics;
+			if (meter.hidden === on) meter.hidden = !on;
+			if (on) meter.textContent = `Rysowanie: ${SceneFX.metrics.mean.toFixed(1)} ms · p95 ${SceneFX.metrics.p95.toFixed(1)} ms · ${game.entities.length} obiektów`;
 		}
 		requestAnimationFrame(frame);
 	}

@@ -204,8 +204,11 @@ test("the decision of XII changes XIII: Varn's garrison and a second flak batter
 	assert.equal(garrison.entities.filter((e) => e.team === 0 && e.type === "flak").length, 2);
 	const plain = start("colony13"),
 		shipyard = start("colony13", { choices: { colony12: "shipyard" } });
-	assert.equal(shipyard.podsLeft(1), plain.podsLeft(1) - 3);
+	// About a third of her pods fewer (0.171.12: 4 → 3; it was 3 fewer, which left her 1), strikes charging slower.
+	assert.equal(shipyard.podsLeft(1), plain.podsLeft(1) - Math.max(1, Math.round(plain.podsLeft(1) * 0.3)));
+	assert.ok(shipyard.podsLeft(1) >= 2);
 	assert.ok(shipyard.invasion.strikeReady > plain.invasion.strikeReady);
+	assert.ok(shipyard.invasion.strikeCooldown > plain.invasion.strikeCooldown);
 	assert.ok(shipyard.hq(1).maxHp < plain.hq(1).maxHp);
 	assert.ok(shipyard.act2.radio.some((l) => /Stocznia Admiralicji/.test(l.text)));
 });
@@ -357,4 +360,12 @@ test("the finale film's captions follow the campaign decisions", () => {
 	assert.match(b[2], /wrakami/);
 	assert.match(a[5], /odbudowali/);
 	assert.match(b[5], /popiołem/);
+});
+
+// 0.171.12: X's fleet gives XI at most its cap — the same number in the epilogue, the briefing and the radio.
+test("the pods carried from X to XI are capped, and said without a wrong plural", () => {
+	const g = new RTS.Game(42, "colony11");
+	g.applyCampaignLevel("normal");
+	assert.equal(g.applyCampaignCarry({ colony10: { pods: 8 } }), RTS.ACT4_POD_CAP);
+	assert.ok(g.act2.radio.some((l) => l.text === `Flota z blokady Eos daje nam kapsuły desantowe: ${RTS.ACT4_POD_CAP}.`));
 });

@@ -166,10 +166,17 @@ const MenuBackdrop = (() => {
 			tx = e.clientX / innerWidth - 0.5;
 			ty = e.clientY / innerHeight - 0.5;
 		});
+		// Whether the backdrop is laid out at all: its computed style read twice a second, not every frame (0.171.13).
+		let shown = true,
+			nextLook = 0;
 		const frame = (now) => {
 			requestAnimationFrame(frame);
+			if (now >= nextLook) {
+				nextLook = now + 500;
+				shown = wrap.isConnected && getComputedStyle(wrap).display !== "none";
+			}
 			// Rest while the menu is hidden, a film is on, or nothing changes (reduced motion).
-			if (!wrap.isConnected || menu.root.hidden || getComputedStyle(wrap).display === "none") return;
+			if (!wrap.isConnected || menu.root.hidden || !shown) return;
 			if (menu.reduced) {
 				if (!drawnStill) scene(c, k, 20, 0, 0, world);
 				drawnStill = true;

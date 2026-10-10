@@ -1,5 +1,30 @@
 # Gra wieloosobowa (wersje 0.46–0.49, 0.123, 0.153 i 0.155)
 
+## Odporność serwera lobby (wersja 0.171.10, 2026-10-10)
+
+Z przeglądu gry (`lobby-server.js`):
+
+- **Zła wiadomość nie wyłącza serwera.** `cleanRules` przyjmuje cokolwiek (to, co nie jest obiektem, to brak zasad; `rules: null` rzucało wyjątek), numery miejsc muszą być liczbami całkowitymi (obiekt z `toString` rzucał), a obsługa każdej wiadomości jest w `try/catch` — klient dostaje „Nieprawidłowa wiadomość.”, serwer działa dalej.
+- **Tura daleko przed czasem bitwy jest ignorowana:** najwyżej `turnLead` = 300 tur (30 s) ponad czas od startu (tura = 0,1 s). Dotąd `t: 300000` kazało serwerowi dopisać i rozesłać 300 tys. pustych tur, a przy ok. 1e8 kończyła się pamięć.
+- **Przedstawienie się (`hello`) raz na połączenie,** a stan pokoju zawiera tylko `hostSeat` (które miejsce jest gospodarza); każdy klient dostaje w wiadomości `room` własne `host: true/false`. Dotąd serwer rozsyłał wszystkim identyfikator klienta gospodarza — jedyne, czym klient się przedstawia — i drugi `hello` z tym identyfikatorem dawał przejęcie pokoju (zmiana zasad, start).
+- **WebSocket:** wiadomość złożona z wielu ramek ma limit całego rozmiaru (`maxMessage`, 64 KB), nie tylko każdej ramki.
+
+Test `tests/lobby.test.js` „hostile messages” sprawdza te przypadki; prawdziwy serwer (WebSocket) przeżywa `rules: null`, obiekt jako numer miejsca i turę 1e8. Resztę przeglądu zrobiła wersja 0.171.16 (niżej).
+
+## Połączenia, powroty i wersje (wersja 0.171.16, 2026-10-10)
+
+- **Martwe połączenie:** serwer zapisuje, kiedy klient ostatnio coś przysłał; gracz w bitwie milczący dłużej niż `idle` = 8 s (strona pinguje co 2 s) jest usuwany jak po zamknięciu połączenia (`sweep` co 2 s) — puste tury, po 20 s komputer. Dotąd połączenie zerwane bez zamknięcia (Wi-Fi, uśpienie) trzymało miejsce jako „połączone” i reszta czekała.
+- **Powrót przy starym połączeniu:** `rejoin` przyjmuje miejsce także wtedy, gdy wisi na nim jeszcze dawne połączenie tego gracza (zamyka je). Klient przy odmowie próbuje jeszcze kilka razy, zamiast od razu kończyć bitwę.
+- **Powrót do długiej bitwy bez zamrażania innych:** po `rejoin` serwer dalej gra za drużynę pustymi turami (wysyła je też wracającemu); strona po odtworzeniu dziennika wysyła `caught`, serwer odpowiada `go` z numerem ostatniej pustej tury, od którego idą tury gracza (`Lockstep`: `resuming`, `catching`). Dotąd pozostali czekali przez całe odtwarzanie (ok. 3 min po 45-minutowej bitwie). Wracający w trakcie odtwarzania nie jest usuwany za milczenie, a komputer nie przejmuje wtedy drużyny.
+- **Pierwsze miejsce dla gracza:** serwer nie da komputera na miejsce 0 i nie zacznie bez gracza na nim (gra zakłada człowieka na drużynie 0 i bitwa wisiała od startu); przycisk „Komputer” przy pierwszym miejscu zniknął.
+- **Wersja gry:** `hello` (lobby i połączenie przez kody) niesie `game` = `GAME_VERSION`; serwer porównuje ją z wersją z `package.json`, druga strona z własną. Dotąd porównywano tylko numer protokołu (1 od 0.153) i różne wydania łączyły się, a potem rozjeżdżały.
+- **Bezpieczeństwo:** teksty z serwera (np. powód odmowy powrotu) idą do strony jako tekst, liczby z listy gier przez `Number`; serwer lobby przyjmuje tylko strony gry (ten sam host, `app://game`, klienci bez `Origin`) i tylko zamaskowane ramki; `server.js` odmawia ścieżek z segmentem zaczynającym się od kropki (`.git`, `.claude`) i `node_modules`.
+- **Gra przez kody:** stan „disconnected” WebRTC kończy bitwę dopiero, gdy nie wróci w ciągu 8 s („failed” i „closed” od razu).
+- **Import zapisów** (`save-transfer.js`): najpierw zapis kluczy z pliku, stare usuwane dopiero po udanym zapisie wszystkich; błąd (brak miejsca) przywraca poprzednie zapisy.
+- **Suma kontrolna** (`checksum`): także rodzaj rozkazu, cel rozkazu i cel jednostki oraz ulepszenia stron — rozjazd widać wcześniej, nie dopiero w położeniu lub wytrzymałości.
+
+Testy w `tests/lobby.test.js`: zła wersja, pierwsze miejsce, cichy gracz usuwany, powrót przy starym połączeniu, pozostali nie czekają na odtwarzającego (te same sumy kontrolne po powrocie). Sprawdzone ręcznie: `/.git/config`, `/node_modules/`, `/.claude/launch.json` → 403, gra → 200; WebSocket z obcego `Origin` odrzucony.
+
 ## Tryby scenariuszy i Inwazja przez sieć (wersja 0.155, 2026-10-09)
 
 **Jak zagrać.** W zasadach (gospodarz; przez kody i przez serwer) pole **Tryb**. Pod nim cel trybu albo wyjaśnienie, czemu tryb jest niedostępny przy tym składzie (wtedy gra się Podbój). Tryby niedostępne są w liście wyszarzone.
