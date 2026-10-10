@@ -9,8 +9,8 @@ function createTerrainHeight() {
 	const CELL = 12,
 		// World units per 1.0 of height; decides how steep the slopes look and how long shadows get.
 		RISE = 70;
-	const RAISED = { mesa: [1, "plateau"], spire: [1.35, "peak"], outcrop: [0.65, "plateau"], rock: [0.7, "plateau"], wreck: [0.55, "plateau"], derelict: [0.6, "plateau"], ruin: [0.4, "plateau"], debris: [0.3, "plateau"], grove: [0.3, "peak"], resin: [0.3, "plateau"], eggs: [0.18, "peak"], processor: [0.2, "plateau"] };
-	const WATER = { lake: -0.35, glow: -0.35, chasm: -1.3, crevasse: -1, lava: -0.25, dune: 0.5 };
+	const RAISED = { mesa: [1, "plateau"], spire: [1.35, "peak"], outcrop: [0.65, "plateau"], rock: [0.7, "plateau"], wreck: [0.55, "plateau"], derelict: [0.6, "plateau"], ruin: [0.4, "plateau"], debris: [0.3, "plateau"], grove: [0.3, "peak"], resin: [0.3, "plateau"], eggs: [0.18, "peak"], processor: [0.2, "plateau"], crystal: [0.5, "peak"] };
+	const WATER = { lake: -0.35, glow: -0.35, chasm: -1.3, crevasse: -1, lava: -0.25, dune: 0.5, sea: -0.45, ice: -0.08 };
 	let map = null,
 		queue = [],
 		lights = new Map();

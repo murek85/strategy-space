@@ -1,29 +1,71 @@
-/* The campaign prologue: six 5-second shots in the manner of a sci-fi game cinematic, drawn locally on a canvas
-   (no video files): a slow camera push, letterboxed frame, nebulae and parallax stars, planets with lit
-   atmospheres and city lights, detailed ships with running lights and engine trails, laser fire, lens flares,
-   a tactical HUD, typed titles with a glitch, colour grading, vignette and film grain. Deterministic (the same
-   time gives the same frame); with reduced motion the camera, flicker, shake and grain stand still.
-   Shots: the convoy routes and the beacons; the Dominium blockade; the sector going dark; Lira's holographic
-   transmission from Eos; the run through the ice canyons of Vesper; dawn over the fleet. */
+/* The campaign prologue (0.169): a story of about two and a half minutes leading to the start of act I, in the manner
+   of a sci-fi game cinematic, drawn locally on a canvas (no video files): a slow camera push, letterboxed frame,
+   nebulae and parallax stars, planets with lit atmospheres and city lights, detailed ships with running lights and
+   engine trails, laser fire, lens flares, a tactical HUD, typed titles with a glitch, colour grading, vignette and
+   film grain. Deterministic (the same time gives the same frame); with reduced motion the camera, flicker, shake
+   and grain stand still. Fifteen shots of their own lengths (LENGTHS): the frontier; the settlers; Lira's network
+   of beacons; the convoy routes; the Dominium; the blockade; the sector going dark; the ultimatum; the Silent
+   Station on Eos; Lira's transmission; the muster of the last fleet; the blockade run; the descent to Eos; the
+   landing; dawn and the title of act I. Lira speaks in the transmission and at the landing (lines). */
 const CampaignFilm = (() => {
-	const duration = 30;
+	const LENGTHS = [9, 10, 10, 9, 10, 10, 10, 10, 10, 11, 10, 10, 11, 10, 10];
+	const duration = LENGTHS.reduce((n, l) => n + l, 0);
 	const captions = [
-		"Latarnie pogranicza prowadziły konwoje między wolnymi światami. Każdy sygnał oznaczał bezpieczny powrót.",
-		"Flota Dominium zajęła orbitalne węzły. Jeden rozkaz odciął Kolonie od energii i dostaw.",
-		"Miasta pogrążyły się w ciemności. Ostatni transport pomocy czekał na szlak, który przestał istnieć.",
-		"Lira ocaliła nadajnik na Eos. Jej wiadomość ujawniła drogę do klucza ukrytego w lodowym archiwum.",
-		"Mała ekspedycja ruszyła ku Vesperowi. W cieniu lodowych grzbietów rodził się plan przełamania blokady.",
-		"Odzyskaj Eos. Zdobądź klucz. Przywróć latarnie. Odzyskany Świt zaczyna się od twojego rozkazu.",
+		"Na skraju zbadanej galaktyki leży pogranicze: kilka światów, które nie należą do nikogo.",
+		"Przylecieli tu osadnicy, którzy chcieli żyć z dala od Dominium. Nazwali się Wolnymi Koloniami.",
+		"Inżynierka Lira zaprojektowała dla nich sieć latarni — przekaźników, które dawały energię, łączność i bezpieczne szlaki.",
+		"Latarnie prowadziły konwoje między wolnymi światami. Każdy sygnał oznaczał bezpieczny powrót.",
+		"Dominium patrzyło na pogranicze jak na zbuntowaną prowincję. Czekało tylko na pretekst.",
+		"Flota Dominium zajęła orbitalne węzły. Jeden rozkaz — i latarnie gasły jedna po drugiej.",
+		"Miasta pogrążyły się w ciemności. Bez energii Kolonie miały wytrzymać najwyżej kilka tygodni.",
+		"Na wszystkich kanałach popłynęło ultimatum: kapitulacja albo cisza.",
+		"Na Eos, w Stacji Ciszy, latarnia zgasła ostatnia. Lira została przy niej — i ocaliła nadajnik.",
+		"Jej sygnał przebił blokadę. W szyfrze ukryła coś więcej: drogę do archiwum na Vesperze, gdzie czeka klucz do sieci.",
+		"W pasie asteroid ukryła się ostatnia flota Kolonii. Na wezwanie odpowiedział jeden dowódca — Ty.",
+		"Kurs na Eos: przez linię blokady, w ciszy radiowej, ze zgaszonymi światłami.",
+		"Wejście w atmosferę. Pod nami kotlina Eos — i garnizon Dominium przy stacjach łączności.",
+		"Lądowanie przy Stacji Ciszy. Lira czeka. Latarnia wciąż milczy.",
+		"Odbuduj zasilanie. Przejmij łączność. Zapal latarnię. Odzyskany Świt zaczyna się od Twojego rozkazu.",
 	];
 	const titles = [
+		"POGRANICZE",
+		"WOLNE KOLONIE",
+		"SIEĆ LATARNI",
 		"SZLAKI WOLNYCH KOLONII",
+		"DOMINIUM",
 		"BLOKADA DOMINIUM",
 		"SEKTOR BEZ ŚWIATŁA",
+		"ULTIMATUM",
+		"STACJA CISZY / EOS",
 		"TRANSMISJA / EOS / LIRA",
-		"KURS NA VESPER",
-		"OPERACJA ODZYSKANY ŚWIT",
+		"OSTATNIA FLOTA",
+		"PRZEZ BLOKADĘ",
+		"KOTLINA EOS",
+		"LĄDOWANIE",
+		"POCZĄTEK",
 	];
-	const places = ["SEKTOR 07 · KORYTARZ HELION", "ORBITA KHEPRI IV", "KHEPRI IV · STRONA NOCNA", "KANAŁ 7.31 · SZYFR KOLONII", "VESPER · LODOWE WROTA", "SEKTOR 07 · ŚWIT"];
+	const places = [
+		"SEKTOR 07 · POGRANICZE",
+		"KHEPRI IV · PIERWSZE OSADY",
+		"PROJEKT SIECI · WARSZTAT LIRY",
+		"SEKTOR 07 · KORYTARZ HELION",
+		"STOLICA DOMINIUM",
+		"ORBITA KHEPRI IV",
+		"KHEPRI IV · STRONA NOCNA",
+		"WSZYSTKIE KANAŁY · DOMINIUM",
+		"EOS · STACJA CISZY",
+		"KANAŁ 7.31 · SZYFR KOLONII",
+		"PAS ASTEROID HELION",
+		"ORBITA EOS · LINIA BLOKADY",
+		"EOS · ATMOSFERA",
+		"EOS · STACJA CISZY",
+		"EOS · ŚWIT",
+	];
+	// Lira speaks (her voice and motif, as in the radio scenes) in the transmission and at the landing.
+	const lines = {
+		9: ["lira", "Tu Lira, Stacja Ciszy na Eos. Nadajnik ma jeszcze kilka godzin zasilania. Potrzebuję dowódcy."],
+		13: ["lira", "Witaj na Eos, dowódco. Latarnia milczy — ale jeszcze nie umarła."],
+	};
 	const W = 960,
 		H = 400,
 		BAR = 34;
@@ -344,9 +386,9 @@ const CampaignFilm = (() => {
 		c.restore();
 	}
 	// A title typed letter by letter with a short glitch, a line drawing under it.
-	function title(c, text, local, scene, reduced, spec) {
+	function title(c, text, local, scene, reduced, spec, span = 5) {
 		const shown = reduced ? text.length : Math.floor(clamp01((local - 0.35) / 1.1) * text.length),
-			fade = reduced ? 1 : clamp01((4.6 - local) / 0.4),
+			fade = reduced ? 1 : clamp01((span - 0.4 - local) / 0.4),
 			x = 46,
 			y = H - BAR - 46;
 		if (shown <= 0) return;
@@ -372,7 +414,7 @@ const CampaignFilm = (() => {
 		c.fillRect(x, y + 10, lw, 1.5);
 		c.font = "10px monospace";
 		c.fillStyle = "rgba(170,225,235,0.8)";
-		c.fillText(`${spec.label} 0${scene + 1} / 0${spec.shots.length}`, x, y + 26);
+		c.fillText(`${spec.label} ${String(scene + 1).padStart(2, "0")} / ${String(spec.shots.length).padStart(2, "0")}`, x, y + 26);
 		if (!reduced && shown < text.length && Math.floor(local * 6) % 2 === 0) c.fillRect(x + typed + 4, y - 16, 10, 18);
 		c.restore();
 	}
@@ -404,8 +446,238 @@ const CampaignFilm = (() => {
 	}
 
 	// ---------- shots ----------
+	// A speaker as a hologram in a comm frame (x, y the top left, size the side), tinted and scanlined, a label
+	// under it (0.171; Lira's own since 0.169).
+	function holo(c, who, label, x, y, size, t, reduced, tint = "#3fe0d0", text = "#9ff5e8") {
+		glow(c, x + size / 2, y + size / 2, size * 0.8, tint, 0.16);
+		c.save();
+		c.strokeStyle = text;
+		c.globalAlpha = 0.6;
+		c.lineWidth = 1.5;
+		c.strokeRect(x - 15, y - 15, size + 30, size + 42);
+		c.globalAlpha = 1;
+		if (typeof Portraits !== "undefined") {
+			c.globalAlpha = 0.85;
+			Portraits.draw(c, who, x, y, size, t, reduced ? 0 : Portraits.mouth(t));
+			c.globalAlpha = 1;
+			c.globalCompositeOperation = "color";
+			c.fillStyle = tint;
+			c.fillRect(x, y, size, size);
+			c.globalCompositeOperation = "source-over";
+		} else {
+			c.fillStyle = "#2a7f80";
+			c.beginPath();
+			c.ellipse(x + size / 2, y + size * 0.4, size * 0.19, size * 0.24, 0, 0, Math.PI * 2);
+			c.fill();
+		}
+		c.fillStyle = "rgba(0,0,0,0.25)";
+		for (let yy = y; yy < y + size; yy += 3) c.fillRect(x, yy, size, 1);
+		c.font = "11px monospace";
+		c.fillStyle = text;
+		c.fillText(label, x, y + size + 19);
+		c.restore();
+	}
+	function holoLira(c, x, y, size, t, reduced, tint = "#3fe0d0") {
+		holo(c, "lira", "LIRA · INŻYNIERKA SIECI", x, y, size, t, reduced, tint);
+	}
+	// An asteroid: a lumpy rock lit from the upper left.
+	function rock(c, x, y, r, seed, t = 0) {
+		const pts = [],
+			spin = t * (rnd(seed) - 0.5) * 0.2;
+		for (let k = 0; k < 10; k++) {
+			const a = (k / 10) * Math.PI * 2 + spin,
+				d = r * (0.72 + rnd(seed * 7 + k) * 0.4);
+			pts.push([x + Math.cos(a) * d, y + Math.sin(a) * d]);
+		}
+		poly(c, pts, "#3a3836");
+		poly(c, pts.slice(5, 9).concat([[x, y]]), "#22201f");
+		poly(c, pts.slice(0, 3).concat([[x, y]]), "#5c5650");
+	}
+	// Dunes or ridges in layers scrolling by (the flight over Eos and Vesper): a palette of four layers from far to
+	// near, `speed` px a second, sharp (ice) or soft (sand) crests.
+	function ridges(c, t, colors, speed, sharp, crest) {
+		for (let layer = 0; layer < 4; layer++) {
+			const v = speed * (0.2 + layer * 0.55),
+				base = 170 + layer * 55,
+				pts = [[0, H]];
+			for (let x = -160; x < W + 160; x += 40) {
+				const wx = x + ((t * v) % 160),
+					k = x + Math.floor((t * v) / 160) * 160,
+					h = sharp ? (1 - Math.abs(Math.sin(k * 0.009 + layer * 2))) * 85 + Math.abs(Math.sin(k * 0.047 + layer)) * 22 - 30 : (0.5 + 0.5 * Math.sin(k * 0.006 + layer * 2)) * 70 + Math.sin(k * 0.021 + layer) * 10 - 20;
+				pts.push([wx - 160, base - h]);
+			}
+			pts.push([W + 160, H]);
+			const ridge = pts.map(([x, y]) => [W - x, y]);
+			poly(c, ridge, colors[layer]);
+			c.strokeStyle = crest.replace("A", String(0.5 - layer * 0.1));
+			c.lineWidth = 3 - layer * 0.5;
+			c.beginPath();
+			ridge.slice(1, -1).forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y)));
+			c.stroke();
+		}
+	}
+	// The beacon tower of Eos: a lattice mast on a concrete foot, the lamp on top (lit 0…1).
+	function tower(c, x, y, s, lit, t) {
+		c.save();
+		c.translate(x, y);
+		c.scale(s, s);
+		poly(c, [[-26, 0], [26, 0], [16, -18], [-16, -18]], "#2a2622");
+		c.strokeStyle = "#3e3a34";
+		c.lineWidth = 3;
+		c.beginPath();
+		c.moveTo(-14, -18);
+		c.lineTo(-5, -150);
+		c.moveTo(14, -18);
+		c.lineTo(5, -150);
+		for (let k = 0; k < 7; k++) {
+			const y0 = -18 - k * 19,
+				w0 = 14 - k * 1.3;
+			c.moveTo(-w0, y0);
+			c.lineTo(w0 - 1.3, y0 - 19);
+		}
+		c.stroke();
+		poly(c, [[-11, -150], [11, -150], [7, -164], [-7, -164]], "#4a463e");
+		c.restore();
+		const pulse = 0.8 + 0.2 * Math.sin(t * 3);
+		if (lit > 0) {
+			glow(c, x, y - 157 * s, 70 * s, "#8dffd0", lit * pulse);
+			glow(c, x, y - 157 * s, 16 * s, "#ffffff", lit);
+		} else glow(c, x, y - 157 * s, 6 * s, "#ff5a4a", 0.5 + 0.5 * Math.sin(t * 2));
+	}
+	// The Silent Station: a low dome and a block by the tower, a lit window.
+	function station(c, x, y, s, light) {
+		c.save();
+		c.translate(x, y);
+		c.scale(s, s);
+		c.fillStyle = "#24211d";
+		c.beginPath();
+		c.ellipse(0, 0, 46, 30, 0, Math.PI, Math.PI * 2);
+		c.fill();
+		c.fillRect(30, -24, 60, 24);
+		c.fillStyle = "#3a352e";
+		c.fillRect(30, -27, 60, 4);
+		if (light > 0) {
+			c.fillStyle = `rgba(255,205,130,${light})`;
+			c.fillRect(48, -18, 10, 7);
+			glow(c, 53, -14, 26, "#ffcc80", light * 0.5);
+		}
+		c.restore();
+	}
+	// The Colonies' dropship: a broad wedge with two engine pods, seen from the side, heading right.
+	function dropship(c, x, y, s, t, burn = 1) {
+		c.save();
+		c.translate(x, y);
+		c.scale(s, s);
+		if (burn > 0) {
+			trail(c, -40, -6, 90 * burn, 5, "#7fdcff");
+			trail(c, -40, 8, 90 * burn, 5, "#7fdcff");
+		}
+		poly(c, [[44, 2], [-38, -16], [-44, 2], [-38, 18]], "#4a6470");
+		poly(c, [[44, 2], [-30, -12], [0, -4]], "#7a98a4");
+		poly(c, [[20, -6], [36, 0], [20, 2]], "#bfefff");
+		c.fillStyle = "#2a3a44";
+		c.fillRect(-40, -12, 18, 7);
+		c.fillRect(-40, 6, 18, 7);
+		const on = Math.sin(t * 4) > 0 ? 1 : 0.2;
+		glow(c, -38, -16, 7, "#7fe7ff", on);
+		glow(c, 44, 2, 6, "#ffffff", 0.6);
+		c.restore();
+	}
+	// Dark dunes under the night sky of Eos (the Silent Station, the landing): three soft layers.
+	function eosNight(c, t, dawn = 0) {
+		const sky = c.createLinearGradient(0, 0, 0, H);
+		sky.addColorStop(0, dawn ? "#1a2638" : "#0c1628");
+		sky.addColorStop(0.7, dawn ? `rgba(${120 + dawn * 90},${80 + dawn * 50},${70},1)` : "#26344a");
+		sky.addColorStop(1, dawn ? "#d89a6a" : "#4a4a52");
+		c.fillStyle = sky;
+		c.fillRect(0, 0, W, H);
+		stars(c, t, 1, 200 - dawn * 150, 41);
+		if (!dawn) glow(c, 820, 80, 220, "#8fa8c8", 0.18);
+		for (const [base, color, amp, k] of [[270, dawn ? "#5a4636" : "#2a3040", 30, 0.005], [310, dawn ? "#3e3026" : "#1e2230", 24, 0.008], [350, dawn ? "#2a2018" : "#12141c", 18, 0.012]]) {
+			const pts = [[0, H]];
+			for (let x = 0; x <= W; x += 20) pts.push([x, base - Math.sin(x * k + base) * amp - Math.sin(x * k * 3.1) * amp * 0.3]);
+			pts.push([W, H]);
+			poly(c, pts, color);
+		}
+	}
+
 	const SHOTS = [
-		// The routes: a ringed world, a chain of beacons passing light along, a convoy and an escort cruiser.
+		// 1 · The frontier: a deep field drifting by, a galactic band, a lone sun far off.
+		(c, t, local) => {
+			nebula(c, t, [[300, 160, 380, "#1a3a5a", 0.5, 1.5], [700, 220, 320, "#3a2a5a", 0.4, -1], [520, 120, 260, "#14404a", 0.35, 0.5]]);
+			c.save();
+			c.translate(W / 2, H / 2);
+			c.rotate(-0.25);
+			for (let i = 0; i < 260; i++) {
+				const x = (rnd(i * 3) - 0.5) * W * 1.4 - local * 6,
+					y = (rnd(i * 5) - 0.5) * 60 * (1 + rnd(i));
+				c.fillStyle = `rgba(220,230,255,${0.08 + rnd(i * 7) * 0.25})`;
+				c.fillRect(x, y, 1.4, 1.4);
+			}
+			c.restore();
+			glow(c, W / 2, H / 2, 300, "#3a4a7a", 0.2);
+			stars(c, t, 3, 260, 51);
+			flare(c, 760, 110, 0.35 + 0.1 * Math.sin(t), "#ffd8a0");
+			// The worlds of the frontier, named one by one.
+			[[220, 250, "KHEPRI"], [380, 150, "EOS"], [560, 270, "VESPER"], [690, 190, "NADIR"]].forEach(([x, y, name], i) => {
+				const a = clamp01((local - 2 - i * 1.3) / 0.8);
+				if (a <= 0) return;
+				glow(c, x, y, 14, "#9fd8ff", a);
+				c.globalAlpha = a;
+				c.font = "10px monospace";
+				c.fillStyle = "#cfe8f4";
+				c.fillText(name, x + 10, y - 8);
+				c.globalAlpha = 1;
+			});
+		},
+		// 2 · The settlers: colony ships coming down to a world, cities lighting up on its night side.
+		(c, t, local, reduced, span) => {
+			nebula(c, t, [[240, 110, 260, "#2a4a6a", 0.45, 1]]);
+			stars(c, t, 4, 200, 52);
+			planet(c, 650, 380, 280, { base: "#5f8a7a", atmo: "#9fe9d0", light: -2.4, cities: 0.05 + clamp01(local / (span - 1.5)) * 0.85, t, seed: 21 });
+			for (let i = 0; i < 4; i++) {
+				const p = clamp01((local - i * 1.4) / 6),
+					x = 80 + i * 60 + p * 420,
+					y = 70 + i * 25 + p * 140;
+				if (p > 0 && p < 1) freighter(c, x, y, 1.1 - p * 0.6, t, i);
+			}
+			capital(c, 120 + local * 14, 90, 0.6, t, false);
+		},
+		// 3 · The beacons: Lira's design on a holographic map, the network lighting up link by link.
+		(c, t, local, reduced, span) => {
+			c.fillStyle = "#04121a";
+			c.fillRect(0, 0, W, H);
+			nebula(c, t, [[420, 200, 360, "#0f3a44", 0.55, 0]]);
+			c.strokeStyle = "rgba(127,231,220,0.08)";
+			for (let x = 60; x < 600; x += 30) {
+				c.beginPath();
+				c.moveTo(x, 60);
+				c.lineTo(x, 340);
+				c.stroke();
+			}
+			const nodes = [[100, 270], [170, 160], [250, 230], [320, 110], [390, 260], [460, 170], [530, 300], [560, 110]],
+				links = [[0, 1], [1, 2], [1, 3], [2, 4], [3, 5], [4, 5], [4, 6], [5, 7]],
+				grown = reduced ? links.length : clamp01((local - 0.6) / (span - 3)) * links.length;
+			links.forEach(([a, b], i) => {
+				const f = clamp01(grown - i);
+				if (f <= 0) return;
+				const [ax, ay] = nodes[a],
+					[bx, by] = nodes[b];
+				c.strokeStyle = "rgba(141,255,208,0.7)";
+				c.lineWidth = 1.5;
+				c.beginPath();
+				c.moveTo(ax, ay);
+				c.lineTo(ax + (bx - ax) * f, ay + (by - ay) * f);
+				c.stroke();
+				if (f < 1) glow(c, ax + (bx - ax) * f, ay + (by - ay) * f, 14, "#c9fff0", 0.9);
+			});
+			nodes.forEach(([x, y], i) => beacon(c, x, y + 10, 0.7, i === 0 || links.some(([a, b], k) => b === i && grown >= k + 1) ? 1 : 0.15, t, i));
+			c.font = "10px monospace";
+			c.fillStyle = "rgba(160,240,230,0.85)";
+			c.fillText(`SIEĆ LATARNI · PRZEKAŹNIKI ${Math.min(nodes.length, 1 + Math.floor(grown))}/${nodes.length} · ENERGIA · ŁĄCZNOŚĆ · SZLAKI`, 90, 330);
+			holoLira(c, 680, 92, 190, t, reduced);
+		},
+		// 4 · The routes: a ringed world, a chain of beacons passing light along, a convoy and an escort cruiser.
 		(c, t, local) => {
 			nebula(c, t, [[220, 120, 260, "#2a5a7a", 0.5, 2], [760, 90, 220, "#3b2e6a", 0.35, -1.5], [520, 330, 300, "#14404a", 0.4, 1]]);
 			stars(c, t, 6, 220, 1);
@@ -419,7 +691,6 @@ const CampaignFilm = (() => {
 			c.stroke();
 			c.restore();
 			chain.forEach(([x, y], i) => beacon(c, x, y, 0.9, 1, t, i));
-			// A pulse of light running down the chain.
 			const k = (t * 1.6) % (chain.length - 1),
 				i0 = Math.floor(k),
 				f = k - i0,
@@ -430,29 +701,54 @@ const CampaignFilm = (() => {
 			capital(c, 230 + local * 12, 110, 0.75, t, false);
 			flare(c, 140, 70, 0.55, "#9fd8ff");
 		},
-		// The blockade: a Dominium dreadnought slides in, fighters, beams putting out the beacons.
+		// 5 · The Dominium: its red world, the armada forming up in rows, the decree on the frontier.
 		(c, t, local, reduced) => {
+			nebula(c, t, [[300, 200, 320, "#4a1418", 0.55, 0.5], [760, 120, 240, "#2a1020", 0.4, -0.5]]);
+			stars(c, t, 2, 180, 53, "#f0d0d0");
+			planet(c, 170, 330, 230, { base: "#6a3a30", dark: "#120806", atmo: "#ff7a5a", light: -0.9, cities: 0.7, t, seed: 23 });
+			// The armada: three rows of dreadnoughts in step, the nearer ones bigger, fighters along the bottom.
+			for (let row = 0; row < 3; row++) for (let i = 0; i < 3 - (row === 0 ? 1 : 0); i++) capital(c, 430 + i * 210 + row * 60 + local * 4, 90 + row * 85, 0.42 + row * 0.12, t + i + row, true);
+			for (let i = 0; i < 7; i++) fighter(c, 380 + i * 70 + local * 20, 335 + (i % 3) * 8, 0.7, 0, true);
+			// The decree: a red sigil and its text.
+			const a = reduced ? 1 : clamp01((local - 2) / 1);
+			c.save();
+			c.globalAlpha = a;
+			poly(c, [[860, 70], [890, 120], [830, 120]], "rgba(255,90,70,0.35)");
+			c.strokeStyle = "#ff6a5a";
+			c.lineWidth = 1.5;
+			c.beginPath();
+			c.moveTo(860, 70);
+			c.lineTo(890, 120);
+			c.lineTo(830, 120);
+			c.closePath();
+			c.stroke();
+			c.font = "10px monospace";
+			c.fillStyle = "#ffb4a8";
+			c.fillText("DOMINIUM · DEKRET 7", 720, 145);
+			c.fillText("POGRANICZE: PROWINCJA ZBUNTOWANA", 720, 160);
+			c.restore();
+		},
+		// 6 · The blockade: a Dominium dreadnought slides in, fighters, beams putting out the beacons.
+		(c, t, local) => {
 			nebula(c, t, [[700, 100, 280, "#5a1f2a", 0.45, -1], [200, 300, 260, "#2a1f3a", 0.4, 1]]);
 			stars(c, t, 4, 200, 2, "#f0d8d8");
 			planet(c, 760, 360, 230, { base: "#5f6a7f", atmo: "#ff9a8a", light: -2.0, cities: 0.5, t, seed: 4 });
 			const beacons = Array.from({ length: 5 }, (_, i) => [470 + i * 85, 225 + Math.sin(i) * 35]);
 			beacons.forEach(([x, y], i) => {
-				const out = local > 1.2 + i * 0.55;
+				const out = local > 1.6 + i * 0.9;
 				beacon(c, x, y, 0.8, out ? 0 : 1, t, i);
-				if (local > 0.9 + i * 0.55 && !out) beam(c, 330, 120, x, y - 8, "#ff5a4a", 2.2, 0.9);
-				if (out && local < 1.5 + i * 0.55) glow(c, x, y, 40, "#ff8a5a", 0.8);
+				if (local > 1.2 + i * 0.9 && !out) beam(c, 330, 120, x, y - 8, "#ff5a4a", 2.2, 0.9);
+				if (out && local < 2.1 + i * 0.9) glow(c, x, y, 40, "#ff8a5a", 0.8);
 			});
-			const enter = ease(clamp01(local / 3.2));
+			const enter = ease(clamp01(local / 4));
 			capital(c, -260 + enter * 520 + local * 6, 120, 1.55, t, true);
-			for (let i = 0; i < 7; i++) fighter(c, 120 + i * 90 + local * (40 + i * 6), 280 + Math.sin(i * 2 + t) * 30, 0.9, 0.12 * Math.sin(i), true);
+			for (let i = 0; i < 7; i++) fighter(c, 120 + i * 90 + local * (30 + i * 5), 280 + Math.sin(i * 2 + t) * 30, 0.9, 0.12 * Math.sin(i), true);
 		},
-		// The dark: the night side of Khepri IV going out city by city; a last transport waiting on its pad.
-		(c, t, local) => {
+		// 7 · The dark: the night side of Khepri IV going out city by city; a last transport waiting on its pad.
+		(c, t, local, reduced, span) => {
 			nebula(c, t, [[300, 90, 300, "#16283a", 0.5, 1]]);
 			stars(c, t, 3, 180, 3);
-			// (The light comes from below the horizon: the visible face is the night side, its cities going out.)
-			planet(c, 480, 420, 330, { base: "#3c5560", atmo: "#5fb8d8", light: 2.2, cities: Math.max(0.04, 1 - local / 4), clouds: 0.35, t, seed: 6 });
-			// The night limb: a thin line of air lit from behind.
+			planet(c, 480, 420, 330, { base: "#3c5560", atmo: "#5fb8d8", light: 2.2, cities: Math.max(0.04, 1 - local / (span - 2)), clouds: 0.35, t, seed: 6 });
 			c.save();
 			c.globalCompositeOperation = "lighter";
 			c.strokeStyle = "#4fa8d8";
@@ -464,55 +760,90 @@ const CampaignFilm = (() => {
 				c.stroke();
 			}
 			c.restore();
-			// The network readout falling.
+			const left = Math.max(0, 1 - local / (span - 2.5));
 			c.font = "11px monospace";
 			c.fillStyle = "rgba(255,170,120,0.85)";
-			c.fillText(`SIEĆ LATARNI: ${Math.max(0, Math.round(100 - local * 32))}%`, 760, 104);
+			c.fillText(`SIEĆ LATARNI: ${Math.round(left * 100)}%`, 760, 104);
 			c.fillStyle = "rgba(255,170,120,0.2)";
 			c.fillRect(760, 110, 140, 4);
 			c.fillStyle = "rgba(255,170,120,0.85)";
-			c.fillRect(760, 110, 140 * Math.max(0, 1 - local / 3.1), 4);
-			// The last transport: lights on its pad on the horizon.
+			c.fillRect(760, 110, 140 * left, 4);
 			freighter(c, 250 + local * 3, 150, 1.25, t, 2);
 			glow(c, 250, 170, 50, "#ffb35c", 0.25);
 		},
-		// The transmission: a hologram of Lira in a comm frame, the route Eos → Vesper on a star map, a waveform.
+		// 8 · The ultimatum: a red transmission over every channel, a countdown running.
 		(c, t, local, reduced) => {
+			c.fillStyle = "#0c0406";
+			c.fillRect(0, 0, W, H);
+			const jitter = reduced ? 0 : rnd(Math.floor(t * 10)) > 0.85 ? (rnd(t) - 0.5) * 10 : 0;
+			c.save();
+			c.translate(jitter, 0);
+			glow(c, 300, 200, 220, "#ff3a2a", 0.15);
+			c.strokeStyle = "rgba(255,110,90,0.6)";
+			c.lineWidth = 1.5;
+			c.strokeRect(180, 70, 240, 250);
+			// The officer: a faceless silhouette behind the sigil.
+			poly(c, [[300, 110], [330, 160], [270, 160]], "rgba(255,90,70,0.25)");
+			c.fillStyle = "#2a0c0c";
+			c.beginPath();
+			c.ellipse(300, 175, 34, 42, 0, 0, Math.PI * 2);
+			c.fill();
+			poly(c, [[230, 320], [255, 230], [345, 230], [370, 320]], "#2a0c0c");
+			c.fillStyle = "rgba(0,0,0,0.3)";
+			for (let y = 70; y < 320; y += 3) c.fillRect(180, y, 240, 1);
+			c.restore();
+			const lines = ["DO WOLNYCH KOLONII POGRANICZA:", "SIEĆ LATARNI POZOSTANIE WYŁĄCZONA", "DO CZASU BEZWARUNKOWEJ KAPITULACJI.", "", "KAPITULACJA ALBO CISZA."],
+				typed = reduced ? 999 : Math.floor(local * 28);
+			c.font = "13px monospace";
+			let used = 0;
+			lines.forEach((line, i) => {
+				const show = line.slice(0, Math.max(0, typed - used));
+				used += line.length + 4;
+				c.fillStyle = i === 4 ? "#ffd0c8" : "#ff9a8a";
+				if (i === 4) c.font = "600 18px monospace";
+				c.fillText(show, 470, 120 + i * 26);
+			});
+			const left = Math.max(0, 72 * 3600 - local * 3600 * 2.5);
+			c.font = "600 26px monospace";
+			c.fillStyle = "#ff6a5a";
+			c.fillText([Math.floor(left / 3600), Math.floor((left % 3600) / 60), Math.floor(left % 60)].map((v) => String(v).padStart(2, "0")).join(":"), 470, 290);
+		},
+		// 9 · The Silent Station: night over the basin of Eos, the dead beacon, one lit window, sparks at the mast.
+		(c, t, local, reduced) => {
+			eosNight(c, t);
+			planet(c, 820, 80, 26, { base: "#d8d0c0", dark: "#6a6458", atmo: "#ffffff", light: -2.6, clouds: 0, t, seed: 31 });
+			tower(c, 620, 300, 1, 0, t);
+			station(c, 500, 302, 1.1, 0.9);
+			// Sparks: Lira at work at the foot of the mast.
+			if (!reduced)
+				for (let i = 0; i < 6; i++) {
+					const f = (t * 1.7 + i / 6) % 1;
+					if (rnd(Math.floor(t * 1.7 + i / 6) * 7 + i) > 0.5) continue;
+					c.fillStyle = `rgba(255,${200 + Math.floor(f * 55)},140,${1 - f})`;
+					c.fillRect(612 + Math.cos(i * 2.1) * f * 26, 252 - Math.sin(i * 1.3 + 0.6) * f * 24 + f * f * 30, 2, 2);
+				}
+			glow(c, 612, 254, 22, "#bfe6ff", 0.4 + 0.4 * Math.sin(t * 23));
+			// Sand on the wind.
+			c.strokeStyle = "rgba(210,190,160,0.25)";
+			for (let i = 0; i < 40; i++) {
+				const x = (((rnd(i) * W + t * 160) % W) + W) % W,
+					y = 220 + rnd(i * 3) * 140;
+				c.beginPath();
+				c.moveTo(x, y);
+				c.lineTo(x - 30, y + 2);
+				c.stroke();
+			}
+		},
+		// 10 · The transmission: Lira's hologram, her voice on the waveform, the way to Vesper's archive hidden in it.
+		(c, t, local, reduced, span) => {
 			c.fillStyle = "#04121a";
 			c.fillRect(0, 0, W, H);
 			nebula(c, t, [[480, 200, 360, "#0f3a44", 0.6, 0]]);
-			// Holo panel.
 			const jitter = reduced ? 0 : rnd(Math.floor(t * 12)) > 0.9 ? (rnd(t) - 0.5) * 8 : 0;
 			c.save();
 			c.translate(jitter, 0);
-			c.strokeStyle = "rgba(127,231,220,0.6)";
-			c.lineWidth = 1.5;
-			c.strokeRect(610, 62, 250, 262);
-			glow(c, 735, 193, 180, "#3fd6c8", 0.18);
-			if (typeof Portraits !== "undefined") {
-				c.save();
-				c.globalAlpha = 0.85;
-				Portraits.draw(c, "lira", 625, 77, 220, t, reduced ? 0 : Portraits.mouth(t));
-				c.restore();
-				c.save();
-				c.globalCompositeOperation = "color";
-				c.fillStyle = "#3fe0d0";
-				c.fillRect(625, 77, 220, 220);
-				c.restore();
-			} else {
-				c.fillStyle = "#2a7f80";
-				c.beginPath();
-				c.ellipse(735, 162, 42, 52, 0, 0, Math.PI * 2);
-				c.fill();
-				poly(c, [[670, 292], [700, 222], [770, 222], [800, 292]], "#2a7f80");
-			}
-			c.fillStyle = "rgba(0,0,0,0.25)";
-			for (let y = 77; y < 297; y += 3) c.fillRect(625, y, 220, 1);
-			c.font = "11px monospace";
-			c.fillStyle = "#9ff5e8";
-			c.fillText("LIRA · INŻYNIERKA SIECI", 625, 316);
+			holoLira(c, 625, 77, 220, t, reduced);
 			c.restore();
-			// Waveform of the voice.
 			c.strokeStyle = "#9ff5e8";
 			c.lineWidth = 1.5;
 			c.beginPath();
@@ -521,9 +852,8 @@ const CampaignFilm = (() => {
 				x === 100 ? c.moveTo(x, yy) : c.lineTo(x, yy);
 			}
 			c.stroke();
-			// The star map: Eos → Vesper, the route drawing itself.
 			const route = [[140, 130, "EOS"], [260, 96, ""], [350, 160, ""], [480, 118, "VESPER"]],
-				drawn = reduced ? 1 : clamp01((local - 0.6) / 2.6);
+				drawn = reduced ? 1 : clamp01((local - 2) / (span - 4));
 			c.strokeStyle = "rgba(127,231,220,0.25)";
 			for (let k = 0; k < 6; k++) {
 				c.beginPath();
@@ -533,8 +863,7 @@ const CampaignFilm = (() => {
 			c.strokeStyle = "#ffd38a";
 			c.lineWidth = 2;
 			c.beginPath();
-			const total = route.length - 1,
-				upto = drawn * total;
+			const upto = drawn * (route.length - 1);
 			route.forEach(([x, y], i) => {
 				if (i > Math.ceil(upto)) return;
 				const [px, py] = route[Math.max(0, i - 1)],
@@ -552,75 +881,127 @@ const CampaignFilm = (() => {
 			}
 			c.fillStyle = "rgba(160,240,230,0.8)";
 			c.font = "10px monospace";
-			c.fillText("ARCHIWUM VESPER / KLUCZ SIECI · ODSZYFROWANO 63%", 100, 228);
+			c.fillText(`KANAŁ 7.31 · ZASILANIE NADAJNIKA ${Math.max(4, Math.round(19 - local * 1.4))}% · ARCHIWUM VESPER: KLUCZ SIECI`, 100, 228);
 		},
-		// The run: through the ice canyons of Vesper, fog, snow streaks, the expedition at speed.
-		(c, t, local) => {
-			const sky = c.createLinearGradient(0, 0, 0, H);
-			sky.addColorStop(0, "#2b4258");
-			sky.addColorStop(0.6, "#7f9db2");
-			sky.addColorStop(1, "#c9dbe4");
-			c.fillStyle = sky;
-			c.fillRect(0, 0, W, H);
-			planet(c, 800, 90, 40, { base: "#eef5f8", dark: "#8fa3b0", atmo: "#ffffff", light: -2.3, clouds: 0.2, t, seed: 9 });
-			for (let layer = 0; layer < 4; layer++) {
-				const speed = 20 + layer * 55,
-					base = 170 + layer * 55,
-					color = ["#9fb4c2", "#6f889a", "#3d566a", "#1b2a38"][layer],
-					pts = [[0, H]];
-				for (let x = -160; x < W + 160; x += 40) {
-					const wx = x + ((t * speed) % 160),
-						k = x + Math.floor((t * speed) / 160) * 160,
-						// Sharp peaks: a folded sine and a jagged term.
-						h = (1 - Math.abs(Math.sin(k * 0.009 + layer * 2))) * 85 + Math.abs(Math.sin(k * 0.047 + layer)) * 22 - 30;
-					pts.push([wx - 160, base - h]);
-				}
-				pts.push([W + 160, H]);
-				const ridge = pts.map(([x, y]) => [W - x, y]);
-				poly(c, ridge, color);
-				// Snow along the ridge, fog between the layers.
-				c.strokeStyle = `rgba(245,250,255,${0.55 - layer * 0.1})`;
-				c.lineWidth = 3 - layer * 0.5;
-				c.beginPath();
-				ridge.slice(1, -1).forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y)));
-				c.stroke();
-				const fog = c.createLinearGradient(0, base - 30, 0, base + 40);
-				fog.addColorStop(0, "rgba(220,235,245,0)");
-				fog.addColorStop(1, `rgba(220,235,245,${0.18 + layer * 0.04})`);
-				c.fillStyle = fog;
-				c.fillRect(0, base - 30, W, 70);
-			}
-			// The expedition.
-			for (let i = 0; i < 3; i++) fighter(c, 260 + i * 150 + Math.sin(t * 1.3 + i) * 12, 190 + i * 28 + Math.cos(t * 1.7 + i) * 8, 1.8 - i * 0.2, Math.sin(t + i) * 0.05, false);
-			// Snow streaks rushing past.
-			c.strokeStyle = "rgba(240,248,255,0.5)";
-			c.lineWidth = 1;
-			for (let i = 0; i < 70; i++) {
-				const x = (((rnd(i) * W - t * 900) % W) + W) % W,
-					y = rnd(i * 3) * H;
-				c.beginPath();
-				c.moveTo(x, y);
-				c.lineTo(x + 24, y - 3);
-				c.stroke();
-			}
+		// 11 · The muster: the Colonies' last fleet hidden in an asteroid belt, the commander's dropship cast off.
+		(c, t, local, reduced, span) => {
+			nebula(c, t, [[480, 160, 380, "#1a2a3a", 0.5, 0.5]]);
+			stars(c, t, 2, 200, 54);
+			for (let i = 0; i < 14; i++) rock(c, ((rnd(i) * 1100 - local * (6 + rnd(i * 3) * 10)) % 1100) - 70, 60 + rnd(i * 5) * 290, 14 + rnd(i * 7) * 30, i + 3, t);
+			capital(c, 300, 150, 0.7, t, false);
+			capital(c, 520, 230, 0.55, t + 1, false);
+			for (let i = 0; i < 3; i++) freighter(c, 160 + i * 70, 280 + i * 12, 0.7, t, i);
+			const go = ease(clamp01((local - 3) / (span - 4)));
+			dropship(c, 420 + go * 600, 190 - go * 60, 1.2 + go * 0.6, t, 0.4 + go);
+			c.font = "10px monospace";
+			c.fillStyle = "rgba(170,225,235,0.85)";
+			c.fillText("ZGRUPOWANIE · PAS ASTEROID HELION", 640, 300);
+			c.fillStyle = "#7fe7c8";
+			c.fillText("OKRĘT DESANTOWY „ŚWIT” · DOWÓDCA: TY", 640, 316);
+			for (let i = 0; i < 6; i++) rock(c, ((rnd(i + 40) * 1200 - local * 40) % 1200) - 100, 330 + rnd(i * 9) * 40, 26 + rnd(i) * 20, i + 60, t);
 		},
-		// Dawn: the sun rises over the planet's limb, the fleet heads into the light, the beacons light again.
+		// 12 · The blockade run: between the Dominium's dreadnoughts, lights out, fire passing wide.
 		(c, t, local, reduced) => {
-			nebula(c, t, [[480, 120, 360, "#5a3a2a", 0.4, 0], [200, 80, 260, "#2a4a6a", 0.35, 1]]);
-			stars(c, t, 4, 160, 5);
-			const rise = ease(clamp01(local / 3)),
-				sx = 520,
-				sy = 300 - rise * 70;
-			glow(c, sx, sy, 520, "#ffb46a", 0.35 + rise * 0.25);
-			planet(c, 480, 820, 560, { base: "#6f8f94", atmo: "#ffd7a0", light: -1.57, cities: 0.4, t, seed: 11 });
-			flare(c, sx, sy, 0.6 + rise * 0.6, "#ffcf8a");
-			for (let i = 0; i < 8; i++) {
-				const on = local > 1.2 + i * 0.3;
-				beacon(c, 120 + i * 100, 300 - Math.sin(i * 0.8) * 25 - i * 4, 0.7, on ? clamp01((local - 1.2 - i * 0.3) * 3) : 0, t, i);
+			nebula(c, t, [[600, 120, 300, "#3a1420", 0.4, -1]]);
+			stars(c, t, 30, 220, 55);
+			planet(c, 840, 420, 260, { base: "#8a8f96", dark: "#14161a", atmo: "#cfd8e0", light: -2.2, clouds: 0, t, seed: 33 });
+			capital(c, 900 - local * 90, 80, 1.3, t, true);
+			capital(c, 1100 - local * 140, 330, 1.7, t + 2, true);
+			const x = 260 + Math.sin(t * 0.7) * 30,
+				y = 210 + Math.sin(t * 1.3) * 18;
+			dropship(c, x, y, 1.5, t, 1);
+			for (let i = 0; i < 4; i++) {
+				const at = 1.5 + i * 1.8;
+				if (local > at && local < at + 0.5) beam(c, 760 - i * 40, 90 + i * 60, x + 80 + i * 30, y - 60 + i * 50, "#ff5a4a", 2.4, 0.9);
 			}
-			for (let i = 0; i < 6; i++) freighter(c, 80 + i * 110 + local * 30, 228 + (i % 3) * 22, 0.9 + i * 0.05, t, i);
-			capital(c, 150 + local * 18, 196, 0.8, t, false);
-			const show = reduced ? 1 : clamp01((local - 2.2) / 1);
+			c.font = "10px monospace";
+			c.fillStyle = "rgba(170,225,235,0.85)";
+			c.fillText("CISZA RADIOWA · ŚWIATŁA WYŁĄCZONE · KURS: EOS", 60, 330);
+		},
+		// 13 · The descent: the entry burning, then the canyons of Eos rushing by at dawn.
+		(c, t, local, reduced, span) => {
+			const split = span * 0.45,
+				fire = clamp01(1 - (local - split + 0.6) / 1.2);
+			if (local > split - 0.6) {
+				const sky = c.createLinearGradient(0, 0, 0, H);
+				sky.addColorStop(0, "#3a3a5a");
+				sky.addColorStop(0.6, "#c88a6a");
+				sky.addColorStop(1, "#e8c49a");
+				c.fillStyle = sky;
+				c.fillRect(0, 0, W, H);
+				glow(c, 760, 120, 260, "#ffd0a0", 0.5);
+				ridges(c, t, ["#c49a6c", "#9a7048", "#6a4a30", "#3a2818"], 120, false, "rgba(255,230,190,A)");
+				dropship(c, 380 + Math.sin(t * 1.4) * 20, 160 + Math.cos(t * 1.1) * 10, 1.4, t, 1);
+			}
+			if (fire > 0) {
+				c.save();
+				c.globalAlpha = fire;
+				c.fillStyle = "#1a0a06";
+				c.fillRect(0, 0, W, H);
+				glow(c, 480, 200, 360, "#ff6a2a", 0.6);
+				glow(c, 520, 200, 160, "#ffd080", 0.7);
+				for (let i = 0; i < 40; i++) {
+					const f = (t * 2 + rnd(i)) % 1;
+					c.strokeStyle = `rgba(255,${150 + Math.floor(rnd(i * 3) * 100)},80,${0.6 * (1 - f)})`;
+					c.lineWidth = 2;
+					c.beginPath();
+					c.moveTo(520 - f * 500, 200 + (rnd(i * 5) - 0.5) * 160 * f);
+					c.lineTo(520 - f * 500 - 40, 200 + (rnd(i * 5) - 0.5) * 160 * f);
+					c.stroke();
+				}
+				const shake = reduced ? 0 : (rnd(Math.floor(t * 30)) - 0.5) * 6;
+				dropship(c, 520 + shake, 200 + shake * 0.5, 1.8, t, 0);
+				c.restore();
+			}
+		},
+		// 14 · The landing: dust over the pad by the Silent Station, the dark beacon, Lira waiting.
+		(c, t, local, reduced, span) => {
+			eosNight(c, t, 0.35);
+			tower(c, 700, 300, 1, 0, t);
+			station(c, 580, 302, 1.1, 0.9);
+			const down = ease(clamp01(local / (span * 0.55))),
+				x = 330,
+				y = 60 + down * 230;
+			glow(c, x, 305, 80 + down * 120, "#c9a07a", down * 0.5);
+			for (let i = 0; i < 18 * down; i++) {
+				const a = rnd(i) * Math.PI,
+					r = (local * 30 + rnd(i * 3) * 60) % 160;
+				c.fillStyle = `rgba(200,170,130,${0.25 * (1 - r / 160)})`;
+				c.beginPath();
+				c.arc(x + Math.cos(a) * r * (rnd(i) > 0.5 ? 1 : -1), 305 - Math.sin(a) * r * 0.25, 10 + r * 0.1, 0, Math.PI * 2);
+				c.fill();
+			}
+			c.save();
+			c.translate(x, y);
+			c.rotate(-0.04 * (1 - down));
+			dropship(c, 0, 0, 1.6, t, 0);
+			c.restore();
+			glow(c, x, y + 30, 40, "#9fd8ff", (1 - down) * 0.7);
+			// Lira, small, by the station.
+			if (local > span * 0.6) {
+				const a = reduced ? 1 : clamp01((local - span * 0.6) / 0.6);
+				c.globalAlpha = a;
+				glow(c, 520, 280, 30, "#3fe0d0", 0.5);
+				c.fillStyle = "#9ff5e8";
+				c.fillRect(516, 266, 8, 22);
+				c.beginPath();
+				c.arc(520, 261, 5, 0, Math.PI * 2);
+				c.fill();
+				c.font = "10px monospace";
+				c.fillText("LIRA: „WITAJ NA EOS, DOWÓDCO.”", 460, 240);
+				c.globalAlpha = 1;
+			}
+		},
+		// 15 · The title: dawn over the basin of Eos, the beacon still dark — the act begins.
+		(c, t, local, reduced) => {
+			const rise = ease(clamp01(local / 5));
+			eosNight(c, t, 0.6 + rise * 0.4);
+			glow(c, 480, 300 - rise * 40, 420, "#ffb46a", 0.3 + rise * 0.3);
+			flare(c, 480, 300 - rise * 40, 0.5 + rise * 0.5, "#ffcf8a");
+			tower(c, 760, 330, 1.2, 0, t);
+			station(c, 640, 332, 1.2, 0.6);
+			dropship(c, 300, 322, 1.1, t, 0);
+			const show = reduced ? 1 : clamp01((local - 1.5) / 1.2);
 			c.save();
 			c.globalAlpha = show;
 			c.textAlign = "center";
@@ -628,41 +1009,44 @@ const CampaignFilm = (() => {
 			c.shadowColor = "rgba(255,190,110,0.9)";
 			c.shadowBlur = 24;
 			c.fillStyle = "#fff4e2";
-			c.fillText("ODZYSKANY ŚWIT", W / 2, 140);
+			c.fillText("ODZYSKANY ŚWIT", W / 2, 130);
 			c.shadowBlur = 0;
 			c.font = "12px monospace";
 			c.fillStyle = "rgba(255,230,190,0.85)";
-			c.fillText("P O G R A N I C Z E   G A L A K T Y K I", W / 2, 166);
+			c.fillText("A K T   I   ·   P O G R A N I C Z E   G A L A K T Y K I", W / 2, 156);
 			c.restore();
 		},
 	];
-	const TINT = ["#2a6f8f", "#8f2a2a", "#2a3f6f", "#2a8f80", "#4f7f9f", "#a06a2a"];
+	const TINT = ["#2a4a8f", "#2a8f6a", "#2a8f80", "#2a6f8f", "#8f2a2a", "#8f2a2a", "#2a3f6f", "#8f1a1a", "#4a3a2a", "#2a8f80", "#2a4a6f", "#6f2a3a", "#a05a2a", "#8a6a3a", "#a06a2a"];
 
 	// The director, shared with the act II prologue (act2-film.js): spec = { shots, titles, places, tints, captions,
 	// label, alarm (shots with the alarm, a shake and a red flash), receive (shots of a received transmission) }.
 	function render(c, time, reduced, spec) {
 		time = Math.max(0, time);
 		const last = spec.shots.length - 1,
-			span = spec.length || 5,
-			scene = Math.min(last, Math.floor(time / span)),
-			local = Math.min(span, time - scene * span),
-			t = reduced ? scene * 5 + 2.5 : time,
-			l = reduced ? 2.5 : local;
+			lengths = spec.lengths || spec.shots.map(() => spec.length || 5);
+		let scene = 0,
+			start = 0;
+		while (scene < last && time >= start + lengths[scene]) start += lengths[scene++];
+		const span = lengths[scene],
+			local = Math.min(span, time - start),
+			t = reduced ? start + span / 2 : time,
+			l = reduced ? span / 2 : local;
 		c.save();
 		c.fillStyle = "#03070d";
 		c.fillRect(0, 0, W, H);
-		// The camera: a slow push in; a shake under the blockade's fire.
-		const zoom = 1 + (reduced ? 0.03 : local * 0.012),
-			shake = !reduced && spec.alarm?.includes(scene) && local > 0.9 && local < 4 ? (rnd(Math.floor(time * 40)) - 0.5) * 4 : 0;
+		// The camera: a slow push in (the same over a long shot); a shake under the fire of the alarm shots.
+		const zoom = 1 + (reduced ? 0.03 : (local / span) * 0.06),
+			shake = !reduced && spec.alarm?.includes(scene) && local > 0.9 && local < span - 1 ? (rnd(Math.floor(time * 40)) - 0.5) * 4 : 0;
 		c.translate(W / 2 + shake, H / 2 + shake * 0.6);
 		c.scale(zoom, zoom);
 		c.translate(-W / 2, -H / 2);
-		spec.shots[scene](c, t, l, reduced);
+		spec.shots[scene](c, t, l, reduced, span);
 		c.restore();
 		hud(c, scene, l, t, reduced, spec);
-		title(c, spec.titles[scene], l, scene, reduced, spec);
+		title(c, spec.titles[scene], l, scene, reduced, spec, span);
 		finish(c, scene, l, t, reduced, spec.tints[scene]);
-		// Cuts: fade from and to black; a red flash as the blockade opens fire.
+		// Cuts: fade from and to black; a red flash as the alarm shots open fire.
 		if (!reduced) {
 			const fade = Math.max(0, 1 - local / 0.45, (local - (span - 0.45)) / 0.45);
 			if (fade > 0) {
@@ -676,9 +1060,11 @@ const CampaignFilm = (() => {
 		}
 		return { scene, caption: spec.captions[scene] };
 	}
-	const SPEC = { shots: SHOTS, titles, places, tints: TINT, captions, label: "ROZDZIAŁ PROLOGU", alarm: [1], receive: [3] };
+	const SPEC = { shots: SHOTS, titles, places, tints: TINT, captions, lengths: LENGTHS, label: "UJĘCIE PROLOGU", alarm: [5, 11], receive: [7, 9] };
 	const draw = (c, time, reduced = false) => render(c, time, reduced, SPEC);
 	// The tools for other films.
-	const kit = { W, H, BAR, rnd, clamp01, ease, poly, glow, flare, stars, nebula, planet, trail, capital, freighter, fighter, beam, beacon, render, finish };
-	return { draw, captions, titles, duration, kit };
+	// (0.170: the prologue's pieces too — the beacon tower and the Silent Station of Eos, the dropship, the night over the
+	// basin, Lira's hologram, asteroids — for the campaign's finale.)
+	const kit = { W, H, BAR, rnd, clamp01, ease, poly, glow, flare, stars, nebula, planet, trail, capital, freighter, fighter, beam, beacon, render, finish, tower, station, dropship, eosNight, holoLira, holo, rock };
+	return { draw, captions, titles, duration, lengths: LENGTHS, lines, kit };
 })();

@@ -314,6 +314,25 @@ export function createModels3D(THREE) {
 		window: std("#40301c", { emissive: "#ffc878", emissiveIntensity: 1.1 }),
 	};
 	for (const m of [HULK.light, HULK.ember, HULK.window]) glowing.push([m, m.emissiveIntensity]);
+	// The gantries of an orbital shipyard (0.164, "Doki Eos").
+	const DOCK = {
+		steel: std("#9aa4aa", { roughness: 0.45, metalness: 0.7 }),
+		dark: std("#454d53", { roughness: 0.55, metalness: 0.6 }),
+		rib: std("#7c868c", { roughness: 0.6, metalness: 0.5 }),
+		yellow: std("#d8a838", { roughness: 0.5, metalness: 0.3 }),
+		lamp: std("#fff0c8", { emissive: "#ffd890", emissiveIntensity: 1.5 }),
+		beacon: std("#ff5a3a", { emissive: "#ff3a1a", emissiveIntensity: 1.6 }),
+		blue: std("#9ae8ff", { emissive: "#5fd0ff", emissiveIntensity: 1.3 }),
+	};
+	for (const m of [DOCK.lamp, DOCK.beacon, DOCK.blue]) glowing.push([m, m.emissiveIntensity]);
+	// The crystal pillars of Nivalis (0.165, "Kryształowe Grzbiety"): clear cyan and violet, glowing more at night.
+	const PILLAR = {
+		cyan: std("#bfefff", { roughness: 0.12, metalness: 0.1, emissive: "#3fb8e0", emissiveIntensity: 0.35, transparent: true, opacity: 0.9 }),
+		violet: std("#d4c4ff", { roughness: 0.12, metalness: 0.1, emissive: "#8a5ae0", emissiveIntensity: 0.35, transparent: true, opacity: 0.9 }),
+		core: std("#f2fcff", { emissive: "#9fe8ff", emissiveIntensity: 0.9 }),
+		base: std("#8aa6b8", { roughness: 0.8, metalness: 0 }),
+	};
+	for (const m of [PILLAR.cyan, PILLAR.violet, PILLAR.core]) glowing.push([m, m.emissiveIntensity]);
 	const ASTEROID = std("#5e5853", { roughness: 0.95, metalness: 0.05 }),
 		ASTEROID_DARK = std("#3b3734", { roughness: 1, metalness: 0.05 }),
 		ASTEROID_ICE = std("#9fb0bc", { roughness: 0.55, metalness: 0.05 });
@@ -377,6 +396,65 @@ export function createModels3D(THREE) {
 				// The map's stone (biome holds the look's rocks in space): ice fields, dark basalt, or mixed rock.
 				const m = biome === "ice" ? (n % 3 ? ASTEROID_ICE : ASTEROID) : biome === "dark" ? (n % 3 ? ASTEROID_DARK : ASTEROID) : n % 4 === 3 ? ASTEROID_ICE : n % 2 ? ASTEROID : ASTEROID_DARK;
 				rockPart(root, m, [s * (1 + rnd(n + 3) * 0.6), s * (0.8 + rnd(n + 4) * 0.5), s * (0.9 + rnd(n + 5) * 0.4)], [x, y, z], n * 7 + seed);
+			}
+		} else if (kind === "crystal") {
+			// A cluster of crystal pillars on a frosted knoll: six-sided prisms with pointed tips, tall ones in the
+			// middle leaning out, short ones round the edge, a bright core in the biggest.
+			const { cyl } = detail.tools,
+				count = Math.max(5, Math.min(16, Math.round((w * h) / 2200)));
+			rockPart(root, PILLAR.base, [rx * 0.8, 10, rz * 0.8], [0, -2, 0], seed);
+			for (let n = 0; n < count; n++) {
+				const [x, z] = n ? spot(n, 0.75) : [0, 0],
+					edge = Math.hypot(x / rx, z / rz),
+					H = (n ? 40 + rnd(n + 11) * 70 : 120 + rnd(2) * 40) * (1 - edge * 0.45),
+					r = (n ? 5 + rnd(n + 12) * 6 : 12) * (1 - edge * 0.3),
+					m = rnd(n + 13) < 0.3 ? PILLAR.violet : PILLAR.cyan,
+					pillar = group(root, [x, 0, z]);
+				pillar.rotation.set((rnd(n + 14) - 0.5) * 0.5 + (z / rz) * 0.25, rnd(n + 15) * 3, (rnd(n + 16) - 0.5) * 0.5 - (x / rx) * 0.25);
+				cyl(pillar, m, r, H, [0, H / 2, 0], { segs: 6 });
+				cyl(pillar, m, r, r * 2.2, [0, H + r * 1.1, 0], { segs: 6, top: 0.01 });
+				if (!n) cyl(pillar, PILLAR.core, r * 0.35, H * 0.8, [0, H * 0.45, 0], { segs: 6 });
+			}
+		} else if (kind === "dock") {
+			// A gantry of an orbital shipyard along the long side of its field: two lattice girders with cross
+			// braces, pylons and beacons at the ends, work lights; over long berths a crane on rails and the
+			// ribs and keel of a hull being built, a blue welding glow.
+			const { box, cyl } = detail.tools,
+				long = w >= h,
+				L = (long ? w : h) * 0.96,
+				B = Math.min((long ? h : w) * 0.9, 90),
+				yard = group(root, [0, 34, 0]);
+			yard.rotation.y = long ? 0 : Math.PI / 2;
+			const bays = Math.max(2, Math.round(L / 24));
+			for (const z of [-B / 2, B / 2]) {
+				for (const y of [0, 22]) box(yard, DOCK.steel, [L, 3, 3], [0, y, z], null, 0);
+				for (let k = 0; k <= bays; k++) {
+					const x = -L / 2 + (k * L) / bays;
+					box(yard, DOCK.steel, [2, 22, 2], [x, 11, z], null, 0);
+					if (k < bays) box(yard, DOCK.dark, [1.6, Math.hypot(L / bays, 22), 1.6], [x + L / bays / 2, 11, z], [0, 0, Math.atan2(L / bays, 22)], 0);
+				}
+			}
+			const spans = Math.max(2, Math.round(L / 110));
+			for (let k = 0; k <= spans; k++) box(yard, DOCK.dark, [3, 3, B], [-L / 2 + (k * L) / spans, 22, 0], null, 0);
+			for (const x of [-L / 2 + 4, L / 2 - 4])
+				for (const z of [-B / 2, B / 2]) {
+					cyl(yard, DOCK.dark, 3.5, 46, [x, -12, z], { segs: 8 });
+					box(yard, DOCK.beacon, [6, 6, 6], [x, 28, z], null, 0);
+				}
+			for (let x = -L / 2 + 30, k = 0; x < L / 2 - 20; x += 60, k++) box(yard, DOCK.lamp, [5, 3, 5], [x, 25, (k % 2 ? -1 : 1) * B / 2], null, 0);
+			if (L > 220) {
+				const cx = (rnd(5) - 0.5) * L * 0.5;
+				box(yard, DOCK.yellow, [10, 6, B + 14], [cx, 30, 0], null, 0);
+				box(yard, DOCK.yellow, [7, 20, 7], [cx, 18, (rnd(6) - 0.5) * B * 0.6], null, 0);
+			}
+			if (L > 320) {
+				box(yard, DOCK.rib, [L * 0.62, 4, 6], [0, -6, 0], null, 0);
+				for (let x = -L * 0.3; x <= L * 0.3; x += 24) {
+					const s = 1 - (Math.abs(x) / (L * 0.34)) ** 2;
+					if (s <= 0.1) continue;
+					for (const z of [-1, 1]) box(yard, DOCK.rib, [3, 18 * s, 3], [x, 2 + 9 * s, z * B * 0.24 * s], [z * 0.35, 0, 0], 0);
+				}
+				box(yard, DOCK.blue, [4, 4, 4], [L * 0.12 * (rnd(7) > 0.5 ? 1 : -1), 6, 0], null, 0);
 			}
 		} else if (kind === "hulk") {
 			// The hulk of a dead warship (0.143, "Cmentarzysko Floty"), floating along the long side of its

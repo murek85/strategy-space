@@ -167,6 +167,8 @@
 			}
 			return out;
 		};
+		// A half turn round the middle: a list and its twins (fair corners for every pair of opposite bases).
+		const both = (list) => [...list, ...list.map(([x, y, ...rest]) => [3360 - x, 2160 - y, ...rest])];
 		const MORE = {
 			// Ice: a pale ice giant with vast bright rings near the battle; diagonal bands of ice make the lanes.
 			glacis: {
@@ -261,6 +263,88 @@
 				gasFields: [[880, 640, 2400], [2480, 1520, 2400], [1680, 420, 2000], [1680, 1740, 2000]],
 				crystalFields: [[1350, 820, 1500], [2010, 1340, 1500], [2480, 640, 1200], [880, 1520, 1200]],
 			},
+			// M3 (0.164) — Eos's docks: the Colonies' orbital shipyard over the desert planet Eos, held by the Admiralty's
+			// blockade; long gantries make a berth across the middle (the richest ore inside it), mooring towers and a
+			// few asteroid fields mark the lanes. Chapter X plays here.
+			eosdocks: {
+				mission: {
+					name: "Doki Eos",
+					planet: "Eos · orbita",
+					biome: "dust",
+					theme: "space",
+					space: true,
+					mirror: "none",
+					weatherName: "Burza słoneczna",
+					storms: ["solar", "meteor"],
+					look: { planet: "desert", rocks: "rock", nebula: [["#d08a46", "#8a4a2e", "#f0b070"], ["#5a6ad0", "#3a4aa0", "#90a8f0"]], sky: [["#8a5a30", "#f0c080"], ["#2a3a70", "#6a8ad0"]], sun: "#fff0d8", glow: "#ffc890", rings: false, comet: false, convoys: true, derelict: false, ice: false },
+					description:
+						"Orbitalna stocznia Kolonii nad pustynną Eos, zajęta przez blokadę Admiralicji. Długie pomosty doków tworzą przez środek pola bitwy pochylnię — w niej leżą najbogatsze złoża, a wyjścia prowadzą z obu końców i przez środek. Wieże cumownicze i pola asteroid wyznaczają korytarze na flankach. Burze słoneczne i deszcz odłamków.",
+				},
+				waters: () => [],
+				obstacles: () => [
+					...block("dock", both([
+						[1390, 860, 420, 70],
+						[1970, 860, 420, 70],
+						[1180, 430, 380, 60],
+						[2560, 1000, 60, 340],
+						[1680, 560, 90, 90],
+					])),
+					...block("asteroids", both([
+						[1000, 1700, 180, 140],
+						[620, 820, 140, 120],
+					])),
+				],
+				ores: [[1680, 1080, 6400], ...both([[1250, 1080, 4200], [560, 1080, 4000], [1680, 330, 3600]])],
+				gasFields: both([[1100, 700, 2600], [820, 1500, 2000]]),
+				crystalFields: both([[1450, 1180, 1500], [1150, 1900, 1200]]),
+			},
+			// M3 (0.164) — the Crimson Nebula: most of the field lies in red clouds (ships are hard to hit there and
+			// their shields do not come back); a clear corridor runs from corner to corner, a map of ambushes.
+			crimson: {
+				mission: {
+					name: "Szkarłatna Mgławica",
+					planet: "Mgławica Szkarłat",
+					biome: "ash",
+					theme: "space",
+					space: true,
+					mirror: "none",
+					weatherName: "Burza jonowa",
+					storms: ["ion", "solar"],
+					stormNames: { solar: "Rozbłysk gwiazdy w mgławicy" },
+					look: { planet: "gas", rocks: "dark", nebula: [["#d03050", "#8a1838", "#ff6070"], ["#6a1040", "#a02048", "#ff8080"]], sky: [["#801828", "#ff5060"], ["#401030", "#a03060"]], sun: "#ffd0c0", glow: "#ff6a6a", rings: "far", comet: true, convoys: false, derelict: true, ice: false },
+					description:
+						"Pole bitwy w sercu szkarłatnej mgławicy. Prawie wszędzie zalegają czerwone obłoki: statki w nich trudno trafić, ale ich osłony się nie odnawiają. Czysty korytarz biegnie po przekątnej od narożnika do narożnika — reszta to teren zasadzek między ciemnymi polami asteroid. Burze jonowe i rozbłyski gwiazdy ukrytej w mgławicy.",
+				},
+				waters: () => [],
+				obstacles: () =>
+					block("asteroids", both([
+						[1300, 820, 160, 130],
+						[2060, 700, 150, 120],
+						[900, 1180, 140, 120],
+						[1680, 1560, 180, 120],
+						[2350, 1180, 130, 110],
+					])),
+				// The map's own clouds: a grid round the middle, clear along the corridor and round the corners.
+				nebulae: (() => {
+					const out = [],
+						corners = [[420, 400], [2940, 400], [2940, 1760], [420, 1760]],
+						// Distance from the corridor (the line from the south-west corner to the north-east one).
+						corridor = (x, y) => Math.abs((y - 1760) * 2520 + (x - 420) * 1360) / Math.hypot(2520, 1360);
+					for (let i = -5; i <= 5; i++)
+						for (let j = -4; j <= 4; j++) {
+							const x = 1680 + i * 330,
+								y = 1080 + j * 300,
+								r = (i + j) % 2 ? 300 : 350;
+							if (x < 150 || y < 150 || x > 3210 || y > 2010) continue;
+							if (corridor(x, y) < r + 70 || corners.some(([cx, cy]) => Math.hypot(cx - x, cy - y) < 620)) continue;
+							out.push([x, y, r]);
+						}
+					return out;
+				})(),
+				ores: [[1680, 1080, 6000], ...both([[1180, 1000, 4600], [560, 1080, 4000], [1500, 380, 3600]])],
+				gasFields: both([[1200, 1650, 2600], [860, 560, 2000]]),
+				crystalFields: both([[1900, 1250, 1600], [2300, 300, 1200]]),
+			},
 		};
 		for (const [id, map] of Object.entries(MORE)) {
 			FRONTIER_MAPS[id] = map;
@@ -270,7 +354,7 @@
 		MISSIONS.orbit.look = { planet: "gas", rocks: "rock", rings: "far", comet: true, convoys: true, derelict: true, ice: true };
 
 		const old = {};
-		for (const k of ["configureMission", "configureSkirmish", "applyScenarioModifiers", "spawn", "productionType", "developmentRequirement", "enqueue", "damage", "applyDamage", "tick", "unitName", "entityName", "aiPickUnit", "canTarget", "population", "movementFactor", "serialize", "accuracy", "researchStatus", "stormEffects"]) old[k] = Game.prototype[k];
+		for (const k of ["configureMission", "configureSkirmish", "applyScenarioModifiers", "spawn", "productionType", "developmentRequirement", "enqueue", "damage", "applyDamage", "tick", "unitName", "entityName", "aiPickUnit", "canTarget", "population", "movementFactor", "serialize", "accuracy", "researchStatus", "stormEffects", "wildlife"]) old[k] = Game.prototype[k];
 		// Meteor shields: a research of the laboratory, on the orbit only.
 		RTS.RESEARCH.meteorShield = {
 			name: "Osłony przeciwmeteorytowe",
@@ -340,6 +424,10 @@
 		});
 
 		Object.assign(Game.prototype, {
+			// No land animals in space (the decorative fauna of the 2D and WebGL boards and its sounds; 0.160.1).
+			wildlife() {
+				return isSpace(this) ? [] : old.wildlife.call(this);
+			},
 			configureMission() {
 				old.configureMission.call(this);
 				if (isSpace(this)) clearSpace(this);
@@ -376,8 +464,10 @@
 					hideout.crewMax = level.crew;
 					hideout.buildClock = 4;
 					for (let i = 0; i < Math.min(2, level.crew); i++) {
-						const a = (i / 2) * Math.PI * 2,
-							f = this.spawn("pirate", 2, best.x + Math.cos(a) * 80, best.y + Math.sin(a) * 80);
+						// Beside the hideout, on free space (the first free of a few spots round it).
+						const spots = [80, 120].flatMap((r) => Array.from({ length: 8 }, (_, k) => ({ x: best.x + Math.cos((i / 2 + k / 8) * Math.PI * 2) * r, y: best.y + Math.sin((i / 2 + k / 8) * Math.PI * 2) * r }))),
+							at = spots.find((q) => !this.blocked(q.x, q.y, 20)) || spots[0],
+							f = this.spawn("pirate", 2, at.x, at.y);
 						f.hideout = hideout.id;
 					}
 				}
@@ -595,10 +685,23 @@
 					if (this.time - f.orphanAt > C.orphan) this.applyDamage(null, f, 1e6);
 				}
 			},
+			// The nebula clouds: round every gas field, and the map's own (0.164, `nebulae` in its layout: [x, y, r] at
+			// the medium size, scaled with the map). Kept off the save: they follow from the map and its size.
+			nebulaClouds() {
+				if (!isSpace(this)) return [];
+				const own = FRONTIER_MAPS[this.missionId]?.nebulae || [],
+					cache = this._nebulae;
+				if (cache && cache.gas === this.gasFields && cache.W === this.W && cache.H === this.H) return cache.list;
+				const sx = this.W / 3360,
+					sy = this.H / 2160,
+					list = [...(this.gasFields || []).map((f) => ({ x: f.x, y: f.y, r: SPACE.nebula.radius })), ...own.map(([x, y, r]) => ({ x: x * sx, y: y * sy, r: r * Math.min(sx, sy) }))];
+				Object.defineProperty(this, "_nebulae", { value: { gas: this.gasFields, W: this.W, H: this.H, list }, configurable: true, writable: true, enumerable: false });
+				return list;
+			},
 			// Inside a nebula cloud (null elsewhere).
 			inNebula(e) {
 				if (!isSpace(this)) return null;
-				return (this.gasFields || []).find((f) => dist(f, e) < SPACE.nebula.radius) || null;
+				return this.nebulaClouds().find((f) => dist(f, e) < f.r) || null;
 			},
 			// Next to an asteroid field (space only).
 			byAsteroids(e) {

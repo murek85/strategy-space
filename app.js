@@ -113,9 +113,30 @@
 		const m = MISSIONS[g.missionId] || {},
 			me = g.humans?.[0] ?? 0;
 		if (g.entities.some((e) => e.type === "hq" && e.hp > 0 && e.team !== me && e.team !== 2 && !g.allied?.(me, e.team) && g.factionFor?.(e.team)?.key === "swarm")) return "game:hive";
-		if (m.theme === "derelict") return "game:wreck";
+		// The map under a chapter (campaign-maps.js, act IV), so the chapters share its music (0.167).
+		const map = RTS.CAMPAIGN_MAPS?.[g.missionId]?.map || RTS.ACT4?.[g.missionId]?.map || RTS.ACT3?.[g.missionId]?.map || g.missionId;
 		// Space (0.145): themes in the manner of "Interstellar", one for each world.
-		if (m.space) return { glacis: "game:glacis", abyss: "game:void", graveyard: "game:requiem" }[g.missionId] || "game:orbit";
+		if (m.space) return { glacis: "game:glacis", abyss: "game:void", graveyard: "game:requiem", eosdocks: "game:docks", crimson: "game:nebula", comets: "game:comets" }[map] || "game:orbit";
+		// The new worlds and maps (0.167).
+		const own = {
+			thalassa: "game:tide",
+			crystals: "game:crystal",
+			nadir: "game:ruins",
+			bastion: "game:bastion",
+			vesper: "game:archive",
+			lanterns: "game:beacons",
+			ashvalley: "game:ashes",
+			// The remaining maps (0.168); the training range is on Eos too.
+			training: "game:beacons",
+			horizon: "game:dunes",
+			frost: "game:frost",
+			skyfall: "game:skyfall",
+			solar: "game:oasis",
+			colony4: "game:signal",
+			colony5: "game:convoy",
+		}[map];
+		if (own) return own;
+		if (m.theme === "derelict") return "game:wreck";
 		if (m.theme === "lumen" || m.theme === "skyfall" || m.theme === "space") return "game:lumen";
 		if (m.theme === "magma" || g.missionId === "colony6") return "game:forge";
 		return "game:" + (m.sunny ? "sun" : m.biome);
@@ -1301,6 +1322,18 @@
 			colony12: "colony13",
 			colony13: "colony14",
 		}[game.missionId];
+		// The end of the campaign: its finale film (campaign-finale.js), full screen.
+		if (victory && game.missionId === "colony14" && typeof FinaleFilm !== "undefined") {
+			const button = document.createElement("button");
+			button.className = "primary-button";
+			button.textContent = "FINAŁ KAMPANII ▶";
+			button.onclick = () => {
+				started = false;
+				menu.afterFinale = "campaign";
+				menu.show("finale");
+			};
+			$("overlay").querySelector(".briefing").append(button);
+		}
 		if (victory && MISSIONS[game.missionId].campaign && nextChapter) {
 			const button = document.createElement("button");
 			button.className = "primary-button";
@@ -1317,6 +1350,10 @@
 					menu.afterIntro2 = "briefing";
 					menu.act2IntroSeen = true;
 					menu.show("intro2");
+				} else if (nextChapter === "colony10" && !campaign.completed.colony10 && typeof Act4Film !== "undefined") {
+					menu.afterIntro4 = "briefing";
+					menu.act4IntroSeen = true;
+					menu.show("intro4");
 				} else menu.show("briefing");
 			};
 			$("overlay").querySelector(".briefing").append(button);
@@ -1458,7 +1495,7 @@
 				title: m.name,
 				planet: m.planet,
 				// The orbital battle arrives at the gas giant (loading-screen.js "space").
-				biome: m.space ? spaceWorld(m) : m.biome,
+				biome: m.space ? spaceWorld(m) : m.theme === "ocean" || m.theme === "crystal" ? m.theme : m.biome,
 				reduced: !!menu?.reduced,
 			});
 		requestAnimationFrame(() =>
@@ -1476,7 +1513,7 @@
 		const ok = loadGame(key);
 		if (ok && typeof LoadingScreen !== "undefined") {
 			const m = MISSIONS[game.missionId] || {},
-				screen = LoadingScreen.show({ eyebrow: "WCZYTANY ZAPIS · " + timeLabel(game.time), title: m.name, planet: m.planet, biome: m.space ? spaceWorld(m) : m.biome, reduced: !!menu?.reduced, minTime: 1.2 });
+				screen = LoadingScreen.show({ eyebrow: "WCZYTANY ZAPIS · " + timeLabel(game.time), title: m.name, planet: m.planet, biome: m.space ? spaceWorld(m) : m.theme === "ocean" || m.theme === "crystal" ? m.theme : m.biome, reduced: !!menu?.reduced, minTime: 1.2 });
 			afterFrames(3, () => screen.done());
 		}
 		return ok;

@@ -393,6 +393,12 @@ body .production-heading .queue-controls {
 body .sidebar .intel-panel {
 	overflow-x: hidden;
 }
+/* 0.166.1: the drawer's scroll bar as in the menu's windows (thin, sea-green on the dark panel). */
+body .sidebar,
+body .sidebar .intel-panel {
+	scrollbar-width: thin;
+	scrollbar-color: #55766f #101e2b;
+}
 body .sidebar .thin-track {
 	overflow: hidden;
 }

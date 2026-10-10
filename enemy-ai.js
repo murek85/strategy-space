@@ -348,7 +348,7 @@
 				this.aiGoTo(scout, { x: spot.x, y: spot.y }, "move");
 			},
 			aiActive() {
-				return !!this.enemyAi && !!this.scenario && this.scenario.enemy !== "waves" && (!MISSIONS[this.missionId]?.campaign || MISSIONS[this.missionId].act === 3);
+				return !!this.enemyAi && !!this.scenario && this.scenario.enemy !== "waves" && (!MISSIONS[this.missionId]?.campaign || MISSIONS[this.missionId].act >= 3);
 			},
 			// The level, shaped by the faction's style when a team is given.
 			aiLevel(team = null) {
@@ -388,7 +388,7 @@
 				// Survival has no enemy base: its waves are the whole opponent.
 				this.scenario.enemy = this.modeState?.mode === "survival" ? "waves" : ENEMY[input.enemy] ? input.enemy : "commander";
 				this.enemyAi = null;
-				if (this.scenario.enemy === "commander" && (!MISSIONS[this.missionId]?.campaign || MISSIONS[this.missionId].act === 3)) this.setupEnemyAi();
+				if (this.scenario.enemy === "commander" && (!MISSIONS[this.missionId]?.campaign || MISSIONS[this.missionId].act >= 3)) this.setupEnemyAi();
 				return result;
 			},
 			setupEnemyAi() {

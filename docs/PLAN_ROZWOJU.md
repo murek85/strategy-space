@@ -1,6 +1,6 @@
 # Plan rozwoju prototypu
 
-Aktualizacja: 2026-10-08. Aktualna wersja: 0.156.
+Aktualizacja: 2026-10-09. Aktualna wersja: 0.171.
 
 Ten plik jest punktem wejścia do dokumentacji: opisuje bieżący stan, otwarte kierunki i historię wersji. Instrukcja gry i sterowanie: [README](../README.md).
 
@@ -34,7 +34,7 @@ Gra zawiera trzy frakcje (Wolne Kolonie, Dominium, Rój Kryształowy), osiem map
 | [Wersja 0.12](WERSJA_0_12.md), [0.13](WERSJA_0_13.md), [0.14](WERSJA_0_14.md) | Notatki wydań | Wdrożone |
 | [Etap G](ETAP_G.md) | Plan (2026-10-08) | Ukończony: G1 (AI nowych mechanik) 0.150, G3 (aplikacja Electron) 0.151, G2 (desant z orbity) 0.152, G4 (lobby, 2 na 2, powrót do bitwy) 0.153 |
 | [Desant z orbity](DESANT_Z_ORBITY.md) | Opis wdrożenia | Tryb „Inwazja” (0.152) |
-| [Akt IV „Inwazja”](AKT_IV.md) | Plan (2026-10-08) | Pięć rozdziałów X–XIV: Admiralicja Dominium (adm. Vok) i Wartownicy Otchłani. H3 (frakcja Wartowników) ukończony w 0.154, H1–H2 (rozdziały X–XI) w 0.156; H4–H7 — do realizacji |
+| [Akt IV „Inwazja”](AKT_IV.md) | Ukończony (2026-10-09) | Pięć rozdziałów X–XIV: Admiralicja Dominium (adm. Vok) i Wartownicy Otchłani. H3 (frakcja Wartowników) ukończony w 0.154, H1–H2 (rozdziały X–XI) w 0.156, H4 (XII) w 0.157, H5 (XIII) w 0.158, H6 (XIV, prolog i epilog) w 0.159, H7 (balans) w 0.160 |
 | [Aplikacja na Windows](APLIKACJA.md) | Opis wdrożenia | Electron, instalator, zapisy do pliku (0.151) |
 | [Pomysły](POMYSLY.md) | Lista możliwości | Aktualne statusy pomysłów |
 | [Gospodarka i rozwój](GOSPODARKA_I_ROZWOJ.md) | Koncepcja z 0.3–0.8 | Historyczna; niemal całość wdrożona |
@@ -289,6 +289,38 @@ Przy każdym kolejnym etapie należy uruchomić pełny zestaw, nie tylko testy u
 | 0.152 | Etap G2: desant z orbity — tryb „Inwazja” (orbita, potem planeta; kapsuły, uderzenie i skan z orbity) — [opis](DESANT_Z_ORBITY.md) |
 | 0.152.1 | Szuflada celów bez poziomego przewijania, ukryta pod raportem końca — [opis](KAMPANIA_OPRAWA.md) |
 | 0.153 | Etap G4: serwer lobby, lista gier, 2 na 2 przez sieć z komputerem na wolnym miejscu, powrót do bitwy po zerwaniu połączenia — [opis](MULTIPLAYER.md) |
+| 0.171 | Nowe prologi aktów II–IV: po 8 ujęć, 76 s, historie prowadzące do pierwszego rozdziału aktu, akty III–IV zależne od decyzji; własna muzyka `prologue2`–`prologue4` (`act2-film.js`, `act3-film.js`, `act4-film.js`, `audio.js`, `menu.js`) — [opis](KAMPANIA_OPRAWA.md) |
+| 0.170 | Nowy film finału kampanii: 13 ujęć, 122 s, co stało się po wojnie, zależnie od decyzji; dłuższa muzyka `finale` (`campaign-finale.js`, `audio.js`, `menu.js`) — [opis](AKT_IV.md) |
+| 0.169 | Nowy prolog kampanii: 15 ujęć, 150 s, historia prowadząca do aktu I, głos Liry, muzyka `prologue` (`campaign-film.js`, `audio.js`, `menu.js`) — [opis](KAMPANIA_OPRAWA.md) |
+| 0.168.6 | Kampania: szkolenie na początku aktu I, zaraz po intro (`menu.js`) — [opis](MENU_GLOWNE.md) |
+| 0.168.5 | Intro kampanii tylko przy pierwszym wejściu (zapamiętane), przycisk „Intro kampanii” przy akcie I (`menu.js`) — [opis](MENU_GLOWNE.md) |
+| 0.168.4 | Nowa muzyka intro: otwarcie w stylu „Interstellar”, 30 s i 20 s pod prologi aktów (`audio.js`, `menu.js`) — [opis](AUDIO.md) |
+| 0.168.3 | Muzyka finału kampanii: motyw zwycięstwa w stylu „Interstellar” zsynchronizowany z filmem (`audio.js`, `menu.js`) — [opis](AUDIO.md) |
+| 0.168.2 | Menu: wszystkie listy wyboru w jednym stylu — własna strzałka, ciemne opcje, podświetlenie, pola zablokowane (`menu.css`) |
+| 0.168.1 | Odprawa: lista poziomu trudności kampanii w stylu pozostałych pól menu (`menu.css`) |
+| 0.168 | Muzyka pozostałych map: Wydmy, Szron, Szczyty, Oaza, Sygnał, Konwój; Szkolenie — Latarnie (`audio.js`, `app.js`) — [opis](AUDIO.md) |
+| 0.167.4 | Muzyka Bastionu Admiralicji: sygnał trąbki, ostinato smyczków, dalekie działa — [opis](AUDIO.md) |
+| 0.167.3 | Muzyka Ruin Nadiru: echo murów, gong cytadeli, rytualny bęben — [opis](AUDIO.md) |
+| 0.167.2 | Muzyka Lodowego Archiwum: pozytywka i pękający lód zamiast dzwonków — [opis](AUDIO.md) |
+| 0.167.1 | Muzyka doliny Eos: Latarnie (Dolina Latarni, I) i Popioły (Wypalona Dolina, XI) — [opis](AUDIO.md) |
+| 0.167 | Muzyka nowych map: 8 motywów (`audio.js`), wybór według mapy pod rozdziałem (`app.js`), odsłuch w ustawieniach — [opis](AUDIO.md) |
+| 0.166.2 | Balans rozdziału XIII (kapsuły, armia i wieże Vok, koniec uderzeń po desancie na łatwym i średnim, cel dodatkowy według poziomu); bot symulatora atakuje centrum po rozbiciu obrońców — [opis](AKT_IV.md) |
+| 0.166.1 | Panel boczny (zakładki Cele, Logistyka, Kolejki, Oddział): cienki pasek przewijania jak w oknach menu (`hud-compact.css`) |
+| 0.166 | Mapy, krok M5: przypływy na Archipelagu Thalassy, pękający lód na Lodowym Archiwum, Szlak Komet (`world-rules.js`, `world-art.js`, `webgl3d/world-3d.js`) — plan M1–M5 zakończony — [opis](MAPY_TEMATYCZNE.md) |
+| 0.165 | Mapy, krok M4: motywy `ocean` i `crystal` (`world-art.js`, woda `sea`, przeszkoda `crystal`, 2D i 3D), Archipelag Thalassy i Kryształowe Grzbiety (XIII); siatka akwenów w silniku — [opis](MAPY_TEMATYCZNE.md) |
+| 0.164 | Mapy, krok M3: Doki Eos (X, przeszkoda `dock`, planeta `desert`) i Szkarłatna Mgławica (własne obłoki `nebulae`); poprawka miejsca załogi piratów — [opis](MAPY_TEMATYCZNE.md) |
+| 0.163 | Mapy, krok M2: Wypalona Dolina (XI) i Bastion Admiralicji (XII) w `campaign-maps.js`, także jako scenariusze; symulacja balansu aktu IV — [opis](MAPY_TEMATYCZNE.md) |
+| 0.162 | Mapy, krok M1: Dolina Latarni, Lodowe Archiwum i Ruiny Nadiru (`campaign-maps.js`) dla rozdziałów I–III i scenariuszy; stałe bazy w rozdziałach — [opis](MAPY_TEMATYCZNE.md) |
+| 0.161 | Film finału kampanii po zwycięstwie w XIV (`campaign-finale.js`), zależny od decyzji; przycisk „Finał kampanii” na ekranie kampanii — [opis](AKT_IV.md) |
+| 0.160.1 | Bez fauny lądowej na mapach kosmicznych w trybach Canvas i WebGL (`space-rules.js`: `wildlife()`) — [opis](BITWA_NA_ORBICIE.md) |
+| 0.160 | Akt IV, krok H7: symulacje balansu (`tools/act4-sim.js`), strojenie rozdziałów X–XIV według poziomu, testy — akt ukończony — [opis](AKT_IV.md) |
+| 0.159 | Akt IV, krok H6: finał XIV (szczeliny, Brama, sojusznicy z decyzji), prolog i epilog aktu IV — [opis](AKT_IV.md) |
+| 0.158 | Akt IV, krok H5: rozdział XIII (odwrócona inwazja na Białym Przesmyku, szczeliny, decyzja rozejm/klęska) — [opis](AKT_IV.md) |
+| 0.157.2 | Pole „Adres serwera” w stylu pozostałych pól tekstowych (`netplay-menu.js`, `menu.css`) |
+| 0.157.1 | Pokój gry sieciowej: przyciski miejsca w osobnym wierszu kafelka (`netplay-menu.js`, `menu.css`) |
+| 0.157 | Akt IV, krok H4: rozdział XII (konwój do uplinku, Twierdza, Wartownicy, decyzja garnizon/stocznia); dowódca AI w aktach IV — [opis](AKT_IV.md) |
+| 0.156.2 | Raport końca przewija się z widocznym paskiem (`style.css`, `.end-report`) |
+| 0.156.1 | Kursor gry widoczny nad oknami modalnymi (doktryny, statystyki, drzewo rozwoju) — `cursor.js` |
 | 0.156 | Akt IV, kroki H1–H2: rozdziały X–XIV na liście kampanii, X (Blokada Eos) i XI (Kapsuły nad Eos) pełne, wynik orbity X → kapsuły XI — [opis](AKT_IV.md) |
 | 0.155.1 | Czytelność map w kosmosie: spokojniejsze tło, ciemna warstwa pod polem bitwy, świecące paski stron statków — [opis](BITWA_NA_ORBICIE.md) |
 | 0.155 | Inwazja i tryby scenariuszy w grze sieciowej (przez kody i przez serwer), Obrona i Przetrwanie w kooperacji — [opis](MULTIPLAYER.md) |

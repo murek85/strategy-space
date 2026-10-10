@@ -906,6 +906,9 @@ async function createPixiGameRenderer(options) {
 					light(lightPool, lightWorld, cx, cy, 130, MISSIONS[game.missionId].theme === "frozenhive" ? 0x96c8ff : 0x78dc8c, night * 0.6 * p);
 				} else if (o.kind === "processor") {
 					light(lightPool, lightWorld, cx, cy, 220, 0xffc27a, 0.2 + night * 0.7);
+				} else if (o.kind === "crystal") {
+					light(lightPool, lightWorld, cx, cy - 30, 200, 0x8cdcff, (0.1 + night * 0.6) * p);
+					if (glowAlpha) light(glowPool, glow, cx, cy - 30, 70, 0xbfefff, glowAlpha * 0.5 * p);
 				}
 			}
 			// Gas fissures and crystals light the ground around them at night.

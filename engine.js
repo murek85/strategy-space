@@ -2054,14 +2054,43 @@
 			game.updateVision();
 			return game;
 		}
+		// Waters near a point (0.165): maps with many bodies of water (a sea made of hundreds of them) keep them in
+		// a grid of 256-unit cells, rebuilt when the list changes (a new list, a body added, the map rescaled).
+		watersNear(x, y, pad) {
+			const list = this.waters || [];
+			if (list.length <= 24) return list;
+			const sign = list.length + ":" + list[0].x + ":" + list[0].rx + ":" + list.at(-1).x + ":" + list.at(-1).y + ":" + this.W;
+			let index = this._waterIndex;
+			if (!index || index.list !== list || index.sign !== sign) {
+				const C = 256,
+					cols = Math.ceil(this.W / C) + 1,
+					cells = new Map();
+				for (const w of list)
+					for (let cy = Math.max(0, Math.floor((w.y - w.ry) / C)); cy <= Math.floor((w.y + w.ry) / C); cy++)
+						for (let cx = Math.max(0, Math.floor((w.x - w.rx) / C)); cx <= Math.floor((w.x + w.rx) / C); cx++) {
+							const k = cy * cols + cx;
+							if (!cells.has(k)) cells.set(k, []);
+							cells.get(k).push(w);
+						}
+				index = { list, sign, C, cols, cells };
+				Object.defineProperty(this, "_waterIndex", { value: index, configurable: true, writable: true, enumerable: false });
+			}
+			const { C, cols, cells } = index,
+				out = new Set();
+			for (let cy = Math.max(0, Math.floor((y - pad) / C)); cy <= Math.floor((y + pad) / C); cy++)
+				for (let cx = Math.max(0, Math.floor((x - pad) / C)); cx <= Math.floor((x + pad) / C); cx++) for (const w of cells.get(cy * cols + cx) || []) out.add(w);
+			return out;
+		}
 		blocked(x, y, pad = 22) {
 			return (
 				x < 25 ||
 				y < 25 ||
 				x > this.W - 25 ||
 				y > this.H - 25 ||
-				(this.waters || []).some(
+				[...this.watersNear(x, y, pad)].some(
 					(w) =>
+						// Frozen water (kind "ice", world-rules.js) carries units.
+						w.kind !== "ice" &&
 						// The shoreline never exceeds the ellipse box, so the box is a cheap first test.
 						Math.abs(x - w.x) < w.rx + pad &&
 						Math.abs(y - w.y) < w.ry + pad &&

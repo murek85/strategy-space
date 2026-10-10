@@ -515,12 +515,16 @@
 					e.y = 1750 + (e.id % 2) * 160;
 					e.home = { x: e.x, y: e.y };
 				}
+				// Chapters with their own map (campaign-maps.js): its terrain, bases on fixed spots.
+				const own = this.applyCampaignMap?.();
 				this.placeCornerBases();
 				this.clusterRelays();
+				if (own) this.settleIntoTerrain();
 				this.explored.fill(0);
 				this.updateVision();
 			},
-			placeCornerBases() {
+			// Base spots in team order (0, 1, 3, 4): corners picked by the seed; campaign-maps.js fixes them per chapter.
+			baseSpots() {
 				const corners = [
 						[420, 400],
 						[this.W - 420, 400],
@@ -540,10 +544,14 @@
 						(offset + 1) % 4,
 						(offset + 3) % 4,
 					];
+				return order.map((i) => corners[i]);
+			},
+			placeCornerBases() {
+				const spots = this.baseSpots();
 				const teams = [0, 1, 3, 4].filter((team) => this.hq(team));
 				teams.forEach((team, i) => {
 					const h = this.hq(team),
-						[x, y] = corners[order[i]],
+						[x, y] = spots[i],
 						dx = x - h.x,
 						dy = y - h.y;
 					for (const e of this.entities.filter(
@@ -1581,6 +1589,7 @@
 			require("./scenario-modes.js")(RTS);
 			require("./frontier-maps.js")(RTS);
 			require("./themed-maps.js")(RTS);
+			require("./campaign-maps.js")(RTS);
 			require("./support-rules.js")(RTS);
 			require("./scenario-setup.js")(RTS);
 			require("./scenario-challenges.js")(RTS);
@@ -1597,6 +1606,7 @@
 			require("./doctrine-rules.js")(RTS);
 			require("./patrol-rules.js")(RTS);
 			require("./space-rules.js")(RTS);
+			require("./world-rules.js")(RTS);
 			require("./deposit-rules.js")(RTS);
 			require("./invasion-rules.js")(RTS);
 			require("./watchers-rules.js")(RTS);

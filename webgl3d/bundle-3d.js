@@ -60618,6 +60618,25 @@ function createModels3D(THREE) {
 		window: std("#40301c", { emissive: "#ffc878", emissiveIntensity: 1.1 }),
 	};
 	for (const m of [HULK.light, HULK.ember, HULK.window]) glowing.push([m, m.emissiveIntensity]);
+	// The gantries of an orbital shipyard (0.164, "Doki Eos").
+	const DOCK = {
+		steel: std("#9aa4aa", { roughness: 0.45, metalness: 0.7 }),
+		dark: std("#454d53", { roughness: 0.55, metalness: 0.6 }),
+		rib: std("#7c868c", { roughness: 0.6, metalness: 0.5 }),
+		yellow: std("#d8a838", { roughness: 0.5, metalness: 0.3 }),
+		lamp: std("#fff0c8", { emissive: "#ffd890", emissiveIntensity: 1.5 }),
+		beacon: std("#ff5a3a", { emissive: "#ff3a1a", emissiveIntensity: 1.6 }),
+		blue: std("#9ae8ff", { emissive: "#5fd0ff", emissiveIntensity: 1.3 }),
+	};
+	for (const m of [DOCK.lamp, DOCK.beacon, DOCK.blue]) glowing.push([m, m.emissiveIntensity]);
+	// The crystal pillars of Nivalis (0.165, "Kryształowe Grzbiety"): clear cyan and violet, glowing more at night.
+	const PILLAR = {
+		cyan: std("#bfefff", { roughness: 0.12, metalness: 0.1, emissive: "#3fb8e0", emissiveIntensity: 0.35, transparent: true, opacity: 0.9 }),
+		violet: std("#d4c4ff", { roughness: 0.12, metalness: 0.1, emissive: "#8a5ae0", emissiveIntensity: 0.35, transparent: true, opacity: 0.9 }),
+		core: std("#f2fcff", { emissive: "#9fe8ff", emissiveIntensity: 0.9 }),
+		base: std("#8aa6b8", { roughness: 0.8, metalness: 0 }),
+	};
+	for (const m of [PILLAR.cyan, PILLAR.violet, PILLAR.core]) glowing.push([m, m.emissiveIntensity]);
 	const ASTEROID = std("#5e5853", { roughness: 0.95, metalness: 0.05 }),
 		ASTEROID_DARK = std("#3b3734", { roughness: 1, metalness: 0.05 }),
 		ASTEROID_ICE = std("#9fb0bc", { roughness: 0.55, metalness: 0.05 });
@@ -60681,6 +60700,65 @@ function createModels3D(THREE) {
 				// The map's stone (biome holds the look's rocks in space): ice fields, dark basalt, or mixed rock.
 				const m = biome === "ice" ? (n % 3 ? ASTEROID_ICE : ASTEROID) : biome === "dark" ? (n % 3 ? ASTEROID_DARK : ASTEROID) : n % 4 === 3 ? ASTEROID_ICE : n % 2 ? ASTEROID : ASTEROID_DARK;
 				rockPart(root, m, [s * (1 + rnd(n + 3) * 0.6), s * (0.8 + rnd(n + 4) * 0.5), s * (0.9 + rnd(n + 5) * 0.4)], [x, y, z], n * 7 + seed);
+			}
+		} else if (kind === "crystal") {
+			// A cluster of crystal pillars on a frosted knoll: six-sided prisms with pointed tips, tall ones in the
+			// middle leaning out, short ones round the edge, a bright core in the biggest.
+			const { cyl } = detail.tools,
+				count = Math.max(5, Math.min(16, Math.round((w * h) / 2200)));
+			rockPart(root, PILLAR.base, [rx * 0.8, 10, rz * 0.8], [0, -2, 0], seed);
+			for (let n = 0; n < count; n++) {
+				const [x, z] = n ? spot(n, 0.75) : [0, 0],
+					edge = Math.hypot(x / rx, z / rz),
+					H = (n ? 40 + rnd(n + 11) * 70 : 120 + rnd(2) * 40) * (1 - edge * 0.45),
+					r = (n ? 5 + rnd(n + 12) * 6 : 12) * (1 - edge * 0.3),
+					m = rnd(n + 13) < 0.3 ? PILLAR.violet : PILLAR.cyan,
+					pillar = group(root, [x, 0, z]);
+				pillar.rotation.set((rnd(n + 14) - 0.5) * 0.5 + (z / rz) * 0.25, rnd(n + 15) * 3, (rnd(n + 16) - 0.5) * 0.5 - (x / rx) * 0.25);
+				cyl(pillar, m, r, H, [0, H / 2, 0], { segs: 6 });
+				cyl(pillar, m, r, r * 2.2, [0, H + r * 1.1, 0], { segs: 6, top: 0.01 });
+				if (!n) cyl(pillar, PILLAR.core, r * 0.35, H * 0.8, [0, H * 0.45, 0], { segs: 6 });
+			}
+		} else if (kind === "dock") {
+			// A gantry of an orbital shipyard along the long side of its field: two lattice girders with cross
+			// braces, pylons and beacons at the ends, work lights; over long berths a crane on rails and the
+			// ribs and keel of a hull being built, a blue welding glow.
+			const { box, cyl } = detail.tools,
+				long = w >= h,
+				L = (long ? w : h) * 0.96,
+				B = Math.min((long ? h : w) * 0.9, 90),
+				yard = group(root, [0, 34, 0]);
+			yard.rotation.y = long ? 0 : Math.PI / 2;
+			const bays = Math.max(2, Math.round(L / 24));
+			for (const z of [-B / 2, B / 2]) {
+				for (const y of [0, 22]) box(yard, DOCK.steel, [L, 3, 3], [0, y, z], null, 0);
+				for (let k = 0; k <= bays; k++) {
+					const x = -L / 2 + (k * L) / bays;
+					box(yard, DOCK.steel, [2, 22, 2], [x, 11, z], null, 0);
+					if (k < bays) box(yard, DOCK.dark, [1.6, Math.hypot(L / bays, 22), 1.6], [x + L / bays / 2, 11, z], [0, 0, Math.atan2(L / bays, 22)], 0);
+				}
+			}
+			const spans = Math.max(2, Math.round(L / 110));
+			for (let k = 0; k <= spans; k++) box(yard, DOCK.dark, [3, 3, B], [-L / 2 + (k * L) / spans, 22, 0], null, 0);
+			for (const x of [-L / 2 + 4, L / 2 - 4])
+				for (const z of [-B / 2, B / 2]) {
+					cyl(yard, DOCK.dark, 3.5, 46, [x, -12, z], { segs: 8 });
+					box(yard, DOCK.beacon, [6, 6, 6], [x, 28, z], null, 0);
+				}
+			for (let x = -L / 2 + 30, k = 0; x < L / 2 - 20; x += 60, k++) box(yard, DOCK.lamp, [5, 3, 5], [x, 25, (k % 2 ? -1 : 1) * B / 2], null, 0);
+			if (L > 220) {
+				const cx = (rnd(5) - 0.5) * L * 0.5;
+				box(yard, DOCK.yellow, [10, 6, B + 14], [cx, 30, 0], null, 0);
+				box(yard, DOCK.yellow, [7, 20, 7], [cx, 18, (rnd(6) - 0.5) * B * 0.6], null, 0);
+			}
+			if (L > 320) {
+				box(yard, DOCK.rib, [L * 0.62, 4, 6], [0, -6, 0], null, 0);
+				for (let x = -L * 0.3; x <= L * 0.3; x += 24) {
+					const s = 1 - (Math.abs(x) / (L * 0.34)) ** 2;
+					if (s <= 0.1) continue;
+					for (const z of [-1, 1]) box(yard, DOCK.rib, [3, 18 * s, 3], [x, 2 + 9 * s, z * B * 0.24 * s], [z * 0.35, 0, 0], 0);
+				}
+				box(yard, DOCK.blue, [4, 4, 4], [L * 0.12 * (rnd(7) > 0.5 ? 1 : -1), 6, 0], null, 0);
 			}
 		} else if (kind === "hulk") {
 			// The hulk of a dead warship (0.143, "Cmentarzysko Floty"), floating along the long side of its
@@ -61994,6 +62072,8 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 		crevasse: () => new THREE.MeshStandardMaterial({ color: "#1f4558", roughness: 0.04, metalness: 0.2, transparent: true, opacity: 0.9, normalMap: ripples, normalScale: new THREE.Vector2(0.25, 0.25) }),
 		glow: () => new THREE.MeshStandardMaterial({ color: "#123e48", emissive: "#0d4a52", emissiveIntensity: 0.3, roughness: 0.1, metalness: 0, transparent: true, opacity: 0.78, normalMap: ripples, normalScale: new THREE.Vector2(0.4, 0.4) }),
 		lava: () => new THREE.MeshStandardMaterial({ color: "#2a0d06", emissive: "#ffffff", emissiveMap: cracks, emissiveIntensity: 1.3, roughness: 0.85, metalness: 0 }),
+		// The sea of Thalassa (0.165): deeper, greener and less clear than a lake, with stronger waves.
+		sea: () => new THREE.MeshStandardMaterial({ color: "#1f6f86", roughness: 0.08, metalness: 0.1, transparent: true, opacity: 0.9, normalMap: ripples, normalScale: new THREE.Vector2(0.75, 0.75) }),
 	};
 	// The look of open water (lakes, crevasses, glowing pools; not lava), on top of the fog-of-war shader:
 	// small waves, a second ripple layer against tiling, the sky reflected at grazing angles (fresnel),
@@ -62175,7 +62255,7 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 		// Lakes and crevasses on level ground are flat mirrors; glowing pools and lava (chains of bodies
 		// along a channel) always lie on their bed.
 		// (On uneven shores a lake is still flat, at its lowest rim point.)
-		const level = kind === "lake" || kind === "crevasse" ? (rimHigh - rimLow < 8 ? rimHigh : rimLow) + 0.6 : null;
+		const level = kind === "lake" || kind === "crevasse" || kind === "sea" ? (rimHigh - rimLow < 8 ? rimHigh : rimLow) + 0.6 : null;
 		for (let y = Math.max(0, Math.floor((w.y - w.ry * 1.1) / STEP) * STEP); y <= Math.min(game.H, w.y + w.ry * 1.1); y += STEP)
 			for (let x = Math.max(0, Math.floor((w.x - w.rx * 1.1) / STEP) * STEP); x <= Math.min(game.W, w.x + w.rx * 1.1); x += STEP) {
 				const nx = (x - w.x) / w.rx,
@@ -63149,7 +63229,7 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 		let best = null,
 			bestD = Infinity;
 		for (const w of waters) {
-			if (w.kind !== "lake" && w.kind !== "crevasse") continue;
+			if (w.kind !== "lake" && w.kind !== "crevasse" && w.kind !== "sea") continue;
 			const box = w.box;
 			if (!box) continue;
 			const d = Math.hypot(Math.max(box.x0 - point.x, 0, point.x - box.x1), Math.max(box.y0 - point.y, 0, point.y - box.y1));
@@ -63637,7 +63717,7 @@ function createSceneLife3D(THREE, { world, heightAt, models3d, hiddenLayer, spla
 			const piece = marks.get(i),
 				r = piece
 					? make(`landmark|${i}|${piece}`, () => models3d.scenery("landmark", piece, o.w, o.h), piece === "eosBeacon" || piece === "nadirCitadel")
-					: make("obstacle|" + i + "|" + o.x + "|" + o.y, () => models3d.scenery("obstacle", space ? (o.kind === "hulk" ? "hulk" : "asteroids") : o.kind || "rock", o.w, o.h, space ? RTS.MISSIONS[game.missionId].look?.rocks || "rock" : biome, i + 1), o.kind === "spire" || o.kind === "grove"),
+					: make("obstacle|" + i + "|" + o.x + "|" + o.y, () => models3d.scenery("obstacle", space ? (o.kind === "hulk" || o.kind === "dock" ? o.kind : "asteroids") : o.kind || "rock", o.w, o.h, space ? RTS.MISSIONS[game.missionId].look?.rocks || "rock" : biome, i + 1), o.kind === "spire" || o.kind === "grove"),
 				cx = o.x + o.w / 2,
 				cy = o.y + o.h / 2;
 			if (!r.placed) {
@@ -63645,9 +63725,10 @@ function createSceneLife3D(THREE, { world, heightAt, models3d, hiddenLayer, spla
 				r.holder.position.set(cx, heightAt(cx, cy), cy);
 			}
 			if (piece) r.model.update({ lit, progress: held }, { time });
-			// Asteroid fields turn slowly; hulks of warships only drift a little, keeping to their field.
+			// Asteroid fields turn slowly; hulks of warships only drift a little, keeping to their field; the
+			// gantries of a shipyard stay put.
 			else if (space && o.kind === "hulk") r.holder.rotation.y = Math.sin(time * 0.06 + i) * 0.015;
-			else if (space) r.holder.rotation.y = time * (0.012 + (i % 3) * 0.006) * (i % 2 ? 1 : -1);
+			else if (space && o.kind !== "dock") r.holder.rotation.y = time * (0.012 + (i % 3) * 0.006) * (i % 2 ? 1 : -1);
 		});
 		// Deposits (ore, gas, crystals): one model per stage (art.js layouts), swapped when the stage
 		// changes; shown once explored, like on the 2D board.
@@ -64169,6 +64250,28 @@ function createScatter3D(THREE, { world, heightAt, fogged }) {
 				["grass", plant("#9aa7a0"), 900, [4, 7], "meadow", false, 0.2],
 				["tree", TREES.snowPine(), 150, [28, 46], "any", true, 0.12],
 			];
+		// Thalassa (0.165): lush islands — grass, ferns, broad trees, sand and shells on the bare patches.
+		if (theme === "ocean")
+			return [
+				["grass", plant("#6f9a4a"), 3400, [5, 10], "meadow", false, 0.25],
+				["tallGrass", plant("#7fa456"), 700, [9, 15], "meadow", false, 0.2],
+				["fern", plant("#3f7a44"), 600, [7, 13], "meadow", false, 0.2],
+				["shrub", plant("#4f7a3a"), 450, [7, 13], "any", true, 0.2],
+				["pebble", std("#c8b88a"), 2600, [1.4, 3.4], "bare", false, 0.2],
+				["stone", std("#8a8478"), 700, [3, 8], "bare", true, 0.2],
+				["tree", TREES.broad(), 160, [26, 40], "meadow", true, 0.15],
+				["tree", TREES.acacia(false), 60, [24, 36], "any", true, 0.15],
+			];
+		// The crystal ridges of Nivalis (0.165): frost, ice pebbles and shards of crystal glinting in the snow.
+		if (theme === "crystal")
+			return [
+				["pebble", std("#b8ccd8"), 3200, [1.4, 3.4], "any", false, 0.2],
+				["angular", std("#8aa0b0"), 500, [6, 12], "bare", true, 0.15],
+				["shard", std("#bfefff", { roughness: 0.15, metalness: 0.1, emissive: "#3fb8e0", emissiveIntensity: 0.3, transparent: true, opacity: 0.88 }), 900, [4, 11], "any", true, 0.1],
+				["shard", std("#d4c4ff", { roughness: 0.15, metalness: 0.1, emissive: "#8a5ae0", emissiveIntensity: 0.3, transparent: true, opacity: 0.88 }), 300, [4, 9], "any", true, 0.1],
+				["grass", plant("#9aa7a0"), 600, [4, 7], "meadow", false, 0.2],
+				["tree", TREES.snowPine(), 60, [26, 42], "any", true, 0.12],
+			];
 		if (biome === "ash") {
 			const list = [
 				["stone", std(theme === "magma" ? "#2f2928" : "#3e3836"), 2000, [3, 9], "any", true, 0.25],
@@ -64279,9 +64382,9 @@ function createScatter3D(THREE, { world, heightAt, fogged }) {
 			kinds.push({ shape, material, shadow, spots });
 		}
 		// Lake shores.
-		for (const [shape, material, perLake, [lo, hi], inner, outer, shadow, shade] of shorePalette(mission.biome)) {
+		for (const [shape, material, perLake, [lo, hi], inner, outer, shadow, shade] of shorePalette(mission.theme === "ocean" ? "dust" : mission.biome)) {
 			const spots = [];
-			for (const w of (game.waters || []).filter((w) => !w.kind)) {
+			for (const w of (game.waters || []).filter((w) => !w.kind || w.kind === "sea")) {
 				const n = Math.round(perLake * Math.sqrt((w.rx * w.ry) / 9000) * density);
 				for (let i = 0; i < n; i++) {
 					const a = rand() * Math.PI * 2,
@@ -64857,6 +64960,128 @@ function createMarks3D(THREE, { world, heightAt, fogged }) {
 	return { update, stats: () => ({ decals: decals.n, wallLinks: wallBody.count }) };
 }
 
+// ---- webgl3d/world-3d.js ----
+/* Map features that change in time on the 3D board (M5, 0.166; rules in world-rules.js), rebuilt every frame
+   from the game state (the ground painting is static):
+   - the tide: sheets of sea water over the sandbars, rising and falling with game.tide().level;
+   - holes in the ice: dark open water in a ring of broken white ice, freezing back (game.iceHoles);
+   - comets crossing the field in space: a blazing head and a long tail of glowing dust (game.comets()). */
+function createWorld3D(THREE, { world, heightAt }) {
+	const group = new THREE.Group();
+	world.add(group);
+	const m = new THREE.Matrix4(),
+		q = new THREE.Quaternion(),
+		p = new THREE.Vector3(),
+		s = new THREE.Vector3(),
+		flat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
+
+	// ---------- the tide over the fords ----------
+	const MAX_TIDE = 16,
+		tideMaterial = new THREE.MeshStandardMaterial({ color: "#3a9cb0", roughness: 0.08, metalness: 0.1, transparent: true, opacity: 0, depthWrite: false }),
+		tide = new THREE.InstancedMesh(new THREE.CircleGeometry(1, 40), tideMaterial, MAX_TIDE);
+	tide.frustumCulled = false;
+	tide.count = 0;
+	tide.renderOrder = 2;
+	group.add(tide);
+
+	// ---------- holes in the ice ----------
+	const MAX_HOLES = 32,
+		holeWater = new THREE.InstancedMesh(new THREE.CircleGeometry(1, 14), new THREE.MeshStandardMaterial({ color: "#163a4e", roughness: 0.05, metalness: 0.2, transparent: true, opacity: 0.95, depthWrite: false }), MAX_HOLES),
+		holeRim = new THREE.InstancedMesh(new THREE.RingGeometry(0.82, 1.12, 14), new THREE.MeshStandardMaterial({ color: "#f2fafc", roughness: 0.6, transparent: true, opacity: 0.95, depthWrite: false }), MAX_HOLES);
+	for (const h of [holeWater, holeRim]) {
+		h.frustumCulled = false;
+		h.count = 0;
+		h.renderOrder = 2;
+		group.add(h);
+	}
+
+	// ---------- comets ----------
+	const glowTexture = (() => {
+		const c = document.createElement("canvas");
+		c.width = c.height = 64;
+		const x = c.getContext("2d"),
+			g = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+		g.addColorStop(0, "rgba(255,255,255,1)");
+		g.addColorStop(0.3, "rgba(200,236,255,.7)");
+		g.addColorStop(1, "rgba(120,180,255,0)");
+		x.fillStyle = g;
+		x.fillRect(0, 0, 64, 64);
+		const t = new THREE.CanvasTexture(c);
+		t.colorSpace = THREE.SRGBColorSpace;
+		return t;
+	})();
+	const TAIL = 28,
+		comets = [0, 1].map(() => {
+			const holder = new THREE.Group(),
+				head = new THREE.Mesh(new THREE.SphereGeometry(16, 14, 10), new THREE.MeshBasicMaterial({ color: "#f4fbff" })),
+				parts = [];
+			holder.add(head);
+			for (let i = 0; i < TAIL; i++) {
+				const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture, color: i % 3 ? "#9fd0ff" : "#e6f6ff", transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
+				holder.add(sprite);
+				parts.push(sprite);
+			}
+			const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture, color: "#ffffff", transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
+			halo.scale.set(130, 130, 1);
+			halo.material.opacity = 0.7;
+			holder.add(halo);
+			holder.visible = false;
+			group.add(holder);
+			return { holder, parts };
+		});
+
+	function update(game, { time = game.time } = {}) {
+		// The tide.
+		const level = game.tide?.()?.level || 0;
+		let n = 0;
+		if (level > 0)
+			for (const w of game.tideBodies?.() || []) {
+				if (n >= MAX_TIDE) break;
+				p.set(w.x, heightAt(w.x, w.y) + 2 + level * 2, w.y);
+				tide.setMatrixAt(n++, m.compose(p, flat, s.set(w.rx * 0.95, w.ry * 0.95, 1)));
+			}
+		tide.count = n;
+		tide.instanceMatrix.needsUpdate = true;
+		tideMaterial.opacity = 0.85 * level;
+		// Holes in the ice.
+		n = 0;
+		for (const h of game.iceHoles || []) {
+			if (n >= MAX_HOLES) break;
+			const fade = Math.max(0.05, Math.min(1, (h.until - game.time) / 10));
+			p.set(h.x, heightAt(h.x, h.y) + 1.2, h.y);
+			m.compose(p, flat, s.set(h.r * fade, h.r * 0.85 * fade, 1));
+			holeWater.setMatrixAt(n, m);
+			p.y += 0.3;
+			holeRim.setMatrixAt(n, m.compose(p, flat, s.set(h.r * fade, h.r * 0.85 * fade, 1)));
+			n++;
+		}
+		for (const h of [holeWater, holeRim]) {
+			h.count = n;
+			h.instanceMatrix.needsUpdate = true;
+		}
+		// Comets.
+		const list = game.comets?.() || [];
+		comets.forEach((k, i) => {
+			const c = list[i];
+			k.holder.visible = !!c;
+			if (!c) return;
+			const y = 90;
+			k.holder.position.set(c.x, y, c.y);
+			const len = Math.hypot(c.x - c.tail.x, c.y - c.tail.y);
+			k.parts.forEach((sp, j) => {
+				const t = (j + 1) / TAIL,
+					wobble = Math.sin(time * 2 + j * 0.7) * 6 * t,
+					side = t * t * 70;
+				sp.position.set(-c.dx * len * t + -c.dy * (side + wobble), -t * 20, -c.dy * len * t + c.dx * (side + wobble));
+				const size = 40 + t * 140;
+				sp.scale.set(size, size, 1);
+				sp.material.opacity = 0.32 * (1 - t);
+			});
+		});
+	}
+	return { update };
+}
+
 // ---- webgl3d/relief-3d.js ----
 /* Relief of the 3D board (visual only: movement, vision and saves do not change; the 2D boards keep
    webgl/terrain-height.js). A height map twice as fine as the 2D one (6 units a cell) built from the
@@ -64891,8 +65116,8 @@ function createRelief3D({ RISE }) {
 		};
 	}
 	// Plateau-shaped obstacles: [height (× RISE), profile]; cliff: mesa walls, knoll: rugged rock, mound: soft.
-	const RAISED = { mesa: [1, "cliff"], outcrop: [0.7, "knoll"], rock: [0.75, "knoll"], spire: [1.4, "peak"], grove: [0.3, "soft"], eggs: [0.18, "soft"], wreck: [0.55, "mound"], derelict: [0.6, "mound"], ruin: [0.4, "mound"], debris: [0.3, "mound"], resin: [0.3, "mound"], processor: [0.2, "mound"] };
-	const WATER = { lake: -0.35, glow: -0.35, chasm: -1.3, crevasse: -1, lava: -0.25, dune: 0.5 };
+	const RAISED = { mesa: [1, "cliff"], outcrop: [0.7, "knoll"], rock: [0.75, "knoll"], spire: [1.4, "peak"], grove: [0.3, "soft"], eggs: [0.18, "soft"], wreck: [0.55, "mound"], derelict: [0.6, "mound"], ruin: [0.4, "mound"], debris: [0.3, "mound"], resin: [0.3, "mound"], processor: [0.2, "mound"], crystal: [0.5, "knoll"] };
+	const WATER = { lake: -0.35, glow: -0.35, chasm: -1.3, crevasse: -1, lava: -0.25, dune: 0.5, sea: -0.45, ice: -0.08 };
 	const ROUGH = { ice: 0.75, dust: 1, ash: 1.25 };
 
 	function build(game, { relief = true } = {}) {
@@ -66122,11 +66347,14 @@ function createSpace3D(THREE) {
 			veil.position.set(game.W / 2, -30, game.H / 2);
 			veil.scale.set(game.W + M * 2, 1, game.H + M * 2);
 			veilUniforms.size.value.set(game.W, game.H);
+			const PAL_GAS = { c: ["#54331f", "#8c4d2e", "#c78c54", "#edd4a8"], amp: 1, atmo: "#73b3ff", rings: ["#9e8c78", "#f2e6d1"], ringAlpha: 0.6 };
 			const PAL = {
 				gas: { c: ["#54331f", "#8c4d2e", "#c78c54", "#edd4a8"], amp: 1, atmo: "#73b3ff", rings: ["#9e8c78", "#f2e6d1"], ringAlpha: 0.6 },
 				ice: { c: ["#24607e", "#3a88a8", "#68b8cf", "#b4e4ee"], amp: 0.35, atmo: "#8fe0ff", rings: ["#8aa6b8", "#eef8ff"], ringAlpha: 0.75 },
 				lava: { c: ["#1c1614", "#4a3a2c", "#ff7a1e", "#ffd070"], amp: 0, atmo: "#a8481e", rings: ["#000000", "#000000"], ringAlpha: 0 },
-			}[kind === "none" ? "gas" : kind];
+				// A desert world (0.164, Eos): the gas giant's shader with sand tones and faint bands.
+				desert: { c: ["#4a2e18", "#8a5a30", "#c89458", "#ecd2a0"], amp: 0.22, atmo: "#ffc890", rings: ["#000000", "#000000"], ringAlpha: 0 },
+			}[kind === "none" ? "gas" : kind] || PAL_GAS;
 			planet.visible = kind !== "none";
 			planetUniforms.kind.value = kind === "ice" ? 1 : kind === "lava" ? 2 : 0;
 			["c0", "c1", "c2", "c3"].forEach((k, i) => planetUniforms[k].value.set(PAL.c[i]));
@@ -66156,7 +66384,7 @@ function createSpace3D(THREE) {
 			ringsAligned = false;
 			ringUniforms.planetCentre.value.copy(centre);
 			ringUniforms.planetRadius.value = R;
-			moon.visible = kind === "gas" || kind === "ice";
+			moon.visible = kind === "gas" || kind === "ice" || kind === "desert";
 			moon.position.set(game.W * 1.35, -2500, -15000);
 			moon.scale.setScalar(650);
 			blackHole.visible = !!look.blackHole;
@@ -66650,6 +66878,8 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 	let beacons = [];
 	// Wall links, tracks, craters, habitats (webgl3d/marks-3d.js).
 	const marks = createMarks3D(THREE, { world, heightAt: (x, y) => heightAt(x, y), fogged: (m) => fogged(m, true) });
+	// The tide, holes in the ice, comets (webgl3d/world-3d.js).
+	const worldFx = createWorld3D(THREE, { world, heightAt: (x, y) => heightAt(x, y) });
 	// Placement preview: translucent models of the building to place, green where it can stand, red where
 	// it cannot (one per wall segment while a wall is dragged). The overlay keeps the footprint circle.
 	const ghostOk = new THREE.MeshBasicMaterial({ color: "#aee5c7", transparent: true, opacity: 0.42, depthWrite: false }),
@@ -67000,10 +67230,11 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			cloudTexture.colorSpace = THREE.SRGBColorSpace;
 		}
 		nebula = new THREE.Group();
-		const R = RTS.SPACE?.nebula?.radius || 230;
 		// Layers of cloud from below the plane to over the ships: as the camera moves they slide apart and
-		// the cloud reads as a volume.
-		(game.gasFields || []).forEach((f, i) => {
+		// the cloud reads as a volume. The clouds round the gas fields and the map's own (0.164).
+		const clouds = game.nebulaClouds?.() || (game.gasFields || []).map((f) => ({ x: f.x, y: f.y, r: RTS.SPACE?.nebula?.radius || 230 }));
+		clouds.forEach((f, i) => {
+			const R = f.r;
 			for (let k = 0; k < 12; k++) {
 				const a = k * 2.4 + i,
 					d = k ? R * (0.3 + ((k * 37) % 10) / 16) : 0,
@@ -69027,6 +69258,8 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		magma: { light: [1.08, 0.97, 0.88], shadow: [1.0, 0.94, 0.95], saturation: 1.08 },
 		frozenhive: { light: [1.0, 1.0, 1.05], shadow: [0.96, 0.95, 1.08], saturation: 1.0 },
 		derelict: { light: [1.04, 0.99, 0.94], shadow: [0.95, 0.97, 1.03], saturation: 0.98 },
+		ocean: { light: [1.03, 1.02, 0.97], shadow: [0.9, 0.98, 1.08], saturation: 1.12 },
+		crystal: { light: [0.98, 1.01, 1.07], shadow: [0.94, 0.94, 1.12], saturation: 1.06 },
 		space: { light: [1.02, 1.0, 0.97], shadow: [0.88, 0.94, 1.14], saturation: 1.12 },
 	};
 	const NIGHT_SHADOW = new THREE.Color(0.86, 0.94, 1.14),
@@ -69239,6 +69472,7 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			scatter.update(game);
 			life.update(game.time, { fog: options.fog, colors: COLORS });
 			marks.update(game, { hidden, sun: sun.position.clone().sub(sun.target.position).normalize() });
+			worldFx.update(game);
 			syncGhosts();
 			syncRallies();
 			objectives.update(game, clock, { beacons, colorOf: (team) => game.colorFor?.(team) || COLORS[team] || "#f5e27a" });

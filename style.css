@@ -1040,14 +1040,23 @@ kbd {
 	border: 1px solid rgba(160, 220, 210, 0.25);
 	box-shadow: 0 30px 90px #000a, inset 0 1px 0 rgba(255, 255, 255, 0.06);
 	max-height: calc(100% - 16px);
-	/* Scrolls only on very short boards, without bars (the card is laid out to fit). */
+	/* Scrolls when the board is shorter than the card (long reports of the campaign), with a thin visible bar
+	   (0.156.2: the bar was hidden and the top of the report seemed cut off). */
 	overflow-x: hidden;
 	overflow-y: auto;
-	scrollbar-width: none;
+	scrollbar-width: thin;
+	scrollbar-color: rgba(160, 220, 210, 0.45) transparent;
 	animation: end-rise 0.7s ease-out both;
 }
 .briefing.end-report::-webkit-scrollbar {
-	display: none;
+	width: 8px;
+}
+.briefing.end-report::-webkit-scrollbar-thumb {
+	background: rgba(160, 220, 210, 0.45);
+	border-radius: 4px;
+}
+.briefing.end-report::-webkit-scrollbar-track {
+	background: transparent;
 }
 .briefing.end-report:not(.with-epilogue) {
 	width: 560px;

@@ -167,6 +167,13 @@ body.in-menu > .command-bar {
 }
 .campaign-level select {
 	min-width: 120px;
+	/* 0.168.1: the same field as the other selects of the menu (it was the browser's white default). */
+	background: #10202a;
+	color: #d6e7e6;
+	border: 1px solid #435863;
+	border-radius: 4px;
+	padding: 6px 8px;
+	font: inherit;
 }
 .campaign-level-info {
 	font-size: 0.92em;
@@ -960,6 +967,10 @@ body.in-menu > .command-bar {
 	padding: 6px 8px;
 	font: inherit;
 }
+/* One field across the whole width (the lobby server's address). */
+.net-fields.net-single {
+	grid-template-columns: 1fr;
+}
 .net-check {
 	font-size: 13px;
 	color: #9fb6bf;
@@ -1623,8 +1634,6 @@ body.menu-over-game .menu-hud b {
 	background: #e6fff6;
 	box-shadow: 0 0 12px #7fe7c8;
 }
-#command-menu.has-backdrop .menu-setting select,
-#command-menu.has-backdrop .scenario-config select,
 #command-menu.has-backdrop .scenario-config input:not([type]),
 #command-menu.has-backdrop .scenario-config input[type="text"] {
 	background: rgba(12, 28, 36, 0.8);
@@ -1632,11 +1641,37 @@ body.menu-over-game .menu-hud b {
 	border-radius: 0;
 	color: #e1eee6;
 }
-#command-menu.has-backdrop .menu-setting select:focus-visible,
-#command-menu.has-backdrop .scenario-config select:focus-visible {
+/* 0.168.2: every select of the menu (settings, scenarios, the map, the campaign briefing, network games) one glass
+   field: the same background, frame and padding, a thin sea-green chevron instead of the system arrow, a dark list
+   of options, a glow on hover and focus, dimmed when locked. */
+#command-menu.has-backdrop select {
+	-webkit-appearance: none;
+	appearance: none;
+	background: rgba(12, 28, 36, 0.8) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%237fe7c8' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 10px center / 10px 6px;
+	border: 1px solid rgba(160, 220, 210, 0.28);
+	border-radius: 0;
+	color: #e1eee6;
+	padding: 7px 30px 7px 9px;
+	font: inherit;
+	cursor: pointer;
+	transition: border-color 0.15s, box-shadow 0.15s;
+}
+#command-menu.has-backdrop select:hover:not(:disabled) {
+	border-color: rgba(127, 231, 200, 0.6);
+}
+#command-menu.has-backdrop select:focus-visible {
 	outline: none;
 	border-color: #7fe7c8;
 	box-shadow: 0 0 14px rgba(127, 231, 200, 0.3);
+}
+#command-menu.has-backdrop select:disabled {
+	opacity: 0.55;
+	cursor: default;
+}
+#command-menu.has-backdrop select option,
+#command-menu.has-backdrop select optgroup {
+	background: #0f1f28;
+	color: #e1eee6;
 }
 .has-backdrop .menu-setting input[type="checkbox"] {
 	-webkit-appearance: none;
@@ -2226,8 +2261,21 @@ body.menu-over-game .menu-hud b {
 .net-player.mine {
 	border-color: rgba(127, 231, 200, 0.45);
 }
-.net-player .net-small {
-	margin-left: 6px;
+/* A seat's buttons (take it, the computer) on their own row under the name, so a narrow team column keeps
+   the name and the state readable. */
+.net-teams .net-player {
+	flex-wrap: wrap;
+	row-gap: 8px;
+}
+.net-teams .net-player .net-swatch {
+	flex-shrink: 0;
+}
+.net-seat-actions {
+	flex-basis: 100%;
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	gap: 6px;
 }
 .net-resume {
 	padding: 10px 12px;

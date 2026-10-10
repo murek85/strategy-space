@@ -31,8 +31,8 @@ export function createRelief3D({ RISE }) {
 		};
 	}
 	// Plateau-shaped obstacles: [height (× RISE), profile]; cliff: mesa walls, knoll: rugged rock, mound: soft.
-	const RAISED = { mesa: [1, "cliff"], outcrop: [0.7, "knoll"], rock: [0.75, "knoll"], spire: [1.4, "peak"], grove: [0.3, "soft"], eggs: [0.18, "soft"], wreck: [0.55, "mound"], derelict: [0.6, "mound"], ruin: [0.4, "mound"], debris: [0.3, "mound"], resin: [0.3, "mound"], processor: [0.2, "mound"] };
-	const WATER = { lake: -0.35, glow: -0.35, chasm: -1.3, crevasse: -1, lava: -0.25, dune: 0.5 };
+	const RAISED = { mesa: [1, "cliff"], outcrop: [0.7, "knoll"], rock: [0.75, "knoll"], spire: [1.4, "peak"], grove: [0.3, "soft"], eggs: [0.18, "soft"], wreck: [0.55, "mound"], derelict: [0.6, "mound"], ruin: [0.4, "mound"], debris: [0.3, "mound"], resin: [0.3, "mound"], processor: [0.2, "mound"], crystal: [0.5, "knoll"] };
+	const WATER = { lake: -0.35, glow: -0.35, chasm: -1.3, crevasse: -1, lava: -0.25, dune: 0.5, sea: -0.45, ice: -0.08 };
 	const ROUGH = { ice: 0.75, dust: 1, ash: 1.25 };
 
 	function build(game, { relief = true } = {}) {

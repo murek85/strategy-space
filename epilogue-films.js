@@ -5,7 +5,10 @@
    - act II (chapter VI): the Hefajstos complex blows up (destroy) or powers down as the technicians are flown
      out (evacuate), Vulkan IX afterwards, the first pulse of an artefact in Lira's lab, the end of the act;
    - act III (chapter IX): the Heart of the Swarm cracks and goes dark, the artefacts fall silent, the fleets of
-     the Colonies and the Dominium fly together (trust) or part their ways (distance), a common dawn. */
+     the Colonies and the Dominium fly together (trust) or part their ways (distance), a common dawn;
+   - act IV (chapter XIV, 0.159): the Gate at Erebus breaks and goes dark, the rifts close across the frontier, the
+     fleets fly home — the Colonies with Vok's Admiralty (truce in XIII) or alone, Varn beside them (trust in VIII or
+     his garrison saved in XII) — and the end of the invasion. */
 const Epilogues = (() => {
 	const K = () => CampaignFilm.kit;
 	const VIOLET = "#c98cff";
@@ -288,7 +291,7 @@ const Epilogues = (() => {
 						: distance
 							? "Kolonie odlatują z Pyrrhosa własną drogą. Varn salutuje z daleka; rozejm pozostaje kruchy."
 							: "Kolonie i Dominium po raz pierwszy od lat nie liczą strat, lecz ocalałych.",
-					"Nad pograniczem wstaje świt — tym razem wspólny. Koniec kampanii.",
+					"Nad pograniczem wstaje świt — tym razem wspólny. Ale artefakty milczą tylko na chwilę. Koniec aktu III.",
 				],
 				tints: ["#8f2a6a", "#6a2a8f", "#4f6f9f", "#a06a2a"],
 				shots: [
@@ -353,15 +356,83 @@ const Epilogues = (() => {
 						flare(c, 480, sy, 0.7 + rise * 0.6, "#ffcf8a");
 						capital(c, 150 + local * 16, 210, 0.8, t, false);
 						capital(c, 620 + local * 16, 230, 0.75, t, true);
-						bigTitle(c, k, "ŚWIT — TYM RAZEM WSPÓLNY", "K O N I E C   K A M P A N I I", local, reduced, "rgba(255,200,130,0.9)", 120);
+						bigTitle(c, k, "ŚWIT — TYM RAZEM WSPÓLNY", "K O N I E C   A K T U   I I I", local, reduced, "rgba(255,200,130,0.9)", 120);
 					},
 				],
 				label: "EPILOG AKTU III",
 				alarm: [],
 			};
 		},
+		// Act IV: Inwazja — the Gate falls; who flies home with the Colonies follows the act's decisions.
+		colony14: (game) => {
+			const k = K();
+			const { W, H, rnd, clamp01, ease, stars, nebula, glow, flare, capital, fighter, planet } = k;
+			const P = typeof Act4Film !== "undefined" ? Act4Film.parts : null;
+			const truce = game?.act4?.decision13 === "truce",
+				varn = !!game?.act4?.varn14;
+			return {
+				titles: ["BRAMA GAŚNIE", "SZCZELINY SIĘ ZAMYKAJĄ", truce ? "WSPÓLNY POWRÓT" : "SAMI PRZECIW CIEMNOŚCI", "KONIEC INWAZJI"],
+				places: ["EREBUS · HORYZONT ZDARZEŃ", "POGRANICZE · SIEĆ SZCZELIN", "EOS · ORBITA", "SEKTOR 07 · ŚWIT"],
+				captions: [
+					"Brama pęka przy horyzoncie zdarzeń. Światło Wartowników gaśnie, a Głos Bramy milknie w pół słowa.",
+					"Na całym pograniczu szczeliny zamykają się jedna po drugiej. Artefakty znów milczą — tym razem na dobre.",
+					(truce ? "Okręty Vok i Kolonii wracają z Erebusa razem. Admiralicja podpisuje rozejm, którego kiedyś nie uznała." : "Admiralicja nie istnieje. Kolonie wracają z Erebusa jako jedyna siła pogranicza.") +
+						(varn ? " Varn leci obok Liry." : " Varn czeka na nich na Nivalis — wciąż z dystansem."),
+					"Inwazja odparta. Nad Eos wstaje świt — i nikt nie wie, co jeszcze kryje się za horyzontem.",
+				],
+				tints: ["#1f6f8f", "#2a6f8f", truce ? "#6f5a4f" : "#4f6f9f", "#a06a2a"],
+				shots: [
+					(c, t, local) => {
+						c.fillStyle = "#020306";
+						c.fillRect(0, 0, W, H);
+						stars(c, t, 3, 220, 81, "#ffe6cc");
+						const crack = clamp01(local / 3.2);
+						if (P) P.blackHole(c, 560, 210, 70, t, 1 - clamp01((local - 2.4) / 1.6), crack);
+						glow(c, 392, 252, 160 * (1 - crack) + 20, "#f2fdff", 0.5 * (1 - crack));
+					},
+					(c, t, local) => {
+						c.fillStyle = "#03060c";
+						c.fillRect(0, 0, W, H);
+						nebula(c, t, [[480, 200, 380, "#0a2a3a", 0.5, 0]]);
+						stars(c, t, 2, 220, 82, "#d6f4ff");
+						const pts = [[160, 160], [300, 270], [460, 130], [620, 250], [790, 160]];
+						pts.forEach(([x, y], i) => {
+							const shut = clamp01((local - 0.8 - i * 0.75) * 1.1);
+							if (P) P.rift(c, x, y, 60, 1 - shut, t);
+						});
+						c.font = "11px monospace";
+						c.fillStyle = "rgba(190,240,255,0.9)";
+						c.fillText(`SZCZELINY: ${local > 3.6 ? "ZAMKNIĘTE" : "ZAMYKAJĄ SIĘ"}`, 660, 92);
+					},
+					(c, t, local) => {
+						nebula(c, t, [[300, 120, 300, "#1a3a5a", 0.5, 1]]);
+						stars(c, t, 5, 200, 83);
+						planet(c, 480, 470, 300, { base: "#c69a5c", dark: "#2a1c12", atmo: "#ffd29a", light: -1.9, cities: 0.6, t, seed: 83 });
+						capital(c, 200 + local * 18, 150, 1, t, false);
+						if (truce) capital(c, 240 + local * 18, 245, 1.05, t, true);
+						if (varn) capital(c, 90 + local * 18, 215, 0.7, t, true);
+						for (let i = 0; i < 6; i++) fighter(c, 120 + i * 70 + local * 34, 195 + (i % 3) * 20, 0.9, 0, truce && i % 2 === 1);
+						flare(c, 860, 70, 0.5, "#ffd0a0");
+					},
+					(c, t, local, reduced) => {
+						nebula(c, t, [[480, 120, 360, "#5a3a2a", 0.45, 0], [200, 80, 260, "#2a4a6a", 0.35, 1]]);
+						stars(c, t, 4, 160, 84);
+						const rise = ease(clamp01(local / 3)),
+							sy = 300 - rise * 80;
+						glow(c, 480, sy, 560, "#ffb46a", 0.4 + rise * 0.25);
+						planet(c, 480, 820, 560, { base: "#c69a5c", atmo: "#ffd7a0", light: -1.57, cities: 0.8, t, seed: 84 });
+						flare(c, 480, sy, 0.7 + rise * 0.6, "#ffcf8a");
+						capital(c, 150 + local * 16, 210, 0.8, t, false);
+						if (truce) capital(c, 620 + local * 16, 230, 0.75, t, true);
+						bigTitle(c, k, "INWAZJA ODPARTA", "K O N I E C   A K T U   I V", local, reduced, "rgba(127,233,255,0.9)", 120);
+					},
+				],
+				label: "EPILOG AKTU IV",
+				alarm: [],
+			};
+		},
 	};
-	const ACT = { colony3: "Epilog aktu I · Odzyskany Świt", colony6: "Epilog aktu II · Cena świtu", colony9: "Epilog aktu III · Przebudzenie Roju" };
+	const ACT = { colony3: "Epilog aktu I · Odzyskany Świt", colony6: "Epilog aktu II · Cena świtu", colony9: "Epilog aktu III · Przebudzenie Roju", colony14: "Epilog aktu IV · Inwazja" };
 	// The film of a chapter's ending (null if the chapter does not end an act).
 	function film(id, game = null) {
 		if (!FILMS[id] || typeof CampaignFilm === "undefined") return null;

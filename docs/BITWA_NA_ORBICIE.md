@@ -4,6 +4,20 @@ Aktualizacja: 2026-10-08. Wersje: 0.130 (mapa, statki, osłony), 0.131 (stacje, 
 
 Pierwszy krok kierunku „Bitwy kosmiczne i transport między planetami” (zob. [Pomysły](POMYSLY.md)): mapa w kosmosie, na której zamiast pojazdów walczą statki. Zasady w `space-rules.js` (łańcuch modułów zasad, ostatni), wygląd 2D w `space-art.js`, modele 3D statków w `webgl3d/ships-3d.js`.
 
+## Szlak Komet (0.166, 2026-10-09)
+
+Mapa `comets` (`world-rules.js`): dwa szlaki komet przecinają pole bitwy co 3 minuty; warkocz rani statki (najpierw osłony), głowa uzupełnia gaz. Szczegóły: [MAPY_TEMATYCZNE.md](MAPY_TEMATYCZNE.md).
+
+## Doki Eos i Szkarłatna Mgławica (0.164, 2026-10-09)
+
+- **Doki Eos** (`eosdocks`): orbitalna stocznia nad pustynną Eos. Nowa przeszkoda `kind: "dock"` — pomost stoczni (dwie kratownice, poprzeczki, pylony i czerwone znaczniki na końcach, światła robocze; na długich pomostach żuraw i żebra budowanego kadłuba). Rysuje ją `space-art.js` (Canvas i PixiJS) i `webgl3d/models-3d.js` (3D, nie obraca się jak pola asteroid). Pomosty tworzą przez środek pochylnię z najbogatszym złożem; wyjścia z obu końców i przez środek. Nowy wygląd planety `look.planet: "desert"` (2D i 3D).
+- **Szkarłatna Mgławica** (`crimson`): mapa może mieć własne obłoki mgławicy bez złóż gazu — `nebulae: [[x, y, r]]` w układzie (rozmiar średni, skalowane z mapą). `game.nebulaClouds()` zwraca obłoki przy gazie i obłoki mapy; korzysta z nich `inNebula` (trudniej trafić, osłony się nie odnawiają) i oba renderery. Obłoki nie trafiają do zapisu — wynikają z mapy i jej rozmiaru. Tu pokrywają ok. 64% pola; czysty korytarz biegnie po przekątnej SW–NE.
+- Poprawka: załoga kryjówki piratów pojawia się na wolnym miejscu obok kryjówki (dotąd mogła trafić w pole asteroid).
+
+## Bez zwierząt w kosmosie (0.160.1, 2026-10-09)
+
+Ozdobna fauna lądowa planszy (`game.wildlife()` — jaszczurki, ptaki, drobne zwierzęta według biomu mapy) pojawiała się na mapach kosmicznych w rendererach Canvas i WebGL (PixiJS), bo mapy kosmiczne mają formalny biom (np. `ice`). `space-rules.js` zwraca na nich pustą listę — bez fauny na planszy i bez jej odgłosów (`audio.js`). Renderer 3D pomijał ją już wcześniej; neutralne jednostki (piraci) zostają. Test w `tests/space.test.js`.
+
 ## Czytelność bitwy na tle kosmosu (0.155.1, 2026-10-09)
 
 Zgłoszenie właściciela: budynki, statki i inne elementy na mapach kosmicznych są słabo widoczne. Sprawdzenie w grze (renderer 3D; Orbita Kharona, Wrota Pustki, Pierścienie Glacjalis), z porównaniem po wyłączaniu kolejnych warstw tła:

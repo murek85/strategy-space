@@ -1,19 +1,27 @@
-/* Act II prologue "Cena świtu": four 5-second shots in the style of the campaign intro (campaign-film.js — its
-   kit and director: letterbox, camera push, HUD, typed titles, grade, grain): the beacons alight again and a
-   repeated signal from Khepri IV; Dominium drills on the dunes at dusk and the burrowers waking under the sand;
-   three convoy haulers on a mountain road in a blizzard; the Hefajstos complex draining Vulkan IX. */
+/* Act II prologue "Cena świtu" (0.106; retold in 0.171 as a story of about 75 seconds leading to chapter IV), in the
+   style of the campaign films (campaign-film.js — its kit and director: letterbox, camera push, HUD, typed titles,
+   grade, grain). Eight shots of their own lengths (LENGTHS): after the dawn — Khepri IV lit again, the aid coming in;
+   a repeated signal in the band of the beacons; Lira decoding it — a research team cut off on Khepri; the Dominium's
+   drills on the dunes at dusk and the burrowers waking; under the sand — a drill reaching an ancient probe; the source
+   of the blockade — the Hefajstos complex draining Vulkan IX; the convoy that will have to cross the pass of Vesper;
+   the commander's dropship landing on Khepri IV by the research station, the act's title. */
 const Act2Film = (() => {
-	const duration = 20;
-	const titles = ["AKT II / CENA ŚWITU", "SYGNAŁ SPOD PIASKU", "OSTATNI KONWÓJ", "SERCE POPIOŁU"];
+	const LENGTHS = [9, 9, 10, 10, 9, 10, 9, 10];
+	const duration = LENGTHS.reduce((n, l) => n + l, 0);
+	const titles = ["PO ŚWICIE", "SYGNAŁ", "ZAGINIONA EKIPA", "KHEPRI IV", "POD PIASKIEM", "HEFAJSTOS", "SZLAK PRZEZ LÓD", "AKT II · CENA ŚWITU"];
 	const captions = [
-		"Latarnie znów świecą. W ich paśmie pojawił się cichy, powtarzany sygnał z odciętej ekipy badawczej.",
-		"Na Khepri IV Dominium kopie w dawnych instalacjach sondy. Hałas wiertni obudził paszczaki w skalnych jamach.",
-		"Archiwum wskaże drogę do rdzeni energetycznych. Trzy konwojowce muszą przejść przez lodową przełęcz Vesperu.",
-		"Na końcu szlaku czeka kompleks Hefajstos — źródło blokady. Świt ma swoją cenę. Ty zdecydujesz, kto ją zapłaci.",
+		"Latarnie znów świeciły. Na Khepri IV wrócił prąd, a transporty pomocy nadlatywały jeden po drugim.",
+		"Ale w paśmie latarni pojawił się cichy, powtarzany sygnał — za słaby na wezwanie, za regularny na przypadek.",
+		"Lira odszyfrowała go po trzech dniach: ekipa badawcza z Khepri IV, odcięta od czterdziestu dni, wciąż żyje.",
+		"Na wydmach Khepri Dominium postawiło wiertnie. Ich hałas obudził paszczaki w skalnych jamach.",
+		"Dominium kopało w ruinach dawnej sondy — a w jej archiwum zapisano, skąd naprawdę płynie energia blokady.",
+		"Ze wszystkich śladów wyłonił się jeden adres: kompleks Hefajstos na Vulkanie IX, który wysysa energię planety.",
+		"Droga tam wiedzie przez rdzenie energetyczne ukryte za lodową przełęczą Vesperu. Ktoś będzie musiał je przewieźć.",
+		"Najpierw jednak Khepri IV: badacze, ich archiwum i rdzeń danych. Świt ma swoją cenę. Ty zdecydujesz, kto ją zapłaci.",
 	];
-	const places = ["SEKTOR 07 · SIEĆ LATARNI: 100%", "KHEPRI IV · POLA JAM", "VESPER · PRZEŁĘCZ SZRONU", "VULKAN IX · KOMPLEKS HEFAJSTOS"];
+	const places = ["KHEPRI IV · ORBITA", "SEKTOR 07 · SIEĆ LATARNI: 100%", "STACJA CISZY · EOS", "KHEPRI IV · POLA JAM", "KHEPRI IV · POD WYDMAMI", "VULKAN IX · KOMPLEKS HEFAJSTOS", "VESPER · PRZEŁĘCZ SZRONU", "KHEPRI IV · STACJA BADAWCZA"];
 	const K = CampaignFilm.kit,
-		{ W, H, rnd, clamp01, ease, poly, glow, flare, stars, nebula, planet, freighter, capital, fighter, beam, beacon } = K;
+		{ W, H, rnd, clamp01, ease, poly, glow, flare, stars, nebula, planet, freighter, capital, fighter, beam, beacon, dropship, holoLira } = K;
 
 	// Sand dunes in layers (moving left by the parallax), lit from the low sun on the right.
 	function dunes(c, t, layers) {
@@ -115,7 +123,8 @@ const Act2Film = (() => {
 		glow(c, x + 45 * s, y - 14 * s, 9 * s, "#ffffff", 1);
 	}
 
-	const SHOTS = [
+	// The shots of 0.106, now parts of the story.
+	const PART = [
 		// The beacons again: the chain lit across the sector, a planet at dawn, the signal pulsing from Khepri IV.
 		(c, t, local) => {
 			nebula(c, t, [[300, 100, 280, "#1f4a5a", 0.5, 1], [760, 300, 300, "#3a3a6a", 0.35, -1]]);
@@ -208,8 +217,8 @@ const Act2Film = (() => {
 			c.fillRect(0, 0, W, H);
 		},
 		// Vulkan IX: the Hefajstos complex on its crater, beams of energy pulled out of the planet, lava, ash,
-		// Dominium ships circling; the act's title at the end.
-		(c, t, local, reduced) => {
+		// Dominium ships circling (and the act's title, when asked).
+		(c, t, local, reduced, span, withTitle = false) => {
 			const sky = c.createLinearGradient(0, 0, 0, H);
 			sky.addColorStop(0, "#120808");
 			sky.addColorStop(0.7, "#4a1a10");
@@ -278,6 +287,7 @@ const Act2Film = (() => {
 				fighter(c, 480 + Math.cos(a) * 260, 130 + Math.sin(a) * 50, 1.1, a + Math.PI / 2, true);
 			}
 			capital(c, 120 + local * 10, 70, 0.6, t, true);
+			if (!withTitle) return;
 			const show = reduced ? 1 : clamp01((local - 2.4) / 1);
 			c.save();
 			c.globalAlpha = show;
@@ -294,9 +304,141 @@ const Act2Film = (() => {
 			c.restore();
 		},
 	];
-	const SPEC = { shots: SHOTS, titles, places, captions, tints: ["#2a6f8f", "#a0582a", "#4f7f9f", "#a0301a"], label: "UJĘCIE PROLOGU AKTU II", alarm: [3], receive: [0] };
+	const SHOTS = [
+		// 1 · After the dawn: Khepri IV lit again on its night side, the aid convoys coming down to it.
+		(c, t, local, reduced, span) => {
+			nebula(c, t, [[260, 110, 260, "#1f4a5a", 0.45, 1]]);
+			stars(c, t, 4, 200, 201);
+			planet(c, 600, 400, 300, { base: "#c69a5c", dark: "#2a1c12", atmo: "#ffd29a", light: 2.3, cities: 0.2 + clamp01(local / (span - 2)) * 0.8, clouds: 0.3, t, seed: 201 });
+			for (let i = 0; i < 5; i++) {
+				const p = clamp01((local - i * 0.9) / 6);
+				if (p > 0 && p < 1) freighter(c, 80 + i * 50 + p * 420, 80 + i * 22 + p * 150, 1 - p * 0.5, t, i);
+			}
+			c.font = "10px monospace";
+			c.fillStyle = "rgba(255,220,160,0.85)";
+			c.fillText(`KHEPRI IV · ZASILANIE MIAST ${Math.round(20 + clamp01(local / (span - 2)) * 80)}%`, 90, 330);
+		},
+		// 2 · The signal in the band of the beacons.
+		PART[0],
+		// 3 · Lira decoding it at the Silent Station: the waveform, the map of Khepri IV, the research station marked.
+		(c, t, local, reduced, span) => {
+			c.fillStyle = "#04121a";
+			c.fillRect(0, 0, W, H);
+			nebula(c, t, [[420, 200, 360, "#0f3a44", 0.55, 0]]);
+			holoLira(c, 680, 92, 190, t, reduced);
+			const decoded = reduced ? 1 : clamp01((local - 0.8) / (span - 3));
+			c.strokeStyle = "#ffd28a";
+			c.lineWidth = 1.4;
+			c.beginPath();
+			for (let x = 0; x < 460; x += 3) {
+				const y = 120 + (Math.floor((x + t * 60) / 40) % 3 === 0 ? Math.sin(x * 0.9) * 10 : 0) * (1 - decoded * 0.7);
+				x ? c.lineTo(90 + x, y) : c.moveTo(90, y);
+			}
+			c.stroke();
+			// The map of Khepri IV: a disc with the research station marked, the line of the last contact.
+			c.strokeStyle = "rgba(255,210,140,0.35)";
+			c.beginPath();
+			c.arc(250, 250, 70, 0, Math.PI * 2);
+			c.stroke();
+			glow(c, 286, 232, 12 + 6 * Math.sin(t * 4), "#ffd38a", decoded);
+			c.font = "10px monospace";
+			c.fillStyle = "rgba(255,230,180,0.9)";
+			const text = "EKIPA BADAWCZA · OSTATNI KONTAKT: 41 DNI · ŻYJĄ: 4";
+			c.fillText(text.slice(0, Math.floor(decoded * text.length)), 340, 250);
+			c.fillText(`ODSZYFROWANO ${Math.round(decoded * 100)}%`, 90, 160);
+		},
+		// 4 · The dunes of Khepri IV at dusk: the drills, the burrowers.
+		PART[1],
+		// 5 · Under the sand: a cross-section, a drill reaching the ancient probe in a cave, the burrowers' tunnels.
+		(c, t, local, reduced, span) => {
+			const g = c.createLinearGradient(0, 0, 0, H);
+			g.addColorStop(0, "#a8553a");
+			g.addColorStop(0.18, "#5a3424");
+			g.addColorStop(1, "#1a0e0a");
+			c.fillStyle = g;
+			c.fillRect(0, 0, W, H);
+			for (let k = 0; k < 5; k++) {
+				c.fillStyle = `rgba(0,0,0,${0.08 + k * 0.03})`;
+				c.beginPath();
+				c.moveTo(0, 90 + k * 60);
+				for (let x = 0; x <= W; x += 40) c.lineTo(x, 90 + k * 60 + Math.sin(x * 0.01 + k) * 12);
+				c.lineTo(W, H);
+				c.lineTo(0, H);
+				c.fill();
+			}
+			// The drill coming down.
+			const depth = 60 + ease(clamp01(local / (span - 3))) * 190;
+			c.fillStyle = "#3a302a";
+			c.fillRect(470, 40, 20, depth - 40);
+			glow(c, 480, depth, 30, "#ffb06a", 0.6 + 0.3 * Math.sin(t * 9));
+			// The probe: an ancient pod in a cave, its lights waking as the drill comes near.
+			c.fillStyle = "#0e0806";
+			c.beginPath();
+			c.ellipse(480, 300, 150, 50, 0, 0, Math.PI * 2);
+			c.fill();
+			poly(c, [[420, 310], [450, 270], [510, 270], [540, 310], [510, 330], [450, 330]], "#5a5650");
+			const wake = clamp01((depth - 180) / 60);
+			for (let i = 0; i < 5; i++) glow(c, 445 + i * 18, 300, 8, "#ffe0a0", wake * (0.5 + 0.5 * Math.sin(t * 3 + i)));
+			// Burrowers' tunnels and a body moving in them.
+			c.strokeStyle = "rgba(60,40,30,0.8)";
+			c.lineWidth = 16;
+			c.beginPath();
+			c.moveTo(0, 220);
+			c.bezierCurveTo(200, 180, 260, 300, 380, 260);
+			c.stroke();
+			const u = (t * 0.15) % 1;
+			glow(c, u * 380, 220 + Math.sin(u * 3) * 40, 14, "#c08a5a", 0.6);
+			c.font = "10px monospace";
+			c.fillStyle = "rgba(255,220,160,0.85)";
+			c.fillText(`ODWIERT · ${Math.round(depth * 1.6)} M · SONDA: ${wake > 0.5 ? "AKTYWNA" : "UŚPIONA"}`, 620, 90);
+		},
+		// 6 · The source: Hefajstos on Vulkan IX.
+		(c, t, local, reduced, span) => PART[3](c, t, local, reduced, span, false),
+		// 7 · The convoy that will have to cross the pass of Vesper.
+		PART[2],
+		// 8 · Khepri IV at dusk: the commander's dropship coming down by the research station, the act's title.
+		(c, t, local, reduced, span) => {
+			const sky = c.createLinearGradient(0, 0, 0, H);
+			sky.addColorStop(0, "#1d1a2e");
+			sky.addColorStop(0.55, "#a8553a");
+			sky.addColorStop(0.8, "#e3a060");
+			c.fillStyle = sky;
+			c.fillRect(0, 0, W, H);
+			glow(c, 820, 250, 260, "#ffb060", 0.6);
+			flare(c, 820, 250, 0.45, "#ffc080");
+			dunes(c, t * 0.3, [[280, 24, 6, "#7a4a32", "rgba(255,200,140,0.35)"]]);
+			// The research station: domes, a mast with the signal lamp blinking.
+			c.fillStyle = "#3a2a22";
+			for (const [x, r] of [[600, 26], [650, 18]]) {
+				c.beginPath();
+				c.ellipse(x, 300, r, r * 0.7, 0, Math.PI, Math.PI * 2);
+				c.fill();
+			}
+			c.fillRect(676, 230, 4, 70);
+			glow(c, 678, 228, 10, "#ffd38a", Math.pow(Math.max(0, Math.sin(t * Math.PI * 0.6)), 4));
+			dunes(c, t * 0.3, [[340, 20, 12, "#4a2a1c", "rgba(255,180,120,0.4)"]]);
+			const down = ease(clamp01(local / (span * 0.5)));
+			dropship(c, 300, 60 + down * 230, 1.4, t, 1 - down);
+			glow(c, 300, 300, 60 + down * 80, "#c9a07a", down * 0.4);
+			const show = reduced ? 1 : clamp01((local - span * 0.45) / 1);
+			c.save();
+			c.globalAlpha = show;
+			c.textAlign = "center";
+			c.font = "700 40px sans-serif";
+			c.shadowColor = "rgba(255,120,60,0.9)";
+			c.shadowBlur = 24;
+			c.fillStyle = "#ffe8d6";
+			c.fillText("CENA ŚWITU", W / 2, 130);
+			c.shadowBlur = 0;
+			c.font = "12px monospace";
+			c.fillStyle = "rgba(255,210,180,0.85)";
+			c.fillText("A K T   I I", W / 2, 154);
+			c.restore();
+		},
+	];
+	const SPEC = { shots: SHOTS, titles, places, captions, lengths: LENGTHS, tints: ["#a0602a", "#2a6f8f", "#2a8f80", "#a0582a", "#7a3a1a", "#a0301a", "#4f7f9f", "#a0582a"], label: "UJĘCIE PROLOGU AKTU II", alarm: [5], receive: [1, 2] };
 	function draw(c, time, reduced = false) {
 		return K.render(c, time, reduced, SPEC);
 	}
-	return { draw, captions, titles, duration };
+	return { draw, captions, titles, duration, lengths: LENGTHS };
 })();

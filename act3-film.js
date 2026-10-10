@@ -1,20 +1,39 @@
-/* Act III prologue "Przebudzenie Roju": four 5-second shots in the style of the campaign films (campaign-film.js
-   kit and director): the artefacts of the frontier pulsing as one on a holographic star map; the glowing thicket
-   of Lumeria V, the Swarm crawling out of the crystal caves; the fleets of the Colonies and of the Dominium side by
-   side over Nivalis, a cloud of the Swarm coming; the Heart of the Swarm beating under the magma of Pyrrhos, an
-   orbital strike falling. */
+/* Act III prologue "Przebudzenie Roju" (retold in 0.171 as a story of about 75 seconds leading to chapter VII), in
+   the style of the campaign films (campaign-film.js — its kit and director). Eight shots of their own lengths
+   (LENGTHS): the fall of Hefajstos as the act II decision made it (blown up, or switched off with the technicians
+   flying out); the artefacts of the frontier beating as one; Dr Tessa's lab — the pattern in the crystal is alive;
+   the Swarm spreading over the tactical map; Varn's call (grateful or bitter, by the same decision); the fleets of
+   the Colonies and of the Dominium over Nivalis; the Heart of the Swarm under the magma of Pyrrhos; the landing on
+   Lumeria V among the crawlers, the act's title. Act3Film.prepare(choices) sets the campaign's decisions
+   (CampaignProgress.choices) before it plays. */
 const Act3Film = (() => {
-	const duration = 20;
-	const titles = ["AKT III / PRZEBUDZENIE ROJU", "LUMERIA V", "SOJUSZ Z KONIECZNOŚCI", "SERCE ROJU"];
-	const captions = [
-		"Od wyłączenia Hefajstosa artefakty w całym pograniczu biją jednym rytmem. Coś odpowiada na ich wezwanie.",
-		"Na Lumerii V z kryształowych grot wyszło coś żywego. Rój nie zna litości ani strachu.",
-		"Dominium traci kolejne światy. Komandor Varn proponuje to, co wczoraj byłoby nie do pomyślenia: sojusz.",
-		"Serce Roju bije pod rzekami magmy Pyrrhosa. Uciszysz je — albo pogranicze stanie się jego gniazdem.",
+	const LENGTHS = [9, 9, 10, 9, 10, 9, 10, 10];
+	const duration = LENGTHS.reduce((n, l) => n + l, 0);
+	let choices = {};
+	const burnt = () => choices.colony6 === "destroy",
+		saved = () => choices.colony6 === "evacuate";
+	const titles = ["UPADEK HEFAJSTOSA", "RYTM ARTEFAKTÓW", "ŻYWY KRYSZTAŁ", "MAPA ROJU", "WEZWANIE VARNA", "SOJUSZ Z KONIECZNOŚCI", "SERCE ROJU", "AKT III · PRZEBUDZENIE ROJU"];
+	const captions = () => [
+		burnt()
+			? "Hefajstos runął w ogniu. Blokada pogranicza upadła razem z nim, a ruiny kompleksu płonęły jeszcze przez wiele dni."
+			: saved()
+				? "Hefajstos zgasł. Technicy Dominium odlecieli wahadłowcami, a blokada pogranicza upadła razem z kompleksem."
+				: "Hefajstos zgasł, a blokada pogranicza upadła razem z nim. Na Vulkanie IX zapadła cisza.",
+		"Tej samej nocy artefakty obcych w całym pograniczu zaczęły bić jednym rytmem. Coś odpowiadało na ich wezwanie.",
+		"Dr Tessa zbadała odłamek z Khepri. Wzór w krysztale nie był maszyną. Był żywy — i rósł.",
+		"Na mapach sektora pojawiły się fioletowe plamy. Rój budził się świat po świecie, zaczynając od Lumerii V.",
+		burnt()
+			? "Komandor Varn nie wybaczył Hefajstosa. Ale Rój pożerał jego światy — a wróg mojego wroga to jeszcze nie przyjaciel."
+			: saved()
+				? "Komandor Varn pamiętał o uratowanych technikach. Pierwszy raz Dominium nie żądało — prosiło o pomoc."
+				: "Komandor Varn wywołał Kolonie. Dominium traciło kolejne światy i proponowało to, co wczoraj było nie do pomyślenia.",
+		"Nad Nivalis floty, które jeszcze niedawno do siebie strzelały, mogą stanąć ramię w ramię.",
+		"A pod rzekami magmy Pyrrhosa bije Serce Roju. Uciszysz je — albo pogranicze stanie się jego gniazdem.",
+		"Najpierw Lumeria V, gdzie sygnał jest najsilniejszy. Zdobądź artefakt, zanim zabierze go Rój.",
 	];
-	const places = ["SEKTOR 07 · SIEĆ ARTEFAKTÓW", "LUMERIA V · GĄSZCZ SZEPTÓW", "NIVALIS · ORBITA", "PYRRHOS · SERCE ROJU"];
+	const places = ["VULKAN IX · ORBITA", "SEKTOR 07 · SIEĆ ARTEFAKTÓW", "STACJA CISZY · LABORATORIUM", "SEKTOR 07 · MAPA TAKTYCZNA", "KANAŁ DOMINIUM · SZYFR VARNA", "NIVALIS · ORBITA", "PYRRHOS · SERCE ROJU", "LUMERIA V · GĄSZCZ SZEPTÓW"];
 	const K = CampaignFilm.kit,
-		{ W, H, rnd, clamp01, ease, poly, glow, flare, stars, nebula, planet, capital, fighter, beam } = K;
+		{ W, H, rnd, clamp01, ease, poly, glow, flare, stars, nebula, planet, capital, fighter, freighter, beam, dropship, holo } = K;
 	const VIOLET = "#c98cff";
 
 	// A crystal shard: a faceted prism, lit from inside.
@@ -77,17 +96,18 @@ const Act3Film = (() => {
 		glow(c, x, y, r * 1.2, "#7a3aaa", 0.25);
 	}
 
-	const SHOTS = [
+	// The shots of the first prologue, now parts of the story.
+	const PART = [
 		// The artefacts beating as one: a holo star map of the frontier, five artefacts pulsing in step,
 		// lines of light joining them, "RYTM: ZSYNCHRONIZOWANY".
-		(c, t, local) => {
+		(c, t, local, reduced, span = 5) => {
 			c.fillStyle = "#05030c";
 			c.fillRect(0, 0, W, H);
 			nebula(c, t, [[480, 200, 380, "#3a1a5a", 0.6, 0], [200, 120, 220, "#1a2a5a", 0.4, 1]]);
 			stars(c, t, 2, 220, 41, "#e6d6ff");
 			const pts = [[180, 150], [340, 260], [480, 120], [640, 240], [800, 150]];
 			const beat = Math.pow(Math.max(0, Math.sin(t * Math.PI * 1.2)), 6),
-				sync = clamp01(local / 2.5);
+				sync = clamp01(local / (span * 0.45));
 			// Rings of the map.
 			c.strokeStyle = "rgba(201,140,255,0.15)";
 			for (let k = 0; k < 6; k++) {
@@ -148,8 +168,8 @@ const Act3Film = (() => {
 			flare(c, 90, 60, 0.4, "#bfe6ff");
 		},
 		// Pyrrhos: the Heart of the Swarm glowing through cracks in the magma, beating; the Swarm rising; an orbital
-		// strike from Varn's station falls; the act's title.
-		(c, t, local, reduced) => {
+		// strike from Varn's station falls (and the act's title, when asked).
+		(c, t, local, reduced, span = 5, withTitle = true) => {
 			const sky = c.createLinearGradient(0, 0, 0, H);
 			sky.addColorStop(0, "#0c0612");
 			sky.addColorStop(0.7, "#3a1020");
@@ -186,12 +206,13 @@ const Act3Film = (() => {
 			// The Swarm rising from the heart.
 			swarm(c, 480, 150 - local * 6, 150, t, 300);
 			// The orbital strike: a beam from above, the hit flaring.
-			const strike = clamp01((local - 1.6) / 0.4) * (1 - clamp01((local - 2.6) / 0.6));
+			const strike = clamp01((local - span * 0.32) / 0.4) * (1 - clamp01((local - span * 0.52) / 0.6));
 			if (strike > 0) {
 				beam(c, 600, 0, 560, 300, "#ffd28a", 4, strike);
 				glow(c, 560, 300, 160 * strike, "#fff0c0", strike);
 			}
 			capital(c, 100 + local * 12, 70, 0.55, t, true);
+			if (!withTitle) return;
 			const show = reduced ? 1 : clamp01((local - 2.8) / 0.9);
 			c.save();
 			c.globalAlpha = show;
@@ -208,9 +229,173 @@ const Act3Film = (() => {
 			c.restore();
 		},
 	];
-	const SPEC = { shots: SHOTS, titles, places, captions, tints: ["#6a2a8f", "#2a8f80", "#4f6f9f", "#8f2a6a"], label: "UJĘCIE PROLOGU AKTU III", alarm: [3], receive: [0] };
+	// The frontier on the tactical map (shots 4 and 5): the worlds, by name.
+	const WORLDS = [[230, 250, "LUMERIA V"], [380, 150, "NIVALIS"], [520, 290, "PYRRHOS"], [650, 170, "KHEPRI IV"], [790, 260, "EOS"], [470, 90, "VULKAN IX"]];
+
+	const SHOTS = [
+		// 1 · The fall of Hefajstos: Vulkan IX from orbit, the complex's beams of energy failing — then a blast and a
+		// burning scar (destroy), or its lights going out one by one and shuttles flying away (evacuate).
+		(c, t, local, reduced, span) => {
+			nebula(c, t, [[700, 120, 300, "#4a1a10", 0.5, 1]]);
+			stars(c, t, 3, 200, 301, "#ffe0d0");
+			const fall = clamp01((local - 1.5) / (span * 0.35));
+			planet(c, 480, 470, 300, { base: "#6a2a1a", dark: "#1a0806", atmo: "#ff8a4a", light: -2.2, cities: burnt() ? 0 : 0.6 * (1 - fall), t, seed: 301 });
+			// The beams pulled out of the planet, dying.
+			for (let k = 0; k < 4; k++) beam(c, 400 + k * 50, 190, 380 + k * 70, 0, "#ff9a4a", 3, (1 - fall) * (0.5 + 0.3 * Math.sin(t * 5 + k)));
+			// The complex on the limb.
+			for (let k = 0; k < 9; k++) {
+				const out = clamp01(fall * 1.4 - k * 0.06);
+				glow(c, 420 + k * 15, 186 + Math.abs(k - 4) * 2, 9, "#ffd28a", burnt() ? 1 - fall : 1 - out);
+			}
+			if (burnt()) {
+				const blast = clamp01((local - span * 0.4) / 1.2),
+					fade = 1 - clamp01((local - span * 0.6) / 2);
+				if (blast > 0) {
+					glow(c, 480, 186, 40 + blast * 260, "#fff0c0", fade * 0.9 + 0.1);
+					glow(c, 480, 186, 30 + blast * 90, "#ff7a2a", 0.8);
+					c.strokeStyle = `rgba(255,200,140,${0.6 * fade})`;
+					c.lineWidth = 3;
+					c.beginPath();
+					c.ellipse(480, 186, blast * 340, blast * 90, 0, 0, Math.PI * 2);
+					c.stroke();
+				}
+			} else
+				for (let i = 0; i < 4; i++) {
+					const p = clamp01((local - span * 0.35 - i * 0.7) / 4);
+					if (p > 0 && p < 1) freighter(c, 470 + i * 12 + p * 420, 186 + i * 14 - p * 30, 0.5 + p * 0.4, t, i);
+				}
+			c.font = "10px monospace";
+			c.fillStyle = "rgba(255,210,170,0.9)";
+			c.fillText(`HEFAJSTOS · ${burnt() ? (local > span * 0.4 ? "SYGNAŁ UTRACONY" : "PRZECIĄŻENIE RDZENIA") : `ODŁĄCZANIE ${Math.round(fall * 100)}%`}`, 620, 92);
+			c.fillText(`BLOKADA SEKTORA: ${fall >= 1 ? "UPADŁA" : "AKTYWNA"}`, 620, 106);
+		},
+		// 2 · The artefacts of the frontier beating as one.
+		PART[0],
+		// 3 · Dr Tessa's lab: a crystal shard under the scanner, its pattern growing like a living thing.
+		(c, t, local, reduced, span) => {
+			c.fillStyle = "#0a0712";
+			c.fillRect(0, 0, W, H);
+			glow(c, 300, 260, 260, "#4a2a6a", 0.4);
+			holo(c, "tessa", "DR MIRA TESSA · EKIPA BADAWCZA", 690, 96, 170, t, reduced, "#c9a060", "#f0cf8a");
+			// The pedestal and the shard, the scanner's ring going up and down.
+			poly(c, [[230, 330], [370, 330], [350, 300], [250, 300]], "#2a2236");
+			crystal(c, 300, 300, 90, 22, 0, 0.4 + 0.2 * Math.sin(t * 2.4));
+			const ring = 300 - (0.5 + 0.5 * Math.sin(t * 1.6)) * 90;
+			c.strokeStyle = "rgba(127,231,220,0.7)";
+			c.lineWidth = 2;
+			c.beginPath();
+			c.ellipse(300, ring, 46, 10, 0, 0, Math.PI * 2);
+			c.stroke();
+			// The pattern: a branching growth, deeper each second.
+			const grow = reduced ? 1 : clamp01(local / (span - 2));
+			c.save();
+			c.strokeStyle = "#e0b0ff";
+			c.globalAlpha = 0.8;
+			c.lineWidth = 1.2;
+			const branch = (x, y, a, len, depth) => {
+				if (depth > grow * 6 || len < 4) return;
+				const x2 = x + Math.cos(a) * len,
+					y2 = y + Math.sin(a) * len;
+				c.beginPath();
+				c.moveTo(x, y);
+				c.lineTo(x2, y2);
+				c.stroke();
+				branch(x2, y2, a - 0.5, len * 0.72, depth + 1);
+				branch(x2, y2, a + 0.45, len * 0.68, depth + 1);
+			};
+			branch(500, 330, -Math.PI / 2, 52, 0);
+			c.restore();
+			c.font = "10px monospace";
+			c.fillStyle = "rgba(240,210,160,0.9)";
+			c.fillText("ODŁAMEK · KHEPRI IV", 240, 110);
+			c.fillText(`WZROST STRUKTURY +${Math.round(grow * 340)}%`, 440, 110);
+			if (grow > 0.7) {
+				c.fillStyle = "#ff9aff";
+				c.fillText("KLASYFIKACJA: ORGANIZM", 440, 124);
+			}
+		},
+		// 4 · The tactical map: the Swarm's violet stains spreading from Lumeria V world after world.
+		(c, t, local, reduced, span) => {
+			c.fillStyle = "#04060c";
+			c.fillRect(0, 0, W, H);
+			c.fillStyle = "rgba(127,231,220,0.08)";
+			for (let x = 0; x < W; x += 40) c.fillRect(x, 0, 1, H);
+			for (let y = 0; y < H; y += 40) c.fillRect(0, y, W, 1);
+			const spread = reduced ? 0.8 : clamp01(local / (span - 1.5));
+			let lost = 0;
+			WORLDS.forEach(([x, y, name], i) => {
+				const d = Math.hypot(x - 230, y - 250) / 600,
+					hit = clamp01((spread - d) * 3);
+				if (hit > 0) glow(c, x, y, 30 + hit * 70, "#9a3aff", 0.5 * hit);
+				if (hit > 0.5) lost++;
+				glow(c, x, y, 8, hit > 0.5 ? "#ff7aff" : "#7fe7ff", 0.9);
+				c.font = "10px monospace";
+				c.fillStyle = hit > 0.5 ? "rgba(255,170,255,0.9)" : "rgba(170,240,230,0.85)";
+				c.fillText(name, x + 12, y - 8);
+			});
+			swarm(c, 230 + spread * 300, 250 - spread * 40, 60 + spread * 140, t, 260);
+			c.font = "11px monospace";
+			c.fillStyle = "rgba(255,170,255,0.95)";
+			c.fillText(`ŚWIATY ZARAŻONE: ${lost}/${WORLDS.length}`, 620, 92);
+		},
+		// 5 · Varn's call: the commander on the Dominium channel, his flagship behind, the offer typed out.
+		(c, t, local, reduced, span) => {
+			nebula(c, t, [[700, 200, 340, "#4a1410", 0.5, -1]]);
+			stars(c, t, 2, 160, 305, "#ffd6c8");
+			capital(c, 560 + local * 6, 260, 1.3, t, true);
+			holo(c, "varn", "KMDR ARIS VARN · DOMINIUM", 120, 96, 170, t, reduced, "#c0503a", "#e9a17a");
+			const text = burnt() ? "ZAWIESZENIE BRONI · CEL: RÓJ · BEZ POSIŁKÓW" : saved() ? "DŁUG ZA HEFAJSTOS · SOJUSZ · CEL: RÓJ" : "PROPOZYCJA: SOJUSZ · CEL: SERCE ROJU",
+				typed = reduced ? 1 : clamp01((local - 1) / (span * 0.5));
+			c.font = "11px monospace";
+			c.fillStyle = "rgba(255,200,180,0.95)";
+			c.fillText(text.slice(0, Math.floor(typed * text.length)), 360, 330);
+			c.fillText("KANAŁ SZYFROWANY · DOMINIUM → KOLONIE", 360, 92);
+		},
+		// 6 · The fleets of both sides over Nivalis, the Swarm closing in.
+		PART[2],
+		// 7 · The Heart of the Swarm under Pyrrhos, the orbital strike.
+		(c, t, local, reduced, span) => PART[3](c, t, local, reduced, span, false),
+		// 8 · Lumeria V: the dropship coming down into the glowing thicket among the crawlers, the act's title.
+		(c, t, local, reduced, span) => {
+			PART[1](c, t, local, reduced, span);
+			const down = ease(clamp01(local / (span * 0.5)));
+			dropship(c, 250 + down * 20, 40 + down * 250, 1.3, t, 1 - down * 0.8);
+			glow(c, 270, 320, 40 + down * 80, "#7fe7ff", down * 0.35);
+			const show = reduced ? 1 : clamp01((local - span * 0.45) / 1);
+			c.save();
+			c.globalAlpha = show;
+			c.textAlign = "center";
+			c.font = "700 38px sans-serif";
+			c.shadowColor = "rgba(201,140,255,0.95)";
+			c.shadowBlur = 26;
+			c.fillStyle = "#f4e6ff";
+			c.fillText("PRZEBUDZENIE ROJU", W / 2, 120);
+			c.shadowBlur = 0;
+			c.font = "12px monospace";
+			c.fillStyle = "rgba(230,200,255,0.85)";
+			c.fillText("A K T   I I I", W / 2, 144);
+			c.restore();
+		},
+	];
+	let SPEC = null;
+	function prepare(next = {}) {
+		choices = { ...next };
+		SPEC = { shots: SHOTS, titles, places, captions: captions(), lengths: LENGTHS, tints: [burnt() ? "#a0301a" : "#a0582a", "#6a2a8f", "#6a4a8f", "#8f2a8f", "#a0402a", "#4f6f9f", "#8f2a6a", "#2a8f80"], label: "UJĘCIE PROLOGU AKTU III", alarm: [3, 6], receive: [1, 4] };
+		return api;
+	}
 	function draw(c, time, reduced = false) {
+		if (!SPEC) prepare(choices);
 		return K.render(c, time, reduced, SPEC);
 	}
-	return { draw, captions, titles, duration };
+	const api = {
+		draw,
+		prepare,
+		duration,
+		lengths: LENGTHS,
+		titles,
+		get captions() {
+			return SPEC ? SPEC.captions : captions();
+		},
+	};
+	return api;
 })();

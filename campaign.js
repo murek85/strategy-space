@@ -22,6 +22,8 @@
 		colony3: ["arsenal", "prisoners"],
 		colony6: ["destroy", "evacuate"],
 		colony8: ["trust", "distance"],
+		colony12: ["garrison", "shipyard"],
+		colony13: ["truce", "rout"],
 	};
 	class CampaignProgress {
 		constructor(storage) {

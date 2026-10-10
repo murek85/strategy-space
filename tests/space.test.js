@@ -313,3 +313,8 @@ test("three more maps in space, each its own world: layout, look and storms", ()
 	assert.ok(new Game(7, "graveyard").obstacles.some((o) => o.kind === "hulk"));
 	assert.equal(new Game(7, "abyss").weather.name, "Rozbłysk dysku");
 });
+
+test("no land animals on maps in space (the decorative fauna of the 2D and WebGL boards)", () => {
+	for (const id of ["orbit", "glacis", "abyss", "graveyard", "colony10", "colony14"]) assert.equal(new RTS.Game(42, id).wildlife().length, 0, id);
+	assert.ok(new RTS.Game(42, "horizon").wildlife().length > 0, "planets keep theirs");
+});

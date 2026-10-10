@@ -398,6 +398,28 @@ export function createScatter3D(THREE, { world, heightAt, fogged }) {
 				["grass", plant("#9aa7a0"), 900, [4, 7], "meadow", false, 0.2],
 				["tree", TREES.snowPine(), 150, [28, 46], "any", true, 0.12],
 			];
+		// Thalassa (0.165): lush islands — grass, ferns, broad trees, sand and shells on the bare patches.
+		if (theme === "ocean")
+			return [
+				["grass", plant("#6f9a4a"), 3400, [5, 10], "meadow", false, 0.25],
+				["tallGrass", plant("#7fa456"), 700, [9, 15], "meadow", false, 0.2],
+				["fern", plant("#3f7a44"), 600, [7, 13], "meadow", false, 0.2],
+				["shrub", plant("#4f7a3a"), 450, [7, 13], "any", true, 0.2],
+				["pebble", std("#c8b88a"), 2600, [1.4, 3.4], "bare", false, 0.2],
+				["stone", std("#8a8478"), 700, [3, 8], "bare", true, 0.2],
+				["tree", TREES.broad(), 160, [26, 40], "meadow", true, 0.15],
+				["tree", TREES.acacia(false), 60, [24, 36], "any", true, 0.15],
+			];
+		// The crystal ridges of Nivalis (0.165): frost, ice pebbles and shards of crystal glinting in the snow.
+		if (theme === "crystal")
+			return [
+				["pebble", std("#b8ccd8"), 3200, [1.4, 3.4], "any", false, 0.2],
+				["angular", std("#8aa0b0"), 500, [6, 12], "bare", true, 0.15],
+				["shard", std("#bfefff", { roughness: 0.15, metalness: 0.1, emissive: "#3fb8e0", emissiveIntensity: 0.3, transparent: true, opacity: 0.88 }), 900, [4, 11], "any", true, 0.1],
+				["shard", std("#d4c4ff", { roughness: 0.15, metalness: 0.1, emissive: "#8a5ae0", emissiveIntensity: 0.3, transparent: true, opacity: 0.88 }), 300, [4, 9], "any", true, 0.1],
+				["grass", plant("#9aa7a0"), 600, [4, 7], "meadow", false, 0.2],
+				["tree", TREES.snowPine(), 60, [26, 42], "any", true, 0.12],
+			];
 		if (biome === "ash") {
 			const list = [
 				["stone", std(theme === "magma" ? "#2f2928" : "#3e3836"), 2000, [3, 9], "any", true, 0.25],
@@ -508,9 +530,9 @@ export function createScatter3D(THREE, { world, heightAt, fogged }) {
 			kinds.push({ shape, material, shadow, spots });
 		}
 		// Lake shores.
-		for (const [shape, material, perLake, [lo, hi], inner, outer, shadow, shade] of shorePalette(mission.biome)) {
+		for (const [shape, material, perLake, [lo, hi], inner, outer, shadow, shade] of shorePalette(mission.theme === "ocean" ? "dust" : mission.biome)) {
 			const spots = [];
-			for (const w of (game.waters || []).filter((w) => !w.kind)) {
+			for (const w of (game.waters || []).filter((w) => !w.kind || w.kind === "sea")) {
 				const n = Math.round(perLake * Math.sqrt((w.rx * w.ry) / 9000) * density);
 				for (let i = 0; i < n; i++) {
 					const a = rand() * Math.PI * 2,

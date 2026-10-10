@@ -22,6 +22,7 @@
 <script src="../campaign-act2.js"></script>
 <script src="../scenario-modes.js"></script>
 <script src="../frontier-maps.js"></script><script src="../themed-maps.js"></script>
+<script src="../campaign-maps.js"></script>
 <script src="../support-rules.js"></script>
 <script src="../scenario-setup.js"></script>
 <script src="../scenario-challenges.js"></script>
@@ -41,6 +42,7 @@
 <script src="../faction-art.js"></script>
 <script src="../swarm-art.js"></script>
 <script src="../map-art.js"></script><script src="../themed-art.js"></script>
+<script src="../world-art.js"></script>
 <script src="../space-art.js"></script>
 <script src="../knowledge.js"></script>
 <script src="../galaxy-map.js"></script>
@@ -276,14 +278,23 @@
 			click("confirm");
 			check("Potwierdzony nowy start", starts === 2 && !menu.active);
 			menu.show("single");
+			try {
+				localStorage.removeItem("pogranicze-intro-v1");
+			} catch {}
 			click("campaign");
 			check("Kampania otwiera intro", menu.screen === "intro");
-			check("Intro wybiera osobny motyw", musicModes.at(-1) === "intro");
+			check("Intro wybiera osobny motyw", musicModes.at(-1) === "prologue");
 			click("skip-intro");
 			check(
 				"Pominięcie przywraca muzykę menu",
 				musicModes.at(-1) === "menu",
 			);
+			menu.show("single");
+			click("campaign");
+			check("Raz obejrzane intro nie wraca przy wejściu", menu.screen === "campaign");
+			click("intro");
+			check("Przycisk intro przy akcie I odtwarza intro", menu.screen === "intro");
+			click("skip-intro");
 			document.querySelector('[data-mission="colony1"]').click();
 			click("launch");
 			click("confirm");

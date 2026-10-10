@@ -9,6 +9,15 @@
 	filter: drop-shadow(0 1px 3px #000b);
 	will-change: transform;
 }
+/* As a popover (above modal dialogs): no default popover box. */
+#game-pointer[popover] {
+	inset: 0 auto auto 0;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	overflow: visible;
+}
 #game-pointer[hidden] {
 	display: none;
 }

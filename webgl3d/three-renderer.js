@@ -26,6 +26,7 @@ import { createSceneLife3D } from "./scene-life-3d.js";
 import { createScatter3D } from "./scatter-3d.js";
 import { createObjectives3D } from "./objectives-3d.js";
 import { createMarks3D } from "./marks-3d.js";
+import { createWorld3D } from "./world-3d.js";
 import { createSky3D, cloudShade } from "./sky-3d.js";
 import { nightLightShade } from "./night-lights-3d.js";
 import { createRelief3D } from "./relief-3d.js";
@@ -115,6 +116,8 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 	let beacons = [];
 	// Wall links, tracks, craters, habitats (webgl3d/marks-3d.js).
 	const marks = createMarks3D(THREE, { world, heightAt: (x, y) => heightAt(x, y), fogged: (m) => fogged(m, true) });
+	// The tide, holes in the ice, comets (webgl3d/world-3d.js).
+	const worldFx = createWorld3D(THREE, { world, heightAt: (x, y) => heightAt(x, y) });
 	// Placement preview: translucent models of the building to place, green where it can stand, red where
 	// it cannot (one per wall segment while a wall is dragged). The overlay keeps the footprint circle.
 	const ghostOk = new THREE.MeshBasicMaterial({ color: "#aee5c7", transparent: true, opacity: 0.42, depthWrite: false }),
@@ -465,10 +468,11 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			cloudTexture.colorSpace = THREE.SRGBColorSpace;
 		}
 		nebula = new THREE.Group();
-		const R = RTS.SPACE?.nebula?.radius || 230;
 		// Layers of cloud from below the plane to over the ships: as the camera moves they slide apart and
-		// the cloud reads as a volume.
-		(game.gasFields || []).forEach((f, i) => {
+		// the cloud reads as a volume. The clouds round the gas fields and the map's own (0.164).
+		const clouds = game.nebulaClouds?.() || (game.gasFields || []).map((f) => ({ x: f.x, y: f.y, r: RTS.SPACE?.nebula?.radius || 230 }));
+		clouds.forEach((f, i) => {
+			const R = f.r;
 			for (let k = 0; k < 12; k++) {
 				const a = k * 2.4 + i,
 					d = k ? R * (0.3 + ((k * 37) % 10) / 16) : 0,
@@ -2492,6 +2496,8 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		magma: { light: [1.08, 0.97, 0.88], shadow: [1.0, 0.94, 0.95], saturation: 1.08 },
 		frozenhive: { light: [1.0, 1.0, 1.05], shadow: [0.96, 0.95, 1.08], saturation: 1.0 },
 		derelict: { light: [1.04, 0.99, 0.94], shadow: [0.95, 0.97, 1.03], saturation: 0.98 },
+		ocean: { light: [1.03, 1.02, 0.97], shadow: [0.9, 0.98, 1.08], saturation: 1.12 },
+		crystal: { light: [0.98, 1.01, 1.07], shadow: [0.94, 0.94, 1.12], saturation: 1.06 },
 		space: { light: [1.02, 1.0, 0.97], shadow: [0.88, 0.94, 1.14], saturation: 1.12 },
 	};
 	const NIGHT_SHADOW = new THREE.Color(0.86, 0.94, 1.14),
@@ -2704,6 +2710,7 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			scatter.update(game);
 			life.update(game.time, { fog: options.fog, colors: COLORS });
 			marks.update(game, { hidden, sun: sun.position.clone().sub(sun.target.position).normalize() });
+			worldFx.update(game);
 			syncGhosts();
 			syncRallies();
 			objectives.update(game, clock, { beacons, colorOf: (team) => game.colorFor?.(team) || COLORS[team] || "#f5e27a" });

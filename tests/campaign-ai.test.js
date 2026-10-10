@@ -111,8 +111,11 @@ test("the campaign's commander plays the Dominium's style without its faction ru
 	assert.ok(L.interval > plain.interval && L.attackSize[0] > Math.round(plain.attackSize[0] * RTS.CAMPAIGN_AI.colony3.attackSize), "rarer, bigger attacks");
 	assert.equal(L.raids, false);
 	assert.equal(L.uplinkAt, null, "no orbital strikes in the campaign chapters");
-	// Its factory turns out bastions and heavy machines.
-	run(g, 480);
+	// Its factory turns out bastions and heavy machines (the idle player's centre is kept standing).
+	for (let i = 0; i < 480 * 30 && !g.result; i++) {
+		g.hq(0).hp = g.hq(0).maxHp;
+		g.tick(1 / 30);
+	}
 	const built = g.entities.filter((e) => e.team === 1 && ["sentinel", "heavy"].includes(e.type));
 	assert.ok(built.length > 0, "Dominium vehicles");
 	assert.equal(g.entities.filter((e) => e.team === 1 && e.type === "raider").length, 0);

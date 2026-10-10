@@ -1,6 +1,6 @@
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
-const { GameAudio } = require("../audio.js");
+const { GameAudio, STORIES } = require("../audio.js");
 
 test("preferences persist and volume is clamped", () => {
 	const data = new Map(),
@@ -214,7 +214,7 @@ test("music and effects volume are independent and persisted", () => {
 	assert.equal(r.musicVolume, 1);
 	assert.equal(r.volume, 0.8);
 });
-test("intro has its own six-part thirty-second arrangement", () => {
+test("the opening (0.168.4): an Interstellar-like departure, 30 s and 20 s, ending on a question", () => {
 	const a = new GameAudio(),
 		notes = [];
 	a.musicMode = "intro";
@@ -224,6 +224,23 @@ test("intro has its own six-part thirty-second arrangement", () => {
 	assert.equal(t, 30);
 	assert.ok(new Set(notes.map((n) => n[0])).size >= 6);
 	assert.ok(notes.every((n) => n.slice(1).every(Number.isFinite)));
+	// The parts at their times: the piano call and the slow clock, the figure, the build, the cut, the last note.
+	for (const [total, length] of [[60, 30], [40, 20]]) {
+		const b = new GameAudio(),
+			at = [];
+		b.musicMode = total === 60 ? "intro" : "intro:20";
+		b.instrument = (kind, freq, start) => at.push({ kind, freq, start });
+		let time = 0;
+		for (let step = 0; step < total + 10; step++) time += b.musicStep(step, time);
+		const between = (from, to, kind) => at.filter((n) => n.start >= from * length && n.start < to * length && (!kind || n.kind === kind));
+		assert.ok(between(0, 0.3, "piano").length >= 2 && between(0, 0.3, "tick").length >= 4, length + " the call");
+		assert.equal(between(0, 0.3, "taiko").length, 0, length + " no drums at first");
+		assert.ok(between(0.34, 0.66, "organ").length >= 12, length + " the figure");
+		assert.ok(between(0.67, 0.9, "taiko").length >= 3 && between(0.66, 0.7, "braam").length === 1, length + " the build");
+		const last = at.filter((n) => n.start >= 0.9 * length);
+		assert.ok(last.length === 2 && last.every((n) => n.kind === "piano"), length + " silence and one note");
+		assert.ok(!at.some((n) => n.start >= length), length + " nothing after the film");
+	}
 });
 test("activity audio follows visible working robots and respects pause", () => {
 	const a = new GameAudio(),
@@ -278,20 +295,21 @@ test("listening from the settings holds the theme and mood; the intro loops", ()
 	a.updateMusicState({ time: 100, entities: [], isVisible: () => true });
 	for (let step = 0; step < 40; step++) a.musicStep(step, step);
 	assert.equal(a.musicMood, "battle");
-	// The intro starts over (step 64 = step 0).
+	// The intro starts over (step 64 = step 0): the pedal, the drone and the clock.
 	a.previewMusic("intro");
 	const notes = [];
 	a.instrument = (...n) => notes.push(n[0]);
 	a.musicStep(64, 0);
-	assert.ok(notes.includes("drone") && notes.includes("braam"));
+	assert.ok(notes.includes("organ") && notes.includes("drone") && notes.includes("tick"));
 	assert.ok(a.stopPreview());
 	assert.equal(a.musicPreview, null);
 	assert.equal(a.stopPreview(), false);
 });
-test("four eerie themes: their own instruments, tempo and harmony; moods change them", () => {
+test("the eerie themes (and those of the new worlds, 0.167): their own instruments, tempo and harmony; moods change them", () => {
 	const sets = [],
 		seqs = [];
-	for (const mode of ["game:wreck", "game:hive", "game:lumen", "game:forge"]) {
+	const EERIE = ["game:wreck", "game:hive", "game:lumen", "game:forge", "game:tide", "game:crystal", "game:ruins", "game:bastion", "game:archive", "game:beacons", "game:ashes", "game:dunes", "game:frost", "game:skyfall", "game:oasis", "game:convoy", "game:signal"];
+	for (const mode of EERIE) {
 		const a = new GameAudio(),
 			notes = [];
 		a.musicMode = mode;
@@ -311,13 +329,72 @@ test("four eerie themes: their own instruments, tempo and harmony; moods change 
 		for (let step = 0; step < 32; step++) b.musicStep(step, step);
 		for (const kind of ["heart", "taiko", "braam"]) assert.ok(fight.includes(kind), mode + " battle " + kind);
 	}
-	assert.equal(new Set(sets).size, 4, sets.join(" | "));
-	assert.equal(new Set(seqs).size, 4);
+	assert.ok(new Set(sets).size >= 7, sets.join(" | "));
+	assert.equal(new Set(seqs).size, EERIE.length);
+	// The accents of the new worlds: the surf, glass bells, a marching snare.
+	const accents = (mode) => {
+		const a = new GameAudio(),
+			kinds = [];
+		a.musicMode = mode;
+		a.instrument = (...n) => kinds.push(n[0]);
+		let t = 0;
+		for (let step = 0; step < 128; step++) t += a.musicStep(step, t);
+		return kinds;
+	};
+	assert.ok(accents("game:tide").filter((k) => k === "hiss").length >= 6, "the surf");
+	assert.ok(accents("game:crystal").filter((k) => k === "bell").length > accents("game:hive").filter((k) => k === "bell").length, "glass bells");
+	assert.ok(accents("game:bastion").includes("snare") && !accents("game:ruins").includes("snare"), "the march");
+	// The valley of Eos: the beacon signals often in chapter I, rarely after the landing (XI); the same call.
+	const bells = (mode) => accents(mode).filter((k) => k === "bell").length;
+	assert.ok(bells("game:beacons") > bells("game:ashes") * 2 && bells("game:ashes") > 0, "the beacon");
+	// The archive under the ice: a music box (a high piano figure) and the ice cracking — neither in the crystal ridges.
+	const box = (mode) => {
+		const a = new GameAudio(),
+			notes = [];
+		a.musicMode = mode;
+		a.instrument = (...n) => notes.push(n);
+		let t = 0;
+		for (let step = 0; step < 256; step++) t += a.musicStep(step, t);
+		return { piano: notes.filter((n) => n[0] === "piano").length, cracks: notes.filter((n) => n[0] === "tick" && n[1] > 1000).length };
+	};
+	assert.ok(box("game:archive").piano >= 8 && box("game:archive").cracks >= 2, "the archive: " + JSON.stringify(box("game:archive")));
+	assert.equal(box("game:crystal").piano, 0);
+	assert.equal(box("game:crystal").cracks, 0);
+	// The ruins of Nadir: the call echoing off the walls, the citadel's gong, a ritual drum outside the fight.
+	const notesOf = (mode) => {
+		const a = new GameAudio(),
+			notes = [];
+		a.musicMode = mode;
+		a.instrument = (...n) => notes.push(n);
+		let t = 0;
+		for (let step = 0; step < 128; step++) t += a.musicStep(step, t);
+		return notes;
+	};
+	const ruins = notesOf("game:ruins"),
+		forge = notesOf("game:forge");
+	assert.ok(ruins.filter((n) => n[0] === "flute").length >= 2 * forge.filter((n) => n[0] === "flute").length, "echoes");
+	assert.ok(ruins.some((n) => n[0] === "bell" && n[1] < 80), "the gong");
+	assert.ok(ruins.filter((n) => n[0] === "taiko").length >= 8 && !forge.some((n) => n[0] === "taiko"), "the ritual drum");
+	// The Admiralty's bastion: the bugle on brass, low strings with the march, distant guns — none in the ruins.
+	const bastion = notesOf("game:bastion");
+	for (const kind of ["brass", "strings", "kick"]) {
+		assert.ok(bastion.some((n) => n[0] === kind), "the bastion " + kind);
+		assert.ok(!ruins.some((n) => n[0] === kind), "the ruins " + kind);
+	}
+	// The remaining maps (0.168): the wailing voice and the rumble of the dune sea, the harp of the islands and the
+	// oasis, the signal's code.
+	const dunes = notesOf("game:dunes"),
+		skyfall = notesOf("game:skyfall"),
+		signal = notesOf("game:signal");
+	assert.ok(dunes.some((n) => n[0] === "wail") && dunes.some((n) => n[0] === "bass"), "the dune sea");
+	assert.ok(skyfall.filter((n) => n[0] === "pluck").length >= 8 && !ruins.some((n) => n[0] === "pluck"), "the harp");
+	assert.ok(signal.filter((n) => n[0] === "bell" && n[3] < 0.3).length >= 6, "the code");
 });
-test("four space themes in the manner of Interstellar: organ figure, clock, piano; a driving battle", () => {
+test("the space themes in the manner of Interstellar (seven with 0.167): organ figure, clock, piano; a driving battle", () => {
 	const sets = [],
 		seqs = [];
-	for (const mode of ["game:orbit", "game:glacis", "game:void", "game:requiem"]) {
+	const SPACE = ["game:orbit", "game:glacis", "game:void", "game:requiem", "game:docks", "game:nebula", "game:comets"];
+	for (const mode of SPACE) {
 		const a = new GameAudio(),
 			notes = [];
 		a.musicMode = mode;
@@ -338,6 +415,127 @@ test("four space themes in the manner of Interstellar: organ figure, clock, pian
 		for (let step = 0; step < 32; step++) b.musicStep(step, step);
 		for (const kind of ["organ", "taiko", "braam", "tick"]) assert.ok(fight.includes(kind), mode + " battle " + kind);
 	}
-	assert.equal(new Set(seqs).size, 4);
+	assert.equal(new Set(seqs).size, SPACE.length);
 	assert.ok(new Set(sets).size >= 3, sets.join(" | "));
+});
+
+// 0.168.3 (0.170: 122 s): the finale's score, its parts on the film's shots.
+test("the campaign finale: an Interstellar-like score in step with the two-minute film", () => {
+	const vm = require("node:vm"),
+		fs = require("node:fs"),
+		path = require("node:path");
+	const ctx = vm.createContext({ Math, RTS: {} });
+	vm.runInContext(["campaign-film.js", "act4-film.js", "campaign-finale.js"].map((f) => fs.readFileSync(path.join(__dirname, "..", f), "utf8")).join("\n;\n") + ";globalThis.F = FinaleFilm;", ctx);
+	const F = ctx.F,
+		starts = F.lengths.reduce((out, l) => [...out, out.at(-1) + l], [0]);
+	assert.equal(F.duration, 122);
+	const a = new GameAudio(),
+		notes = [];
+	a.musicMode = "finale";
+	a.instrument = (kind, freq, start) => notes.push({ kind, freq, start });
+	let t = 0;
+	for (let step = 0; step < 260; step++) t += a.musicStep(step, t);
+	const at = (from, to, kind) => notes.filter((n) => n.start >= from && n.start < to && (!kind || n.kind === kind));
+	// The Gate (1): the drone, the blast as it cracks; the rifts (2): bells, no clock.
+	assert.ok(at(0, 0.1, "drone").length === 1 && at(5.9, 6.1, "braam").length === 1);
+	assert.ok(at(starts[1], starts[2], "bell").length >= 8 && at(starts[1], starts[2], "tick").length === 0);
+	// Home and Eos (3–4): the organ's figure; the beacon (5): the full organ and the bell chord.
+	assert.ok(at(starts[2], starts[4], "organ").length >= 30);
+	assert.ok(at(starts[4], starts[5], "bell").length >= 15 && at(starts[4], starts[5], "braam").length === 1);
+	// Hefajstos (6): the piano alone; the council (8): the brass chorale.
+	assert.ok(at(starts[5], starts[6], "piano").length >= 4 && at(starts[5], starts[6], "taiko").length === 0);
+	assert.ok(at(starts[7], starts[8], "brass").length >= 12);
+	// The people (10): the piano tune; the routes (12): drums gathering.
+	assert.ok(at(starts[9], starts[10], "piano").length >= 8);
+	assert.ok(at(starts[11], starts[12], "taiko").length >= 6);
+	// The end (13): the great chord in C, the cut, one bright note, nothing after the film.
+	assert.ok(at(starts[12], starts[12] + 0.1, "organ").some((n) => Math.abs(n.freq - 130.81) < 1));
+	assert.equal(at(118.2, 119).length, 0);
+	assert.ok(at(119, 120, "piano").length >= 1);
+	assert.equal(at(122, 200).length, 0);
+});
+// 0.169: the campaign prologue — 150 s of score telling the film's story, its parts on the film's shots.
+test("the campaign prologue: its score in step with the 150 s film", () => {
+	const vm = require("node:vm"),
+		fs = require("node:fs"),
+		path = require("node:path");
+	const ctx = vm.createContext({ Math });
+	vm.runInContext(fs.readFileSync(path.join(__dirname, "..", "campaign-film.js"), "utf8") + ";globalThis.F = CampaignFilm;", ctx);
+	const F = ctx.F,
+		starts = F.lengths.reduce((out, l) => [...out, out.at(-1) + l], [0]);
+	assert.equal(F.duration, 150);
+	assert.equal(F.lengths.length, 15);
+	const a = new GameAudio(),
+		notes = [];
+	a.musicMode = "prologue";
+	a.instrument = (kind, freq, start) => notes.push({ kind, freq, start });
+	let t = 0;
+	for (let step = 0; step < 320; step++) t += a.musicStep(step, t);
+	const at = (from, to, kind) => notes.filter((n) => n.start >= from && n.start < to && (!kind || n.kind === kind));
+	// The frontier (shots 1–4): the piano, bells in the network shot (3), no drums.
+	assert.ok(at(0, starts[4], "piano").length >= 30 && at(starts[2], starts[3], "bell").length >= 2);
+	assert.equal(at(0, starts[4], "taiko").length, 0);
+	// The blockade (shot 6): blasts and drums; the dark (7): no drums; the ultimatum (8): brass.
+	assert.ok(at(starts[5], starts[6], "braam").length >= 2 && at(starts[5], starts[6], "taiko").length >= 6);
+	assert.equal(at(starts[6], starts[7], "taiko").length, 0);
+	assert.ok(at(starts[7], starts[8], "brass").length >= 6);
+	// Lira (9–10): the lone piano, no drums.
+	assert.ok(at(starts[8], starts[10], "piano").length >= 8 && at(starts[8], starts[10], "taiko").length === 0);
+	// The mission (11–14): the organ's figure; drums in the run and the descent, none at the landing.
+	assert.ok(at(starts[10], starts[11], "organ").length >= 16);
+	assert.ok(at(starts[11], starts[13], "taiko").length >= 12 && at(starts[13], starts[14], "taiko").length === 0);
+	assert.ok(at(starts[12], starts[12] + 0.1, "braam").length === 1, "a blast as the descent begins");
+	// The title (15): the great chord, the cut, one bright note, nothing after the film.
+	assert.ok(at(starts[14], starts[14] + 0.1, "organ").length >= 6);
+	assert.equal(at(146.2, 147).length, 0);
+	assert.ok(at(147, 148, "piano").length >= 1);
+	assert.equal(at(150, 200).length, 0);
+	// Lira speaks in the transmission and at the landing.
+	assert.deepEqual(Object.keys(F.lines).map(Number), [9, 13]);
+});
+
+// 0.171: the prologues of acts II-IV — about 75 s each, a score of their own with its parts on the film's shots.
+test("the prologues of acts II-IV: their scores in step with the films", () => {
+	const vm = require("node:vm"),
+		fs = require("node:fs"),
+		path = require("node:path");
+	const ctx = vm.createContext({ Math });
+	vm.runInContext(["campaign-film.js", "act2-film.js", "act3-film.js", "act4-film.js"].map((f) => fs.readFileSync(path.join(__dirname, "..", f), "utf8")).join("\n;\n") + ";globalThis.L = { prologue2: Act2Film, prologue3: Act3Film, prologue4: Act4Film };", ctx);
+	for (const [mode, F] of Object.entries(ctx.L)) {
+		const P = STORIES[mode],
+			starts = F.lengths.reduce((out, l) => [...out, out.at(-1) + l], [0]);
+		assert.equal(F.duration, 76, mode);
+		assert.equal(F.lengths.length, 8, mode);
+		assert.deepEqual(P.parts.map(([at]) => at), starts.slice(0, -1), mode + ": the parts start with the shots");
+		assert.equal(P.end, F.duration, mode);
+		assert.equal(P.parts.at(-1)[1], "title", mode + ": the title on the last shot");
+		const a = new GameAudio(),
+			notes = [];
+		a.musicMode = mode;
+		a.instrument = (kind, freq, start) => notes.push({ kind, freq, start });
+		let t = 0;
+		for (let step = 0; step < 180; step++) t += a.musicStep(step, t);
+		const at = (from, to, kind) => notes.filter((n) => n.start >= from && n.start < to && (!kind || n.kind === kind));
+		assert.ok(notes.every((n) => Number.isFinite(n.freq) && n.freq > 20), mode + ": valid notes");
+		// Drums in the battles, none in the quiet; the great chord at the title, the cut and one note; nothing after.
+		for (const [i, [from, mood]] of P.parts.entries()) {
+			const to = P.parts[i + 1]?.[0] ?? P.end;
+			if (mood === "battle") assert.ok(at(from, to, "taiko").length >= 6, `${mode}: drums in the battle at ${from}`);
+			if (mood === "quiet" || mood === "hope") assert.equal(at(from, to, "taiko").length, 0, `${mode}: no drums at ${from}`);
+		}
+		const title = P.parts.at(-1)[0];
+		assert.ok(at(title, title + 0.1, "organ").length >= 6, mode + ": the great chord");
+		assert.equal(at(P.end - 3.9, P.end - 3).length, 0, mode + ": the cut");
+		assert.ok(at(P.end - 3, P.end - 2, "piano").length >= 1, mode + ": one bright note");
+		assert.equal(at(P.end, 200).length, 0, mode + ": nothing after the film");
+	}
+	// The decisions change the prologues of acts III and IV.
+	const three = (colony6) => ctx.L.prologue3.prepare({ colony6 }).captions,
+		four = (colony8) => ctx.L.prologue4.prepare({ colony8 }).captions;
+	assert.notEqual(three("destroy")[0], three("evacuate")[0]);
+	assert.notEqual(three("destroy")[4], three("evacuate")[4]);
+	assert.equal(three("destroy")[1], three("evacuate")[1]);
+	assert.notEqual(four("trust")[0], four("distance")[0]);
+	assert.equal(four("trust").length, 8);
+	assert.equal(typeof ctx.L.prologue4.parts.blackHole, "function", "the finale and the epilogues borrow its pieces");
 });

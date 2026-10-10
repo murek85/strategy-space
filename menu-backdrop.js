@@ -17,6 +17,8 @@ const MenuBackdrop = (() => {
 		magma: ["#8a3a24", "#1a0806", "#ff7a3a"],
 		frozenhive: ["#b8d0e0", "#2a3a50", "#c9b8ff"],
 		derelict: ["#6a6a66", "#141414", "#ffb08a"],
+		ocean: ["#3f8aa0", "#08202a", "#a8e8ff"],
+		crystal: ["#a8d8ec", "#283a50", "#d4c4ff"],
 	};
 	const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
 	const css = (v) => `rgb(${v.map(Math.round).join(",")})`;

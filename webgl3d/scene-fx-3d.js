@@ -147,6 +147,8 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 		crevasse: () => new THREE.MeshStandardMaterial({ color: "#1f4558", roughness: 0.04, metalness: 0.2, transparent: true, opacity: 0.9, normalMap: ripples, normalScale: new THREE.Vector2(0.25, 0.25) }),
 		glow: () => new THREE.MeshStandardMaterial({ color: "#123e48", emissive: "#0d4a52", emissiveIntensity: 0.3, roughness: 0.1, metalness: 0, transparent: true, opacity: 0.78, normalMap: ripples, normalScale: new THREE.Vector2(0.4, 0.4) }),
 		lava: () => new THREE.MeshStandardMaterial({ color: "#2a0d06", emissive: "#ffffff", emissiveMap: cracks, emissiveIntensity: 1.3, roughness: 0.85, metalness: 0 }),
+		// The sea of Thalassa (0.165): deeper, greener and less clear than a lake, with stronger waves.
+		sea: () => new THREE.MeshStandardMaterial({ color: "#1f6f86", roughness: 0.08, metalness: 0.1, transparent: true, opacity: 0.9, normalMap: ripples, normalScale: new THREE.Vector2(0.75, 0.75) }),
 	};
 	// The look of open water (lakes, crevasses, glowing pools; not lava), on top of the fog-of-war shader:
 	// small waves, a second ripple layer against tiling, the sky reflected at grazing angles (fresnel),
@@ -328,7 +330,7 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 		// Lakes and crevasses on level ground are flat mirrors; glowing pools and lava (chains of bodies
 		// along a channel) always lie on their bed.
 		// (On uneven shores a lake is still flat, at its lowest rim point.)
-		const level = kind === "lake" || kind === "crevasse" ? (rimHigh - rimLow < 8 ? rimHigh : rimLow) + 0.6 : null;
+		const level = kind === "lake" || kind === "crevasse" || kind === "sea" ? (rimHigh - rimLow < 8 ? rimHigh : rimLow) + 0.6 : null;
 		for (let y = Math.max(0, Math.floor((w.y - w.ry * 1.1) / STEP) * STEP); y <= Math.min(game.H, w.y + w.ry * 1.1); y += STEP)
 			for (let x = Math.max(0, Math.floor((w.x - w.rx * 1.1) / STEP) * STEP); x <= Math.min(game.W, w.x + w.rx * 1.1); x += STEP) {
 				const nx = (x - w.x) / w.rx,
@@ -1302,7 +1304,7 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 		let best = null,
 			bestD = Infinity;
 		for (const w of waters) {
-			if (w.kind !== "lake" && w.kind !== "crevasse") continue;
+			if (w.kind !== "lake" && w.kind !== "crevasse" && w.kind !== "sea") continue;
 			const box = w.box;
 			if (!box) continue;
 			const d = Math.hypot(Math.max(box.x0 - point.x, 0, point.x - box.x1), Math.max(box.y0 - point.y, 0, point.y - box.y1));

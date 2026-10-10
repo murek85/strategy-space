@@ -1,6 +1,49 @@
-# Kampania i oprawa: sceny łączności, wybory, filmy, menu i interfejs (wersje 0.99–0.122, 0.149–0.152.1; 2026-10-07–08)
+# Kampania i oprawa: sceny łączności, wybory, filmy, menu i interfejs (wersje 0.99–0.122, 0.149–0.152.1, 0.169, 0.171; 2026-10-07–09)
 
 Najnowsze zmiany na górze. Zakres: portrety i sceny łączności, wybory, głosy, intro, prologi i epilogi, ekrany końca i ładowania, menu, pauza, ekrany menu, interfejs gry, drzewo rozwoju, panel badań, ekran kampanii, odblokowanie do testów, filmy na pełnym ekranie.
+
+## Nowe prologi aktów II–IV (wersja 0.171, 2026-10-09)
+
+Prologi aktów II, III i IV (`act2-film.js`, `act3-film.js`, `act4-film.js`) były 20-sekundowymi zapowiedziami w 4 ujęciach. Teraz każdy opowiada historię prowadzącą do pierwszego rozdziału aktu: 8 ujęć o własnych długościach (`LENGTHS`, `lengths` w specyfikacji reżysera `CampaignFilm.kit.render`), razem 76 s. Ujęcia z poprzednich prologów zostały częściami nowych historii (`PART`), a tytuł aktu pojawia się dopiero w ostatnim ujęciu. Każdy prolog ma własną muzykę (`prologue2`–`prologue4`, zob. `docs/AUDIO.md`). Ekrany menu `intro2`–`intro4` biorą długość paska postępu z `duration` filmu, a podpis brzmi „Prolog aktu … · ok. 75 sekund”.
+
+| Ujęcie | Akt II · Cena świtu | Akt III · Przebudzenie Roju | Akt IV · Inwazja |
+|---|---|---|---|
+| 1 | Po świcie: Khepri IV odzyskuje prąd, nadlatują transporty pomocy | Upadek Hefajstosa: wybuch i płonąca blizna (zniszczenie) albo gasnące światła i odlatujące wahadłowce (ewakuacja) | Rozejm nad cichym Pyrrhosem: okręty obu stron, „wspólne dowództwo” albo każdy własną drogą (decyzja z rozdziału VIII) |
+| 2 | Sygnał w paśmie latarni | Rytm artefaktów na holomapie | Adm. Selen Vok na kanale Admiralicji: rozejm nieważny, Varn zdrajcą, rozkaz blokady |
+| 3 | Lira odszyfrowuje wezwanie: ekipa badawcza z Khepri IV żyje | Laboratorium dr Tessy: struktura w krysztale rośnie — „klasyfikacja: organizm” | Flota Admiralicji zamyka orbitę Eos |
+| 4 | Wiertnie Dominium na wydmach, paszczaki | Mapa taktyczna: fioletowe plamy Roju rozchodzą się od Lumerii V | Artefakt na orbicie odpowiada na nieznany sygnał |
+| 5 | Pod piaskiem: odwiert dociera do dawnej sondy | Wezwanie Varna: wdzięczny (ewakuacja) albo chłodny (zniszczenie) | Szczelina i Wartownicy Otchłani |
+| 6 | Hefajstos wysysa energię Vulkana IX | Floty Kolonii i Dominium nad Nivalis | Wartownicy strzelają do okrętów Kolonii i Dominium |
+| 7 | Konwój na lodowej przełęczy Vesperu | Serce Roju pod magmą Pyrrhosa, uderzenie orbitalne | Brama przy czarnej dziurze Erebus |
+| 8 | Lądowanie o zmierzchu przy stacji badawczej, „CENA ŚWITU” | Lądowanie na Lumerii V wśród pełzaczy, „PRZEBUDZENIE ROJU” | Flota Kolonii wychodzi ze skoku nad Eos, przed nią światła blokady, „INWAZJA” |
+
+`Act3Film.prepare(choices)` i `Act4Film.prepare(choices)` (jak `FinaleFilm`) ustawiają decyzje kampanii przed odtworzeniem; menu podaje je z `campaignDetails().choices`. Akt III zmienia ujęcia i podpisy 1 i 5 (decyzja o Hefajstosie, `colony6`), akt IV — ujęcie i podpis 1 (propozycja Varna, `colony8`). `Act4Film.parts` (Wartownik, szczelina, czarna dziura z Bramą) zostają dla finału i epilogów. Zestaw filmowy dostał ogólną ramkę łączności `holo(who, label, …)` — z niej korzysta też `holoLira`.
+
+## Nowy prolog kampanii — historia pogranicza (wersja 0.169, 2026-10-09)
+
+Intro kampanii (`campaign-film.js`, `CampaignFilm`) opowiada teraz historię prowadzącą do rozpoczęcia aktu I: 15 ujęć o własnych długościach (`LENGTHS`), razem 150 s (ok. 2,5 minuty). Reżyser (`kit.render`) przyjmuje listę długości ujęć (`spec.lengths`); inne filmy (prologi aktów II–IV, epilogi, finał) zostają przy 5 s na ujęcie.
+
+| # | Ujęcie | Czas | Co widać |
+|---|---|---|---|
+| 1 | Pogranicze | 9 s | głęboki kosmos, pasmo galaktyki, nazwy światów pojawiają się kolejno: Khepri, Eos, Vesper, Nadir |
+| 2 | Wolne Kolonie | 10 s | statki osadników schodzą ku planecie, na jej nocnej stronie zapalają się miasta |
+| 3 | Sieć latarni | 10 s | holomapa w warsztacie Liry, łącza sieci rosną przekaźnik po przekaźniku, hologram Liry |
+| 4 | Szlaki | 9 s | łańcuch latarni, konwój i krążownik eskorty |
+| 5 | Dominium | 10 s | czerwona stolica, armada w trzech szeregach, dekret: „pogranicze — prowincja zbuntowana” |
+| 6 | Blokada | 10 s | drednot Dominium wchodzi w kadr, wiązki gaszą latarnie (alarm, wstrząs) |
+| 7 | Sektor bez światła | 10 s | nocna strona Khepri gaśnie miasto po mieście, wskaźnik sieci spada do zera |
+| 8 | Ultimatum | 10 s | czerwona transmisja na wszystkich kanałach, tekst pisany na żywo, odliczanie |
+| 9 | Stacja Ciszy | 10 s | nocna kotlina Eos, martwa wieża latarni, jedno oświetlone okno, iskry przy maszcie — Lira przy pracy |
+| 10 | Transmisja | 11 s | hologram Liry, przebieg głosu, trasa do archiwum na Vesperze, gasnące zasilanie nadajnika; **Lira mówi** |
+| 11 | Ostatnia flota | 10 s | kryjówka w pasie asteroid, „Okręt desantowy Świt · Dowódca: Ty”, start |
+| 12 | Przez blokadę | 10 s | przelot między drednotami, salwy chybiają, cisza radiowa (alarm) |
+| 13 | Kotlina Eos | 11 s | ognisty wlot w atmosferę, potem lot nad wydmami Eos |
+| 14 | Lądowanie | 10 s | pył przy Stacji Ciszy, ciemna wieża, Lira czeka; **Lira mówi** |
+| 15 | Początek | 10 s | świt nad kotliną, wieża latarni wciąż ciemna, tytuł „ODZYSKANY ŚWIT · AKT I” |
+
+- Kwestie Liry (`CampaignFilm.lines`) mówi jej głos z motywem, jak w scenach łączności.
+- Muzyka: tryb `prologue` (`audio.js`, `prologueStep`), części na ujęciach filmu (`PROLOGUE`, sekundy) — opis w [AUDIO.md](AUDIO.md).
+- Pasek postępu i podpis („Prolog · ok. 2,5 minuty”) biorą długość z filmu. Intro nadal odtwarza się tylko przy pierwszym wejściu w kampanię, potem z przycisku „Intro kampanii” przy akcie I.
 
 ## Szuflada celów: bez przewijania, ukryta pod raportem (wersja 0.152.1, 2026-10-08)
 

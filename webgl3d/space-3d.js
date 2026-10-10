@@ -899,11 +899,14 @@ export function createSpace3D(THREE) {
 			veil.position.set(game.W / 2, -30, game.H / 2);
 			veil.scale.set(game.W + M * 2, 1, game.H + M * 2);
 			veilUniforms.size.value.set(game.W, game.H);
+			const PAL_GAS = { c: ["#54331f", "#8c4d2e", "#c78c54", "#edd4a8"], amp: 1, atmo: "#73b3ff", rings: ["#9e8c78", "#f2e6d1"], ringAlpha: 0.6 };
 			const PAL = {
 				gas: { c: ["#54331f", "#8c4d2e", "#c78c54", "#edd4a8"], amp: 1, atmo: "#73b3ff", rings: ["#9e8c78", "#f2e6d1"], ringAlpha: 0.6 },
 				ice: { c: ["#24607e", "#3a88a8", "#68b8cf", "#b4e4ee"], amp: 0.35, atmo: "#8fe0ff", rings: ["#8aa6b8", "#eef8ff"], ringAlpha: 0.75 },
 				lava: { c: ["#1c1614", "#4a3a2c", "#ff7a1e", "#ffd070"], amp: 0, atmo: "#a8481e", rings: ["#000000", "#000000"], ringAlpha: 0 },
-			}[kind === "none" ? "gas" : kind];
+				// A desert world (0.164, Eos): the gas giant's shader with sand tones and faint bands.
+				desert: { c: ["#4a2e18", "#8a5a30", "#c89458", "#ecd2a0"], amp: 0.22, atmo: "#ffc890", rings: ["#000000", "#000000"], ringAlpha: 0 },
+			}[kind === "none" ? "gas" : kind] || PAL_GAS;
 			planet.visible = kind !== "none";
 			planetUniforms.kind.value = kind === "ice" ? 1 : kind === "lava" ? 2 : 0;
 			["c0", "c1", "c2", "c3"].forEach((k, i) => planetUniforms[k].value.set(PAL.c[i]));
@@ -933,7 +936,7 @@ export function createSpace3D(THREE) {
 			ringsAligned = false;
 			ringUniforms.planetCentre.value.copy(centre);
 			ringUniforms.planetRadius.value = R;
-			moon.visible = kind === "gas" || kind === "ice";
+			moon.visible = kind === "gas" || kind === "ice" || kind === "desert";
 			moon.position.set(game.W * 1.35, -2500, -15000);
 			moon.scale.setScalar(650);
 			blackHole.visible = !!look.blackHole;

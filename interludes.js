@@ -72,8 +72,8 @@ const Interludes = (() => {
 			["gate", "…KAŻDY, KTO TRZYMA LATARNIE, ODPOWIE…"],
 		],
 		colony13: [
-			["vok", "Pierścienie Glacjalis to moja ostatnia orbita. Tu skończy się wasza inwazja."],
-			["lira", "Jej okręt flagowy stoi przy stacji. Uderzmy, zanim szczeliny otworzą się w środku bitwy."],
+			["vok", "Pierścienie Glacjalis to moja ostatnia orbita. Tym razem to moje kapsuły spadną na wasze głowy."],
+			["lira", "Vok trzyma orbitę nad Nivalis. Przetrwajmy desant wśród Kryształowych Grzbietów, potem uderzmy na jej kwaterę."],
 			["gate", "…SZCZELINA OTWARTA… OGRÓD WZYWA…"],
 		],
 		colony14: [
@@ -91,6 +91,8 @@ const Interludes = (() => {
 		magma: ["#8a3a24", "#1a0806", "#ff7a3a"],
 		frozenhive: ["#b8d0e0", "#2a3a50", "#c9b8ff"],
 		derelict: ["#6a6a66", "#141414", "#ffb08a"],
+		ocean: ["#3f8aa0", "#08202a", "#a8e8ff"],
+		crystal: ["#a8d8ec", "#283a50", "#d4c4ff"],
 		space: ["#3a4466", "#05060c", "#9fb8ff"],
 	};
 	// Sides: the Colonies speak from the left in teal, the Dominium from the right in red, Varn (an officer of the

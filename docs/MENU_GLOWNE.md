@@ -5,6 +5,13 @@
 Data: 2026-09-21. Punkt wyjścia: prototyp 0.4.
 Status: pierwszy zakres wdrożony w 0.5 (2026-09-21). Na życzenie użytkownika pozycja Nowa operacja od razu nosi nazwę Gra jednoosobowa. Poniższa koncepcja zachowuje pierwotne nazewnictwo; kampania, multiplayer i pozostałe rozszerzenia nadal są propozycjami.
 
+## Intro kampanii raz, potem z przycisku (wersja 0.168.5, 2026-10-09)
+
+- Intro kampanii (film „Odzyskany Świt”, 30 s) odtwarza się tylko przy pierwszym wejściu w „Kampania: Odzyskany Świt”; potem przycisk prowadzi od razu do mapy kampanii. Obejrzenie zapamiętuje urządzenie (`localStorage`, klucz `pogranicze-intro-v1`, jak sceny łączności) — przenosi je też eksport i import zapisów.
+- Pod nagłówkiem „Akt I · Odzyskany Świt” jest przycisk **Intro kampanii**, tak jak przyciski prologów aktów II–IV — odtwarza intro w każdej chwili („Pomiń intro” wraca do kampanii).
+- Test: `tests/menu-browser.html` — pierwsze wejście otwiera intro, drugie od razu kampanię, przycisk przy akcie I odtwarza intro (39/39).
+- 0.168.6: w akcie I „Szkolenie · Próba kolonii” stoi zaraz po przycisku intro, przed rozdziałami I–III (dotąd lista sortowała się po identyfikatorach i szkolenie było na końcu aktu).
+
 ## Cel i klimat
 
 Menu ma przypominać terminal na mostku okrętu: po lewej polecenia dowódcy, po prawej duży widok planety Khepri IV z dyskretną siatką orbitalną. Granatowe tło, jasna typografia i miętowe akcenty nawiązują do obecnego interfejsu. Bursztyn wyróżnia informacje, czerwień tylko błędy i zagrożenia.

@@ -22,11 +22,13 @@ test("reworked scenario maps get their themed terrain when a scenario is configu
 });
 
 test("the bare constructor keeps the classic layout used by engine tests and campaign", () => {
-	for (const id of [...scenarios, "colony1", "colony2", "colony3", "training"]) {
+	for (const id of [...scenarios, "training"]) {
 		const g = new Game(42, id);
 		assert.ok([...g.waters, ...g.obstacles].every((o) => !o.kind), id);
 		assert.equal(g.mapVersion, undefined, id);
 	}
+	// Chapters I–III have their own maps (campaign-maps.js, 0.162).
+	for (const id of ["colony1", "colony2", "colony3"]) assert.ok(new Game(42, id).obstacles.some((o) => o.kind), id);
 	for (const id of ["colony1", "colony2", "colony3", "training"]) assert.ok(MISSIONS[id].theme, id);
 });
 

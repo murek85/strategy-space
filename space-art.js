@@ -46,7 +46,7 @@ const SpaceArt = (() => {
 			n = (g.W * g.H) / (3360 * 2160),
 			look = lookOf(g),
 			kind = look.planet || "gas",
-			tint = { ice: ["#04090f", "#08131e", "#0c1c2a"], lava: ["#0c0605", "#170b08", "#221009"], none: ["#070407", "#100810", "#180a12"] }[look.blackHole ? "none" : kind] || ["#05070f", "#090d1c", "#0c1226"];
+			tint = { desert: ["#0a0705", "#120d09", "#1a120c"], ice: ["#04090f", "#08131e", "#0c1c2a"], lava: ["#0c0605", "#170b08", "#221009"], none: ["#070407", "#100810", "#180a12"] }[look.blackHole ? "none" : kind] || ["#05070f", "#090d1c", "#0c1226"];
 		const sky = c.createLinearGradient(0, 0, g.W * 0.3, g.H);
 		sky.addColorStop(0, tint[0]);
 		sky.addColorStop(0.55, tint[1]);
@@ -61,12 +61,13 @@ const SpaceArt = (() => {
 				r = 180 + rand() * 320;
 			glowDot(c, x, y, r, i % 3 ? "rgba(80,96,150,.10)" : "rgba(150,110,160,.08)");
 		}
-		// Nebula clouds where the gas is.
-		for (const f of g.gasFields || [])
+		// Nebula clouds where the gas is, and the map's own clouds (0.164).
+		for (const f of g.nebulaClouds?.() || g.gasFields || [])
 			for (let k = 0; k < 6; k++) {
 				const a = rand() * TAU,
-					d = rand() * 160;
-				glowDot(c, f.x + Math.cos(a) * d, f.y + Math.sin(a) * d, 150 + rand() * 160, look.nebula ? hexA(look.nebula[0][k % 3], k % 2 ? 0.22 : 0.16) : k % 2 ? "rgba(168,84,214,.22)" : "rgba(80,150,230,.16)");
+					s = (f.r || 230) / 230,
+					d = rand() * 160 * s;
+				glowDot(c, f.x + Math.cos(a) * d, f.y + Math.sin(a) * d, (150 + rand() * 160) * s, look.nebula ? hexA(look.nebula[0][k % 3], k % 2 ? 0.22 : 0.16) : k % 2 ? "rgba(168,84,214,.22)" : "rgba(80,150,230,.16)");
 			}
 		// Stars: many dim ones, some bright with a halo.
 		for (let i = 0; i < 2600 * n; i++) {
@@ -105,7 +106,7 @@ const SpaceArt = (() => {
 		// Nebula filaments: thin glowing wisps curling through the clouds.
 		c.save();
 		c.lineCap = "round";
-		for (const f of g.gasFields || [])
+		for (const f of g.nebulaClouds?.() || g.gasFields || [])
 			for (let k = 0; k < 5; k++) {
 				let x = f.x + (rand() - 0.5) * 260,
 					y = f.y + (rand() - 0.5) * 260,
@@ -164,6 +165,8 @@ const SpaceArt = (() => {
 				gas: { body: ["#c49a6c", "#7a5a44"], bands: ["#d9b384", "#a8784e", "#e6caa0", "#8c6248", "#c79a6a", "#b5865a"], rim: [140, 200, 255], ring: [214, 196, 170] },
 				ice: { body: ["#cfe6f2", "#86b2c8"], bands: ["#e6f4fb", "#a8cfe0", "#f2fbff", "#90bcd2", "#d0e8f4", "#b6d8e8"], rim: [170, 230, 255], ring: [220, 238, 250] },
 				lava: { body: ["#3a2420", "#161010"], bands: [], rim: [255, 130, 60], ring: [0, 0, 0] },
+				// A desert world (0.164, Eos): sand and rust, faint dust bands, a warm haze.
+				desert: { body: ["#d4a46a", "#8a5a34"], bands: ["#e0b47a", "#b8844e", "#ecca94", "#9c6a40", "#d0a066", "#c08c58"], rim: [255, 200, 140], ring: [0, 0, 0] },
 			}[kind];
 		c.save();
 		c.beginPath();
@@ -339,8 +342,62 @@ const SpaceArt = (() => {
 			c.fill();
 		}
 	}
+	// A gantry of an orbital shipyard (0.164): two lattice girders along the long side, cross braces, beacons at
+	// the ends, work lights; over long berths a crane and the ribs of a hull being built.
+	function dock(c, o, rand) {
+		const long = o.w >= o.h,
+			L = (long ? o.w : o.h) * 0.96,
+			B = Math.min((long ? o.h : o.w) * 0.9, 90);
+		c.save();
+		c.translate(o.x + o.w / 2, o.y + o.h / 2);
+		if (!long) c.rotate(Math.PI / 2);
+		c.fillStyle = "rgba(0,0,0,.35)";
+		c.fillRect(-L / 2 + 14, -B / 2 + 18, L, B);
+		if (L > 320) {
+			c.strokeStyle = "#6c767c";
+			c.lineWidth = 3;
+			c.beginPath();
+			c.moveTo(-L * 0.31, 0);
+			c.lineTo(L * 0.31, 0);
+			c.stroke();
+			for (let x = -L * 0.3; x <= L * 0.3; x += 24) {
+				const s = 1 - (Math.abs(x) / (L * 0.34)) ** 2;
+				if (s <= 0.1) continue;
+				c.beginPath();
+				c.moveTo(x, -B * 0.3 * s);
+				c.lineTo(x, B * 0.3 * s);
+				c.stroke();
+			}
+			glowDot(c, L * 0.12, 0, 14, "rgba(120,220,255,.85)");
+		}
+		const bays = Math.max(2, Math.round(L / 24));
+		for (const z of [-B / 2, B / 2]) {
+			c.fillStyle = "#8c969c";
+			c.fillRect(-L / 2, z - 4, L, 8);
+			c.strokeStyle = "#454d53";
+			c.lineWidth = 1.5;
+			c.beginPath();
+			for (let k = 0; k < bays; k++) {
+				const x = -L / 2 + (k * L) / bays;
+				c.moveTo(x, z - 4);
+				c.lineTo(x + L / bays, z + 4);
+			}
+			c.stroke();
+		}
+		c.fillStyle = "#5a6268";
+		const spans = Math.max(2, Math.round(L / 110));
+		for (let k = 0; k <= spans; k++) c.fillRect(-L / 2 + (k * L) / spans - 2, -B / 2, 4, B);
+		if (L > 220) {
+			c.fillStyle = "#d8a838";
+			c.fillRect((rand() - 0.5) * L * 0.5 - 6, -B / 2 - 8, 12, B + 16);
+		}
+		for (const x of [-L / 2 + 4, L / 2 - 4]) for (const z of [-B / 2, B / 2]) glowDot(c, x, z, 8, "rgba(255,80,50,.9)");
+		for (let x = -L / 2 + 30, k = 0; x < L / 2 - 20; x += 60, k++) glowDot(c, x, (k % 2 ? -1 : 1) * B / 2, 6, "rgba(255,230,170,.85)");
+		c.restore();
+	}
 	function field(c, o, rand) {
 		if (o.kind === "hulk") return hulk(c, o, rand);
+		if (o.kind === "dock") return dock(c, o, rand);
 		const cx = o.x + o.w / 2,
 			cy = o.y + o.h / 2,
 			count = Math.max(4, Math.round((o.w * o.h) / 3200));

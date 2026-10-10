@@ -143,7 +143,8 @@
 				const I = this.invasion,
 					count = Math.min(INVASION.dropSize, this.podsLeft(team));
 				I.pods[team] -= count;
-				I.dropReady = this.time + INVASION.dropCooldown;
+				// (A campaign chapter may set its own pace: I.dropCooldown, I.strikeCooldown.)
+				I.dropReady = this.time + (I.dropCooldown ?? INVASION.dropCooldown);
 				I.dropNo = (I.dropNo || 0) + count;
 				for (let k = 0; k < count; k++) {
 					const a = (k / Math.max(1, count)) * Math.PI * 2 + 0.4,
@@ -214,7 +215,7 @@
 					return false;
 				}
 				const S = RTS.FACTION_FX?.strike || { delay: 3 };
-				this.invasion.strikeReady = this.time + INVASION.strikeCooldown;
+				this.invasion.strikeReady = this.time + (this.invasion.strikeCooldown ?? INVASION.strikeCooldown);
 				(this.strikes ||= []).push({ x: Math.round(x), y: Math.round(y), at: this.time + S.delay, team });
 				if (this.isHuman(team)) this.as(team, () => this.notify("Uderzenie z orbity — trafienie za " + S.delay + " s.", "order-move"));
 				for (const h of this.humans) if (!this.allied(h, team) && this.isVisibleTo(h, x, y)) this.as(h, () => this.notify("UWAGA: namierzanie orbitalne! Uciekaj z oznaczonego obszaru.", "alarm"));
@@ -287,7 +288,7 @@
 				if (I?.phase !== "ground" || this.isHuman(I.owner) || this.result || !this.enemyAi?.teams?.[I.owner]) return;
 				const team = I.owner;
 				if (this.time >= I.aiDropAt && !this.dropRequirement(team)) {
-					I.aiDropAt = this.time + INVASION.aiDropEvery;
+					I.aiDropAt = this.time + (I.aiDropEvery ?? INVASION.aiDropEvery);
 					const spot = this.aiLandingSpot(team);
 					if (spot) this.dropPods(team, spot.x, spot.y);
 				}

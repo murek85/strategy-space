@@ -2,7 +2,12 @@
 // Listening to the music in the settings: themes (audio.js music modes) and the game's moods.
 const MUSIC_THEMES = [
 	["menu", "Menu — Odległe światło"],
-	["intro", "Intro — burza"],
+	["prologue", "Prolog kampanii — historia pogranicza"],
+	["prologue2", "Prolog aktu II — cena świtu"],
+	["prologue3", "Prolog aktu III — przebudzenie Roju"],
+	["prologue4", "Prolog aktu IV — inwazja"],
+	["intro", "Intro — wyruszenie"],
+	["finale", "Finał kampanii — zwycięstwo"],
 	["game:dust", "Pustynia"],
 	["game:sun", "Świt bliźniaczych słońc"],
 	["game:ice", "Lód"],
@@ -11,10 +16,26 @@ const MUSIC_THEMES = [
 	["game:hive", "Ul"],
 	["game:lumen", "Gąszcz"],
 	["game:forge", "Kuźnia"],
+	["game:tide", "Przypływ — Thalassa"],
+	["game:crystal", "Kryształ — Grzbiety Nivalis"],
+	["game:ruins", "Ruiny — Nadir"],
+	["game:bastion", "Bastion Admiralicji"],
+	["game:archive", "Archiwum pod lodem"],
+	["game:beacons", "Latarnie — Dolina Latarni"],
+	["game:ashes", "Popioły — Wypalona Dolina"],
+	["game:dunes", "Wydmy — Cichy Horyzont"],
+	["game:frost", "Szron — Biały Przesmyk"],
+	["game:skyfall", "Szczyty — Wiszące Szczyty"],
+	["game:oasis", "Oaza — Słoneczna Dolina"],
+	["game:signal", "Sygnał spod piasku"],
+	["game:convoy", "Ostatni konwój"],
 	["game:orbit", "Kosmos — Orbita"],
 	["game:glacis", "Kosmos — Pierścienie"],
 	["game:void", "Kosmos — Horyzont zdarzeń"],
 	["game:requiem", "Kosmos — Requiem floty"],
+	["game:docks", "Kosmos — Doki Eos"],
+	["game:nebula", "Kosmos — Szkarłatna Mgławica"],
+	["game:comets", "Kosmos — Szlak Komet"],
 ];
 const MUSIC_MOODS = [
 	["explore", "Eksploracja"],
@@ -111,7 +132,9 @@ class CommandMenu {
 		this.api.freeze();
 		if (screen !== "settings") this.api.audio?.()?.stopPreview?.();
 		this.api.music?.(
-			["intro", "intro2", "intro3", "interlude"].includes(screen) ? "intro" : "menu",
+			// The campaign's finale has its own victory cue (audio.js, finaleStep).
+			// The prologues of acts II-IV last 20 s: their own length of the opening cue (audio.js, introStep).
+			screen === "intro" ? "prologue" : screen === "finale" ? "finale" : ["intro2", "intro3", "intro4"].includes(screen) ? "prologue" + screen.slice(-1) : screen === "interlude" ? "intro" : "menu",
 		);
 		this.gameElements.forEach((e) => (e.inert = true));
 		document.body.classList.add("in-menu");
@@ -129,9 +152,9 @@ class CommandMenu {
 		} else if (screen === "intro") {
 			title = "Odzyskany Świt";
 			body =
-				'<div class="campaign-film"><canvas id="campaign-film" width="960" height="400" aria-label="Film wprowadzający do kampanii"></canvas><p id="film-caption" aria-live="polite"></p><progress id="film-progress" max="30" value="0" aria-label="Czas intro"></progress></div>' +
+				'<div class="campaign-film"><canvas id="campaign-film" width="960" height="400" aria-label="Film wprowadzający do kampanii"></canvas><p id="film-caption" aria-live="polite"></p><progress id="film-progress" max="' + (typeof CampaignFilm !== "undefined" ? CampaignFilm.duration : 150) + '" value="0" aria-label="Czas intro"></progress></div>' +
 				this.button("skip-intro", "Pomiń intro") +
-				"<small>Prolog · 30 sekund</small>";
+				"<small>Prolog · ok. 2,5 minuty</small>";
 		} else if (screen === "interlude") {
 			// A radio scene before a campaign chapter (interludes.js).
 			const m = RTS.MISSIONS[this.selectedMission],
@@ -141,18 +164,30 @@ class CommandMenu {
 				`<div class="campaign-film"><canvas id="campaign-film" width="960" height="400" aria-label="Scena łączności przed rozdziałem"></canvas><p id="film-caption" aria-live="polite"></p><progress id="film-progress" max="${film.duration}" value="0" aria-label="Czas sceny"></progress></div>` +
 				this.button("skip-interlude", "Pomiń scenę") +
 				`<small>Łączność przed rozdziałem · ${Math.round(film.duration)} sekund</small>`;
+		} else if (screen === "finale") {
+			title = "Finał kampanii";
+			body =
+				'<div class="campaign-film"><canvas id="campaign-film" width="960" height="400" aria-label="Film finałowy kampanii"></canvas><p id="film-caption" aria-live="polite"></p><progress id="film-progress" max="' + (typeof FinaleFilm !== "undefined" ? FinaleFilm.duration : 122) + '" value="0" aria-label="Czas filmu"></progress></div>' +
+				this.button("skip-finale", "Zakończ film") +
+				"<small>Finał kampanii · ok. 2 minuty</small>";
+		} else if (screen === "intro4") {
+			title = "Akt IV · Inwazja";
+			body =
+				'<div class="campaign-film"><canvas id="campaign-film" width="960" height="400" aria-label="Prolog czwartego aktu kampanii"></canvas><p id="film-caption" aria-live="polite"></p><progress id="film-progress" max="' + (typeof Act4Film !== "undefined" ? Act4Film.duration : 76) + '" value="0" aria-label="Czas prologu"></progress></div>' +
+				this.button("skip-intro4", "Pomiń prolog") +
+				"<small>Prolog aktu IV · ok. 75 sekund</small>";
 		} else if (screen === "intro3") {
 			title = "Akt III · Przebudzenie Roju";
 			body =
-				'<div class="campaign-film"><canvas id="campaign-film" width="960" height="400" aria-label="Prolog trzeciego aktu kampanii"></canvas><p id="film-caption" aria-live="polite"></p><progress id="film-progress" max="20" value="0" aria-label="Czas prologu"></progress></div>' +
+				'<div class="campaign-film"><canvas id="campaign-film" width="960" height="400" aria-label="Prolog trzeciego aktu kampanii"></canvas><p id="film-caption" aria-live="polite"></p><progress id="film-progress" max="' + (typeof Act3Film !== "undefined" ? Act3Film.duration : 76) + '" value="0" aria-label="Czas prologu"></progress></div>' +
 				this.button("skip-intro3", "Pomiń prolog") +
-				"<small>Prolog aktu III · 20 sekund</small>";
+				"<small>Prolog aktu III · ok. 75 sekund</small>";
 		} else if (screen === "intro2") {
 			title = "Akt II · Cena świtu";
 			body =
-				'<div class="campaign-film"><canvas id="campaign-film" width="960" height="400" aria-label="Prolog drugiego aktu kampanii"></canvas><p id="film-caption" aria-live="polite"></p><progress id="film-progress" max="20" value="0" aria-label="Czas prologu"></progress></div>' +
+				'<div class="campaign-film"><canvas id="campaign-film" width="960" height="400" aria-label="Prolog drugiego aktu kampanii"></canvas><p id="film-caption" aria-live="polite"></p><progress id="film-progress" max="' + (typeof Act2Film !== "undefined" ? Act2Film.duration : 76) + '" value="0" aria-label="Czas prologu"></progress></div>' +
 				this.button("skip-intro2", "Pomiń prolog") +
-				"<small>Prolog aktu II · 20 sekund</small>";
+				"<small>Prolog aktu II · ok. 75 sekund</small>";
 		} else if (screen === "review") {
 			const m = RTS.MISSIONS[this.selectedMission],
 				review = this.api.review?.() || { objectives: [], radio: [] },
@@ -191,12 +226,14 @@ class CommandMenu {
 					choices: {},
 				},
 				card = ([id, m]) =>
-					`<button class="menu-action mission-card" data-mission="${id}" ${m.requires && !progress[m.requires] ? "disabled" : ""}><span><b>${m.name}${details.badges[id] ? ' <i class="act2-badge" title="Cel dodatkowy wykonany">◆</i>' : ""}</b><small>${m.planet} · ${progress[id] ? "Ukończono" + (details.choices[id] ? (details.choices[id] === "destroy" ? " · kompleks zniszczony" : " · personel ewakuowany") : "") : m.requires && !progress[m.requires] ? "Ukończ: " + RTS.MISSIONS[m.requires].name : "Gotowa do rozpoczęcia"}</small></span><span>↗</span></button>`,
+					`<button class="menu-action mission-card" data-mission="${id}" ${m.requires && !progress[m.requires] ? "disabled" : ""}><span><b>${m.name}${details.badges[id] ? ' <i class="act2-badge" title="Cel dodatkowy wykonany">◆</i>' : ""}</b><small>${m.planet} · ${progress[id] ? "Ukończono" + (details.choices[id] ? (details.choices[id] === "destroy" ? " · kompleks zniszczony" : details.choices[id] === "evacuate" ? " · personel ewakuowany" : " · " + (RTS.CAMPAIGN_DECISIONS?.[id]?.options?.[details.choices[id]]?.name || "").toLowerCase()) : "") : m.requires && !progress[m.requires] ? "Ukończ: " + RTS.MISSIONS[m.requires].name : "Gotowa do rozpoczęcia"}</small></span><span>↗</span></button>`,
 				missions = Object.entries(RTS.MISSIONS)
 					.filter(([, m]) => !!m.campaign === isCampaign)
 					.sort(([a], [b]) => a.localeCompare(b));
-			body = `<div class="campaign-select"><nav class="mission-list campaign-list" aria-label="Akty i rozdziały kampanii"><h2 class="act-heading">Akt I · Odzyskany Świt</h2>${missions
+			body = `<div class="campaign-select"><nav class="mission-list campaign-list" aria-label="Akty i rozdziały kampanii"><h2 class="act-heading">Akt I · Odzyskany Świt</h2>${typeof CampaignFilm !== "undefined" ? this.button("intro", "Intro kampanii") : ""}${missions
 				.filter(([, m]) => !m.act)
+				// The training first, right after the intro, then chapters I–III.
+				.sort(([a], [b]) => (b === "training") - (a === "training"))
 				.map(card)
 				.join(
 					"",
@@ -208,11 +245,11 @@ class CommandMenu {
 				)}${missions.some(([, m]) => m.act === 3) ? `<h2 class="act-heading">Akt III · Przebudzenie Roju</h2>${progress.colony6 && typeof Act3Film !== "undefined" ? this.button("intro3", "Prolog aktu III") : ""}${missions
 				.filter(([, m]) => m.act === 3)
 				.map(card)
-				.join("")}` : ""}${missions.some(([, m]) => m.act === 4) ? `<h2 class="act-heading">Akt IV · Inwazja</h2>${missions
+				.join("")}` : ""}${missions.some(([, m]) => m.act === 4) ? `<h2 class="act-heading">Akt IV · Inwazja</h2>${progress.colony9 && typeof Act4Film !== "undefined" ? this.button("intro4", "Prolog aktu IV") : ""}${missions
 				.filter(([, m]) => m.act === 4)
 				.sort(([a], [b]) => Number(a.slice(6)) - Number(b.slice(6)))
 				.map(card)
-				.join("")}` : ""}</nav><aside id="mission-preview" class="galaxy-info mission-preview" aria-live="polite" aria-label="Podgląd wybranego rozdziału"></aside></div>${this.button("campaign-back", "Wróć do wyboru gry")}`;
+				.join("")}${progress.colony14 && typeof FinaleFilm !== "undefined" ? this.button("finale", "Finał kampanii") : ""}` : ""}</nav><aside id="mission-preview" class="galaxy-info mission-preview" aria-live="polite" aria-label="Podgląd wybranego rozdziału"></aside></div>${this.button("campaign-back", "Wróć do wyboru gry")}`;
 		} else if (screen === "slots") {
 			title =
 				this.slotMode === "save" ? "Zapisz w slocie" : "Wczytaj grę";
@@ -312,6 +349,38 @@ class CommandMenu {
 				body;
 		if (screen === "news")
 			body =
+				"<h2>0.171 / Nowe prologi aktów II–IV</h2><p>Prologi aktów II, III i IV opowiadają dłuższe historie prowadzące do pierwszego rozdziału aktu — po około 75 sekund, z własną muzyką. Prologi aktów III i IV zmieniają się zależnie od Twoich decyzji.</p>" +
+				"<h2>0.170 / Nowy finał kampanii</h2><p>Film finału pokazuje, co stało się na koniec przygody — od pęknięcia Bramy po świt nad Eos z zapaloną latarnią. Około 2 minut, zależnie od Twoich decyzji, z nową muzyką.</p>" +
+				"<h2>0.169 / Nowy prolog kampanii</h2><p>Intro opowiada historię pogranicza w 15 ujęciach (ok. 2,5 minuty) — od pierwszych osad i sieci latarni, przez blokadę Dominium, po lądowanie przy Stacji Ciszy na Eos. Z nową muzyką i głosem Liry.</p>" +
+				"<h2>0.168.6 / Szkolenie na początku aktu I</h2><p>Na ekranie kampanii szkolenie stoi zaraz po intro, przed rozdziałami I–III.</p>" +
+				"<h2>0.168.5 / Intro kampanii z przycisku</h2><p>Intro odtwarza się tylko przy pierwszym wejściu w kampanię; potem obejrzysz je przyciskiem „Intro kampanii” przy akcie I.</p>" +
+				"<h2>0.168.4 / Nowa muzyka intro</h2><p>Prologi aktów mają nową muzykę w stylu finału: zegar, fortepian, organy i pytający dźwięk na końcu.</p>" +
+				"<h2>0.168.3 / Muzyka finału kampanii</h2><p>Film końcowy ma własną muzykę zwycięstwa — od zegara i fortepianu po pełne organy i nagłą ciszę na koniec.</p>" +
+				"<h2>0.168.2 / Jednolite listy wyboru</h2><p>Wszystkie listy w menu — ustawienia, scenariusze, odprawa i gra sieciowa — wyglądają tak samo, z własną strzałką i ciemną listą opcji.</p>" +
+				"<h2>0.168.1 / Pole poziomu trudności</h2><p>Lista poziomu trudności w odprawie wygląda jak pozostałe pola menu.</p>" +
+				"<h2>0.168 / Muzyka pozostałych map</h2><p>Wydmy, Szron, Szczyty, Oaza, Sygnał i Konwój — każda mapa gra teraz muzykę dla siebie.</p>" +
+				"<h2>0.167.4 / Muzyka Bastionu Admiralicji</h2><p>Sygnał trąbki garnizonu, smyczki w takt marszu i dalekie działa z murów.</p>" +
+				"<h2>0.167.3 / Muzyka Ruin Nadiru</h2><p>Flet odbija się echem od murów, gong cytadeli budzi się co kilka taktów, a w tle gra rytualny bęben.</p>" +
+				"<h2>0.167.2 / Muzyka Lodowego Archiwum</h2><p>Archiwum gra teraz pozytywkę spod lodu, a lód pęka i jęczy — częściej, gdy robi się gorąco.</p>" +
+				"<h2>0.167.1 / Muzyka doliny Eos</h2><p>Latarnie dla Doliny Latarni i Popioły dla Wypalonej Doliny — ta sama melodia przed desantem i po nim.</p>" +
+				"<h2>0.167 / Muzyka nowych map</h2><p>Osiem nowych motywów — morze, kryształ, ruiny, bastion, archiwum, doki, mgławica i komety; do odsłuchania w ustawieniach.</p>" +
+				"<h2>0.166.2 / Balans rozdziału XIII</h2><p>Na łatwym i średnim kwatera Vok jest słabiej umocniona, a po odparciu desantu uderzenia z orbity ustają.</p>" +
+				"<h2>0.166.1 / Pasek przewijania w panelu bocznym</h2><p>Zakładki panelu bocznego przewijają się takim samym paskiem jak okna menu.</p>" +
+				"<h2>0.166 / Przypływy, lód i komety</h2><p>Przypływy zalewają mielizny Thalassy, lód Archiwum pęka pod wybuchami, a nowa mapa Szlak Komet ma komety, których warkocze ranią statki i odnawiają gaz.</p>" +
+				"<h2>0.165 / Archipelag Thalassy i Kryształowe Grzbiety</h2><p>Dwa nowe światy: morze z wyspami i mieliznami oraz grzbiety świecących kryształów — tam toczy się teraz rozdział XIII.</p>" +
+				"<h2>0.164 / Doki Eos i Szkarłatna Mgławica</h2><p>Rozdział X w stoczni orbitalnej nad Eos; nowa mapa kosmiczna, w której większość pola zalega mgławica.</p>" +
+				"<h2>0.163 / Wypalona Dolina i Bastion Admiralicji</h2><p>Nowe mapy rozdziałów XI i XII: dolina z rozdziału I po desancie i twierdza za murami z bramami — także w scenariuszach i sieci.</p>" +
+				"<h2>0.162 / Nowe mapy kampanii</h2><p>Rozdziały I–III na własnych mapach: Dolina Latarni, Lodowe Archiwum i Ruiny Nadiru — do zagrania także w scenariuszach i sieci.</p>" +
+				"<h2>0.161 / Film finału kampanii</h2><p>Po zwycięstwie w rozdziale XIV — film końcowy kampanii zależny od Twoich decyzji; do obejrzenia ponownie z ekranu kampanii.</p>" +
+				"<h2>0.160.1 / Bez zwierząt w kosmosie</h2><p>Na mapach kosmicznych w trybach Canvas i WebGL nie pojawiają się już zwierzęta.</p>" +
+				"<h2>0.160 / Akt IV: balans rozdziałów</h2><p>Rozdziały X–XIV dostroiły się do poziomu trudności: garnizony i wieże przeciwnika, tempo desantu w XI i XIII, straż szczelin i wytrzymałość Bramy w XIV. Akt IV jest ukończony.</p>" +
+				"<h2>0.159 / Akt IV: XIV · Brama — finał aktu</h2><p>Zamknij trzy szczeliny Wartowników przy czarnej dziurze Erebus i zniszcz Bramę — z flotą Vok i okrętami Varna, jeśli tak zdecydowałeś. Nowy prolog i epilog aktu IV zależny od Twoich decyzji.</p>" +
+				"<h2>0.158 / Akt IV: XIII · Ostatnia orbita</h2><p>Odwrócona inwazja: Vok trzyma orbitę i zrzuca kapsuły na Biały Przesmyk. Przetrwaj desant pod osłoną baterii przeciwlotniczych, potem uderz na jej kwaterę — i zdecyduj: rozejm z Vok przeciw Wartownikom czy klęska Admiralicji.</p>" +
+				"<h2>0.157.2 / Pole adresu serwera</h2><p>Pole „Adres serwera” wygląda jak pozostałe pola tekstowe menu.</p>" +
+				"<h2>0.157.1 / Kafelki miejsc w pokoju gry</h2><p>Przyciski miejsca w pokoju gry sieciowej są pod nazwą gracza i nie wychodzą poza kafelek.</p>" +
+				"<h2>0.157 / Akt IV: XII · Twierdza Admiralicji</h2><p>Doprowadź technika do stacji uplink przez zasadzkę Admiralicji, potem zdobądź Twierdzę — pod ogniem szczelin Wartowników. Decyzja: garnizon Varna albo stocznia Admiralicji zmienia rozdział XIII. Dowódca AI Admiralicji działa teraz we wszystkich rozdziałach aktu IV.</p>" +
+				"<h2>0.156.2 / Przewijanie raportu końca</h2><p>Długi raport z operacji ma widoczny pasek przewijania.</p>" +
+				"<h2>0.156.1 / Kursor nad oknami dialogowymi</h2><p>Kursor myszy nie znika już nad oknem wyboru doktryny, statystykami i drzewem rozwoju.</p>" +
 				"<h2>0.156 / Akt IV: Inwazja — rozdziały X i XI</h2><p>Nowy akt kampanii po rozdziale IX. Przełam blokadę orbity Eos flotą z lotniskowcem — ocalałe statki to kapsuły desantowe na rozdział XI, w którym lądujesz na Cichym Horyzoncie pod ogniem baterii Admiralicji. Adm. Selen Vok, tajemniczy Głos Bramy i pierwsze szczeliny Wartowników. Rozdziały XII–XIV w wersji roboczej.</p>" +
 				"<h2>0.155.1 / Czytelność map w kosmosie</h2><p>Planeta, pierścienie, czarna dziura, mgławice i słońce przygaszone, skały pod polem bitwy nie udają już przeszkód, a pod planszą leży ciemne tło. Statki mają świecące paski w kolorze strony.</p>" +
 				"<h2>0.155 / Inwazja i tryby w grze sieciowej</h2><p>Gra wieloosobowa: nowe pole Tryb — przekaźniki, król wzgórza, ekspedycja i Inwazja (orbita, potem lądowanie, kapsuły i uderzenia z orbity przez sieć). Przez serwer, przeciw samym komputerom: Obrona i Przetrwanie w kooperacji.</p>" +
@@ -550,8 +619,8 @@ class CommandMenu {
 		}
 		this.root.classList.toggle("reduced-motion", this.reduced);
 		// Films (the intro, the prologues, the radio scenes) take the whole screen.
-		this.root.classList.toggle("film-screen", ["intro", "intro2", "intro3", "interlude"].includes(screen));
-		this.root.innerHTML = `<div class="menu-stars" aria-hidden="true"></div><div class="menu-orbit" aria-hidden="true"><div class="menu-planet"><div class="planet-surface"></div><div class="planet-clouds"></div><div class="planet-shade"></div></div></div><header class="menu-brand"><span>◈</span> POGRANICZE <small>GALAKTYKI / POKŁAD DOWODZENIA</small></header><div class="menu-layout"><section class="menu-content ${["knowledge", "scenarios", "intro", "intro2", "intro3", "interlude", "campaign"].includes(screen) ? "wide" : ""}"><span class="eyebrow">${EYEBROWS[screen] || "WOLNE KOLONIE / SEKTOR 07"}</span><h1 tabindex="-1">${title}</h1>${body}</section>${screen === "pause" ? this.situationHtml() : ""}${screen === "home" ? `<aside class="menu-mission"><span class="eyebrow">${save.valid ? "OSTATNIA OPERACJA" : "SYGNAŁ Z POWIERZCHNI"}</span><h2>${save.valid ? RTS.MISSIONS[save.missionId]?.planet || "Khepri IV" : "Khepri IV"}</h2><p>${save.valid ? RTS.MISSIONS[save.missionId]?.name || "Cichy Horyzont" : "Ekspedycja Wolnych Kolonii"}</p><p>${save.valid ? `Czas bitwy: ${save.time}<br>Zapis: ${save.date}` : "Dominium zajęło północny kompleks.<br>Przywróć kontrolę nad sektorem."}</p><span class="menu-tag">${save.valid ? "ZAPIS GOTOWY DO WZNOWIENIA" : "OCZEKIWANIE NA ROZKAZY"}</span></aside>` : ""}</div><footer class="menu-footer"><span>PROTOTYP 0.16 · ZAPIS LOKALNY</span><button id="menu-news">Co nowego i plany</button><button id="menu-sound">Dźwięk</button></footer>`;
+		this.root.classList.toggle("film-screen", ["intro", "intro2", "intro3", "intro4", "finale", "interlude"].includes(screen));
+		this.root.innerHTML = `<div class="menu-stars" aria-hidden="true"></div><div class="menu-orbit" aria-hidden="true"><div class="menu-planet"><div class="planet-surface"></div><div class="planet-clouds"></div><div class="planet-shade"></div></div></div><header class="menu-brand"><span>◈</span> POGRANICZE <small>GALAKTYKI / POKŁAD DOWODZENIA</small></header><div class="menu-layout"><section class="menu-content ${["knowledge", "scenarios", "intro", "intro2", "intro3", "intro4", "finale", "interlude", "campaign"].includes(screen) ? "wide" : ""}"><span class="eyebrow">${EYEBROWS[screen] || "WOLNE KOLONIE / SEKTOR 07"}</span><h1 tabindex="-1">${title}</h1>${body}</section>${screen === "pause" ? this.situationHtml() : ""}${screen === "home" ? `<aside class="menu-mission"><span class="eyebrow">${save.valid ? "OSTATNIA OPERACJA" : "SYGNAŁ Z POWIERZCHNI"}</span><h2>${save.valid ? RTS.MISSIONS[save.missionId]?.planet || "Khepri IV" : "Khepri IV"}</h2><p>${save.valid ? RTS.MISSIONS[save.missionId]?.name || "Cichy Horyzont" : "Ekspedycja Wolnych Kolonii"}</p><p>${save.valid ? `Czas bitwy: ${save.time}<br>Zapis: ${save.date}` : "Dominium zajęło północny kompleks.<br>Przywróć kontrolę nad sektorem."}</p><span class="menu-tag">${save.valid ? "ZAPIS GOTOWY DO WZNOWIENIA" : "OCZEKIWANIE NA ROZKAZY"}</span></aside>` : ""}</div><footer class="menu-footer"><span>PROTOTYP 0.16 · ZAPIS LOKALNY</span><button id="menu-news">Co nowego i plany</button><button id="menu-sound">Dźwięk</button></footer>`;
 		// The living backdrop (menu-backdrop.js), one canvas kept across the screens.
 		if (this.backdrop === undefined) this.backdrop = typeof MenuBackdrop !== "undefined" ? MenuBackdrop.create(this) : null;
 		if (this.backdrop) {
@@ -571,7 +640,7 @@ class CommandMenu {
 		queueMicrotask(() => ranges.forEach(fill));
 		if (screen === "knowledge") KnowledgeBase.mount(this.root);
 		this.root.querySelector(".menu-footer span").textContent =
-			"PROTOTYP 0.156 · ZAPIS LOKALNY";
+			"PROTOTYP 0.171 · ZAPIS LOKALNY";
 		if (
 			screen === "scenarios" ||
 			(screen === "briefing" &&
@@ -778,7 +847,9 @@ class CommandMenu {
 			this.missionOrigin = "campaign";
 			this.show("briefing");
 		});
-		on("campaign", () => this.show("intro"));
+		// The campaign's intro plays on the first entry only (remembered on this device); the button by act I replays it.
+		on("campaign", () => this.show(this.firstIntro() ? "intro" : "campaign"));
+		on("intro", () => this.show("intro"));
 		on("skip-intro", () => this.show("campaign"));
 		on("intro2", () => {
 			this.afterIntro2 = "campaign";
@@ -790,7 +861,20 @@ class CommandMenu {
 			this.show("intro3");
 		});
 		on("skip-intro3", () => this.show(this.afterIntro3 || "campaign"));
-		if (screen === "intro3") this.playIntro(Act3Film, this.afterIntro3 || "campaign");
+		if (screen === "intro3") this.playIntro(Act3Film.prepare(this.api.campaignDetails?.()?.choices || {}), this.afterIntro3 || "campaign");
+		on("intro4", () => {
+			this.afterIntro4 = "campaign";
+			this.show("intro4");
+		});
+		on("skip-intro4", () => this.show(this.afterIntro4 || "campaign"));
+		if (screen === "intro4") this.playIntro(Act4Film.prepare(this.api.campaignDetails?.()?.choices || {}), this.afterIntro4 || "campaign");
+		// The finale of the campaign (campaign-finale.js), with the campaign's decisions.
+		on("finale", () => {
+			this.afterFinale = "campaign";
+			this.show("finale");
+		});
+		on("skip-finale", () => this.show(this.afterFinale || "campaign"));
+		if (screen === "finale" && typeof FinaleFilm !== "undefined") this.playIntro(FinaleFilm.prepare(this.api.campaignDetails?.()?.choices || {}), this.afterFinale || "campaign");
 		on("review", () => {
 			this.selectedMission = this.api.review().missionId;
 			this.show("review");
@@ -835,6 +919,13 @@ class CommandMenu {
 						.campaign
 						? "campaign"
 						: "scenarios";
+					// The act IV prologue, before chapter X (until it is completed).
+					if (this.selectedMission === "colony10" && typeof Act4Film !== "undefined" && !(this.api.campaign?.() || {}).colony10 && !this.act4IntroSeen) {
+						this.act4IntroSeen = true;
+						this.afterIntro4 = this.firstInterlude(this.selectedMission) ? "interlude" : "briefing";
+						this.show("intro4");
+						return;
+					}
 					// The act III prologue likewise, before chapter VII.
 					if (this.selectedMission === "colony7" && typeof Act3Film !== "undefined" && !(this.api.campaign?.() || {}).colony7 && !this.act3IntroSeen) {
 						this.act3IntroSeen = true;
@@ -950,13 +1041,14 @@ class CommandMenu {
 			const audio = this.api.audio();
 			const showPreview = () => {
 				const p = audio.musicPreview,
-					fixed = ["menu", "intro"].includes(theme.value);
+					// The film cues and the menu have no moods.
+					fixed = ["menu", "intro", "prologue", "prologue2", "prologue3", "prologue4", "finale"].includes(theme.value);
 				mood.disabled = fixed;
 				playButton.firstChild.textContent = p ? "Zatrzymaj" : "Odtwórz";
 				playButton.lastChild.textContent = p ? "■" : "▶";
 				const name = (list, v) => list.find(([k]) => k === v)?.[1] || v;
 				now.textContent = p
-					? `Teraz gra: ${name(MUSIC_THEMES, p.mode)}${["menu", "intro"].includes(p.mode) ? "" : " · " + name(MUSIC_MOODS, p.mood).toLowerCase()}.${audio.muted ? " Dźwięk jest wyciszony." : audio.musicVolume === 0 ? " Głośność muzyki: 0." : ""}`
+					? `Teraz gra: ${name(MUSIC_THEMES, p.mode)}${["menu", "intro", "prologue", "prologue2", "prologue3", "prologue4", "finale"].includes(p.mode) ? "" : " · " + name(MUSIC_MOODS, p.mood).toLowerCase()}.${audio.muted ? " Dźwięk jest wyciszony." : audio.musicVolume === 0 ? " Głośność muzyki: 0." : ""}`
 					: "Wybierz motyw i nastrój. Po wyjściu z ustawień wraca zwykła muzyka.";
 			};
 			const start = () => {
@@ -1084,6 +1176,15 @@ class CommandMenu {
 		if (!s) return "";
 		const tile = (value, label) => `<span><b>${value}</b>${label}</span>`;
 		return `<aside class="pause-report" aria-label="Raport sytuacyjny"><span class="eyebrow">RAPORT SYTUACYJNY</span><div class="pause-tiles">${tile(s.metal, "metal")}${tile(s.gas, "gaz")}${tile(s.crystals, "kryształy")}${tile(s.army, "jednostki bojowe")}${tile(s.workers, "roboty")}${tile(s.relays, "przekaźniki")}</div><h3>Cele</h3><ul class="pause-objectives">${s.objectives.map((o) => `<li class="${o.done ? "done" : o.failed ? "failed" : ""}${o.secondary ? " secondary" : ""}">${o.text}</li>`).join("")}</ul><div class="pause-intel">${s.attack ? `<p class="pause-alert">⚠ Planowany atak wroga za <b>${s.attack}</b></p>` : ""}<p>${s.sky} · budynki: ${s.buildings}</p>${s.line ? `<p class="pause-radio"><b>${RTS.ACT2_SPEAKERS?.[s.line.who]?.name || s.line.who}:</b> ${s.line.text}</p>` : ""}</div></aside>`;
+	}
+	// The campaign's intro plays once, on the first entry into the campaign (remembered on this device).
+	firstIntro() {
+		if (typeof CampaignFilm === "undefined") return false;
+		try {
+			if (localStorage.getItem("pogranicze-intro-v1")) return false;
+			localStorage.setItem("pogranicze-intro-v1", "1");
+		} catch {}
+		return true;
 	}
 	// The radio scene of a chapter plays once before its first briefing (remembered on this device).
 	firstInterlude(id) {
@@ -1537,6 +1638,8 @@ class CommandMenu {
 		else if (this.screen === "intro") this.show("campaign");
 		else if (this.screen === "interlude") this.show("briefing");
 		else if (this.screen === "intro3") this.show(this.afterIntro3 || "campaign");
+		else if (this.screen === "intro4") this.show(this.afterIntro4 || "campaign");
+		else if (this.screen === "finale") this.show(this.afterFinale || "campaign");
 		else if (this.screen === "intro2")
 			this.show(this.afterIntro2 || "campaign");
 		else if (this.screen === "review") this.show("pause");

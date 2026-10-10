@@ -15,6 +15,41 @@
 		"game:lumen": { bpm: 60, root: 87.31, scale: [0, 2, 4, 6, 8, 10], bed: "choir", call: "bell", callOctave: 24, callBar: 0, braam: -2, hiss: true },
 		// "Kuźnia" — magma and the Hefajstos complex: a furnace drone, the anvil keeping time, heavy metal.
 		"game:forge": { bpm: 84, root: 58.27, scale: [0, 1, 3, 5, 6, 8, 10], bed: "drone", call: "flute", callOctave: 24, callBar: 3, braam: 0, anvil: true },
+		// The new worlds (0.167). "Przypływ" — Thalassa: an open major pentatonic, the choir like wind over water,
+		// a flute calling, the surf breaking and drawing back (waves).
+		"game:tide": { bpm: 64, root: 98, scale: [0, 2, 4, 7, 9], bed: "choir", call: "flute", callOctave: 24, callBar: 1, braam: -2, waves: true },
+		// "Kryształ" — the crystal ridges of Nivalis: the hum of the pillars, high glass bells glinting (chimes).
+		"game:crystal": { bpm: 58, root: 92.5, scale: [0, 2, 3, 7, 9, 10], bed: "hum", call: "bell", callOctave: 36, callBar: 2, braam: -1, chimes: true },
+		// "Ruiny" — the Precursors' city on Nadir: an ancient mode over a drone, the wind; since 0.167.3 the flute's
+		// call echoing off the walls (echoes), the citadel's gong every eight bars (gong) and a ritual frame drum.
+		"game:ruins": { bpm: 62, root: 65.41, scale: [0, 1, 4, 5, 7, 8, 10], bed: "drone", call: "flute", callOctave: 24, callBar: 0, braam: 0, hiss: true, echoes: true, gong: true, ritual: true },
+		// "Bastion" — the Admiralty's fortress: a minor march, a snare keeping step behind the walls; since 0.167.4 the
+		// garrison's bugle call on brass (fanfare), low strings pulsing with the march (ostinato) and distant guns.
+		"game:bastion": { bpm: 76, root: 55, scale: [0, 2, 3, 5, 7, 8, 10], bed: "drone", call: "flute", callOctave: 24, callBar: 2, braam: 0, march: true, fanfare: true, ostinato: true, guns: true },
+		// "Archiwum" — the archive under the ice of Vesper: harmonic minor, the choir in the cold, a music box (an old
+		// tune locked under the ice, 0.167.2) and the ice cracking and groaning now and then (cracks).
+		"game:archive": { bpm: 56, root: 82.41, scale: [0, 2, 3, 5, 7, 8, 11], bed: "choir", call: "bell", callOctave: 24, callBar: 3, braam: -1, musicBox: true, cracks: true },
+		// The valley of Eos (0.167.1), twice: "Latarnie" — chapter I, a bright major, the choir, and the beacon's bell
+		// signalling every two bars; "Popioły" — chapter XI, the same root and the same call in the minor over a
+		// drone, the wind, the beacon only now and then, faint (dim) — the valley after the landing.
+		"game:beacons": { bpm: 70, root: 110, scale: [0, 2, 4, 5, 7, 9, 11], bed: "choir", call: "flute", callOctave: 24, callBar: 0, braam: -2, beacon: true },
+		"game:ashes": { bpm: 66, root: 110, scale: [0, 2, 3, 5, 7, 8, 10], bed: "drone", call: "flute", callOctave: 24, callBar: 0, braam: 0, hiss: true, beacon: "dim" },
+		// The remaining maps (0.168). "Wydmy" — Cichy Horyzont, Khepri IV: a double harmonic mode over a drone, a
+		// wailing voice over the dune sea, the sand blowing, and something huge moving under it (rumble).
+		"game:dunes": { bpm: 60, root: 87.31, scale: [0, 1, 4, 5, 7, 8, 11], bed: "drone", call: "wail", callOctave: 12, callBar: 1, braam: -1, hiss: true, rumble: true },
+		// "Szron" — Biały Przesmyk, the frozen outpost (and chapter VIII): the hum of dead modules, a bell, the frozen
+		// hive clicking in the walls, the ice cracking.
+		"game:frost": { bpm: 58, root: 77.78, scale: [0, 1, 3, 5, 6, 8, 10], bed: "hum", call: "bell", callOctave: 24, callBar: 2, braam: -1, clicks: true, cracks: true },
+		// "Szczyty" — Wiszące Szczyty, islands in the air: lydian, a high choir, a flute, a harp rising, the mist.
+		"game:skyfall": { bpm: 66, root: 98, scale: [0, 2, 4, 6, 7, 9, 11], bed: "choir", call: "flute", callOctave: 24, callBar: 3, braam: -2, harp: true, hiss: true },
+		// "Oaza" — Słoneczna Dolina, Helion II: warm mixolydian, a lute-like harp, a hand drum, a low flute.
+		"game:oasis": { bpm: 72, root: 116.54, scale: [0, 2, 4, 5, 7, 9, 10], bed: "choir", call: "flute", callOctave: 12, callBar: 0, braam: -2, harp: true, ritual: true },
+		// "Konwój" — chapter V, the last convoy through the mountain pass: low strings driving on, the snow wind,
+		// the flute echoing between the walls of the pass.
+		"game:convoy": { bpm: 80, root: 73.42, scale: [0, 2, 3, 5, 7, 8, 10], bed: "drone", call: "flute", callOctave: 24, callBar: 1, braam: 0, ostinato: true, hiss: true, echoes: true },
+		// "Sygnał" — chapter IV, the signal from under the sand: a strange mode, the hum, a bell, the signal beeping
+		// in a pattern (morse) and the rumble of what lies buried.
+		"game:signal": { bpm: 64, root: 92.5, scale: [0, 1, 5, 7, 8], bed: "hum", call: "bell", callOctave: 24, callBar: 2, braam: -1, morse: true, rumble: true },
 	};
 	// The space themes (0.145), in the manner of the "Interstellar" score — by its means, not its melodies:
 	// a pipe organ turning one small arpeggio over and over above slow chords, the clock ticking the beat,
@@ -33,7 +68,30 @@
 		// "Requiem floty" (Cmentarzysko Floty): a chorale for the dead fleet — choir and organ in D minor, the
 		// clock, low brass far off.
 		"game:requiem": { bpm: 56, root: 73.42, prog: [[0, "m"], [-2, "M"], [-4, "M"], [-5, "M"], [0, "m"], [3, "M"], [-7, "m"], [-5, "M"]], hold: 1, lead: "chorale", top: "flute" },
+		// "Doki" (0.167, Doki Eos): the Colonies' shipyard — hopeful, in D major, the organ's figure and bells.
+		"game:docks": { bpm: 76, root: 146.83, prog: [[0, "M"], [0, "M"], [7, "M"], [7, "M"], [-3, "m"], [-3, "m"], [5, "M"], [5, "s"]], hold: 1, lead: "organ", top: "bell" },
+		// "Mgławica" (Szkarłatna Mgławica): dark and slow, long organ chords and a drone, a flute lost in the red.
+		"game:nebula": { bpm: 52, root: 61.74, prog: [[0, "m"], [1, "M"], [-2, "m"], [0, "s"]], hold: 2, lead: "chords", top: "flute", deep: true },
+		// "Komety" (Szlak Komet): bright and moving — the piano's figure high up, sus chords, bells like ice dust.
+		"game:comets": { bpm: 80, root: 130.81, prog: [[0, "s"], [4, "m"], [9, "m"], [5, "M"], [0, "s"], [7, "s"], [5, "M"], [2, "s"]], hold: 1, lead: "piano", top: "bell", high: 12 },
 	};
+	// The scores of the prologues of acts II-IV (0.171), in the manner of "Interstellar" like the campaign's prologue:
+	// a root, the parts by the shots of their films (seconds from the start, a mood each) and the end. Moods: hope (a
+	// major key, a piano arpeggio, strings), mystery (a minor key, signal-like bells, a soft pedal), quiet (a lone piano,
+	// a soft choir), threat (a drone, a heartbeat, a blast as it begins), battle (blasts on the bar, war drums, strings),
+	// mission (the organ's turning figure, the drums gathering in its second half), title (a great chord, a sudden
+	// silence, one piano note). tests/audio.test.js keeps the parts in step with Act2Film, Act3Film and Act4Film.
+	const STORIES = {
+		prologue2: { root: 82.41, end: 76, parts: [[0, "hope"], [9, "mystery"], [18, "quiet"], [28, "threat"], [38, "mystery"], [47, "battle"], [57, "mission"], [66, "title"]] },
+		prologue3: { root: 69.3, end: 76, parts: [[0, "battle"], [9, "mystery"], [18, "quiet"], [28, "threat"], [37, "quiet"], [47, "mission"], [56, "battle"], [66, "title"]] },
+		prologue4: { root: 87.31, end: 76, parts: [[0, "hope"], [9, "threat"], [18, "battle"], [28, "mystery"], [37, "threat"], [47, "battle"], [56, "mystery"], [66, "title"]] },
+	};
+	// The parts of the campaign finale's score (seconds), by the shots of its film (campaign-finale.js, LENGTHS: 10, 9, 9,
+	// 10, 9, 9, 10, 9, 9, 9, 10, 9, 10); tests/audio.test.js keeps them in step with the film.
+	const FINALE = { rifts: 10, home: 19, eos: 28, beacon: 38, hefajstos: 47, heart: 56, council: 66, network: 75, people: 84, log: 93, routes: 103, end: 112, cut: 118, stop: 122 };
+	// The parts of the campaign prologue's score (seconds), by the shots of its film (campaign-film.js, LENGTHS: 9, 10,
+	// 10, 9, 10, 10, 10, 10, 10, 11, 10, 10, 11, 10, 10); tests/audio.test.js keeps them in step with the film.
+	const PROLOGUE = { network: 19, routes: 29, dominion: 38, blockade: 48, dark: 58, ultimatum: 68, lira: 78, transmission: 88, mission: 99, run: 109, descent: 119, landing: 130, title: 140, cut: 146, end: 150 };
 	class GameAudio {
 		constructor({ contextFactory, storage } = {}) {
 			this.contextFactory =
@@ -798,28 +856,12 @@
 		// the ice and in the menu. Moods (explore, develop, tension, battle, recovery) add and remove layers.
 		musicStep(step, t) {
 			const hz = (root, n) => root * 2 ** (n / 12);
-			if (this.musicMode === "intro") {
-				// (Listened to from the settings, the cue starts over after a short silence.)
-				if (this.musicPreview) step %= 64;
-				// 30 s: the drone wakes, two blasts, the drums gather, a voice, the storm, then one organ chord of hope.
-				const beat = 0.5,
-					D = 73.42,
-					note = (kind, n, duration, level, pan = 0, delay = 0) => this.instrument(kind, hz(D, n), t + delay, duration, level, pan);
-				if (step === 0) note("drone", -12, 22, 0.05);
-				if (step === 0 || step === 12) note("braam", 0, 5.5, 0.05);
-				if ([6, 9, 18, 21].includes(step)) note("taiko", 2, 1.2, 0.09, -0.2);
-				if (step >= 24 && step < 52 && step % 2 === 0) note("taiko", step % 4 ? 5 : 0, 1, step % 4 ? 0.05 : 0.09, step % 4 ? 0.3 : -0.3);
-				if (step === 20) note("choir", 12, 9, 0.03, -0.2), note("choir", 19, 9, 0.022, 0.2);
-				if (step >= 24 && step < 44 && step % 4 === 0) note("wail", 24 + [0, 1, 4, 1, 0][(step - 24) / 4], 1.9, 0.03, 0.15);
-				if (step === 36) note("chant", 0, 8, 0.03);
-				if (step >= 44 && step < 56 && step % 4 === 0) note("braam", step % 8 ? 5 : 0, 2.2, 0.045);
-				if (step >= 48 && step < 56) note("taiko", 0, 0.6, 0.05, (step % 2) - 0.5);
-				if (step === 56) {
-					[0, 4, 7, 12, 16].forEach((n, k) => note("organ", n + 12, 2.2, 0.018, (k - 2) * 0.3));
-					note("strings", 24, 2.2, 0.02);
-				}
-				return beat;
-			}
+			// The films' opening (0.168.4): "intro" under the radio scenes and the epilogues, "intro:20" a shorter cut of
+			// it (the prologues of acts II-IV until 0.171, which have their own scores in STORIES now).
+			if (this.musicMode === "intro" || this.musicMode === "intro:20") return this.introStep(step, t, this.musicMode === "intro" ? 60 : 40);
+			if (this.musicMode === "prologue") return this.prologueStep(step, t);
+			if (STORIES[this.musicMode]) return this.storyStep(step, t, STORIES[this.musicMode]);
+			if (this.musicMode === "finale") return this.finaleStep(step, t);
 			const mode = this.musicMode,
 				menu = mode === "menu",
 				ice = mode === "game:ice",
@@ -910,6 +952,390 @@
 			if (mood === "recovery" && !pulse) play("choir", root, deg(2) + 12, beat * meter, 0.016, -0.2);
 			return beat;
 		}
+		// The prologues of acts II-IV (0.171): STORIES above, one step an eighth at 120 a minute (0.5 s), a bar 4 s.
+		storyStep(step, t, P) {
+			if (this.musicPreview) step %= P.end * 2 + 8;
+			const beat = 0.5,
+				s = step * beat,
+				pulse = step % 8,
+				bar = Math.floor(step / 8),
+				index = P.parts.findLastIndex(([at]) => s >= at),
+				[from, mood] = P.parts[Math.max(0, index)],
+				next = P.parts[index + 1]?.[0] ?? P.end,
+				within = s - from,
+				progress = within / (next - from),
+				progs = {
+					hope: [[0, 4], [7, 4], [9, 3], [5, 4]],
+					mystery: [[0, 3], [-4, 4]],
+					quiet: [[0, 3], [-4, 4], [3, 4], [-2, 4]],
+					threat: [[0, 3], [-4, 4], [5, 3], [7, 4]],
+					battle: [[0, 3], [1, 4], [0, 3], [-4, 4]],
+					mission: [[0, 3], [-4, 4], [3, 4], [-2, 4]],
+					title: [[0, 3]],
+				},
+				prog = progs[mood],
+				[r, third] = prog[bar % prog.length],
+				chord = [0, third, 7],
+				root = P.root * 2 ** (r / 12),
+				play = (kind, n, duration, level, pan = 0, delay = 0) => this.instrument(kind, root * 2 ** (n / 12), t + delay, duration, level, pan),
+				tick = (level) => this.instrument("tick", pulse % 4 ? 2600 : 3300, t, 0.05, level, pulse % 4 ? 0.35 : -0.35),
+				long = beat * 8 + 0.4,
+				arp = [chord[0], chord[2], 12 + chord[0], 12 + chord[1]],
+				order = [0, 1, 2, 3, 2, 1, 2, 1],
+				fig = arp[order[pulse]] + 12;
+			if (s >= P.end) return beat;
+			// The title: the great chord with the choir; the cut four seconds before the end; one piano note on the fifth.
+			if (mood === "title") {
+				const cut = P.end - 4;
+				if (within === 0) {
+					[0, 3, 7, 12, 15, 19].forEach((n, k) => play("organ", n, cut - from + 0.3, 0.018, (k - 2.5) * 0.25));
+					chord.forEach((n, k) => play("strings", n + 12, cut - from, 0.016, (k - 1) * 0.5));
+					play("choir", 15, cut - from, 0.02, 0.2);
+					play("chant", 0, cut - from, 0.02);
+					play("braam", -12, beat * 8, 0.05);
+					play("taiko", -12, 1.4, 0.08);
+				}
+				if (s < cut && pulse % 2 === 0) tick(0.03);
+				if (s === cut + 1) {
+					play("piano", 31, beat * 8, 0.03, 0.2);
+					play("piano", 31, beat * 6, 0.011, -0.3, beat * 1.5);
+				}
+				return beat;
+			}
+			// The clock: quarters; every eighth when it grows tense; none in the quiet.
+			if (mood !== "quiet" && (pulse % 2 === 0 || mood === "threat" || mood === "battle" || mood === "mission")) tick(mood === "hope" || mood === "mystery" ? 0.022 : 0.032);
+			// The pedal and the chord each bar, by the mood.
+			if (!pulse) {
+				play("organ", -12, long, mood === "quiet" ? 0.011 : 0.02);
+				if (mood === "hope" || mood === "mission" || (mood === "quiet" && within >= 4) || mood === "battle") chord.forEach((n, k) => play("strings", n + 12, long, mood === "battle" ? 0.014 : 0.011, (k - 1) * 0.5));
+				if (mood === "quiet" || (mood === "mission" && progress >= 0.5)) play("choir", chord[1] + 12, long, 0.012, 0.2);
+				if (mood === "threat" || mood === "mystery") play("drone", -12, long, mood === "threat" ? 0.03 : 0.02);
+				if (mood === "battle") play("braam", -12, beat * 6, 0.045);
+			}
+			if (mood === "threat" && within === 0) play("braam", -12, beat * 8, 0.035);
+			// Hope: the piano arpeggio.
+			if (mood === "hope" && pulse % 2 === 0) play("piano", arp[pulse / 2] + 24, beat * 2.5, 0.02, pulse % 4 ? 0.25 : -0.25);
+			// Mystery: signal-like bells high up, a beat of three then a rest.
+			if (mood === "mystery" && [0, 1, 2, 5].includes(pulse)) play("bell", chord[pulse === 5 ? 2 : 0] + 36, beat * (pulse === 2 ? 2 : 0.4), 0.014, 0.35);
+			// Quiet: a lone, slow piano melody.
+			if (mood === "quiet" && (pulse === 0 || pulse === 4)) play("piano", [24, 27, 31, 29, 27, 24, 22, 24][(bar * 2 + pulse / 4) % 8] - r, beat * 4, 0.024, 0.15);
+			// Threat: the heartbeat.
+			if (mood === "threat" && pulse % 4 === 0) this.instrument("heart", 55, t, 0.6, 0.06, 0);
+			// Battle: war drums, strings stabbing.
+			if (mood === "battle") {
+				if ([0, 3, 6].includes(pulse)) play("taiko", -12, 1.1, 0.07, pulse % 2 ? 0.3 : -0.3);
+				if (pulse % 2 === 1) play("strings", chord[pulse % 3] + 12, beat * 0.4, 0.01, 0.2);
+			}
+			// Mission: the organ's turning figure, bells doubling it and drums gathering in the second half.
+			if (mood === "mission") {
+				play("organ", fig, beat * 0.95, 0.013, pulse % 2 ? 0.25 : -0.25);
+				if (progress >= 0.5) {
+					play("bell", fig + 12, beat * 0.9, 0.008, pulse % 2 ? -0.3 : 0.3);
+					if ([0, 3, 6].includes(pulse)) play("taiko", -12, 1.1, 0.05, pulse % 2 ? 0.3 : -0.3);
+				}
+			}
+			return beat;
+		}
+		// The campaign's prologue (0.169, under the 150 s film of campaign-film.js): a score in the manner of
+		// "Interstellar" telling the same story. One step is an eighth at 120 a minute (0.5 s), a bar 4 s. Parts by the
+		// film's shots (PROLOGUE, seconds): the frontier in hopeful D major (a piano arpeggio, strings, bells as the
+		// beacons light); the Dominium in D minor (a drone, a heartbeat), the blockade (blasts, drums); the dark (almost
+		// nothing); the ultimatum (brass stabs); Lira (a lone piano, a soft choir, then strings); the mission (the
+		// organ's turning figure, building with drums and the full organ, easing for the landing); the title (a great
+		// D major chord, a sudden silence, one bright piano note).
+		prologueStep(step, t) {
+			if (this.musicPreview) step %= PROLOGUE.end * 2 + 8;
+			const beat = 0.5,
+				D = 73.42,
+				s = step * beat,
+				P = PROLOGUE,
+				pulse = step % 8,
+				bar = Math.floor(step / 8),
+				part = s < P.dominion ? "peace" : s < P.blockade ? "dominion" : s < P.dark ? "blockade" : s < P.ultimatum ? "dark" : s < P.lira ? "ultimatum" : s < P.mission ? "lira" : s < P.title ? "mission" : "title",
+				progs = {
+					peace: [[0, 4], [-5, 4], [-3, 3], [5, 4]],
+					dominion: [[0, 3], [-4, 4], [5, 3], [7, 4]],
+					blockade: [[0, 3], [-4, 4], [5, 3], [7, 4]],
+					dark: [[0, 3]],
+					ultimatum: [[0, 3], [1, 4]],
+					lira: [[0, 3], [-4, 4], [3, 4], [-2, 4]],
+					mission: [[0, 3], [-4, 4], [3, 4], [-2, 4]],
+					title: [[0, 4]],
+				},
+				prog = progs[part],
+				[r, third] = prog[bar % prog.length],
+				chord = [0, third, 7],
+				root = D * 2 ** (r / 12),
+				play = (kind, n, duration, level, pan = 0, delay = 0) => this.instrument(kind, root * 2 ** (n / 12), t + delay, duration, level, pan),
+				tick = (level) => this.instrument("tick", pulse % 4 ? 2600 : 3300, t, 0.05, level, pulse % 4 ? 0.35 : -0.35),
+				long = beat * 8 + 0.4,
+				arp = [chord[0], chord[2], 12 + chord[0], 12 + chord[1]],
+				order = [0, 1, 2, 3, 2, 1, 2, 1],
+				fig = arp[order[pulse]] + 12;
+			if (s >= P.end) return beat;
+			// The title: the great chord, held; the cut; one bright note on the third, a soft chord under it.
+			if (part === "title") {
+				if (s === P.title) {
+					[0, 4, 7, 12, 16, 19].forEach((n, k) => play("organ", n, (P.cut - P.title) + 0.3, 0.018, (k - 2.5) * 0.25));
+					chord.forEach((n, k) => play("strings", n + 12, P.cut - P.title, 0.016, (k - 1) * 0.5));
+					play("choir", 16, P.cut - P.title, 0.022, 0.2);
+					play("choir", 19, P.cut - P.title, 0.016, -0.2);
+					play("braam", -12, beat * 8, 0.05);
+					play("taiko", -12, 1.4, 0.08);
+				}
+				if (s < P.cut && pulse % 2 === 0) tick(0.03);
+				if (s === P.cut + 1) {
+					play("piano", 28, beat * 8, 0.032, 0.2);
+					play("piano", 28, beat * 6, 0.012, -0.3, beat * 1.5);
+					chord.forEach((n, k) => play("organ", n + 12, beat * 6, 0.008, (k - 1) * 0.4, 0.3));
+				}
+				return beat;
+			}
+			const tense = part === "dominion" || part === "blockade" || part === "ultimatum";
+			// The clock: quarters, every eighth when it grows tense and in the mission; slowing in the dark.
+			if (part === "dark" ? pulse === 0 : pulse % 2 === 0 || tense || part === "mission") tick(part === "peace" || part === "lira" ? 0.02 : 0.032);
+			// The pedal and the chord, each bar.
+			if (!pulse) {
+				if (part !== "dark") play("organ", -12, long, part === "lira" ? 0.012 : 0.02);
+				if (part === "peace" && s >= 8) chord.forEach((n, k) => play("strings", n + 12, long, 0.01, (k - 1) * 0.5));
+				if (part === "lira" && s >= P.transmission) chord.forEach((n, k) => play("strings", n + 12, long, 0.011, (k - 1) * 0.5));
+				if (part === "lira") play("choir", chord[1] + 12, long, 0.011, 0.2);
+				if (tense || part === "dark") play("drone", -12, long, part === "dark" ? 0.04 : 0.03);
+				if (part === "mission") {
+					chord.forEach((n, k) => play("strings", n + 12, long, s >= P.run ? 0.015 : 0.011, (k - 1) * 0.5));
+					if (s >= P.run && s < P.landing) play("choir", chord[1] + 12, long, 0.015, 0.2);
+					if (s >= P.descent && s < P.landing) {
+						chord.forEach((n, k) => play("organ", n + (k ? 12 : 0), long, 0.016, (k - 1) * 0.4));
+						play("chant", chord[0], long, 0.016);
+					}
+				}
+			}
+			// The frontier: a piano arpeggio; bells as the beacons light up in Lira's network.
+			if (part === "peace") {
+				if (pulse % 2 === 0) play("piano", arp[pulse / 2] + 24, beat * 2.5, 0.02, pulse % 4 ? 0.25 : -0.25);
+				if (s >= P.network && s < P.routes && pulse === 4) play("bell", chord[2] + 36, beat * 3, 0.016, (bar % 2) - 0.5);
+			}
+			// The Dominium: a heartbeat; the blockade: blasts on the bar and war drums; metal groaning.
+			if (part === "dominion" && s >= P.dominion + 4 && pulse % 4 === 0) this.instrument("heart", 55, t, 0.6, 0.06, 0);
+			if (part === "dominion" && s === P.dominion) play("braam", -12, beat * 8, 0.035);
+			if (part === "blockade") {
+				if (!pulse) play("braam", -12, beat * 6, 0.045);
+				if ([0, 3, 6].includes(pulse)) play("taiko", -12, 1.1, 0.07, pulse % 2 ? 0.3 : -0.3);
+				if (pulse % 2 === 1) play("strings", chord[pulse % 3] + 12, beat * 0.4, 0.01, 0.2);
+			}
+			// The dark: a low piano note now and then, metal groaning far off.
+			if (part === "dark") {
+				if (pulse === 0 && bar % 2 === 0) play("piano", 12, beat * 8, 0.02, -0.2);
+				if (pulse === 4) play("metal", 0, beat * 6, 0.012, 0.3);
+			}
+			// The ultimatum: brass stabs on the beat, a low drum on the bar.
+			if (part === "ultimatum") {
+				if (pulse === 0 || pulse === 3) chord.forEach((n, k) => play("brass", n, beat * 0.6, 0.016, (k - 1) * 0.3));
+				if (!pulse) play("taiko", -12, 1.2, 0.06);
+			}
+			// Lira: a lone, slow piano melody in D minor.
+			if (part === "lira" && (pulse === 0 || pulse === 4)) {
+				const melody = [24, 27, 31, 29, 27, 24, 22, 24];
+				play("piano", melody[(bar * 2 + pulse / 4) % melody.length] - r, beat * 4, 0.024, 0.15);
+			}
+			// The mission: the organ's turning figure every eighth — doubled with bells in the run, by the organ in the
+			// descent; drums gathering through the run and the descent; one blast as the descent begins; calm at the landing.
+			if (part === "mission") {
+				const landing = s >= P.landing;
+				play(landing ? "piano" : "organ", fig, beat * (landing ? 2 : 0.95), landing ? 0.018 : s >= P.descent ? 0.016 : 0.012, pulse % 2 ? 0.25 : -0.25);
+				if (s >= P.run && !landing) play(s >= P.descent ? "organ" : "bell", fig + 12, beat * 0.9, 0.009, pulse % 2 ? -0.3 : 0.3);
+				if (s >= P.run && !landing && [0, 3, 6].includes(pulse)) play("taiko", -12, 1.1, s >= P.descent ? 0.08 : 0.04 + ((s - P.run) / (P.descent - P.run)) * 0.03, pulse % 2 ? 0.3 : -0.3);
+				if (s === P.descent) play("braam", -12, beat * 8, 0.05);
+			}
+			return beat;
+		}
+		// The films' opening (0.168.4), in the manner of the "Interstellar" score like the finale, but a departure into
+		// the unknown rather than a victory: D minor, ending on a question. `total` steps (eighths at 120 a minute,
+		// 0.5 s each: 60 for 30 s, 40 for 20 s), in parts by its share: the first third a deep organ pedal, the clock
+		// ticking slowly, a two-note piano call echoing; the second the organ's turning figure over D minor, B flat,
+		// F, C, the strings, the clock every eighth; then to nine tenths the build (the choir, the full organ, drums
+		// gathering, one brass blast); at the end a sudden silence and one high piano note left unresolved.
+		introStep(step, t, total = 60) {
+			if (this.musicPreview) step %= total + 4;
+			const beat = 0.5,
+				D = 73.42,
+				third = Math.round(total / 3),
+				build = Math.round((total * 2) / 3),
+				cut = Math.round(total * 0.9),
+				bar = Math.floor(step / 8),
+				pulse = step % 8,
+				[r, q] = [[0, 3], [0, 3], [-2, 4], [-2, 4], [3, 4], [3, 4], [-2, 4], [-2, 4]][bar % 8],
+				chord = [0, q, 7],
+				root = D * 2 ** (r / 12),
+				play = (kind, n, duration, level, pan = 0, delay = 0) => this.instrument(kind, root * 2 ** (n / 12), t + delay, duration, level, pan);
+			if (step >= total) return beat;
+			// The end: silence, then one high piano note on the second (D to E: a question), echoed once.
+			if (step >= cut) {
+				if (step === cut + 2) {
+					this.instrument("piano", D * 2 ** (26 / 12), t, beat * 8, 0.03, 0.2);
+					this.instrument("piano", D * 2 ** (26 / 12), t + beat * 1.5, beat * 6, 0.012, -0.3);
+				}
+				return beat;
+			}
+			// The clock: slow at first (quarters), every eighth from the figure on.
+			if (pulse % 2 === 0 || step >= third) this.instrument("tick", pulse % 4 ? 2600 : 3300, t, 0.05, step >= build ? 0.04 : 0.03, pulse % 4 ? 0.35 : -0.35);
+			// The pedal each bar; the chord on the strings from the second part, the full organ and the choir in the build.
+			if (!pulse) {
+				const long = beat * 8 + 0.4;
+				play("organ", -12, long, 0.022);
+				if (!step) this.instrument("drone", D / 2, t, beat * third, 0.03);
+				if (step >= third) chord.forEach((n, k) => play("strings", n + 12, long, step >= build ? 0.015 : 0.011, (k - 1) * 0.5));
+				if (step >= build) {
+					chord.forEach((n, k) => play("organ", n + (k ? 12 : 0), long, 0.016, (k - 1) * 0.4));
+					play("choir", chord[1] + 12, long, 0.016, 0.2);
+					play("chant", chord[0], long, 0.014);
+				}
+			}
+			// The first part: a two-note piano call (the root and the fifth up), echoed.
+			if (step < third && pulse === 2) {
+				const n = (step % 16 < 8 ? 24 : 31) + (bar % 4 === 3 ? 2 : 0);
+				this.instrument("piano", D * 2 ** (n / 12), t, beat * 6, 0.026, 0.3);
+				this.instrument("piano", D * 2 ** (n / 12), t + beat * 1.5, beat * 6, 0.01, -0.3);
+			}
+			// The second part on: the organ's turning figure, every eighth (doubled in the build).
+			if (step >= third) {
+				const arp = [chord[0], chord[2], 12 + chord[0], 12 + chord[1]],
+					order = [0, 1, 2, 3, 2, 1, 2, 1],
+					fig = arp[order[pulse]] + 12;
+				play("organ", fig, beat * 0.95, step >= build ? 0.015 : 0.012, pulse % 2 ? 0.25 : -0.25);
+				if (step >= build) play("bell", fig + 12, beat * 0.9, 0.008, pulse % 2 ? -0.3 : 0.3);
+			}
+			// The build: drums gathering, one blast at its start.
+			if (step >= build && [0, 3, 6].includes(pulse)) play("taiko", -12, 1.1, 0.04 + ((step - build) / (cut - build)) * 0.05, pulse % 2 ? 0.3 : -0.3);
+			if (step === build) play("braam", -12, beat * 8, 0.045);
+			return beat;
+		}
+		// The campaign's finale (0.168.3; 0.170 under the 122 s film of campaign-finale.js): a score in the manner of
+		// "Interstellar" telling what came after the war. One step is an eighth at 120 a minute (0.5 s), a bar 4 s. Parts
+		// by the film's shots (FINALE, seconds): the Gate (a drone, a chant, a blast as it cracks, the clock stopping);
+		// the rifts (a high choir, a bell for each closing); home and Eos (the organ's turning figure from A minor into
+		// C major, strings, the choir); the beacon (the first height — the full organ, bells as the lamp lights);
+		// Hefajstos and the Heart (a piano alone, then a low drone and high notes); the council (a brass chorale); the
+		// network, the people and the log (the figure again, a warm piano tune, the clock); the routes and the end (the
+		// build with drums, a great C major chord, a sudden silence, one bright piano note).
+		finaleStep(step, t) {
+			if (this.musicPreview) step %= FINALE.stop * 2 + 8;
+			const beat = 0.5,
+				A = 110,
+				s = step * beat,
+				F = FINALE,
+				pulse = step % 8,
+				bar = Math.floor(step / 8),
+				part = s < F.rifts ? "gate" : s < F.home ? "rifts" : s < F.beacon ? "home" : s < F.hefajstos ? "beacon" : s < F.council ? "memory" : s < F.network ? "council" : s < F.routes ? "frontier" : "end",
+				progs = {
+					gate: [[0, 3]],
+					rifts: [[0, 3], [-4, 4]],
+					home: s < F.eos ? [[0, 3], [-4, 4], [3, 4], [-2, 4]] : [[3, 4], [-2, 4], [0, 3], [-4, 4]],
+					beacon: [[3, 4], [-2, 4], [-4, 4], [3, 4]],
+					memory: [[0, 3], [-4, 4], [5, 3], [-2, 4]],
+					council: [[3, 4], [-4, 4], [-2, 4], [3, 4]],
+					frontier: [[3, 4], [-2, 4], [0, 3], [-4, 4]],
+					end: s < F.end ? [[3, 4], [-2, 4], [0, 3], [-4, 4]] : [[3, 4]],
+				},
+				prog = progs[part],
+				[r, third] = prog[bar % prog.length],
+				chord = [0, third, 7],
+				root = A * 2 ** (r / 12),
+				play = (kind, n, duration, level, pan = 0, delay = 0) => this.instrument(kind, root * 2 ** (n / 12), t + delay, duration, level, pan),
+				tick = (level) => this.instrument("tick", pulse % 4 ? 2600 : 3300, t, 0.05, level, pulse % 4 ? 0.35 : -0.35),
+				long = beat * 8 + 0.4,
+				arp = [chord[0], chord[2], 12 + chord[0], 12 + chord[1]],
+				order = [0, 1, 2, 3, 2, 1, 2, 1],
+				fig = arp[order[pulse]] + 12;
+			if (s >= F.stop) return beat;
+			// The end: the build to the great chord; then the cut and one bright note (the third of C, high).
+			if (part === "end") {
+				if (s < F.end) {
+					tick(0.035);
+					if (!pulse) {
+						play("organ", -12, long, 0.024);
+						chord.forEach((n, k) => play("strings", n + 12, long, 0.016, (k - 1) * 0.5));
+						play("choir", chord[1] + 12, long, 0.016, 0.2);
+					}
+					play("organ", fig, beat * 0.95, 0.016, pulse % 2 ? 0.25 : -0.25);
+					play("bell", fig + 12, beat * 0.9, 0.009, pulse % 2 ? -0.3 : 0.3);
+					if ([0, 3, 6].includes(pulse)) play("taiko", -12, 1.1, 0.04 + ((s - F.routes) / (F.end - F.routes)) * 0.04, pulse % 2 ? 0.3 : -0.3);
+					return beat;
+				}
+				if (s === F.end) {
+					[0, 4, 7, 12, 16, 19].forEach((n, k) => play("organ", n, F.cut - F.end + 0.3, 0.018, (k - 2.5) * 0.25));
+					chord.forEach((n, k) => play("strings", n + 12, F.cut - F.end, 0.018, (k - 1) * 0.5));
+					play("choir", 16, F.cut - F.end, 0.022, 0.2);
+					play("choir", 19, F.cut - F.end, 0.016, -0.2);
+					play("chant", 0, F.cut - F.end, 0.02);
+					play("braam", -12, beat * 8, 0.05);
+					play("taiko", -12, 1.4, 0.08);
+				}
+				if (s < F.cut && pulse % 2 === 0) tick(0.03);
+				if (s === F.cut + 1) {
+					play("piano", 28, beat * 8, 0.032, 0.2);
+					play("piano", 28, beat * 6, 0.012, -0.3, beat * 1.5);
+					chord.forEach((n, k) => play("organ", n + 12, beat * 6, 0.008, (k - 1) * 0.4, 0.3));
+				}
+				return beat;
+			}
+			// The Gate: a drone and a chant, the clock racing, a blast as the Gate cracks, then the clock stops.
+			if (part === "gate") {
+				if (!step) {
+					play("drone", -12, F.rifts, 0.05);
+					play("chant", 0, F.rifts, 0.02);
+					play("braam", -12, beat * 8, 0.045);
+				}
+				if (s < 8) tick(0.035);
+				if (s === 6) {
+					play("braam", -12, beat * 8, 0.05);
+					play("taiko", -12, 1.4, 0.08);
+				}
+				return beat;
+			}
+			// The rifts: a high choir, a bell for each rift closing.
+			if (part === "rifts") {
+				if (!pulse) {
+					play("organ", -12, long, 0.014);
+					play("choir", chord[2] + 24, long, 0.014, 0.3);
+					play("choir", chord[1] + 12, long, 0.012, -0.3);
+				}
+				if (pulse % 2 === 0) play("bell", 36 - ((bar * 4 + pulse / 2) % 6) * 2, beat * 4, 0.018, (pulse % 4 ? 0.4 : -0.4));
+				return beat;
+			}
+			// The clock: quarters, every eighth at the heights.
+			if (part !== "memory" && (pulse % 2 === 0 || part === "beacon")) tick(part === "beacon" ? 0.035 : 0.025);
+			// The pedal and the chord, each bar.
+			if (!pulse) {
+				play("organ", -12, long, part === "memory" ? 0.012 : 0.02);
+				if ((part === "home" && s >= F.home + 4) || part === "beacon" || part === "council" || part === "frontier") chord.forEach((n, k) => play("strings", n + 12, long, part === "beacon" ? 0.016 : 0.011, (k - 1) * 0.5));
+				if ((part === "home" && s >= F.eos) || part === "beacon" || (part === "frontier" && s >= F.people && s < F.log)) play("choir", chord[1] + 12, long, 0.014, 0.2);
+				if (part === "beacon") chord.forEach((n, k) => play("organ", n + (k ? 12 : 0), long, 0.016, (k - 1) * 0.4));
+				if (part === "memory" && s >= F.heart) play("drone", -12, long, 0.03);
+			}
+			// The figure of the organ: home and Eos, the beacon (doubled), the network and the log.
+			if (part === "home" || part === "beacon" || (part === "frontier" && (s < F.people || s >= F.log))) {
+				play("organ", fig, beat * 0.95, part === "beacon" ? 0.016 : 0.012, pulse % 2 ? 0.25 : -0.25);
+				if (part === "beacon") play("bell", fig + 12, beat * 0.9, 0.009, pulse % 2 ? -0.3 : 0.3);
+			}
+			// The beacon lights: a bell chord, a soft blast.
+			if (part === "beacon" && s === F.beacon + 4.5) {
+				chord.forEach((n, k) => play("bell", n + 24, beat * 8, 0.022, (k - 1) * 0.4));
+				play("braam", -12, beat * 6, 0.03);
+			}
+			// The memory: Hefajstos — a piano alone; the Heart — high, cold notes over the drone.
+			if (part === "memory") {
+				if (s < F.heart && (pulse === 0 || pulse === 4)) play("piano", [24, 27, 31, 29, 27, 24, 22, 24][(bar * 2 + pulse / 4) % 8] - r, beat * 4, 0.024, 0.15);
+				if (s >= F.heart && pulse === 2) play("piano", chord[(bar % 3)] + 36, beat * 3, 0.014, (bar % 2) - 0.5);
+			}
+			// The council: a brass chorale, one chord a bar, softly.
+			if (part === "council" && (pulse === 0 || pulse === 4)) chord.forEach((n, k) => play("brass", n + (k ? 0 : -12), beat * 3.8, 0.012, (k - 1) * 0.3));
+			// The people: a warm piano tune in C major.
+			if (part === "frontier" && s >= F.people && s < F.log && pulse % 2 === 0) play("piano", [24, 26, 28, 31, 28, 26, 24, 19][(bar * 4 + pulse / 2) % 8] - r + 3, beat * 2.5, 0.022, 0.15);
+			// The network: a bell as each world links up.
+			if (part === "frontier" && s < F.people && pulse === 4) play("bell", chord[2] + 36, beat * 3, 0.014, (bar % 2) - 0.5);
+			return beat;
+		}
 		// The eerie themes (EERIE), with a touch of "Alien" — silence and space, an echoing call, metal groaning,
 		// the hum of the hull, a heartbeat in the tension, hits of metal in the fight. Notes chosen by step, so the
 		// same bar always sounds the same.
@@ -938,7 +1364,12 @@
 			if (!battle && bar % 4 === E.callBar && pulse % 2 === 0 && pulse < 6) {
 				const k = Math.floor(r(bar) * 4),
 					shape = [[0, 4, 3], [0, 6, 5], [7, 3, 0], [0, 8, 7]][k];
-				play(E.call, deg(shape[pulse / 2]) + E.callOctave, beat * (pulse === 4 ? 4 : 1.8), E.call === "bell" ? 0.03 : 0.022, 0.3);
+				const note = deg(shape[pulse / 2]) + E.callOctave,
+					length = beat * (pulse === 4 ? 4 : 1.8),
+					level = E.call === "bell" ? 0.03 : 0.022;
+				play(E.call, note, length, level, 0.3);
+				// Echoes off the walls: twice, from the other side and back, fading.
+				if (E.echoes) [1, 2].forEach((k) => play(E.call, note, length, level * (k === 1 ? 0.45 : 0.2), k === 1 ? -0.5 : 0.5, beat * 1.5 * k));
 			}
 			// Metal groaning now and then (more in the tension).
 			if (pulse === 3 && r(bar * 7 + 1) < (tension ? 0.6 : 0.3)) play("metal", deg(Math.floor(r(bar) * 5)) + 12, beat * 6, 0.016, r(bar + 3) - 0.5);
@@ -948,6 +1379,56 @@
 			if (E.hiss && !pulse && bar % (tension ? 2 : 4) === 2) play("hiss", 60 + Math.floor(r(bar) * 6), beat * 6, 0.02, r(bar + 5) - 0.5);
 			// The forge: the anvil keeps time.
 			if (E.anvil && !battle && (pulse === 0 || pulse === 5)) play("anvil", 31 + (pulse ? 2 : 0), 1.4, pulse ? 0.012 : 0.018, pulse ? 0.3 : -0.3);
+			// The sea: the surf breaking every two bars, from one side and then the other, a low swell under it.
+			if (E.waves && !pulse && bar % 2 === 0) {
+				play("hiss", 55 + Math.floor(r(bar) * 5), beat * 7, tension ? 0.03 : 0.024, bar % 4 ? -0.6 : 0.6);
+				play("bass", deg(0) - 12, beat * 6, 0.02);
+			}
+			// Something huge moving under the ground: a deep swell every eight bars (the dune sea, the buried signal).
+			if (E.rumble && !pulse && bar % 8 === 6) {
+				play("bass", deg(0) - 12, beat * 8, 0.03);
+				play("drone", deg(0) - 12, beat * 8, 0.02);
+			}
+			// A harp: a rising arpeggio plucked every other bar (the islands in the air, the oasis).
+			if (E.harp && !battle && bar % 2 === 1 && pulse < 4) play("pluck", deg(pulse * 2) + 24, beat * 2, 0.02, -0.3 + pulse * 0.2);
+			// The signal: short beeps high up in a fixed pattern every four bars, like a code.
+			if (E.morse && !battle && bar % 4 === 1 && [0, 1, 3, 6].includes(pulse)) play("bell", deg(0) + 36, beat * (pulse === 3 ? 0.6 : 0.25), 0.014, 0.4);
+			// The beacon of Eos: a bell signalling from the tower, echoed; once dark (dim), rarely and faint.
+			if (E.beacon && !battle && !pulse && bar % (E.beacon === "dim" ? 8 : 2) === 0) {
+				const level = E.beacon === "dim" ? 0.012 : 0.026;
+				play("bell", deg(4) + 24, beat * 6, level, -0.3);
+				play("bell", deg(4) + 24, beat * 6, level * 0.45, 0.3, beat * 2);
+			}
+			// The fortress: the garrison's bugle — a rising call on brass every eight bars (four in the tension).
+			if (E.fanfare && !battle && bar % (tension ? 4 : 8) === 0 && pulse < 4) play("brass", deg([0, 2, 4, 7][pulse]) + 12, beat * (pulse === 3 ? 3 : 0.8), pulse === 3 ? 0.02 : 0.016, 0.15);
+			// The fortress: low strings pulsing with the march, the root and the fifth by turns.
+			if (E.ostinato && !battle && pulse % 2 === 0) play("strings", deg(pulse % 4 ? 4 : 0) - 12, beat * 0.9, tension ? 0.012 : 0.008, -0.15);
+			// The fortress: distant guns from the walls now and then — a dull thud and its rumble.
+			if (E.guns && !battle && pulse === 6 && r(bar * 5 + 2) < (tension ? 0.5 : 0.2)) {
+				play("kick", 0, 0.6, 0.03, r(bar) - 0.5);
+				play("hiss", 40, beat * 2, 0.008, r(bar + 1) - 0.5, 0.05);
+			}
+			// The ruins: the citadel's gong — a deep, long bell (two octaves) every eight bars.
+			if (E.gong && !pulse && bar % 8 === 4) {
+				play("bell", deg(0), beat * 12, 0.03, 0);
+				play("bell", deg(0) + 12, beat * 10, 0.016, 0.2);
+			}
+			// The ruins: a ritual frame drum, soft, on every other bar (not in the fight, which has its own drums).
+			if (E.ritual && !battle && bar % 2 === 0 && [0, 3, 5].includes(pulse)) play("taiko", 0, 0.8, (pulse ? 0.014 : 0.022) * (tension ? 1.4 : 1), pulse === 3 ? 0.3 : -0.3);
+			// The archive: a music box — a small high figure every four bars, like an old tune under the ice.
+			if (E.musicBox && !battle && bar % 4 === 1 && pulse % 2 === 0) play("piano", deg([0, 2, 4, 2][pulse / 2] + (bar % 8 === 5 ? 1 : 0)) + 36, beat * 2, 0.014, 0.2);
+			// The ice: a sharp crack and a low groan at odd moments (more in the tension and the fight).
+			if (E.cracks && r(step * 2.9 + 1) < (tension || battle ? 0.08 : 0.04)) {
+				play("tick", 72 + Math.floor(r(step) * 8), 0.04, 0.03, r(step + 2) - 0.5);
+				play("metal", deg(0) - 12, beat * 4, 0.014, r(step + 3) - 0.5);
+			}
+			// Crystal and ice: glass bells glinting high up, now and then.
+			if (E.chimes && !battle && pulse % 2 === 1 && r(step * 5.3) < (tension ? 0.35 : 0.22)) play("bell", deg(Math.floor(r(step + 4) * 9)) + 36, beat * 3, 0.012, r(step + 6) - 0.5);
+			// The fortress: a snare keeping step (and the drum on the bar in the tension).
+			if (E.march && !battle) {
+				if (pulse % 2 === 0) play("snare", 0, 0.1, pulse ? 0.008 : 0.012, -0.2);
+				if (tension && !pulse) play("taiko", 0, 1, 0.04, 0);
+			}
 			// Develop: a slow piano figure in the theme's mode.
 			if (mood === "develop" && pulse % 4 === 1) play("piano", deg(Math.floor(r(step) * 7)) + 24, beat * 5, 0.022, 0.3);
 			// Tension: the heartbeat.
@@ -1424,6 +1905,6 @@
 		}
 	}
 	if (typeof module !== "undefined" && module.exports)
-		module.exports = { GameAudio };
+		module.exports = { GameAudio, STORIES };
 	root.GameAudio = GameAudio;
 })(typeof window !== "undefined" ? window : globalThis);

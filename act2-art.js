@@ -266,6 +266,8 @@ const Act2Art = (() => {
 		const s = game.act2;
 		if (!s) return;
 		const t = game.time;
+		// Markers set by later chapters (act IV): { x, y, color, radius, text, sub, progress }.
+		for (const b of s.beacons || []) beacon(c, b, t, b.color, b.radius, b.text, b.sub, b.progress ?? null);
 		if (s.pad)
 			beacon(
 				c,

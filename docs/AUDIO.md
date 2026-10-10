@@ -1,5 +1,162 @@
 # Dźwięk i muzyka
 
+## Wersja 0.171 — muzyka prologów aktów II–IV (2026-10-09)
+
+Każdy z nowych prologów aktów II–IV trwa 76 s i ma własną partyturę w stylu „Interstellar” (`audio.js`, `storyStep`, tryby `prologue2`, `prologue3`, `prologue4`; plany w `STORIES`: tonika, części w sekundach na ujęciach filmu z nastrojem, koniec — test pilnuje zgodności z `Act2Film.lengths`, `Act3Film.lengths` i `Act4Film.lengths`). Krok to ósemka przy 120 na minutę (0,5 s), takt — 4 s. Wcześniej prologi grały skrócone otwarcie `intro:20`, które zostało w kodzie.
+
+Nastroje:
+
+| Nastrój | Muzyka |
+|---|---|
+| nadzieja | tonacja dur, arpeggio fortepianu, smyczki, cichy zegar co ćwierćnutę |
+| tajemnica | moll, wysokie dzwonki jak sygnał (trzy uderzenia i pauza), burdon |
+| cisza | samotna, powolna melodia fortepianu i cichy chór, smyczki od czwartej sekundy, bez zegara |
+| zagrożenie | burdon, bicie serca, uderzenie blachy na początku części, zegar co ósemkę |
+| bitwa | uderzenia blachy na takt, bębny wojenne, krótkie akcenty smyczków |
+| misja | obracająca się figura organów; w drugiej połowie dzwony i bębny, chór |
+| tytuł | wielki akord (organy, smyczki, chór, śpiew, uderzenie blachy i bęben), cisza 4 s przed końcem, jeden jasny dźwięk fortepianu |
+
+| Prolog | Tonika | Części (s) |
+|---|---|---|
+| akt II · Cena świtu | E | 0 nadzieja (po świcie) · 9 tajemnica (sygnał) · 18 cisza (Lira i zaginiona ekipa) · 28 zagrożenie (wydmy Khepri) · 38 tajemnica (pod piaskiem) · 47 bitwa (Hefajstos) · 57 misja (szlak przez lód) · 66 tytuł |
+| akt III · Przebudzenie Roju | Cis | 0 bitwa (upadek Hefajstosa) · 9 tajemnica (rytm artefaktów) · 18 cisza (żywy kryształ) · 28 zagrożenie (mapa Roju) · 37 cisza (wezwanie Varna) · 47 misja (Nivalis) · 56 bitwa (Serce Roju) · 66 tytuł |
+| akt IV · Inwazja | F | 0 nadzieja (rozejm) · 9 zagrożenie (Admiralicja) · 18 bitwa (blokada Eos) · 28 tajemnica (sygnał artefaktu) · 37 zagrożenie (szczeliny) · 47 bitwa (Wartownicy) · 56 tajemnica (Brama) · 66 tytuł |
+
+W odsłuchu muzyki (Ustawienia) są nowe motywy „Prolog aktu II/III/IV”, bez wyboru nastroju; partytura w odsłuchu się zapętla.
+
+## Wersja 0.170 — muzyka nowego finału kampanii (2026-10-09)
+
+Film finału trwa 122 s (`campaign-finale.js`); jego muzyka w stylu „Interstellar” opowiada, co stało się po wojnie (`audio.js`, `finaleStep`, tryb `finale`; części `FINALE` w sekundach na ujęciach filmu — test pilnuje zgodności z `FinaleFilm.lengths`):
+
+| Czas | Ujęcia | Muzyka |
+|---|---|---|
+| 0–10 s | Brama gaśnie | burdon i śpiew, zegar pędzi, uderzenie blachy i bęben w chwili pęknięcia (6 s), potem zegar milknie |
+| 10–19 s | szczeliny | eteryczny chór, dzwon na każdą ćwierćnutę opadający w dół — szczeliny zamykają się jedna po drugiej, bez zegara |
+| 19–38 s | powrót z Erebusa, Eos | figura organów, z a-moll przechodzi w C-dur; smyczki, nad Eos chór |
+| 38–47 s | latarnia | pierwsza kulminacja: pełne organy, figura z dzwonami, zegar co ósemkę; akord dzwonów i miękkie uderzenie, gdy lampa się zapala |
+| 47–66 s | Hefajstos, Serce Roju | refleksja: samotna melodia fortepianu, potem niski burdon i wysokie, chłodne dźwięki |
+| 66–75 s | rada rozejmu | cichy, dostojny chorał blachy |
+| 75–103 s | sieć, ludzie, dziennik | figura organów i dzwony łączące światy; ciepła melodia fortepianu w C-dur z chórem; zegar i organy przy dzienniku |
+| 103–122 s | szlaki, koniec | narastanie z dzwonami i bębnami, wielki akord C-dur (organy, smyczki, chór, uderzenie), nagła cisza (118 s), jeden jasny dźwięk fortepianu (119 s) |
+
+## Wersja 0.169 — muzyka nowego prologu kampanii (2026-10-09)
+
+Prolog kampanii trwa 150 s (`campaign-film.js`) i ma własną partyturę w stylu „Interstellar”, która opowiada tę samą historię (`audio.js`, `prologueStep`, tryb `prologue`; części `PROLOGUE` w sekundach na ujęciach filmu — test pilnuje zgodności z `CampaignFilm.lengths`):
+
+| Czas | Ujęcia | Muzyka |
+|---|---|---|
+| 0–38 s | pogranicze, osadnicy, sieć, szlaki | D-dur z nadzieją: arpeggio fortepianu, smyczki, dzwonki przy zapalaniu latarni, cichy zegar |
+| 38–58 s | Dominium, blokada | d-moll: burdon, bicie serca; potem uderzenia blachy na takt, bębny wojenne, smyczki |
+| 58–68 s | ciemność | prawie nic: burdon, zegar co takt, pojedyncze niskie dźwięki fortepianu, jęk metalu |
+| 68–78 s | ultimatum | ostre akordy blachy, niski bęben, zegar co ósemkę |
+| 78–99 s | Stacja Ciszy, transmisja | samotna melodia fortepianu Liry w d-moll, cichy chór, od transmisji smyczki |
+| 99–140 s | flota, blokada, zejście, lądowanie | obracająca się figura organów (d – B – F – C): narasta z dzwonami, chórem i bębnami, w zejściu pełne organy i uderzenie blachy, przy lądowaniu wycisza się do fortepianu |
+| 140–150 s | tytuł aktu I | wielki akord D-dur (organy, smyczki, chór), nagła cisza, jeden jasny dźwięk fortepianu |
+
+Dawne 30-sekundowe intro (`intro`) zostaje pod scenami łączności i epilogami, a 20-sekundowe (`intro:20`) pod prologami aktów II–IV. W odsłuchu: „Prolog kampanii — historia pogranicza”.
+
+## Wersja 0.168.4 — nowa muzyka intro (2026-10-09)
+
+Dawne 30-sekundowe intro („burza”: burdon, uderzenia, bębny, zawodzący głos) zastąpiło otwarcie w stylu finału — także „Interstellar”, ale o innym nastroju: wyruszenie w nieznane zamiast zwycięstwa, d-moll, zakończenie pytaniem (`audio.js`, `introStep`). Dwie długości dopasowane do filmów: `intro` — 30 s (prolog aktu I, sceny łączności, epilogi), `intro:20` — 20 s (prologi aktów II–IV). Części według udziału w długości:
+
+| Część | Co gra |
+|---|---|
+| pierwsza trzecia | niski pedał organów i burdon, wolne tykanie zegara (ćwierćnuty), dwudźwiękowe wezwanie fortepianu z echem |
+| druga trzecia | obracająca się figura organów co ósemkę nad d-moll – B – F – C, smyczki, zegar co ósemkę |
+| do 90% | narastanie: chór i śpiew, pełne organy, figura podwojona dzwonami, zbierające się bębny, jedno uderzenie blachy |
+| koniec | nagła cisza i jeden wysoki, nierozwiązany dźwięk fortepianu (sekunda nad toniką) z echem — przed końcem filmu |
+
+W odsłuchu: „Intro — wyruszenie”. Test: obie długości, części w swoich sekundach, cisza i jeden dźwięk na końcu, nic po filmie.
+
+## Wersja 0.168.3 — muzyka finału kampanii (2026-10-09)
+
+Pod filmem finału (40 s, `campaign-finale.js`) grała dotąd burzowa muzyka intro. Teraz ma własny motyw zwycięstwa w stylu „Interstellar” — tymi samymi środkami, bez cytowania melodii (`audio.js`, `finaleStep`; tryb muzyki `finale`). Krok to ósemka przy 120 na minutę (0,5 s), takt — 4 s, dwa takty na ujęcie filmu:
+
+| Czas | Co gra |
+|---|---|
+| 0–10 s | tykanie zegara, pedał organów, pojedyncze dźwięki fortepianu z echem |
+| 10–20 s | obracająca się figura organów (arpeggio co ósemkę) nad a-moll – F – C – G, wchodzą smyczki |
+| 20–30 s | narastanie: chór, pełne akordy organów, figura podwojona oktawę wyżej, bębny coraz głośniej, zegar co ósemkę |
+| 30–35 s | zwycięstwo w C-dur: pełne organy, uderzenie blachy, wysoki chór i śpiew |
+| 35–40 s | nagła cisza, potem jeden dźwięk fortepianu i cichy akord A-dur pod napisem „Koniec kampanii”; po filmie cisza |
+
+- Ekran `finale` w menu włącza ten motyw (dotąd `intro`); w ustawieniach jest w odsłuchu jako „Finał kampanii — zwycięstwo”.
+- Test (`tests/audio.test.js`): czas trwania, kolejne warstwy w swoich sekundach, uderzenie i C-dur w kulminacji, cisza przed ostatnim dźwiękiem fortepianu i po filmie.
+
+## Wersja 0.168 — muzyka pozostałych map (2026-10-09)
+
+Mapy, które grały tylko ogólny motyw biomu (wspólny z innymi), dostały własne:
+
+| Motyw | Mapy | Charakter |
+|---|---|---|
+| Wydmy (`game:dunes`) | Cichy Horyzont | podwójna skala harmoniczna nad burdonem, zawodzący głos nad morzem wydm, piasek na wietrze; **pomruk** — co osiem taktów głęboka fala basu, jakby coś ogromnego ruszyło się pod piaskiem |
+| Szron (`game:frost`) | Biały Przesmyk | brzęczenie martwych modułów, dzwon, zamarznięty rój stuka w ścianach, lód pęka |
+| Szczyty (`game:skyfall`) | Wiszące Szczyty | skala lidyjska, wysoki chór, flet; **harfa** — wznoszące się arpeggio co drugi takt; mgła |
+| Oaza (`game:oasis`) | Słoneczna Dolina | ciepła skala miksolidyjska, harfa jak lutnia, bęben dłoniowy, niski flet |
+| Sygnał (`game:signal`) | rozdział IV · Sygnał spod piasku | obca skala, brzęczenie, dzwon; **kod** — krótkie, wysokie sygnały w stałym rytmie co cztery takty; pomruk zakopanego artefaktu |
+| Konwój (`game:convoy`) | rozdział V · Ostatni konwój | niskie smyczki pchające naprzód, śnieżny wiatr, flet odbijający się echem od ścian przełęczy |
+
+- Szkolenie (poligon na Eos) gra „Latarnie” — jak rozdział I na tej samej planecie.
+- Bez zmian, bo mają motywy pisane dla siebie: Wydmy Bliźniaczych Słońc („Świt bliźniaczych słońc”), Popielny Szlak („Wrak”), Świetlisty Gąszcz i rozdział VII („Gąszcz”), Rzeki Magmy oraz rozdziały VI i IX („Kuźnia”). Rozdział VIII gra „Ul”, bo przeciwnikiem jest Rój (ta reguła ma pierwszeństwo przed mapą); Biały Przesmyk w scenariuszu gra „Szron”.
+- Wybór motywu patrzy też na mapy rozdziałów aktu III (`RTS.ACT3`).
+- Testy: 15 motywów niepokojących, każdy z własną sekwencją; zawodzenie i pomruk Wydm, harfa Szczytów, kod Sygnału.
+
+## Wersja 0.167.4 — własny charakter Bastionu (2026-10-09)
+
+Motyw „Bastion” (Bastion Admiralicji, rozdział XII) miał tylko werbel marszu. Dostał wojskowy charakter twierdzy:
+- **sygnał trąbki** (`fanfare`) — co osiem taktów (w napięciu co cztery) krótka fanfara garnizonu na blasze: wznoszący się akord, ostatni dźwięk przytrzymany;
+- **ostinato smyczków** (`ostinato`) — niskie smyczki pulsujące w takt marszu, na zmianę podstawa i kwinta (głośniej w napięciu);
+- **dalekie działa** (`guns`) — od czasu do czasu głuchy huk z murów i jego pomruk, częściej w napięciu.
+
+Oba silniki dźwięku mają te instrumenty (blacha i głęboki bęben także w trybie wysokiej jakości, Tone.js). Test: w „Bastionie” są blacha, smyczki i huk dział, w „Ruinach” żadnego z nich.
+
+## Wersja 0.167.3 — własny charakter Ruin (2026-10-09)
+
+Motyw „Ruiny” (Ruiny Nadiru, rozdział III) był dość ogólny — burdon, flet i wiatr, blisko „Kuźni” i „Wraku”. Dostał akcenty miasta Prekursorów:
+- **echo murów** (`echoes`) — wezwanie fletu odbija się od ruin dwa razy, z drugiej strony i z powrotem, coraz ciszej;
+- **gong cytadeli** (`gong`) — co osiem taktów głęboki, długo wybrzmiewający dzwon w dwóch oktawach, jak budzący się obelisk;
+- **rytualny bęben** (`ritual`) — cichy rytm bębna obręczowego co drugi takt (głośniej w napięciu; w bitwie grają bębny wojenne).
+
+Test: w „Ruinach” fletu jest co najmniej dwa razy więcej niż w „Kuźni” (echa), jest niski gong i bęben poza bitwą, którego „Kuźnia” nie ma.
+
+## Wersja 0.167.2 — własny charakter Archiwum (2026-10-09)
+
+Motyw „Archiwum” (Lodowe Archiwum, rozdział II) brzmiał podobnie do „Kryształu” (oba miały szklane dzwonki). Teraz zamiast dzwonków ma:
+- **pozytywkę** (`musicBox`) — co cztery takty krótką, wysoką figurę fortepianu, jak starą melodię zamkniętą pod lodem (co drugi raz o stopień wyżej);
+- **pękający lód** (`cracks`) — w nieregularnych chwilach ostry trzask i niski jęk lodu, częściej w napięciu i bitwie; to nawiązanie do lodu, który na tej mapie pęka pod wybuchami (0.166).
+
+Test: w „Archiwum” są pozytywka i trzaski, w „Krysztale” żadnego z nich.
+
+## Wersja 0.167.1 — muzyka doliny Eos (2026-10-09)
+
+Dwa motywy, które się rymują — ten sam ton podstawowy (A) i ta sama melodia wezwania fletu:
+
+| Motyw | Mapy | Charakter |
+|---|---|---|
+| Latarnie (`game:beacons`) | Dolina Latarni, I | jasny dur, chór; **dzwon latarni** co dwa takty z echem — sygnał z wieży |
+| Popioły (`game:ashes`) | Wypalona Dolina, XI | ta sama melodia w mollu nad burdonem, wiatr; dzwon latarni rzadko (co osiem taktów) i cicho — zgaszone latarnie |
+
+Test: dzwon latarni w „Latarniach” odzywa się ponad dwa razy częściej niż w „Popiołach”, a w obu jest obecny.
+
+## Wersja 0.167 — muzyka nowych map (2026-10-09)
+
+Osiem nowych motywów dla map z kroków M1–M5 (`audio.js`, te same mechanizmy co dotychczasowe: motywy niepokojące `EERIE` i kosmiczne `SPACE_MUSIC`; nastroje — eksploracja, rozbudowa, napięcie, bitwa, wytchnienie — zmieniają je jak inne).
+
+| Motyw | Mapy | Charakter |
+|---|---|---|
+| Przypływ (`game:tide`) | Archipelag Thalassy | pentatonika durowa, chór jak wiatr nad wodą, flet; **przybój** — szum fal co dwa takty z lewej i prawej, niski przypływ basu |
+| Kryształ (`game:crystal`) | Kryształowe Grzbiety, XIII | brzęczenie kolumn, wysokie dzwonki; **szklane dzwonki** — iskry dźwięku w losowych miejscach |
+| Ruiny (`game:ruins`) | Ruiny Nadiru, III | dawna skala (frygijska durowa) nad burdonem, flet wśród murów, wiatr; od 0.167.3 echo murów, gong cytadeli i rytualny bęben |
+| Bastion (`game:bastion`) | Bastion Admiralicji, XII | molowy marsz: **werbel** w takt kroku, w napięciu bęben na raz; od 0.167.4 sygnał trąbki, ostinato smyczków i dalekie działa |
+| Archiwum (`game:archive`) | Lodowe Archiwum, II | moll harmoniczny, chór w chłodzie; od 0.167.2 pozytywka i pękający lód |
+| Doki (`game:docks`) | Doki Eos, X | kosmiczny, pełen nadziei — D-dur, figura organów, dzwony |
+| Mgławica (`game:nebula`) | Szkarłatna Mgławica | ciemny i powolny — długie akordy organów, burdon, flet zagubiony w czerwieni |
+| Komety (`game:comets`) | Szlak Komet | jasny i ruchliwy — figura fortepianu wysoko, akordy sus, dzwony jak lodowy pył |
+
+- Wybór motywu (`app.js`, `musicModeFor`) patrzy na mapę pod rozdziałem (`RTS.CAMPAIGN_MAPS`, `RTS.ACT4`), więc rozdział gra muzykę swojej mapy; przy okazji XIV (Wrota Pustki) gra teraz „Horyzont zdarzeń” zamiast domyślnej „Orbity”. Dolina Latarni i Wypalona Dolina (Eos) dostały własne motywy w 0.167.1.
+- Wszystkie nowe motywy są w odsłuchu muzyki w ustawieniach.
+- Testy (`tests/audio.test.js`): 9 motywów niepokojących i 7 kosmicznych — każdy z własną sekwencją, poprawne nuty, bitwa z bębnami i uderzeniami; przybój, szklane dzwonki i werbel marszu tylko tam, gdzie powinny.
+
 ## Wersja 0.145 — muzyka kosmosu (2026-10-08)
 
 Na życzenie użytkownika cztery motywy dla map w kosmosie w stylu filmu „Interstellar” — środkami partytury (organy piszczałkowe, zegar, fortepian, narastanie warstw, nagła cisza), bez cytowania melodii. Partytura w `audio.js` (`SPACE_MUSIC`, `spaceStep`), wybór w grze — `musicModeFor(game)` w `app.js` (mapy z `space: true`; wcześniej grał „Gąszcz”).

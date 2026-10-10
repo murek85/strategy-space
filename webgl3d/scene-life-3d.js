@@ -408,7 +408,7 @@ export function createSceneLife3D(THREE, { world, heightAt, models3d, hiddenLaye
 			const piece = marks.get(i),
 				r = piece
 					? make(`landmark|${i}|${piece}`, () => models3d.scenery("landmark", piece, o.w, o.h), piece === "eosBeacon" || piece === "nadirCitadel")
-					: make("obstacle|" + i + "|" + o.x + "|" + o.y, () => models3d.scenery("obstacle", space ? (o.kind === "hulk" ? "hulk" : "asteroids") : o.kind || "rock", o.w, o.h, space ? RTS.MISSIONS[game.missionId].look?.rocks || "rock" : biome, i + 1), o.kind === "spire" || o.kind === "grove"),
+					: make("obstacle|" + i + "|" + o.x + "|" + o.y, () => models3d.scenery("obstacle", space ? (o.kind === "hulk" || o.kind === "dock" ? o.kind : "asteroids") : o.kind || "rock", o.w, o.h, space ? RTS.MISSIONS[game.missionId].look?.rocks || "rock" : biome, i + 1), o.kind === "spire" || o.kind === "grove"),
 				cx = o.x + o.w / 2,
 				cy = o.y + o.h / 2;
 			if (!r.placed) {
@@ -416,9 +416,10 @@ export function createSceneLife3D(THREE, { world, heightAt, models3d, hiddenLaye
 				r.holder.position.set(cx, heightAt(cx, cy), cy);
 			}
 			if (piece) r.model.update({ lit, progress: held }, { time });
-			// Asteroid fields turn slowly; hulks of warships only drift a little, keeping to their field.
+			// Asteroid fields turn slowly; hulks of warships only drift a little, keeping to their field; the
+			// gantries of a shipyard stay put.
 			else if (space && o.kind === "hulk") r.holder.rotation.y = Math.sin(time * 0.06 + i) * 0.015;
-			else if (space) r.holder.rotation.y = time * (0.012 + (i % 3) * 0.006) * (i % 2 ? 1 : -1);
+			else if (space && o.kind !== "dock") r.holder.rotation.y = time * (0.012 + (i % 3) * 0.006) * (i % 2 ? 1 : -1);
 		});
 		// Deposits (ore, gas, crystals): one model per stage (art.js layouts), swapped when the stage
 		// changes; shown once explored, like on the 2D board.

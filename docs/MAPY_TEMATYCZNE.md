@@ -2,6 +2,84 @@
 
 Wdrożono 2026-09-26, wersja 0.19.
 
+## Mapy zmienne w czasie — krok M5 (wersja 0.166, 2026-10-09)
+
+Zasady: `world-rules.js` (w łańcuchu po `space-rules.js`, wartości w `RTS.WORLD`). Grafika: `world-art.js` (Canvas i PixiJS) i `webgl3d/world-3d.js` (3D). Plan M1–M5 jest tym samym zakończony.
+
+- **Przypływy — Archipelag Thalassy.** Od 3. minuty co 4 minuty morze na minutę zalewa sześć mielizn (`tides` w układzie mapy: ciała wody nad brodami, skalowane z mapą). 15 s wcześniej ostrzeżenie „Przypływ za 15 s”, potem „Przypływ — mielizny pod wodą”, na koniec „Odpływ”. Przy wysokiej wodzie brody blokują jak morze, a jednostki stojące na nich wypływają na najbliższy brzeg. Na mieliźnie nie da się budować; złoża i przekaźniki nigdy na nią nie trafiają (także po zmianie ziarna i rozmiaru). Stan wynika z zegara gry — nic nie trafia do zapisu. 2D: woda wpływa na brody (z pulsującą zapowiedzią przy ostrzeżeniu); 3D: tafla morza nad brodami.
+- **Pękający lód — Lodowe Archiwum.** Jezioro w środku jest skute lodem (woda `kind: "ice"`): lód niesie jednostki (silnik pomija go przy blokadzie), ciężkie maszyny (czołgi, ciężkie, artyleria, bastiony, niszczyciele, kolosy, transportery) zwalniają na nim do 60%. Wybuch od rozmiaru 36 wybija przerębel (promień 26–70) na 45 s: przerębel blokuje, jednostki naziemne w nim tracą 30% zdrowia i zostają wypchnięte, nie zostaje krater; przerębel zamarza po 45 s (blednie w ostatnich 10 s). Przerębla są w zapisie (`iceHoles`). 2D: tafla lodu ze śnieżnym brzegiem i pęknięciami, przerębel z białym obrzeżem i szczelinami; 3D: ciemna woda w pierścieniu lodu.
+- **Szlak Komet — nowa mapa kosmiczna (`comets`).** Pas Ikara z dwoma szlakami komet (zachód–wschód i północ–południe), każdy przelot co 3 minuty. Warkocz (560 długości) rani statki, które się w nim znajdą (16/s, najpierw osłony), a głowa w promieniu 260 uzupełnia pola gazu do stanu z początku gry (40/s). 10 s przed przelotem ostrzeżenie. Kometę rysuje 2D (świecąca głowa, zakrzywiony warkocz) i 3D (głowa z poświatą i warkocz z pyłu).
+- Silnik: woda rodzaju `ice` nie blokuje (`engine.js`, `blocked`), rzeźba 3D lekko zagłębia lód.
+- Testy: `tests/world-rules.test.js` — przypływ (harmonogram, blokada, ostrzeżenia, wypłukanie na brzeg, brak budowy i złóż na brodach w 3 rozmiarach i 3 ziarnach), lód (przejście, spowolnienie, przerębel, obrażenia i wypchnięcie, brak krateru, zapis, zamarzanie), komety (oba szlaki, obrażenia w warkoczu, uzupełnianie gazu, ostrzeżenie).
+
+## Nowe światy — krok M4 (wersja 0.165, 2026-10-09)
+
+Dwa nowe światy jako **motywy** (`theme`) na istniejących biomach — biom decyduje o zasadach (pogoda, fauna), motyw o wyglądzie terenu. Grafika: `world-art.js` (wtyczka `MapArt` dla Canvas; PixiJS używa tej samej tekstury, 3D maluje z niej grunt i buduje własne modele).
+
+| Mapa | Świat | Teren | Gdzie |
+|---|---|---|---|
+| Archipelag Thalassy (`thalassa`) | ocean (`theme: "ocean"`, biom `ash`: sztormy z deszczem, pajęczaki na plażach) | dwie szerokie, zakrzywione cieśniny morza wokół wyspy środkowej z najbogatszymi złożami i dwie krótkie cieśniny od zachodu i wschodu; mielizny (brody ok. 180) na przekątnej pierścienia i w cieśninach — wszystkie szlaki przez brody | scenariusze i sieć |
+| Kryształowe Grzbiety (`crystals`) | Nivalis (`theme: "crystal"`, biom `ice`: śnieżyce, rogacze lodowe) | dwa łuki grzbietów z kolumn kryształu (nowa przeszkoda `crystal`) wokół odsłoniętego płaskowyżu z najbogatszymi kryształami; wejścia ze wschodu i zachodu i wąskie przełęcze w środku łuków; szczeliny lodowca bliżej narożników | XIII · Ostatnia orbita (dotąd Biały Przesmyk) |
+
+- **Morze**: woda rodzaju `kind: "sea"` — blokuje jak jezioro; 2D: plaże, mokry piasek, płycizny, głębia i linia przyboju (rysowane jako jedna linia brzegowa z nakładających się ogniw), palmy i trawy na lądzie, odblaski fal; 3D: własna powierzchnia wody (`WATER.sea` w `scene-fx-3d.js`, płaska jak jezioro), zagłębienie w rzeźbie (`relief-3d.js`, `webgl/terrain-height.js`), roślinność wysp (`scatter-3d.js`: trawa, paprocie, drzewa liściaste) i trzciny z kamykami na brzegach.
+- **Kolumny kryształu**: przeszkoda `kind: "crystal"` — 2D: kępy sześciokątnych pryzmatów w błękicie i fiolecie, iskry, nocna poświata (także światło w PixiJS); 3D: pryzmaty z ostrymi szczytami na oszronionym pagórku, świecące (więcej nocą); grunt motywu — szron z żyłkami kryształu, w 3D odłamki kryształu w śniegu.
+- Kolory motywów w tle menu, scenach łączności, ekranie ładowania i gradacji 3D.
+- **Wydajność**: silnik trzyma akweny w siatce komórek 256 (`watersNear`, gdy jest ich ponad 24) — mapa z morzem ze 124 ogniw liczy się jak inne mapy (symulacja 4 graczy, 4 min: 8,4 s wobec 7,3 s na Rzekach Magmy).
+- **XIII**: bazy na stałych miejscach (Kolonie SW, Vok NE). Symulacja (`node tools/act4-sim.js --chapters colony13`, Biały Przesmyk → Kryształowe Grzbiety): łatwy — zwycięstwo 5:14 → 5:14; średni — porażka 17:09 → 15:09; trudny — porażka 9:49 → 9:46. **Uwaga:** na średnim bot przegrywa także na starej mapie (w H7 wygrywał ledwo, 16:52): po desancie nie przełamuje bazy Vok i nie dochodzi do decyzji. To ograniczenie bota (czeka na 28 jednostek poza obroną bazy przy limicie 60); próby łagodniejszego strojenia (mniejsza armia i garnizon Vok, niższy próg natarcia bota) nie dały zwycięstwa. **Naprawione w 0.166.2** — przyczyna i strojenie: [AKT_IV.md](AKT_IV.md), „Balans rozdziału XIII”.
+- Testy: `tests/campaign-maps.test.js` — morze (ponad 60 ogniw, ponad 20% mapy w trzech rozmiarach, cały ląd osiągalny), siatka akwenów zgodna z pełną listą (4000 punktów), XIII wśród kolumn kryształu z otwartymi wejściami.
+
+## Nowe mapy kampanii — krok M3 (wersja 0.164, 2026-10-09)
+
+| Mapa | Wygląd | Teren | Rozdział |
+|---|---|---|---|
+| Doki Eos (`eosdocks`) | orbita pustynnej Eos | stocznia Kolonii: długie pomosty doków (nowa przeszkoda `dock`) tworzą pochylnię przez środek z najbogatszym złożem, wieże cumownicze i pola asteroid wyznaczają korytarze na flankach; burze słoneczne i deszcz odłamków | X · Blokada Eos (dotąd Orbita Kharona) |
+| Szkarłatna Mgławica (`crimson`) | czerwona mgławica nad gazowym olbrzymem | ok. 64% pola w obłokach mgławicy (trudniej trafić, osłony się nie odnawiają), czysty korytarz po przekątnej od narożnika do narożnika, ciemne pola asteroid — mapa zasadzek; burze jonowe i rozbłyski | scenariusze i sieć |
+
+- X: Kolonie startują na południowym zachodzie, stacja blokady Admiralicji na północnym wschodzie (`RTS.CAMPAIGN_MAPS.colony10`).
+- Balans X (`node tools/act4-sim.js --chapters colony10`, Orbita Kharona → Doki Eos): łatwy — wygrana 2:31 → 2:31; średni — wygrana 4:41 → 4:05; trudny — wygrana 8:01 → 8:51.
+- Szczegóły techniczne (przeszkoda `dock`, obłoki `nebulae`, planeta `desert`): [BITWA_NA_ORBICIE.md](BITWA_NA_ORBICIE.md). Paczka 3D przebudowana (`npm run build:3d`).
+- Testy: `tests/campaign-maps.test.js` — X na Dokach z pustynną Eos; Mgławica: pokrycie obłokami powyżej 55% w trzech rozmiarach, czysty korytarz, obłoki po wczytaniu zapisu takie same i poza zapisem, brak obłoków na lądzie.
+
+## Nowe mapy kampanii — krok M2 (wersja 0.163, 2026-10-09)
+
+| Mapa | Świat / wygląd | Teren | Rozdział |
+|---|---|---|---|
+| Wypalona Dolina (`ashvalley`) | Eos, pył / `dunesea` | Dolina Latarni z rozdziału I po desancie: rozbity krążownik w trzech sekcjach na miejscu latarni (przejścia między nimi), szczątki zestrzelonych kapsuł, ocalałe ruiny i oazy | XI · Kapsuły nad Eos (dotąd Cichy Horyzont) |
+| Bastion Admiralicji (`bastion`) | Nadir, popiół / `derelict` | dwa bastiony w narożnikach NE i SW, każdy za murem z bramą zachodnią i południową (odpowiednio wschodnią i północną) i wieżą na rogu; przez środek Popielny Szlak z wieżami przetwarzania, ścianami narośli i złożami | XII · Twierdza Admiralicji (dotąd Popielny Szlak) |
+
+- XI: gracz ląduje tam, gdzie w rozdziale I stała jego baza (SW), Admiralicja okopała się w NE.
+- XII: Twierdza Admiralicji w bastionie NE, Kolonie w opuszczonym bastionie SW; stacja uplink w połowie Popielnego Szlaku.
+- W scenariuszu na Bastionie dwie pierwsze strony zawsze startują w bastionach (`prefer` w definicji mapy), trzecia i czwarta — w otwartych narożnikach.
+- Balans (`node tools/act4-sim.js --chapters colony11,colony12`, przed → po):
+
+  | Rozdział | Łatwy | Średni | Trudny |
+  |---|---|---|---|
+  | XI | wygrana 2:20 → 2:21 | wygrana 2:45 → 2:46 | porażka 9:18 → 9:49 |
+  | XII | wygrana 2:36 → 2:35 | wygrana 3:20 → 2:51 | porażka 7:46 → 9:53 |
+
+  XII jest nieco łatwiejszy, bo mur chroni też bazę gracza; strojenie aktu (H7) zostaje bez zmian.
+- Testy: `tests/campaign-maps.test.js` obejmuje obie mapy (symetria, dostępność, stałe bazy XI i XII, wrak w XI, osiągalna stacja uplink, bastiony w scenariuszu).
+
+## Nowe mapy kampanii — krok M1 (wersja 0.162, 2026-10-09)
+
+Plan rozbudowy map (propozycja z 0.161): M1 — trzy mapy dla rozdziałów I–III; M2 — Bastion Admiralicji i zniszczona Dolina Latarni dla XI–XII; M3 — Doki Eos (X) i Szkarłatna Mgławica; M4 — nowe biomy (ocean, kryształ), Archipelag Thalassy, Kryształowe Grzbiety, mapa dla XIII; M5 — Szlak Komet, przypływy i pękający lód.
+
+M1 (`campaign-maps.js`, rejestrowane w `RTS.FRONTIER_MAPS`, więc działają też jako scenariusze, w grze sieciowej i w podglądzie `tests/maps-browser.html`):
+
+| Mapa | Świat / wygląd | Teren | Rozdział |
+|---|---|---|---|
+| Dolina Latarni (`lanterns`) | Eos, pył / `dunesea` | otwarta kotlina: niskie grzbiety wydm z wieloma przejściami, wzgórza, ruiny osady, oazy na krańcach, bogate złoża w środku | I · Iskra na Eos |
+| Lodowe Archiwum (`vesper`) | Vesper, lód / `frozenhive` | skute jezioro przez środek (obejście brzegiem północnym albo południowym), szczeliny lodowca z krańców, ruiny stacji, narośle | II · Archiwum pod lodem |
+| Ruiny Nadiru (`nadir`) | Nadir, popiół / `derelict` | miasto Prekursorów: siatka kwartałów z wąskimi ulicami, aleja i bulwar z placem cytadeli w środku, wieże przetwarzania na dwóch placach | III · Świt nad Nadir |
+
+- Każdy układ jest symetryczny względem obrotu o pół obrotu wokół środka mapy, więc przeciwległe narożniki są równe w scenariuszu (2–4 graczy, trzy rozmiary).
+- W rozdziałach bazy stoją na stałych miejscach (`RTS.CAMPAIGN_MAPS`): I — gracz na południowym zachodzie, Dominium na północnym wschodzie; II — północny zachód / południowy wschód; III — zachód / wschód (cytadela). Dotąd narożniki losowało ziarno, a teren był kilkoma prostokątami skał. `advanced-rules.js`: `baseSpots()` (domyślnie narożniki z ziarna) i wywołanie `applyCampaignMap()` przed rozstawieniem baz.
+- Fauna rozdziałów mieszka w legowiskach mapy (`habitats`).
+- Gładkie skały (bez `kind`) przy środku niosą w 3D pomniki aktu I (latarnia Eos, brama archiwum, obelisk cytadeli), a w rozdziale I skała przy bazie gracza — Stację Ciszy.
+- Szkolenie zostaje na dotychczasowym poligonie. Zapisy rozpoczętych rozdziałów I–III wczytują się na starym terenie (teren jest w zapisie).
+- Tempo (symulacja biernego gracza, poziom średni): porażka po 379 / 440 / 354 s wobec 318 / 418 / 374 s na starych układach.
+- Testy: `tests/campaign-maps.test.js` (symetria, dostępność złóż, przekaźników i baz w scenariuszach 2 i 4 graczy; stałe bazy, 8 przekaźników, legowiska, skała pomnika i zapis w rozdziałach). Zaktualizowane: `tests/themed-maps.test.js` (rozdziały I–III mają własny teren), `tests/campaign-ai.test.js` (centrum biernego gracza podtrzymywane podczas sprawdzania produkcji AI).
+
 ## Każde złoże do wykorzystania (wersja 0.151.3, 2026-10-08) — wszystkie mapy
 
 - Problem: ekstraktor stoi dokładnie na złożu gazu (`canBuild` w `engine.js`), a część złóż leżała w przeszkodzie (asteroida, skała) lub bliżej niż pozwalają zasady przy rudzie, kryształach, przekaźniku, innym złożu albo budynku — nie dało się ich nigdy zabudować. Diagnoza (wszystkie mapy scenariuszy × 3 rozmiary × 4 ziarna): 20 z 816 złóż — Orbita Kharona i Cmentarzysko (asteroida rudy obok), Pierścienie Glacjalis (w przeszkodzie), Rzeki Magmy (ruda obok), Słoneczna Dolina i Bliźniacze Słońca (na nieruchomym Paszczaku — złoża przesunięte przy skalowaniu mapy); w kampanii rozdziały I i II (ruda obok).
