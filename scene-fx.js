@@ -4,10 +4,14 @@
 			particles: "high",
 			flashes: true,
 			metrics: false,
+			// The frames-per-second counter over the board (0.171.18).
+			fps: false,
 			// Board renderer and the WebGL-only effects.
 			renderer: "webgl",
 			lights: true,
 			shadows: true,
+			// Shadows of the drifting clouds over the 3D board (0.171.18: in the code since 0.118, never in the settings).
+			clouds: true,
 			bloom: true,
 			water: true,
 			volume: true,
@@ -39,7 +43,7 @@
 		for (const key of ["terrain", "particles"])
 			if (["low", "medium", "high"].includes(saved[key]))
 				options[key] = saved[key];
-		for (const key of ["flashes", "metrics", "lights", "shadows", "bloom", "water", "volume", "scars", "relief", "tilt", "cinema", "ao", "pbr", "reflect", "atmo", "surface", "dof", "haze", "shake"])
+		for (const key of ["flashes", "metrics", "fps", "lights", "shadows", "clouds", "bloom", "water", "volume", "scars", "relief", "tilt", "cinema", "ao", "pbr", "reflect", "atmo", "surface", "dof", "haze", "shake"])
 			if (typeof saved[key] === "boolean") options[key] = saved[key];
 		if (RENDERERS.includes(saved.renderer)) options.renderer = saved.renderer;
 	} catch {}

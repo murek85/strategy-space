@@ -5,6 +5,11 @@
 Data: 2026-09-21. Punkt wyjścia: prototyp 0.4.
 Status: pierwszy zakres wdrożony w 0.5 (2026-09-21). Na życzenie użytkownika pozycja Nowa operacja od razu nosi nazwę Gra jednoosobowa. Poniższa koncepcja zachowuje pierwotne nazewnictwo; kampania, multiplayer i pozostałe rozszerzenia nadal są propozycjami.
 
+## Licznik FPS i cienie chmur (wersja 0.171.18, 2026-10-10)
+
+- **Licznik FPS** (`SceneFX.options.fps`, pole „Licznik FPS (klatki na sekundę)” obok czasu renderowania): `app.js` liczy klatki pętli gry i co 0,5 s wpisuje wynik do `#fps-meter` w prawym górnym rogu (zielony ≥ 55, bursztynowy ≥ 30, czerwony poniżej; styl w `expansion.css`). Działa przy każdym rendererze, widać go nad planszą (w menu jest ukryty). Gdy włączony jest też czas renderowania, ten przesuwa się pod licznik FPS.
+- **Cienie chmur 3D** (`SceneFX.options.clouds`, wśród efektów 3D): `three-renderer.js` (`applyQuality` → `quality.clouds`) wyłącza nimi przesuwające się cienie chmur na planszy; dotąd sprawdzało nieustawiane nigdzie `options.cloudShadows`. Jak inne efekty tylko dla 3D, pole jest wyszarzone przy innym rendererze. „Cienie od słońca” (`shadows`) bez zmian.
+
 ## Poprawki interfejsu z przeglądu gry (wersja 0.171.13, 2026-10-10)
 
 - **Klawisze** (`app.js`): przy otwartych statystykach armii albo oknie potwierdzenia klawisze należą do okna (Esc je zamyka; dotąd otwierał pod nim menu pauzy). M w menu nie wycisza dźwięku, gdy fokus jest w polu tekstowym albo liście (pola kodów gry sieciowej). Spacja i Enter na przycisku HUD-u naciskają go. Usunięty podwójny i martwy kod Esc. (Decyzja fabularna blokuje wznowienie od 0.171.10.)

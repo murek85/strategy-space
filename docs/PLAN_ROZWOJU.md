@@ -1,6 +1,6 @@
 # Plan rozwoju prototypu
 
-Aktualizacja: 2026-10-09. Aktualna wersja: 0.171.17.
+Aktualizacja: 2026-10-09. Aktualna wersja: 0.171.18.
 
 Ten plik jest punktem wejścia do dokumentacji: opisuje bieżący stan, otwarte kierunki i historię wersji. Instrukcja gry i sterowanie: [README](../README.md).
 
@@ -289,6 +289,7 @@ Przy każdym kolejnym etapie należy uruchomić pełny zestaw, nie tylko testy u
 | 0.152 | Etap G2: desant z orbity — tryb „Inwazja” (orbita, potem planeta; kapsuły, uderzenie i skan z orbity) — [opis](DESANT_Z_ORBITY.md) |
 | 0.152.1 | Szuflada celów bez poziomego przewijania, ukryta pod raportem końca — [opis](KAMPANIA_OPRAWA.md) |
 | 0.153 | Etap G4: serwer lobby, lista gier, 2 na 2 przez sieć z komputerem na wolnym miejscu, powrót do bitwy po zerwaniu połączenia — [opis](MULTIPLAYER.md) |
+| 0.171.18 | Licznik FPS (ustawienie `fps`) i przełącznik cieni chmur 3D (`clouds`) w ustawieniach grafiki — [opis](MENU_GLOWNE.md) |
 | 0.171.17 | Testy i narzędzia: test renderera 3D krok po kroku z postępem, podgląd burz z listą skryptów z `index.html`, testy `weatherCloseness`, `closestTo`, listy reguł i ścieżek serwera — [opis](RENDERER_3D.md) |
 | 0.171.16 | Poprawki gry sieciowej z przeglądu: wykrywanie martwych połączeń, powrót przy starym połączeniu i bez zamrażania innych, pierwsze miejsce dla gracza, wersja gry w połączeniu, tekst z serwera, Origin i maska WebSocket, serwer bez `.git`, chwilowe rozłączenia, atomowy import, dokładniejsza suma kontrolna — [opis](MULTIPLAYER.md) |
 | 0.171.15 | Poprawki grafiki 3D z przeglądu: nakładka po zmianie rozmiaru, rozrzut pod budynkami bez zacięć, zwalnianie zasobów przy zmianie mapy, rzadsze odbudowy środowiska, mniej alokacji, bez pustego światła i martwego kodu kafli — [opis](RENDERER_3D.md) |

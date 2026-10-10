@@ -54,7 +54,9 @@
 	window.currentRendererMode = () => rendererMode;
 	// The render meter (found once) and what the army inspector shows (rebuilt only when it changes).
 	let renderMeter = null,
+		fpsMeter = null,
 		armyInspectorSignature = null;
+	const fpsCount = { frames: 0, since: performance.now(), value: 0 };
 	let choiceOpen = false,
 		act2Signature = "";
 	let width = 1,
@@ -2383,6 +2385,12 @@
 		meter.hidden = true;
 		meter.setAttribute("aria-label", "Czas renderowania");
 		document.body.append(meter);
+		// The frames-per-second counter (settings: "Licznik FPS", 0.171.18).
+		const fpsMeter = document.createElement("div");
+		fpsMeter.id = "fps-meter";
+		fpsMeter.hidden = true;
+		fpsMeter.setAttribute("aria-label", "Klatki na sekundę");
+		document.body.append(fpsMeter);
 		const sidebar = document.querySelector(".sidebar");
 		sidebar.insertAdjacentHTML(
 			"beforeend",
@@ -3321,11 +3329,31 @@
 		const renderStart = performance.now();
 		render();
 		SceneFX.measure(performance.now() - renderStart);
+		// The frames per second: counted always (cheap), shown twice a second while the setting is on and the
+		// board is in view (0.171.18). Green from 55, amber from 30, red below.
+		fpsCount.frames++;
+		const clockNow = performance.now(),
+			fpsOn = !!SceneFX.options.fps && !menu?.active,
+			fpsEl = (fpsMeter ||= document.getElementById("fps-meter"));
+		if (clockNow - fpsCount.since >= 500) {
+			fpsCount.value = (fpsCount.frames * 1000) / (clockNow - fpsCount.since);
+			fpsCount.frames = 0;
+			fpsCount.since = clockNow;
+			if (fpsEl && fpsOn) {
+				const v = Math.round(fpsCount.value);
+				fpsEl.textContent = `${v} FPS`;
+				fpsEl.dataset.level = v >= 55 ? "good" : v >= 30 ? "fair" : "poor";
+			}
+		}
+		if (fpsEl && fpsEl.hidden === fpsOn) fpsEl.hidden = !fpsOn;
 		// The render meter: found once, written only while it is shown (0.171.13: a query and a text every frame).
 		const meter = (renderMeter ||= document.getElementById("render-meter"));
 		if (meter) {
 			const on = !!SceneFX.options.metrics;
 			if (meter.hidden === on) meter.hidden = !on;
+			// Below the FPS counter when both are on.
+			const top = fpsOn ? "110px" : "";
+			if (meter.style.top !== top) meter.style.top = top;
 			if (on) meter.textContent = `Rysowanie: ${SceneFX.metrics.mean.toFixed(1)} ms · p95 ${SceneFX.metrics.p95.toFixed(1)} ms · ${game.entities.length} obiektów`;
 		}
 		requestAnimationFrame(frame);

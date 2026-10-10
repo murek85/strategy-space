@@ -69203,7 +69203,7 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		sky.update({ camera, time: clock, ...skyState, aurora, haze, hazeColor: HAZE[state.kind] || HAZE.rain, cover, flash: state.flash || 0, flashColor: FLASH });
 		sunFx.update({ camera, imageRays: quality.cinema && quality.atmo, sunDir: skyState.sunDir, sunColor: skyState.sunlight, e: skyState.e, haze, mist: groundWeather.mistLevel.value, focus: rig, span: Math.max(1600, Math.min(4200, rig.distance * 2.2)) });
 		// Cloud shadows are a thing of the sun: by moonlight they nearly vanish (0.147.4).
-		sky.clouds(clock, options.cloudShadows === false || spaceMap() ? 0 : 0.4 * (1 - haze * 0.6) * (0.15 + 0.85 * smooth(-0.12, 0.15, skyState.e)));
+		sky.clouds(clock, quality.clouds === false || spaceMap() ? 0 : 0.4 * (1 - haze * 0.6) * (0.15 + 0.85 * smooth(-0.12, 0.15, skyState.e)));
 		sky.mesh.visible = !spaceMap();
 		space3d.update({ camera, time: clock, sun: skyState.sunDir });
 	}
@@ -69483,7 +69483,7 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		const o = typeof SceneFX !== "undefined" ? SceneFX.options : {},
 			level = { high: 0, medium: 1, low: 2 },
 			terrainLevel = level[o.terrain] ?? 0,
-			key = [o.terrain, o.particles, o.shadows, o.lights, o.water, o.scars, o.relief, o.flashes, o.cinema, o.ao, o.bloom, o.pbr, o.reflect, o.atmo, o.surface, o.dof, o.haze, o.shake].join("|");
+			key = [o.terrain, o.particles, o.shadows, o.clouds, o.lights, o.water, o.scars, o.relief, o.flashes, o.cinema, o.ao, o.bloom, o.pbr, o.reflect, o.atmo, o.surface, o.dof, o.haze, o.shake].join("|");
 		if (key === qualityKey) return;
 		const first = qualityKey === null,
 			reliefChanged = !first && quality.relief !== (o.relief !== false),
@@ -69493,6 +69493,8 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			scatter: [1, 0.55, 0.25][terrainLevel],
 			particles: [1, 0.5, 0.25][level[o.particles] ?? 0],
 			lights: o.lights !== false,
+			// Cloud shadows (the settings, 0.171.18).
+			clouds: o.clouds !== false,
 			water: o.water !== false,
 			scars: o.scars !== false,
 			relief: o.relief !== false,

@@ -1,4 +1,6 @@
-# Pogranicze Galaktyki — prototyp RTS 0.171.17
+# Pogranicze Galaktyki — prototyp RTS 0.171.18
+
+**Wersja 0.171.18 — licznik FPS i cienie chmur w ustawieniach.** Ustawienia → Grafika: „Licznik FPS (klatki na sekundę)” pokazuje w prawym górnym rogu planszy liczbę klatek na sekundę (odświeżaną dwa razy na sekundę; zielona od 55, bursztynowa od 30, czerwona poniżej), przy każdym rendererze; z czasem renderowania oba liczniki stoją jeden pod drugim. „Cienie chmur 3D” włącza i wyłącza cienie przesuwających się chmur na planszy 3D (były w grze, ale bez przełącznika). Cienie od słońca mają swój przełącznik jak dotąd.
 
 **Wersja 0.171.17 — testy i narzędzia.** Test renderera 3D idzie krok po kroku z paskiem postępu (scena po scenie) i ostrzega, gdy strona jest w tle — nie wygląda już na zawieszony. Strona podglądu burz i kosmosu (`tests/weather-browser.html`) bierze listę skryptów gry z `index.html` (`tests/game-scripts.js`), więc nie rozjedzie się przy nowym pliku reguł. Nowe testy (`tests/tools.test.js`): zbliżenie kamery dla pogody, pomocnik celu zdarzeń interfejsu, zgodność listy reguł strony testowej 3D z grą i serwer `npm start` (gra dostępna, `.git`, `.claude` i `node_modules` zablokowane). `server.js` podaje rzeczywisty port przy `PORT=0`.
 

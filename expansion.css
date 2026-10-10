@@ -1354,6 +1354,28 @@
 #render-meter[hidden] {
 	display: none;
 }
+/* The FPS counter (0.171.18): in the same corner, above the render meter. */
+#fps-meter {
+	position: fixed;
+	right: 18px;
+	top: 82px;
+	z-index: 40;
+	background: #11252dda;
+	color: #8dffc8;
+	padding: 5px 9px;
+	font: 600 12px monospace;
+	pointer-events: none;
+	border-left: 3px solid currentColor;
+}
+#fps-meter[data-level="fair"] {
+	color: #f2cf73;
+}
+#fps-meter[data-level="poor"] {
+	color: #ff8a7a;
+}
+#fps-meter[hidden] {
+	display: none;
+}
 
 /* Resource trade (Logistics → Trade): amount switch and six exchange buttons in the resource colours. */
 .eco-trade-amount {

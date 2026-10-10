@@ -1,6 +1,6 @@
 /* Navigation owns screens; the application retains a single simulation loop. */
 // The game's version: the menu's footer and the saves' export (0.171.13: one place; it was written twice by hand).
-const GAME_VERSION = "0.171.17";
+const GAME_VERSION = "0.171.18";
 // Listening to the music in the settings: themes (audio.js music modes) and the game's moods.
 const MUSIC_THEMES = [
 	["menu", "Menu — Odległe światło"],
@@ -299,9 +299,10 @@ class CommandMenu {
 							)
 							.join(
 								"",
-							)}<label class="menu-setting"><input type="checkbox" id="visual-flashes"> Błyski burzy</label><label class="menu-setting"><input type="checkbox" id="visual-metrics"> Pokaż czas renderowania planszy</label><h2>Renderer</h2><label class="menu-setting">Silnik grafiki<select id="visual-renderer" aria-label="Silnik grafiki"><option value="three">3D (Three.js) — teren, modele i kamera 3D</option><option value="webgl">WebGL (PixiJS) — oświetlenie i efekty</option><option value="webgpu">WebGPU (PixiJS) — nowszy interfejs grafiki</option><option value="canvas">Canvas 2D — tryb awaryjny</option></select></label><p id="renderer-status" role="status"></p>${[
+							)}<label class="menu-setting"><input type="checkbox" id="visual-flashes"> Błyski burzy</label><label class="menu-setting"><input type="checkbox" id="visual-metrics"> Pokaż czas renderowania planszy</label><label class="menu-setting"><input type="checkbox" id="visual-fps"> Licznik FPS (klatki na sekundę)</label><h2>Renderer</h2><label class="menu-setting">Silnik grafiki<select id="visual-renderer" aria-label="Silnik grafiki"><option value="three">3D (Three.js) — teren, modele i kamera 3D</option><option value="webgl">WebGL (PixiJS) — oświetlenie i efekty</option><option value="webgpu">WebGPU (PixiJS) — nowszy interfejs grafiki</option><option value="canvas">Canvas 2D — tryb awaryjny</option></select></label><p id="renderer-status" role="status"></p>${[
 								["lights", "Oświetlenie dnia i nocy, światła"],
 								["shadows", "Cienie od słońca"],
+								["clouds", "Cienie chmur 3D (przesuwają się po planszy)"],
 								["bloom", "Poświata"],
 								["water", "Połysk wody"],
 								["volume", "Objętość budynków i jednostek (światło z kierunku słońca)"],
@@ -351,6 +352,7 @@ class CommandMenu {
 				body;
 		if (screen === "news")
 			body =
+				"<h2>0.171.18 / Licznik FPS i cienie chmur</h2><p>W ustawieniach grafiki: licznik klatek na sekundę nad planszą i przełącznik cieni chmur na planszy 3D.</p>" +
 				"<h2>0.171.17 / Testy i narzędzia</h2><p>Pewniejsze testy grafiki i serwera — zmiany pod spodem, bez wpływu na rozgrywkę.</p>" +
 				"<h2>0.171.16 / Poprawki gry sieciowej</h2><p>Zerwane połączenie nie zatrzymuje już bitwy innym, powrót do długiej bitwy nikogo nie zamraża, a gracze z różnymi wersjami gry nie trafią do jednej bitwy.</p>" +
 				"<h2>0.171.15 / Poprawki grafiki</h2><p>Plansza 3D płynniej znosi stawianie i niszczenie budynków, nie zamraża podglądu budowy po zmianie rozmiaru okna i nie zostawia śmieci w pamięci przy zmianie mapy.</p>" +
@@ -1022,7 +1024,7 @@ class CommandMenu {
 					el.value = SceneFX.options[key];
 					el.onchange = () => SceneFX.set(key, el.value);
 				}
-				for (const key of ["flashes", "metrics", "lights", "shadows", "bloom", "water", "volume", "scars", "relief", "tilt", "cinema", "ao", "pbr", "reflect", "atmo", "surface", "dof", "haze", "shake"]) {
+				for (const key of ["flashes", "metrics", "fps", "lights", "shadows", "clouds", "bloom", "water", "volume", "scars", "relief", "tilt", "cinema", "ao", "pbr", "reflect", "atmo", "surface", "dof", "haze", "shake"]) {
 					const el = this.root.querySelector("#visual-" + key);
 					el.checked = SceneFX.options[key];
 					el.onchange = () => SceneFX.set(key, el.checked);
@@ -1038,7 +1040,7 @@ class CommandMenu {
 						// volume light and the 2.5D tilt belong to the PixiJS renderer only, the cinematic image and the ambient
 						// occlusion to the 3D board; bloom serves both.
 						const only2d = ["visual-volume", "visual-tilt"],
-							only3d = ["visual-cinema", "visual-ao", "visual-pbr", "visual-reflect", "visual-atmo", "visual-surface", "visual-dof", "visual-haze", "visual-shake"];
+							only3d = ["visual-clouds", "visual-cinema", "visual-ao", "visual-pbr", "visual-reflect", "visual-atmo", "visual-surface", "visual-dof", "visual-haze", "visual-shake"];
 						for (const box of this.root.querySelectorAll(".webgl-effect")) box.disabled = !gpu || (s.mode === "three" && only2d.includes(box.id)) || (SceneFX.options.renderer !== "three" && only3d.includes(box.id)) || (s.mode === "canvas" && !!s.note);
 						status.textContent = s.note || (name[s.mode] ? `Aktywny: ${name[s.mode]}.` : gpu ? `${name[SceneFX.options.renderer]} uruchomi się razem z planszą.` : "Aktywny: Canvas 2D.");
 					};
