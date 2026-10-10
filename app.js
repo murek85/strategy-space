@@ -2385,12 +2385,15 @@
 		meter.hidden = true;
 		meter.setAttribute("aria-label", "Czas renderowania");
 		document.body.append(meter);
-		// The frames-per-second counter (settings: "Licznik FPS", 0.171.18).
+		// The frames-per-second counter (settings: "Licznik FPS", 0.171.18): the first item of the board's tool strip,
+		// in line with the zoom buttons (0.171.19: it stood over them at the edge of the board).
 		const fpsMeter = document.createElement("div");
 		fpsMeter.id = "fps-meter";
 		fpsMeter.hidden = true;
 		fpsMeter.setAttribute("aria-label", "Klatki na sekundę");
-		document.body.append(fpsMeter);
+		const tools = document.querySelector(".map-tools");
+		if (tools) tools.prepend(fpsMeter);
+		else document.body.append(fpsMeter);
 		const sidebar = document.querySelector(".sidebar");
 		sidebar.insertAdjacentHTML(
 			"beforeend",
@@ -3351,9 +3354,6 @@
 		if (meter) {
 			const on = !!SceneFX.options.metrics;
 			if (meter.hidden === on) meter.hidden = !on;
-			// Below the FPS counter when both are on.
-			const top = fpsOn ? "110px" : "";
-			if (meter.style.top !== top) meter.style.top = top;
 			if (on) meter.textContent = `Rysowanie: ${SceneFX.metrics.mean.toFixed(1)} ms · p95 ${SceneFX.metrics.p95.toFixed(1)} ms · ${game.entities.length} obiektów`;
 		}
 		requestAnimationFrame(frame);

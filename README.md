@@ -1,4 +1,6 @@
-# Pogranicze Galaktyki — prototyp RTS 0.171.18
+# Pogranicze Galaktyki — prototyp RTS 0.171.19
+
+**Wersja 0.171.19 — licznik FPS na pasku narzędzi planszy.** Licznik klatek nie zasłania już przycisków przybliżania: stoi w prawym górnym rogu w jednym rzędzie z „−”, „⌖” i „+”, tuż po ich lewej stronie, tej samej wysokości. Licznik czasu renderowania przesunięto pod ten pasek.
 
 **Wersja 0.171.18 — licznik FPS i cienie chmur w ustawieniach.** Ustawienia → Grafika: „Licznik FPS (klatki na sekundę)” pokazuje w prawym górnym rogu planszy liczbę klatek na sekundę (odświeżaną dwa razy na sekundę; zielona od 55, bursztynowa od 30, czerwona poniżej), przy każdym rendererze; z czasem renderowania oba liczniki stoją jeden pod drugim. „Cienie chmur 3D” włącza i wyłącza cienie przesuwających się chmur na planszy 3D (były w grze, ale bez przełącznika). Cienie od słońca mają swój przełącznik jak dotąd.
 

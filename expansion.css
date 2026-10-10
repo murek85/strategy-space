@@ -1343,7 +1343,8 @@
 #render-meter {
 	position: fixed;
 	right: 18px;
-	top: 82px;
+	/* Under the board's tool strip (zoom buttons, FPS), 0.171.19. */
+	top: 106px;
 	z-index: 40;
 	background: #11252dda;
 	color: #b8d5c9;
@@ -1354,18 +1355,22 @@
 #render-meter[hidden] {
 	display: none;
 }
-/* The FPS counter (0.171.18): in the same corner, above the render meter. */
+/* The FPS counter (0.171.18): the first item of the board's tool strip, as tall as its buttons and lined up with
+   them, a gap before the zoom (0.171.19). */
 #fps-meter {
-	position: fixed;
-	right: 18px;
-	top: 82px;
-	z-index: 40;
-	background: #11252dda;
-	color: #8dffc8;
-	padding: 5px 9px;
-	font: 600 12px monospace;
-	pointer-events: none;
+	display: flex;
+	align-items: center;
+	height: 30px;
+	box-sizing: border-box;
+	margin-right: 6px;
+	padding: 0 9px;
+	background: rgba(12, 26, 34, 0.75);
+	border: 1px solid var(--hud-edge, #3c4c50);
 	border-left: 3px solid currentColor;
+	color: #8dffc8;
+	font: 600 12px monospace;
+	white-space: nowrap;
+	pointer-events: none;
 }
 #fps-meter[data-level="fair"] {
 	color: #f2cf73;

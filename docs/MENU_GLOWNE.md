@@ -5,6 +5,10 @@
 Data: 2026-09-21. Punkt wyjścia: prototyp 0.4.
 Status: pierwszy zakres wdrożony w 0.5 (2026-09-21). Na życzenie użytkownika pozycja Nowa operacja od razu nosi nazwę Gra jednoosobowa. Poniższa koncepcja zachowuje pierwotne nazewnictwo; kampania, multiplayer i pozostałe rozszerzenia nadal są propozycjami.
 
+## Miejsce licznika FPS (wersja 0.171.19, 2026-10-10)
+
+- `#fps-meter` powstaje w `setupSidebar` (`app.js`) jako pierwszy element paska `.map-tools`, więc stoi w jednym rzędzie z przyciskami „−”, „⌖”, „+” (wysokość 30 px, odstęp 6 px) zamiast nad nimi; bez paska trafia do `body`. `#render-meter` ma `top: 106px`, pod paskiem (`expansion.css`).
+
 ## Licznik FPS i cienie chmur (wersja 0.171.18, 2026-10-10)
 
 - **Licznik FPS** (`SceneFX.options.fps`, pole „Licznik FPS (klatki na sekundę)” obok czasu renderowania): `app.js` liczy klatki pętli gry i co 0,5 s wpisuje wynik do `#fps-meter` w prawym górnym rogu (zielony ≥ 55, bursztynowy ≥ 30, czerwony poniżej; styl w `expansion.css`). Działa przy każdym rendererze, widać go nad planszą (w menu jest ukryty). Gdy włączony jest też czas renderowania, ten przesuwa się pod licznik FPS.

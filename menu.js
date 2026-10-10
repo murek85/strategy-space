@@ -1,6 +1,6 @@
 /* Navigation owns screens; the application retains a single simulation loop. */
 // The game's version: the menu's footer and the saves' export (0.171.13: one place; it was written twice by hand).
-const GAME_VERSION = "0.171.18";
+const GAME_VERSION = "0.171.19";
 // Listening to the music in the settings: themes (audio.js music modes) and the game's moods.
 const MUSIC_THEMES = [
 	["menu", "Menu — Odległe światło"],
@@ -352,6 +352,7 @@ class CommandMenu {
 				body;
 		if (screen === "news")
 			body =
+				"<h2>0.171.19 / Licznik FPS przy przyciskach kamery</h2><p>Licznik klatek stoi w jednym rzędzie z przyciskami przybliżania i ich nie zasłania; czas renderowania jest pod nimi.</p>" +
 				"<h2>0.171.18 / Licznik FPS i cienie chmur</h2><p>W ustawieniach grafiki: licznik klatek na sekundę nad planszą i przełącznik cieni chmur na planszy 3D.</p>" +
 				"<h2>0.171.17 / Testy i narzędzia</h2><p>Pewniejsze testy grafiki i serwera — zmiany pod spodem, bez wpływu na rozgrywkę.</p>" +
 				"<h2>0.171.16 / Poprawki gry sieciowej</h2><p>Zerwane połączenie nie zatrzymuje już bitwy innym, powrót do długiej bitwy nikogo nie zamraża, a gracze z różnymi wersjami gry nie trafią do jednej bitwy.</p>" +
