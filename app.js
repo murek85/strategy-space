@@ -187,6 +187,7 @@
 		button.disabled = sound.failed;
 		$("sound-volume").disabled = sound.failed;
 		$("sound-volume").value = Math.round(sound.volume * 100);
+		$("sound-volume").style.setProperty("--fill", Math.round(sound.volume * 100) + "%");
 		menu?.syncAudio();
 	}
 	async function toggleSound() {
@@ -3359,10 +3360,17 @@
 		requestAnimationFrame(frame);
 	}
 	requestAnimationFrame(frame);
-	// A short boot screen while the page settles (once per load).
+	// The start screen (once per load): the emblem and a bar while the page settles, then a click or a key — which
+	// also lets the sound in, so the menu's music starts at once.
 	if (typeof LoadingScreen !== "undefined") {
-		const boot = LoadingScreen.show({ eyebrow: "WOLNE KOLONIE / SEKTOR 07", title: "Pogranicze Galaktyki", planet: "Pokład dowodzenia · uruchamianie systemów", biome: "ice", reduced: !!menu?.reduced, minTime: 1.4 });
-		if (document.readyState === "complete") afterFrames(2, () => boot.done());
-		else addEventListener("load", () => boot.done(), { once: true });
-	}
+		// Settled: loaded and two frames drawn — or half a second after the load (frames stop in a hidden window).
+		let settled = false;
+		const settle = () => {
+			afterFrames(2, () => (settled = true));
+			setTimeout(() => (settled = true), 500);
+		};
+		if (document.readyState === "complete") settle();
+		else addEventListener("load", settle, { once: true });
+		LoadingScreen.boot({ version: typeof GAME_VERSION !== "undefined" ? GAME_VERSION : "", reduced: !!menu?.reduced, ready: () => settled, onPress: unlockSound });
+	} else document.getElementById("boot-cover")?.remove();
 })();

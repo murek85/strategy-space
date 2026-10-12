@@ -916,6 +916,54 @@ body.in-menu > .command-bar {
 		padding: 14px;
 	}
 }
+/* A low window (0.172.4): the actions stood fixed under the content and took the height — in a 420 px window the
+   network screen's content got 8 px. There the whole window scrolls as one, actions after the content. */
+@media (max-height: 640px) {
+	#command-menu .menu-content.menu-window {
+		min-height: 0;
+		overflow-y: auto;
+		padding-top: 14px;
+		padding-bottom: 14px;
+	}
+	#command-menu .menu-window > h1 {
+		font-size: 28px;
+		margin: 4px 0 10px;
+	}
+	#command-menu .menu-window .menu-scroll {
+		flex: 0 0 auto;
+		overflow: visible;
+	}
+	.menu-window-actions {
+		margin-top: 6px;
+		padding-top: 6px;
+	}
+	/* The brand, the gaps and the footer smaller, for the window to have the height. */
+	#command-menu {
+		padding-top: 12px;
+		padding-bottom: 10px;
+	}
+	#command-menu .menu-brand small {
+		display: none;
+	}
+	#command-menu .menu-layout {
+		padding-top: 8px;
+		padding-bottom: 8px;
+	}
+	#command-menu .menu-footer {
+		padding-top: 8px;
+	}
+	/* The lobby's chat fits the window's height: no title or hint, a shorter log (it ran 90 px out of its panel). */
+	.net-chat-panel {
+		padding: 12px 14px 10px;
+	}
+	.net-chat-panel h2,
+	.net-chat-hint {
+		display: none;
+	}
+	.net-chat-log {
+		min-height: 60px;
+	}
+}
 
 .scenario-config .wide-field {
 	grid-column: 1/-1;
@@ -952,7 +1000,7 @@ body.in-menu > .command-bar {
 	gap: 0 18px;
 }
 .net-fields .menu-setting {
-	margin: 12px 0;
+	margin: 8px 0;
 }
 .net-fields input:not([type="checkbox"]),
 .net-fields select {
@@ -960,12 +1008,23 @@ body.in-menu > .command-bar {
 	width: 100%;
 	margin-top: 8px;
 	box-sizing: border-box;
-	background: #10202a;
-	color: #d6e7e6;
-	border: 1px solid #435863;
-	border-radius: 4px;
+	background: rgba(12, 28, 36, 0.8);
+	color: #e1eee6;
+	border: 1px solid rgba(160, 220, 210, 0.28);
+	border-radius: 0;
 	padding: 6px 8px;
 	font: inherit;
+}
+/* The direct game's two buttons in its own section (0.172.4): left last, they went to the window's fixed actions,
+   away from the section, and took the height of the content. */
+.net-direct-actions {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+	gap: 0 12px;
+	margin: 6px 0 4px;
+}
+.net-direct-actions > .menu-action {
+	margin: 4px 0;
 }
 /* One field across the whole width (the lobby server's address). */
 .net-fields.net-single {
@@ -986,10 +1045,10 @@ body.in-menu > .command-bar {
 	width: 100%;
 	box-sizing: border-box;
 	margin: 8px 0 6px;
-	background: #0b1720;
+	background: rgba(12, 28, 36, 0.8);
 	color: #cfe6df;
-	border: 1px solid #435863;
-	border-radius: 4px;
+	border: 1px solid rgba(160, 220, 210, 0.28);
+	border-radius: 0;
 	padding: 8px;
 	font: 12px/1.4 Consolas, monospace;
 	resize: vertical;
@@ -1023,9 +1082,9 @@ body.in-menu > .command-bar {
 	align-items: center;
 	gap: 12px;
 	padding: 10px 12px;
-	background: #08131cdd;
-	border: 1px solid #2c4550;
-	border-radius: 6px;
+	background: rgba(12, 26, 34, 0.55);
+	border: 1px solid rgba(160, 220, 210, 0.18);
+	border-radius: 0;
 }
 .net-player span:nth-child(2) {
 	display: flex;
@@ -1061,15 +1120,18 @@ body.in-menu > .command-bar {
 .menu-layout.net-lobby-layout {
 	gap: 18px;
 	align-items: stretch;
-	justify-content: flex-start;
+	justify-content: center;
 }
 .net-lobby-layout > * {
 	margin-top: 0;
 	margin-bottom: 0;
 }
+/* 0.172.5: the window takes the width beside the chat (it was 640 px, with empty space on the right) — the fields
+   of a room in three columns instead of two, so the rules take half the rows. */
 #command-menu .net-lobby-layout .menu-content.menu-window {
-	width: 640px;
-	flex: 0 1 640px;
+	width: auto;
+	flex: 1 1 820px;
+	max-width: 880px;
 	min-width: 0;
 }
 .net-chat-panel {
@@ -1170,10 +1232,10 @@ body.in-menu > .command-bar {
 .net-chat-row input {
 	flex: 1;
 	min-width: 0;
-	background: #10202a;
-	color: #d6e7e6;
-	border: 1px solid #435863;
-	border-radius: 4px;
+	background: rgba(12, 28, 36, 0.8);
+	color: #e1eee6;
+	border: 1px solid rgba(160, 220, 210, 0.28);
+	border-radius: 0;
 	padding: 6px 8px;
 	font: inherit;
 }
@@ -1633,6 +1695,12 @@ body.menu-over-game .menu-hud b {
 	border-radius: 0;
 	background: #e6fff6;
 	box-shadow: 0 0 12px #7fe7c8;
+}
+/* The text fields of the menu take the glow of the selects on focus, not the gold frame of the buttons (0.172.3). */
+#command-menu :is(input:not([type]), input[type="text"], input[type="number"], textarea):focus-visible {
+	outline: none;
+	border-color: #7fe7c8;
+	box-shadow: 0 0 14px rgba(127, 231, 200, 0.3);
 }
 #command-menu.has-backdrop .scenario-config input:not([type]),
 #command-menu.has-backdrop .scenario-config input[type="text"] {
@@ -2261,8 +2329,8 @@ body.menu-over-game .menu-hud b {
 .net-player.mine {
 	border-color: rgba(127, 231, 200, 0.45);
 }
-/* A seat's buttons (take it, the computer) on their own row under the name, so a narrow team column keeps
-   the name and the state readable. */
+/* A seat's buttons (take it, the computer) beside the name, or on their own row under it when the team column is
+   narrow, so the name and the state stay readable. */
 .net-teams .net-player {
 	flex-wrap: wrap;
 	row-gap: 8px;
@@ -2271,7 +2339,7 @@ body.menu-over-game .menu-hud b {
 	flex-shrink: 0;
 }
 .net-seat-actions {
-	flex-basis: 100%;
+	margin-left: auto;
 	display: flex;
 	flex-wrap: wrap;
 	justify-content: flex-end;
@@ -2295,4 +2363,49 @@ body.menu-over-game .menu-hud b {
 }
 .net-mode-note.warn {
 	color: #d6bc86;
+}
+/* The rules as a guest sees them (0.172.6): the mode and its goal, then name and value in a grid — two rows instead
+   of nine locked selects. */
+.net-rules-summary {
+	margin: 6px 0 4px;
+	padding: 10px 14px 12px;
+	border: 1px solid rgba(160, 220, 210, 0.18);
+	border-left: 2px solid #7fe7c8;
+	background: rgba(12, 26, 34, 0.55);
+}
+.net-rules-mode {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 2px 10px;
+	margin: 0 0 10px;
+}
+.net-rules-mode b {
+	color: #e8f2f0;
+}
+.net-rules-mode small {
+	color: #d6bc86;
+	font-size: 12px;
+}
+.net-rules-mode span {
+	flex-basis: 100%;
+	font-size: 0.86em;
+	color: #9fb6bf;
+}
+.net-rules-summary dl {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+	gap: 8px 18px;
+	margin: 0;
+}
+.net-rules-summary dt {
+	font: 10px monospace;
+	letter-spacing: 1.5px;
+	text-transform: uppercase;
+	color: #7fe7c8;
+}
+.net-rules-summary dd {
+	margin: 2px 0 0;
+	font-size: 13px;
+	color: #d6e7e6;
 }

@@ -163,7 +163,7 @@
 				n.phase === "setup" && NetPlay.lobbyAvailable?.()
 					? `<h2>Przez serwer — lista gier, 1 na 1 i 2 na 2</h2><p>Gry widoczne dla wszystkich na serwerze; drużyny 2 na 2, komputer na wolnym miejscu, powrót do bitwy po zerwaniu połączenia. Adres pusty — serwer, z którego wczytano grę${typeof window !== "undefined" && window.desktop?.lobby ? "; albo uruchom serwer na tym komputerze dla graczy w tej samej sieci" : ""}.</p><div class="net-fields net-single"><label class="menu-setting">Adres serwera<input id="net-server" type="text" maxlength="120" placeholder="np. 192.168.1.10:4174" value="${esc(p.server)}"></label></div>${this.button("net-relay", "Połącz z serwerem")}${typeof window !== "undefined" && window.desktop?.lobby ? this.button("net-local-server", "Uruchom serwer w sieci lokalnej") : ""}<h2>Bezpośrednio — 1 na 1 przez kody</h2>`
 					: "";
-			return `${server}<p>Bitwa jeden na jeden z drugim graczem, bez serwera: przeglądarki łączą się bezpośrednio (WebRTC). Jeden gracz tworzy grę i wysyła kod zaproszenia, drugi odsyła kod odpowiedzi.</p>${this.profileFields(p)}<label class="menu-setting net-check"><input type="checkbox" id="net-stun" ${p.stun ? "checked" : ""}> Gra przez internet — publiczny serwer STUN (Google) podpowie przeglądarce jej adres. W sieci lokalnej można wyłączyć.</label>${n.phase === "setup" ? this.button("net-host", "Utwórz grę", true) + this.button("net-join", "Dołącz do gry") : step}<p id="net-status" class="net-status" role="status">${esc(n.status || "")}</p>${this.button(n.phase === "setup" ? "net-back" : "net-cancel", n.phase === "setup" ? "Wróć" : "Anuluj połączenie")}`;
+			return `${server}<p>Bitwa jeden na jeden z drugim graczem, bez serwera: przeglądarki łączą się bezpośrednio (WebRTC). Jeden gracz tworzy grę i wysyła kod zaproszenia, drugi odsyła kod odpowiedzi.</p>${this.profileFields(p)}<label class="menu-setting net-check"><input type="checkbox" id="net-stun" ${p.stun ? "checked" : ""}> Gra przez internet — publiczny serwer STUN (Google) podpowie przeglądarce jej adres. W sieci lokalnej można wyłączyć.</label>${n.phase === "setup" ? `<div class="net-direct-actions">${this.button("net-host", "Utwórz grę", true) + this.button("net-join", "Dołącz do gry")}</div>` : step}<p id="net-status" class="net-status" role="status">${esc(n.status || "")}</p>${this.button(n.phase === "setup" ? "net-back" : "net-cancel", n.phase === "setup" ? "Wróć" : "Anuluj połączenie")}`;
 		},
 		mountNetwork() {
 			const n = this.net,
@@ -289,8 +289,7 @@
 						: `<div class="net-player"><span class="net-swatch"></span><span><b>…</b><small>${esc(label)}</small></span></div>`;
 			const hostPlayer = host ? me : n.peer,
 				guestPlayer = host ? n.peer : me;
-			const select = (id, entries, value) => `<select id="net-rule-${id}" ${dis}>${entries.map(([k, label]) => option(k, label, value)).join("")}</select>`;
-			const rules = `<div class="net-fields">${modeField(r.mode, { lobby: false, seats: 2, aiFoes: false, map: r.map }, dis)}<label class="menu-setting">Mapa${select("map", Object.entries(RTS.MISSIONS).filter(([, m]) => !m.campaign).map(([id, m]) => [id, m.name + " / " + m.planet]), r.map)}</label><label class="menu-setting">Rozmiar mapy${select("size", Object.entries(RTS.MAP_SIZES).map(([k, s]) => [k, s.name]), r.size)}</label><label class="menu-setting">Złoża${select("resources", Object.entries(O.resources).map(([k, o]) => [k, o.name]), r.resources)}</label><label class="menu-setting">Pogoda${select("weather", Object.entries(O.weather).map(([k, o]) => [k, o.name]), r.weather)}</label><label class="menu-setting">Fauna${select("fauna", Object.entries(O.fauna).map(([k, o]) => [k, o.name]), r.fauna)}</label><label class="menu-setting">Długość doby${select("dayLength", Object.entries(O.dayLength).map(([k, o]) => [k, o.name]), r.dayLength)}</label><label class="menu-setting">Poziom startowy${select("startLevel", Object.entries(O.startLevel).map(([k, o]) => [k, o.name]), r.startLevel)}</label><label class="menu-setting">Ziarno mapy<span class="net-seed"><input id="net-rule-seed" type="number" min="0" max="999999" value="${r.seed}" ${dis}>${host ? '<button id="net-seed-random" class="net-small">Losuj</button>' : ""}</span></label></div>`;
+			const rules = this.rulesHtml(r, host, { lobby: false, seats: 2, aiFoes: false });
 			return `<div class="net-players">${card(hostPlayer, "Gospodarz · drużyna 1", "")}${card(guestPlayer, "Gość · drużyna 2", n.peer || !host ? (host ? n.peerReady : n.ready) ? "gotowy" : "czeka" : "")}</div><h2>Ty</h2>${this.profileFields(n.profile, "lobby")}<h2>Zasady ${host ? "" : "<small>(wybiera gospodarz)</small>"}</h2>${rules}<p id="net-status" class="net-status" role="status">${esc(n.status || "")}</p>${host ? this.button("net-start", "Rozpocznij bitwę", true) : this.button("net-ready", n.ready ? "Nie jestem gotowy" : "Jestem gotowy", !n.ready)}${this.button("net-leave", "Rozłącz i wróć")}`;
 		},
 		chatPanelHtml() {
@@ -387,12 +386,15 @@
 				};
 			}
 			const ready = $("menu-net-ready");
-			if (ready)
+			if (ready) {
+				// The guest's line tells what to do now (0.172.6), as the host's does.
+				$("net-status").textContent = n.ready ? "Jesteś gotowy — gospodarz rozpocznie bitwę." : "Sprawdź zasady i kliknij „Jestem gotowy”.";
 				ready.onclick = () => {
 					n.ready = !n.ready;
 					n.link?.send({ k: "ready", ready: n.ready });
 					this.show("lobby", "menu-net-ready");
 				};
+			}
 			$("menu-net-leave").onclick = () => {
 				n.link?.close();
 				this.net = null;
@@ -429,6 +431,7 @@
 			else if (msg.k === "resumable") r.resumable = msg;
 			else if (msg.k === "room") {
 				const first = !r.room;
+				r.error = "";
 				r.room = msg.room;
 				r.you = msg.you;
 				// Whether this client hosts the room (the server no longer sends the host's client id, 0.171.10).
@@ -440,6 +443,8 @@
 				return this.show("rooms");
 			} else if (msg.k === "error") {
 				r.status = msg.text;
+				// (Shown in the room too, until the room changes: 0.172.6 — the guest's line there tells what to do now.)
+				r.error = msg.text;
 				if (this.active) this.root.querySelector("#net-status") && (this.root.querySelector("#net-status").textContent = msg.text);
 				return;
 			} else if (msg.k === "chat") {
@@ -466,8 +471,9 @@
 						)
 						.join("")}</div>`
 				: `<p class="net-empty">${r.welcomed ? "Na serwerze nie ma jeszcze gier — utwórz pierwszą." : "Łączenie…"}</p>`;
+			// 0.172.5: "Ty" (name, colour, faction) first — joining a game takes them, and they stood under "Nowa gra".
 			const resume = r.resumable ? `<div class="net-resume"><p>Twoja bitwa „${esc(r.resumable.name)}” trwa — połączenie zostało przerwane.</p>${this.button("net-rejoin", "Wróć do bitwy", true)}</div>` : "";
-			return `<p class="net-server">Serwer: <b>${esc(r.url || "")}</b></p>${resume}<h2>Gry na serwerze</h2>${list}<h2>Nowa gra</h2><div class="net-fields"><label class="menu-setting">Nazwa gry<input id="net-room-name" maxlength="40" value="${esc("Gra gracza " + n.profile.name)}"></label><label class="menu-setting">Układ<select id="net-room-size"><option value="2">1 na 1</option><option value="4">2 na 2 — drużyny</option></select></label></div>${this.button("net-room-create", "Utwórz grę", true)}<h2>Ty</h2>${this.profileFields(n.profile, "relay")}<p id="net-status" class="net-status" role="status">${esc(r.status || "")}</p>${this.button("net-relay-refresh", "Odśwież listę")}${this.button("net-relay-leave", "Rozłącz z serwerem")}`;
+			return `<p class="net-server">Serwer: <b>${esc(r.url || "")}</b></p>${resume}<h2>Ty</h2>${this.profileFields(n.profile, "relay")}<h2>Gry na serwerze</h2>${list}<h2>Nowa gra</h2><div class="net-fields"><label class="menu-setting">Nazwa gry<input id="net-room-name" maxlength="40" value="${esc("Gra gracza " + n.profile.name)}"></label><label class="menu-setting">Układ<select id="net-room-size"><option value="2">1 na 1</option><option value="4">2 na 2 — drużyny</option></select></label></div>${this.button("net-room-create", "Utwórz grę", true)}<p id="net-status" class="net-status" role="status">${esc(r.status || "")}</p>${this.button("net-relay-refresh", "Odśwież listę")}${this.button("net-relay-leave", "Rozłącz z serwerem")}`;
 		},
 		mountRooms() {
 			const n = this.net,
@@ -494,11 +500,32 @@
 					r.link.send({ k: "rejoin", room: r.resumable.room });
 				};
 		},
+		// The rules: fields for the host; for a guest, who cannot change them (0.172.6), a short summary instead of nine
+		// locked selects — the mode with its goal, then the rest in a grid of name and value.
 		rulesHtml(r, editable, ctx = { lobby: true, seats: 2, aiFoes: false }) {
+			if (!editable) return this.rulesSummary(r, ctx);
 			const O = RTS.SCENARIO_OPTIONS,
 				dis = editable ? "" : "disabled",
 				select = (id, entries, value) => `<select id="net-rule-${id}" ${dis}>${entries.map(([k, label]) => option(k, label, value)).join("")}</select>`;
 			return `<div class="net-fields">${modeField(r.mode, { ...ctx, map: r.map }, dis)}<label class="menu-setting">Mapa${select("map", Object.entries(RTS.MISSIONS).filter(([, m]) => !m.campaign).map(([id, m]) => [id, m.name + " / " + m.planet]), r.map)}</label><label class="menu-setting">Rozmiar mapy${select("size", Object.entries(RTS.MAP_SIZES).map(([k, s]) => [k, s.name]), r.size)}</label><label class="menu-setting">Złoża${select("resources", Object.entries(O.resources).map(([k, o]) => [k, o.name]), r.resources)}</label><label class="menu-setting">Pogoda${select("weather", Object.entries(O.weather).map(([k, o]) => [k, o.name]), r.weather)}</label><label class="menu-setting">Fauna${select("fauna", Object.entries(O.fauna).map(([k, o]) => [k, o.name]), r.fauna)}</label><label class="menu-setting">Długość doby${select("dayLength", Object.entries(O.dayLength).map(([k, o]) => [k, o.name]), r.dayLength)}</label><label class="menu-setting">Poziom startowy${select("startLevel", Object.entries(O.startLevel).map(([k, o]) => [k, o.name]), r.startLevel)}</label><label class="menu-setting">Ziarno mapy<span class="net-seed"><input id="net-rule-seed" type="number" min="0" max="999999" value="${r.seed}" ${dis}>${editable ? '<button id="net-seed-random" class="net-small">Losuj</button>' : ""}</span></label></div>`;
+		},
+		rulesSummary(r, ctx) {
+			const O = RTS.SCENARIO_OPTIONS,
+				map = RTS.MISSIONS[r.map],
+				ok = (m) => !RTS.netModeAllowed || RTS.netModeAllowed(m, { ...ctx, map: r.map }),
+				mode = RTS.MODES[r.mode] ? r.mode : "conquest",
+				played = ok(mode) && !(mode === "invasion" && map?.space) ? mode : "conquest";
+			const item = (label, value) => `<div><dt>${esc(label)}</dt><dd>${esc(value ?? "—")}</dd></div>`;
+			return `<div class="net-rules-summary"><p class="net-rules-mode"><b>${esc(RTS.MODES[played].name)}</b>${played !== mode ? ` <small>(wybrany: ${esc(RTS.MODES[mode].name)} — niedostępny przy tym składzie)</small>` : ""}<span>${esc(RTS.MODES[played].objective || "")}</span></p><dl>${[
+				item("Mapa", map ? map.name + " / " + map.planet : r.map),
+				item("Rozmiar", RTS.MAP_SIZES[r.size]?.name),
+				item("Złoża", O.resources[r.resources]?.name),
+				item("Pogoda", O.weather[r.weather]?.name),
+				item("Fauna", O.fauna[r.fauna]?.name),
+				item("Doba", O.dayLength[r.dayLength]?.name),
+				item("Poziom startowy", O.startLevel[r.startLevel]?.name),
+				item("Ziarno mapy", r.seed ? String(r.seed) : "losowe przy starcie"),
+			].join("")}</dl></div>`;
 		},
 		roomHtml() {
 			const n = this.net,
@@ -524,7 +551,7 @@
 			const all = room.seats.every((s) => s.taken || s.ai),
 				readyAll = room.seats.every((s) => s.ai || !s.taken || s.ready || s.host);
 			r.canStart = host && all && readyAll;
-			return `<p class="net-server">Serwer: <b>${esc(r.url)}</b> · ${room.size === 4 ? "2 na 2" : "1 na 1"}${host ? " · gospodarz: Ty" : ""}</p>${seats}<h2>Ty</h2>${this.profileFields(n.profile, "room")}<h2>Zasady ${host ? "" : "<small>(wybiera gospodarz)</small>"}</h2>${this.rulesHtml(rules, host, { lobby: true, seats: room.size === 4 ? 4 : 2, aiFoes: room.seats.filter((s, i) => (room.size === 4 ? i >= 2 : i === 1)).every((s) => s.ai) })}<p id="net-status" class="net-status" role="status">${esc(host ? (all ? (readyAll ? "Wszyscy gotowi." : "Czekam, aż gracze będą gotowi.") : "Zajmij lub oddaj komputerowi każde miejsce.") : r.status || "")}</p>${host ? this.button("net-room-start", "Rozpocznij bitwę", true) : this.button("net-room-ready", me?.ready ? "Nie jestem gotowy" : "Jestem gotowy", !me?.ready)}${this.button("net-room-leave", host ? "Zamknij grę" : "Opuść grę")}`;
+			return `<p class="net-server">Serwer: <b>${esc(r.url)}</b> · ${room.size === 4 ? "2 na 2" : "1 na 1"}${host ? " · gospodarz: Ty" : ""}</p>${seats}<h2>Ty</h2>${this.profileFields(n.profile, "room")}<h2>Zasady ${host ? "" : "<small>(wybiera gospodarz)</small>"}</h2>${this.rulesHtml(rules, host, { lobby: true, seats: room.size === 4 ? 4 : 2, aiFoes: room.seats.filter((s, i) => (room.size === 4 ? i >= 2 : i === 1)).every((s) => s.ai) })}<p id="net-status" class="net-status" role="status">${esc(host ? (all ? (readyAll ? "Wszyscy gotowi." : "Czekam, aż gracze będą gotowi.") : "Zajmij lub oddaj komputerowi każde miejsce.") : r.error || (me?.ready ? "Jesteś gotowy — gospodarz rozpocznie bitwę, gdy wszyscy będą gotowi." : "Sprawdź zasady i kliknij „Jestem gotowy”."))}</p>${host ? this.button("net-room-start", "Rozpocznij bitwę", true) : this.button("net-room-ready", me?.ready ? "Nie jestem gotowy" : "Jestem gotowy", !me?.ready)}${this.button("net-room-leave", host ? "Zamknij grę" : "Opuść grę")}`;
 		},
 		mountRoom() {
 			const n = this.net,

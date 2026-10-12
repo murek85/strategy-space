@@ -46,8 +46,9 @@ const LoadingScreen = (() => {
 		}
 		glow(c, cx, cy, 160 * speed + 20, "#bfe6ff", 0.6 * speed);
 		// The world ahead, growing as we arrive.
-		const r = 40 + arrive * 230;
-		planet(c, cx, cy + 40 + arrive * 210, r, { base: land, dark: night, atmo: air, light: -2.2, cities: 0.5, t, seed: 91 });
+		// (o.world: the start screen's world, low as a horizon under the name.)
+		const r = o.world ? o.world.r : 40 + arrive * 230;
+		planet(c, cx, o.world ? cy + o.world.y : cy + 40 + arrive * 210, r, { base: land, dark: night, atmo: air, light: -2.2, cities: 0.5, t, seed: 91 });
 		flare(c, cx + 240, cy - 120, 0.35 + arrive * 0.3, air);
 		// Grain and a vignette.
 		const v = c.createRadialGradient(cx, cy, H * 0.35, cx, cy, W * 0.7);
@@ -137,6 +138,97 @@ const LoadingScreen = (() => {
 			close,
 		};
 	}
-	return { show, TIPS };
+	// The game's emblem: a hexagonal frame, a world on an orbit, the Free Colonies' chevron over it.
+	const LOGO = `<svg class="boot-logo" viewBox="0 0 120 120" aria-hidden="true"><defs><radialGradient id="boot-world" cx="38%" cy="34%" r="70%"><stop offset="0" stop-color="#d9f6ff"/><stop offset="0.45" stop-color="#5fb8c8"/><stop offset="1" stop-color="#0c2a36"/></radialGradient></defs><path d="M60 4 108 32V88L60 116 12 88V32Z" fill="#07131b" stroke="#2c4a52" stroke-width="3"/><path d="M60 14 99 37V83L60 106 21 83V37Z" fill="none" stroke="#7fe7c8" stroke-opacity="0.35" stroke-width="1.5"/><circle cx="60" cy="62" r="24" fill="url(#boot-world)"/><ellipse cx="60" cy="62" rx="40" ry="11" fill="none" stroke="#f0cf8a" stroke-width="2.5" transform="rotate(-18 60 62)"/><path d="M43 30 60 22 77 30 60 38Z" fill="#7fe7c8"/><circle cx="96" cy="49" r="3" fill="#f0cf8a"/></svg>`;
+
+	/* The start screen (0.172, as in the train game): the jump out of hyperspace behind the game's emblem and name;
+	   a bar until the page has settled ({ ready() }), then "click or press any key". The press closes it — and, being
+	   the first gesture of the session, lets the sound in ({ onPress }, called inside the gesture); the key itself goes
+	   no further, so it does not also press a button of the menu behind. */
+	const BOOT_WORLD = { biome: "ice", world: { y: 400, r: 280 } };
+	function boot(o = {}) {
+		const k = typeof CampaignFilm !== "undefined" ? CampaignFilm.kit : null,
+			root = document.createElement("div");
+		root.className = "loading-screen boot-screen" + (o.reduced ? " reduced" : "");
+		root.setAttribute("role", "dialog");
+		root.setAttribute("aria-label", "Pogranicze Galaktyki — ekran startowy");
+		root.innerHTML = `<canvas class="loading-backdrop" aria-hidden="true"></canvas><div class="loading-hud" aria-hidden="true"><i></i><i></i><i></i><i></i></div><div class="boot-card">${LOGO}<span class="boot-eyebrow">WOLNE KOLONIE · SEKTOR 07</span><h1>POGRANICZE<small>GALAKTYKI</small></h1><p class="boot-sub">strategia czasu rzeczywistego na krańcu zbadanej przestrzeni</p><div class="loading-bar"><b></b></div><p class="boot-press" aria-live="polite">Kliknij lub naciśnij dowolny klawisz</p><p class="boot-ver">${o.version ? "wersja " + o.version : ""}</p></div>`;
+		document.body.append(root);
+		// It takes the page over from the cover drawn since the first paint, without a fade (no menu between).
+		document.getElementById("boot-cover")?.remove();
+		const canvas = root.querySelector("canvas"),
+			bar = root.querySelector(".loading-bar b"),
+			c = canvas.getContext("2d"),
+			start = performance.now(),
+			minTime = o.minTime ?? 1.2;
+		let ready = false,
+			closing = false;
+		const fit = () => {
+			const dpr = Math.min(2, window.devicePixelRatio || 1);
+			canvas.width = Math.round(innerWidth * dpr);
+			canvas.height = Math.round(innerHeight * dpr);
+			if (!k) return;
+			const s = Math.max(canvas.width / k.W, canvas.height / k.H);
+			c.setTransform(s, 0, 0, s, (canvas.width - k.W * s) / 2, (canvas.height - k.H * s) / 2);
+		};
+		fit();
+		addEventListener("resize", fit);
+		const close = () => {
+			if (closing) return;
+			closing = true;
+			root.classList.add("closing");
+			removeEventListener("resize", fit);
+			removeEventListener("keydown", key, true);
+			setTimeout(() => {
+				root.remove();
+				o.onEnter?.();
+			}, 450);
+		};
+		const enter = (e) => {
+			if (e) {
+				e.preventDefault();
+				e.stopPropagation();
+			}
+			if (!ready || closing) return;
+			o.onPress?.();
+			close();
+		};
+		// Until the screen goes, no key reaches the game (the menu behind would take Enter or Escape).
+		const key = (e) => {
+			if (e.repeat || ["Shift", "Control", "Alt", "Meta", "Tab"].includes(e.key)) return e.preventDefault();
+			enter(e);
+		};
+		addEventListener("keydown", key, true);
+		root.addEventListener("pointerdown", enter);
+		const frame = (now) => {
+			if (!root.isConnected || closing) return;
+			const t = (now - start) / 1000;
+			// The ship slows out of hyperspace and stays drifting towards the world while the screen waits.
+			if (k) backdrop(c, k, o.reduced ? 2 : t, BOOT_WORLD, o.reduced ? 0.6 : Math.min(0.6, t / 3));
+			requestAnimationFrame(frame);
+		};
+		requestAnimationFrame(frame);
+		const poll = () => {
+			if (!root.isConnected) return;
+			if ((performance.now() - start) / 1000 >= minTime && (!o.ready || o.ready())) {
+				const m = getComputedStyle(bar).transform.match(/matrix\(([-\d.e]+)/);
+				bar.style.animation = "none";
+				bar.style.transform = `scaleX(${m ? Number(m[1]) : 0})`;
+				void bar.offsetWidth;
+				bar.style.transition = "transform 0.4s ease-out";
+				bar.style.transform = "scaleX(1)";
+				root.classList.add("finished");
+				setTimeout(() => {
+					ready = true;
+					root.classList.add("ready");
+				}, 420);
+				return;
+			}
+			setTimeout(poll, 120);
+		};
+		setTimeout(poll, 120);
+		return { close: () => ((ready = true), enter()), get ready() { return ready; } };
+	}
+	return { show, boot, TIPS };
 })();
 if (typeof window !== "undefined") window.LoadingScreen = LoadingScreen;

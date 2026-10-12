@@ -54,7 +54,7 @@ function createWindow() {
 		minWidth: 1024,
 		minHeight: 640,
 		show: false,
-		backgroundColor: "#071016",
+		backgroundColor: "#02050a",
 		title: "Pogranicze Galaktyki",
 		icon: path.join(ROOT, "build", "icon.png"),
 		autoHideMenuBar: true,

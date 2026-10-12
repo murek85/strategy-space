@@ -5,6 +5,42 @@
 Data: 2026-09-21. Punkt wyjścia: prototyp 0.4.
 Status: pierwszy zakres wdrożony w 0.5 (2026-09-21). Na życzenie użytkownika pozycja Nowa operacja od razu nosi nazwę Gra jednoosobowa. Poniższa koncepcja zachowuje pierwotne nazewnictwo; kampania, multiplayer i pozostałe rozszerzenia nadal są propozycjami.
 
+## Zasady i wskazówka dla gościa (wersja 0.172.6, 2026-10-12)
+
+- `netplay-menu.js`: `rulesHtml(r, editable, ctx)` dla gościa (`editable` fałszywe) zwraca `rulesSummary` — tryb faktycznie rozgrywany (jak `modeField`: niedostępny przy składzie albo Inwazja na mapie kosmicznej → Podbój, z uwagą), cel trybu i `<dl>` z ośmioma wartościami; styl `.net-rules-summary` w `menu.css` (siatka `minmax(150px, 1fr)`). Poczekalnia gry przez kody (`lobbyHtml`) używa teraz tego samego `rulesHtml` zamiast własnej kopii pól.
+- Stan gościa: w pokoju na serwerze `r.error` (ostatni błąd serwera, czyszczony przy każdej wiadomości `room`) albo „Sprawdź zasady i kliknij „Jestem gotowy”.” / „Jesteś gotowy — gospodarz rozpocznie bitwę, gdy wszyscy będą gotowi.” zamiast `r.status` („Połączono z serwerem.”); w grze przez kody to samo w `mountLobby`.
+- Sprawdzone z dwoma graczami na lokalnym serwerze: zmiana pogody u gospodarza od razu w podsumowaniu gościa, a jego gotowość cofnięta (serwer) i wskazówka z powrotem „Sprawdź zasady…”.
+
+## Poczekalnia i pokój gry (wersja 0.172.5, 2026-10-12)
+
+- Sprawdzone na lokalnym serwerze (`/lobby` w `server.js`) z dwoma graczami: lista gier, pokój u gospodarza i u gościa, okno 1280×800 i 962×417.
+- `menu.css`: okno pokoju w `.net-lobby-layout` — `flex: 1 1 820px`, `max-width: 880px` (było stałe 640 px), układ wyśrodkowany; `.net-fields` (siatka `minmax(200px, 1fr)`) daje wtedy trzy kolumny: treść pokoju 770 px zamiast 1006 px. Odstęp pól 8 px zamiast 12 px. `.net-player` w szkle menu (bez zaokrągleń), `.net-seat-actions` z `margin-left: auto` zamiast całego rzędu — przyciski obok nazwy, gdy się mieszczą.
+- `netplay-menu.js` (`roomsHtml`): „Ty” (`profileFields(…, "relay")`) przed listą gier.
+- `@media (max-height: 640px)`: panel czatu bez tytułu i podpowiedzi, `min-height` listy 60 px — przy 417 px zawartość panelu miała 374 px na 288 px.
+
+## Ekran gry wieloosobowej i niskie okno (wersja 0.172.4, 2026-10-12)
+
+- `windowed()` przenosi końcowe `.menu-action` i `[role=status]` treści na stały pasek okna (`.menu-window-actions`). Na ekranie `network` były to także „Utwórz grę” i „Dołącz do gry”, przyciski sekcji gry bezpośredniej — stały z dala od niej i przy 800 px wysokości zostawiały treści 240 px. `netplay-menu.js` owija je w `.net-direct-actions` (dwie kolumny, `menu.css`), więc zostają w sekcji; na pasku są tylko stan i „Wróć”.
+- `@media (max-height: 640px)` w `menu.css`: okno (`.menu-content.menu-window`) przewija się w całości (`.menu-scroll` bez własnego przewijania, bez `min-height: 260px`, które przepełniało układ), mniejszy tytuł, odstępy, bez podpisu marki. Przy wysokości 417 px okno ma 288 px zamiast 220 px, a treść całą wysokość zamiast 8 px; dotyczy wszystkich ekranów-okien (ustawienia, scenariusze, zapisy, poczekalnia).
+
+## Suwaki i pola (wersja 0.172.3, 2026-10-12)
+
+- Przegląd ekranów (ustawienia ze wszystkimi kartami, scenariusze, odprawa, gra sieciowa): suwaki, pola wyboru i listy menu miały już styl gry; odstawały suwak głośności `#sound-volume` na górnym pasku (systemowy), pola gry sieciowej (`.net-fields`, `.net-steps textarea`, `.net-chat-row input` — `#10202a`, rogi 4 px), systemowe strzałki pola liczbowego `#net-rule-seed` i pole czatu bitwy `.battle-chat-input`.
+- `style.css`: domyślny wygląd w `:where()` (zerowa szczegółowość, reguły paneli wygrywają) — suwak z torem wypełnionym do `--fill` i jasnym uchwytem (jak `.has-backdrop .menu-setting`), szklane pola tekstowe/liczbowe/`textarea` z poświatą przy fokusie, bez strzałek pola liczbowego, `accent-color` pól wyboru. `app.js` (`updateAudioControls`) ustawia `--fill` suwaka głośności.
+- `menu.css`: pola sieciowe i czat w kolorach szkła scenariuszy; pola tekstowe menu przy fokusie mają turkusową poświatę zamiast złotej ramki przycisków.
+
+## Paski przewijania (wersja 0.172.2, 2026-10-12)
+
+- Styl przewijania był ustawiany osobno dla kilku paneli; reszta (np. `.menu-layout`, które przewija całe menu w niskim oknie, listy w `act2.css`, panele w `expansion.css`) miała szary pasek systemu ze strzałkami. Reguła `*` na początku `style.css` daje wszystkim `scrollbar-width: thin` i `scrollbar-color: rgba(127, 231, 200, 0.38) transparent`; reguły paneli (np. `#101e2b` w `menu.css`) dalej wygrywają, bo dotyczą samego elementu.
+
+## Ekran startowy (wersja 0.172, 2026-10-12)
+
+- Wzorem gry „Maszynista” (`train/js/screens.js`) start gry ma własny ekran tytułowy: `LoadingScreen.boot({ version, ready, onPress, reduced })` w `loading-screen.js` (styl `.boot-*` w `style.css`). Wcześniej start pokazywał tę samą kartę co wczytywanie misji (`LoadingScreen.show`).
+- Tło: to samo wyjście z nadprzestrzeni (`backdrop`), z planetą lodową niską jak horyzont pod napisem (`world: { y, r }`); na środku godło SVG, „WOLNE KOLONIE · SEKTOR 07”, „POGRANICZE / GALAKTYKI”, podtytuł, pasek, potem pulsująca zachęta i numer wersji z `GAME_VERSION`.
+- Gotowość (`ready`, `app.js`): strona wczytana i dwie klatki narysowane albo 0,5 s po wczytaniu (w ukrytym oknie klatki stoją); co najmniej 1,2 s.
+- 0.172.1: `#boot-cover` (pierwszy element `<body>` w `index.html`, styl w `style.css`) zakrywa stronę od pierwszego narysowania; `LoadingScreen.boot` usuwa go zaraz po dodaniu ekranu, który nie ma już animacji wejścia — menu nie miga przed logo. Bez `LoadingScreen` zasłonę zdejmuje `app.js`, a awaryjnie znika sama po 10 s (animacja CSS). Okno Electrona ma tło `#02050a`, jak zasłona.
+- Klik albo klawisz zamyka ekran; klawisz jest przechwytywany (faza capture, `stopPropagation`), więc nie naciska przycisku menu za ekranem. `onPress` wywołuje `unlockSound` w trakcie gestu — muzyka menu rusza od razu. Shift/Ctrl/Alt/Tab i powtórzenia klawisza nie zamykają ekranu.
+
 ## Miejsce licznika FPS (wersja 0.171.19, 2026-10-10)
 
 - `#fps-meter` powstaje w `setupSidebar` (`app.js`) jako pierwszy element paska `.map-tools`, więc stoi w jednym rzędzie z przyciskami „−”, „⌖”, „+” (wysokość 30 px, odstęp 6 px) zamiast nad nimi; bez paska trafia do `body`. `#render-meter` ma `top: 106px`, pod paskiem (`expansion.css`).

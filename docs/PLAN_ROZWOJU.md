@@ -1,6 +1,6 @@
 # Plan rozwoju prototypu
 
-Aktualizacja: 2026-10-10. Aktualna wersja: 0.171.19.
+Aktualizacja: 2026-10-12. Aktualna wersja: 0.172.6.
 
 Ten plik jest punktem wejścia do dokumentacji: opisuje bieżący stan, otwarte kierunki i historię wersji. Instrukcja gry i sterowanie: [README](../README.md).
 
@@ -289,6 +289,13 @@ Przy każdym kolejnym etapie należy uruchomić pełny zestaw, nie tylko testy u
 | 0.152 | Etap G2: desant z orbity — tryb „Inwazja” (orbita, potem planeta; kapsuły, uderzenie i skan z orbity) — [opis](DESANT_Z_ORBITY.md) |
 | 0.152.1 | Szuflada celów bez poziomego przewijania, ukryta pod raportem końca — [opis](KAMPANIA_OPRAWA.md) |
 | 0.153 | Etap G4: serwer lobby, lista gier, 2 na 2 przez sieć z komputerem na wolnym miejscu, powrót do bitwy po zerwaniu połączenia — [opis](MULTIPLAYER.md) |
+| 0.172.6 | Podsumowanie zasad dla gościa (`rulesSummary`) i wskazówka zamiast powitania serwera — [opis](MENU_GLOWNE.md) |
+| 0.172.5 | Poczekalnia i pokój gry: szersze okno obok czatu, pola w trzech kolumnach, „Ty” przed listą gier, czat w niskim oknie — [opis](MENU_GLOWNE.md) |
+| 0.172.4 | Ekran gry wieloosobowej: przyciski gry przez kody w sekcji (`.net-direct-actions`); okna menu w niskim oknie przewijane w całości — [opis](MENU_GLOWNE.md) |
+| 0.172.3 | Wspólny wygląd suwaków i pól (`:where()` w `style.css`), szklane pola gry sieciowej i czatu, `--fill` suwaka głośności — [opis](MENU_GLOWNE.md) |
+| 0.172.2 | Wspólny styl pasków przewijania (`*` w `style.css`: `scrollbar-width: thin`, turkusowy suwak bez tła) — [opis](MENU_GLOWNE.md) |
+| 0.172.1 | Zasłona `#boot-cover` od pierwszego narysowania strony do ekranu startowego (bez mignięcia menu) — [opis](MENU_GLOWNE.md) |
+| 0.172 | Ekran startowy (`LoadingScreen.boot`): godło, nazwa, pasek do ustabilizowania strony, „kliknij lub naciśnij klawisz” odblokowujące dźwięk — [opis](MENU_GLOWNE.md) |
 | 0.171.19 | Licznik FPS w pasku narzędzi planszy (`.map-tools`) obok przycisków przybliżania; czas renderowania pod paskiem — [opis](MENU_GLOWNE.md) |
 | 0.171.18 | Licznik FPS (ustawienie `fps`) i przełącznik cieni chmur 3D (`clouds`) w ustawieniach grafiki — [opis](MENU_GLOWNE.md) |
 | 0.171.17 | Testy i narzędzia: test renderera 3D krok po kroku z postępem, podgląd burz z listą skryptów z `index.html`, testy `weatherCloseness`, `closestTo`, listy reguł i ścieżek serwera — [opis](RENDERER_3D.md) |

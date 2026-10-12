@@ -1,6 +1,6 @@
 /* Navigation owns screens; the application retains a single simulation loop. */
 // The game's version: the menu's footer and the saves' export (0.171.13: one place; it was written twice by hand).
-const GAME_VERSION = "0.171.19";
+const GAME_VERSION = "0.172.6";
 // Listening to the music in the settings: themes (audio.js music modes) and the game's moods.
 const MUSIC_THEMES = [
 	["menu", "Menu — Odległe światło"],
@@ -352,6 +352,13 @@ class CommandMenu {
 				body;
 		if (screen === "news")
 			body =
+				"<h2>0.172.6 / Zasady i wskazówka dla gościa</h2><p>Gość widzi zasady gry jako zwarte podsumowanie, a pod nim, co ma teraz zrobić.</p>" +
+				"<h2>0.172.5 / Poczekalnia i pokój gry</h2><p>Szerszy pokój gry z polami w trzech kolumnach, Twoje dane na początku listy gier, czat mieszczący się w niskim oknie.</p>" +
+				"<h2>0.172.4 / Ekran gry wieloosobowej</h2><p>Przyciski gry przez kody stoją w swojej sekcji, a w niskim oknie ekrany menu przewijają się w całości zamiast ściskać treść do jednej linii.</p>" +
+				"<h2>0.172.3 / Suwaki i pola</h2><p>Suwak głośności na pasku bitwy i pola gry sieciowej oraz czatu wyglądają jak reszta menu.</p>" +
+				"<h2>0.172.2 / Paski przewijania</h2><p>Wszędzie cienkie, turkusowe paski przewijania zamiast szarych systemowych.</p>" +
+				"<h2>0.172.1 / Start bez mignięcia menu</h2><p>Przy uruchamianiu gry menu główne nie mignie już przed ekranem z logo.</p>" +
+				"<h2>0.172 / Nowy ekran startowy</h2><p>Ekran tytułowy z godłem i nazwą gry nad wyjściem z nadprzestrzeni; kliknij lub naciśnij dowolny klawisz — dźwięk włącza się od razu.</p>" +
 				"<h2>0.171.19 / Licznik FPS przy przyciskach kamery</h2><p>Licznik klatek stoi w jednym rzędzie z przyciskami przybliżania i ich nie zasłania; czas renderowania jest pod nimi.</p>" +
 				"<h2>0.171.18 / Licznik FPS i cienie chmur</h2><p>W ustawieniach grafiki: licznik klatek na sekundę nad planszą i przełącznik cieni chmur na planszy 3D.</p>" +
 				"<h2>0.171.17 / Testy i narzędzia</h2><p>Pewniejsze testy grafiki i serwera — zmiany pod spodem, bez wpływu na rozgrywkę.</p>" +
