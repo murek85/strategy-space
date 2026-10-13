@@ -1,4 +1,6 @@
-# Pogranicze Galaktyki — prototyp RTS 0.172.6
+# Pogranicze Galaktyki — prototyp RTS 0.172.7
+
+**Wersja 0.172.7 — domyślnie grafika 3D.** Domyślny silnik planszy to teraz 3D (Three.js) zamiast WebGL (PixiJS). Gdzie 3D się nie uruchomi, gra jak dotąd sama przechodzi na WebGL, a potem na Canvas 2D. Silnik wybrany wcześniej w Ustawieniach → Grafika zostaje — zmiana dotyczy nowych graczy i tych, którzy nie mają zapisanych ustawień grafiki.
 
 **Wersja 0.172.6 — zasady i wskazówka dla gościa.** Gość w pokoju gry (na serwerze i w grze przez kody) widział zasady jako dziewięć zablokowanych list. Teraz widzi zwarte podsumowanie: tryb z celem (i uwagą, gdy wybrany tryb jest niedostępny przy tym składzie), a pod nim w siatce mapę, rozmiar, złoża, pogodę, faunę, dobę, poziom startowy i ziarno — zmiany gospodarza pojawiają się w nim od razu. Zamiast powitania serwera („Połączono z serwerem.”) gość widzi, co zrobić teraz: „Sprawdź zasady i kliknij »Jestem gotowy«”, a po kliknięciu, że gospodarz rozpocznie bitwę; błędy serwera nadal się pokazują.
 

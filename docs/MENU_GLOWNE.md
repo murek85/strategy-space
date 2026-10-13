@@ -5,6 +5,12 @@
 Data: 2026-09-21. Punkt wyjścia: prototyp 0.4.
 Status: pierwszy zakres wdrożony w 0.5 (2026-09-21). Na życzenie użytkownika pozycja Nowa operacja od razu nosi nazwę Gra jednoosobowa. Poniższa koncepcja zachowuje pierwotne nazewnictwo; kampania, multiplayer i pozostałe rozszerzenia nadal są propozycjami.
 
+## Domyślnie grafika 3D (wersja 0.172.7, 2026-10-13)
+
+- `scene-fx.js`: `defaults.renderer` = `"three"` (było `"webgl"`). Zapisany wybór (`pogranicze-visual-v1`) nadal wygrywa; `SceneFX.set` zapisuje wszystkie opcje naraz, więc kto kiedykolwiek zmienił jakieś ustawienie grafiki, ma zapisany dotychczasowy silnik i zmienia go w Ustawieniach → Grafika.
+- Awaryjne przejścia bez zmian (`applyRenderer` w `app.js`): 3D → WebGL (PixiJS) z komunikatem → Canvas 2D. Silnik startuje przy pierwszej klatce bitwy (w menu plansza nie jest rysowana).
+- Sprawdzone bez zapisanych ustawień: bitwa ruszyła w 3D (`currentRendererMode()` = `three`), bez błędów w konsoli.
+
 ## Zasady i wskazówka dla gościa (wersja 0.172.6, 2026-10-12)
 
 - `netplay-menu.js`: `rulesHtml(r, editable, ctx)` dla gościa (`editable` fałszywe) zwraca `rulesSummary` — tryb faktycznie rozgrywany (jak `modeField`: niedostępny przy składzie albo Inwazja na mapie kosmicznej → Podbój, z uwagą), cel trybu i `<dl>` z ośmioma wartościami; styl `.net-rules-summary` w `menu.css` (siatka `minmax(150px, 1fr)`). Poczekalnia gry przez kody (`lobbyHtml`) używa teraz tego samego `rulesHtml` zamiast własnej kopii pól.

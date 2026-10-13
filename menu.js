@@ -1,6 +1,6 @@
 /* Navigation owns screens; the application retains a single simulation loop. */
 // The game's version: the menu's footer and the saves' export (0.171.13: one place; it was written twice by hand).
-const GAME_VERSION = "0.172.6";
+const GAME_VERSION = "0.172.7";
 // Listening to the music in the settings: themes (audio.js music modes) and the game's moods.
 const MUSIC_THEMES = [
 	["menu", "Menu — Odległe światło"],
@@ -352,6 +352,7 @@ class CommandMenu {
 				body;
 		if (screen === "news")
 			body =
+				"<h2>0.172.7 / Domyślnie grafika 3D</h2><p>Nowa gra startuje z silnikiem 3D (Three.js); wybór z ustawień zostaje.</p>" +
 				"<h2>0.172.6 / Zasady i wskazówka dla gościa</h2><p>Gość widzi zasady gry jako zwarte podsumowanie, a pod nim, co ma teraz zrobić.</p>" +
 				"<h2>0.172.5 / Poczekalnia i pokój gry</h2><p>Szerszy pokój gry z polami w trzech kolumnach, Twoje dane na początku listy gier, czat mieszczący się w niskim oknie.</p>" +
 				"<h2>0.172.4 / Ekran gry wieloosobowej</h2><p>Przyciski gry przez kody stoją w swojej sekcji, a w niskim oknie ekrany menu przewijają się w całości zamiast ściskać treść do jednej linii.</p>" +

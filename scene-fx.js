@@ -6,8 +6,9 @@
 			metrics: false,
 			// The frames-per-second counter over the board (0.171.18).
 			fps: false,
-			// Board renderer and the WebGL-only effects.
-			renderer: "webgl",
+			// Board renderer and the WebGL-only effects. 3D (Three.js) by default since 0.172.7 — where it cannot start,
+			// app.js falls back to WebGL (PixiJS), then Canvas 2D; a choice saved in the settings stays.
+			renderer: "three",
 			lights: true,
 			shadows: true,
 			// Shadows of the drifting clouds over the 3D board (0.171.18: in the code since 0.118, never in the settings).

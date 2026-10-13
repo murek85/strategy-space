@@ -1,6 +1,6 @@
 # Plan rozwoju prototypu
 
-Aktualizacja: 2026-10-12. Aktualna wersja: 0.172.6.
+Aktualizacja: 2026-10-13. Aktualna wersja: 0.172.7.
 
 Ten plik jest punktem wejścia do dokumentacji: opisuje bieżący stan, otwarte kierunki i historię wersji. Instrukcja gry i sterowanie: [README](../README.md).
 
@@ -289,6 +289,7 @@ Przy każdym kolejnym etapie należy uruchomić pełny zestaw, nie tylko testy u
 | 0.152 | Etap G2: desant z orbity — tryb „Inwazja” (orbita, potem planeta; kapsuły, uderzenie i skan z orbity) — [opis](DESANT_Z_ORBITY.md) |
 | 0.152.1 | Szuflada celów bez poziomego przewijania, ukryta pod raportem końca — [opis](KAMPANIA_OPRAWA.md) |
 | 0.153 | Etap G4: serwer lobby, lista gier, 2 na 2 przez sieć z komputerem na wolnym miejscu, powrót do bitwy po zerwaniu połączenia — [opis](MULTIPLAYER.md) |
+| 0.172.7 | Domyślny silnik planszy: 3D (Three.js) — `SceneFX` `renderer: "three"` — [opis](MENU_GLOWNE.md) |
 | 0.172.6 | Podsumowanie zasad dla gościa (`rulesSummary`) i wskazówka zamiast powitania serwera — [opis](MENU_GLOWNE.md) |
 | 0.172.5 | Poczekalnia i pokój gry: szersze okno obok czatu, pola w trzech kolumnach, „Ty” przed listą gier, czat w niskim oknie — [opis](MENU_GLOWNE.md) |
 | 0.172.4 | Ekran gry wieloosobowej: przyciski gry przez kody w sekcji (`.net-direct-actions`); okna menu w niskim oknie przewijane w całości — [opis](MENU_GLOWNE.md) |
