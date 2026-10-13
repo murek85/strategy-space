@@ -1,5 +1,16 @@
 # Dźwięk i muzyka
 
+## Wersja 0.172.8 — dźwięk, który się gubił (2026-10-13)
+
+Sprawdzone w przeglądarce (prawdziwy kontekst dźwięku, bez uruchamiania bitwy) i w `tests/audio.test.js`.
+
+- **Muzyka po pauzie:** `togglePause` (spacja) woła `sound.silence()`, które zatrzymuje planistę muzyki (`musicTimer`), a nic potem go nie uruchamiało — `update()` co klatkę tylko liczy nastrój; muzyka wracała dopiero przy zmianie motywu (menu, wczytanie). Pomiar: po `silence()` i 30 wywołaniach `update()` — 0 nut, brak planisty. Teraz zdjęcie pauzy woła `setMusicMode(musicModeFor(game))` i motyw gra dalej od zapamiętanego kroku (`musicBeats`).
+- **Powrót do okna:** `blur` i ukryta karta wstrzymują kontekst (`suspend()`), a wznawiało go tylko zdarzenie `focus` / widoczna karta — słuchacze pierwszego gestu (`unlockSound`) znikają po odblokowaniu. Pomiar: po `blur` kliknięcie zostawiało kontekst w stanie `suspended`. Teraz `pressBack` (pointerdown/keydown, faza capture) wznawia wstrzymany kontekst, gdy dźwięk nie jest wyciszony; przy działającym kontekście nic nie robi.
+- **Wyciszenie klawiszem M:** zapisywane na stałe (`pogranicze-audio-v1`) i widoczne tylko jako ikona na pasku; M stoi obok N (laboratorium) i przecinka (obrót kamery). `toggleSound` pokazuje teraz komunikat (w bitwie `toast`, w menu `menu.notice`).
+- **Próbki efektów a radio:** `sample()` w `audio-hq.js` liczyło głosy jako `voices - musicNodes.size`, z głosami mowy radiowej — przy dłuższej linii (do 69 sylab) strzały i wybuchy z nagrań przechodziły na syntezę. Teraz `effectVoices()`, jak reszta efektów.
+- Sprawdzone i bez winy: zmiana motywu zawyża licznik efektów o kilka głosów na < 0,3 s (nuty starego motywu wybrzmiewają); źródła zatrzymane przed startem też kończą się (`onended`), więc licznik głosów nie przecieka.
+- Poza grą: zmiana urządzenia wyjścia (słuchawki Bluetooth, monitor HDMI w uśpieniu) może przerwać dźwięk przeglądarki — tego gra nie wykrywa.
+
 ## Wersja 0.171.14 — poprawki z przeglądu gry (2026-10-10)
 
 - **Mowa radiowa** (`audio-radio.js`): `speak()` planowało od razu wszystkie sylaby (do 69 źródeł na linię), a każde liczyło się do limitu efektów (40) — przez ok. 4 s gasły strzały, wybuchy i kliknięcia, a druga linia była odrzucana. Źródła linii są teraz osobno (`speechNodes`, `effectVoices()` = głosy bez muzyki i mowy). Nowa linia wycisza poprzednią w 0,1 s i zaczyna się zaraz po niej.

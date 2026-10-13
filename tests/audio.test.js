@@ -629,3 +629,36 @@ test("battle themes go on where they were after the menu; a replay starts over; 
 	assert.equal(a.noiseBuffer(0.3), a.noiseBuffer(1.2));
 	a.stopMusic(0);
 });
+
+// 0.172.8: the sound that seemed lost — the music after a pause, the effect samples during a radio line, and the
+// window's sound held by a blur coming back at a press.
+test("after a pause the battle music goes on; radio speech does not take the samples' voices", async () => {
+	const a = new GameAudio({ contextFactory: fakeContext });
+	assert.ok(await a.unlock());
+	a.setMusicMode("game:dust");
+	for (let i = 0; i < 10; i++) {
+		a.context.currentTime += 0.3;
+		clearTimeout(a.musicTimer);
+		a.musicTimer = null;
+		a.scheduleMusic();
+	}
+	const beat = a.musicBeat;
+	a.silence();
+	assert.equal(a.musicTimer, null, "the pause stops the scheduler");
+	a.setMusicMode("game:dust");
+	assert.ok(a.musicTimer, "unpausing schedules the music again");
+	assert.ok(a.musicBeat >= beat, "from where it was");
+	a.stopMusic(0);
+	// The speech's voices are not effect voices.
+	a.voices = 50;
+	a.speechNodes = new Set(Array.from({ length: 45 }, (_, i) => ({ i })));
+	assert.ok(a.effectVoices() < a.maxVoices);
+	const fs = require("node:fs"),
+		path = require("node:path"),
+		root = path.join(__dirname, ".."),
+		hq = fs.readFileSync(path.join(root, "audio-hq.js"), "utf8"),
+		app = fs.readFileSync(path.join(root, "app.js"), "utf8");
+	assert.match(hq, /if \(!list \|\| this\.effectVoices\(\) >= this\.maxVoices\) return false;/, "samples count effect voices");
+	assert.match(app, /if \(paused\) sound\.silence\(\);[\s\S]{0,300}else sound\.setMusicMode\(musicModeFor\(game\)\);/, "togglePause brings the music back");
+	assert.match(app, /const pressBack = \(\) => \{[\s\S]{0,200}state === "suspended"/, "a press resumes held sound");
+});

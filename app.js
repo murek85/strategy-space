@@ -195,6 +195,11 @@
 		await sound.unlock();
 		updateAudioControls();
 		if (!sound.muted) sound.play("ready", { force: true });
+		// Said aloud (0.172.8): M sits by N and the comma (laboratory, camera), the mute is remembered across sessions,
+		// and it went by with only the icon on the top bar changing — the sound seemed lost.
+		const note = sound.muted ? "Dźwięk wyłączony — M włącza go z powrotem." : "Dźwięk włączony.";
+		if (menu?.active) menu.notice?.(note);
+		else toast(note);
 	}
 	// The first press unlocks the sound; then the listeners go (0.171.13: every click and key of the session went
 	// through the audio and its controls). Coming back to the window brings the music back without a press.
@@ -213,6 +218,14 @@
 		if (sound.context && !document.hidden) sound.unlock().then(updateAudioControls);
 	};
 	window.addEventListener("focus", soundBack);
+	// Any press brings the held sound back too (0.172.8): after a blur only the window's focus event did, and it does
+	// not always come — an overlay, a screenshot tool or a dialog closed — so the battle went on silent while the
+	// player clicked and pressed. Only a suspended context goes through the audio.
+	const pressBack = () => {
+		if (sound.context?.state === "suspended" && !sound.muted && !document.hidden) sound.unlock().then(updateAudioControls);
+	};
+	document.addEventListener("pointerdown", pressBack, { capture: true, passive: true });
+	document.addEventListener("keydown", pressBack, { capture: true });
 	document.addEventListener("click", (e) => {
 		const button = closestTo(e.target, "button");
 		if (
@@ -1578,6 +1591,9 @@
 		}
 		paused = !paused;
 		if (paused) sound.silence();
+		// The music again after the pause (0.172.8): silence() stops its scheduler, and only a change of theme (the
+		// menu, a loaded save) started it — after Space, Space the battle went on without music.
+		else sound.setMusicMode(musicModeFor(game));
 		toast(
 			paused
 				? "Pauza taktyczna — możesz wydawać rozkazy."

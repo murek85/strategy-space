@@ -218,7 +218,9 @@
 		// A sample from a group: random variant, pitch and small level changes; farther = quieter and duller.
 		sample(group, level, pan, { far = 0, rate = 1, delay = 0, offset = 0, duration = null, spread = 0.06 } = {}) {
 			const list = this.hq?.bank.get(group);
-			if (!list || this.voices - this.musicNodes.size >= this.maxVoices) return false;
+			// Effect voices as everywhere (0.172.8): the radio speech counted here, and during a long line the shots and
+			// blasts fell back to the synthesized ones.
+			if (!list || this.effectVoices() >= this.maxVoices) return false;
 			const c = this.context,
 				pick = list[Math.floor(Math.random() * list.length)],
 				t = c.currentTime + delay,

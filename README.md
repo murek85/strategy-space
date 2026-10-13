@@ -1,4 +1,6 @@
-# Pogranicze Galaktyki — prototyp RTS 0.172.7
+# Pogranicze Galaktyki — prototyp RTS 0.172.8
+
+**Wersja 0.172.8 — dźwięk, który się gubił.** Cztery przyczyny: (1) pauza spacją zatrzymywała muzykę, a jej zdjęcie spacją już jej nie wznawiało — bitwa szła dalej bez muzyki aż do wejścia w menu; teraz muzyka wraca tam, gdzie była. (2) Po wyjściu z okna dźwięk czekał, aż okno dostanie z powrotem fokus — gdy to zdarzenie nie przyszło (nakładka, narzędzie do zrzutów, zamknięte okno dialogowe), gra milczała mimo klikania; teraz wraca też przy pierwszym kliknięciu lub klawiszu. (3) Klawisz M (obok N — laboratorium — i przecinka — obrót kamery) wyciszał grę na stałe, zmieniając tylko ikonę na pasku; teraz mówi o tym komunikat „Dźwięk wyłączony — M włącza go z powrotem”. (4) W czasie dłuższego komunikatu radiowego strzały i wybuchy z nagrań przechodziły na prostsze dźwięki syntetyczne, bo głosy radia liczyły się do limitu efektów.
 
 **Wersja 0.172.7 — domyślnie grafika 3D.** Domyślny silnik planszy to teraz 3D (Three.js) zamiast WebGL (PixiJS). Gdzie 3D się nie uruchomi, gra jak dotąd sama przechodzi na WebGL, a potem na Canvas 2D. Silnik wybrany wcześniej w Ustawieniach → Grafika zostaje — zmiana dotyczy nowych graczy i tych, którzy nie mają zapisanych ustawień grafiki.
 
