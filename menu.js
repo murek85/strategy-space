@@ -1,6 +1,6 @@
 /* Navigation owns screens; the application retains a single simulation loop. */
 // The game's version: the menu's footer and the saves' export (0.171.13: one place; it was written twice by hand).
-const GAME_VERSION = "0.177.2";
+const GAME_VERSION = "0.177.3";
 // Listening to the music in the settings: themes (audio.js music modes) and the game's moods.
 const MUSIC_THEMES = [
 	["menu", "Menu — Odległe światło"],
@@ -356,6 +356,7 @@ class CommandMenu {
 				body;
 		if (screen === "news")
 			body =
+				"<h2>0.177.3 / Dziesięć kolorów gracza</h2><p>Do wyboru jest 10 kolorów (nowe: turkusowy, limonkowy, pomarańczowy, śnieżny, szmaragdowy). Przeciwnik nie dostaje już koloru podobnego do Twojego, a legenda mapy pokazuje prawdziwe kolory stron.</p>" +
 				"<h2>0.177.2 / Osobne przyciski w raportach</h2><p>Przyciski jeden pod drugim w raportach końca bitwy i innych oknach planszy („Nowa operacja”, „Spróbuj ponownie”, „Następny rozdział”, „Rewanż”) mają odstęp i nie zlewają się w jeden blok.</p>" +
 				"<h2>0.177.1 / Gasnące silniki wraków</h2><p>Zniszczona stacja albo okręt w kosmosie gasną: płomienie silników i poświata pod platformą migoczą i znikają w ciągu sekundy, zamiast świecić we wraku do końca.</p>" +
 				"<h2>0.177 / Dźwięk wysokiej jakości bez przerw</h2><p>W jakości „Wysoka” dźwięk nie rwie się już i nie znika w ciężkiej walce: gra liczy dźwięk w 48 kHz zamiast częstotliwości urządzenia (np. 96 kHz), więc pogłos i instrumenty Tone.js mieszczą się w czasie.</p>" +
@@ -660,7 +661,7 @@ class CommandMenu {
 				"<h2>Cele operacji</h2>",
 				`<div class="scenario-config scenario-presets"><label class="wide-field">Gotowe ustawienia<select id="scenario-preset" aria-label="Gotowe ustawienia">${Object.entries(RTS.SCENARIO_PRESETS || {})
 					.map(([id, p]) => `<option value="${id}">${p.name}</option>`)
-					.join("")}<option value="custom">Własne</option></select></label><p id="preset-description"></p></div><div class="scenario-config"><label>Nazwa gracza<input id="scenario-name" maxlength="24" aria-label="Nazwa gracza"></label><label>Kolor<select id="scenario-color" aria-label="Kolor gracza">${(RTS.PLAYER_COLORS || []).map((c, i) => `<option value="${c}">${["Miętowy", "Niebieski", "Fioletowy", "Złoty", "Różowy"][i]}</option>`).join("")}</select></label><label>Poziom trudności<select id="scenario-difficulty" aria-label="Poziom trudności"><option value="easy">Łatwy</option><option value="normal">Średni</option><option value="hard">Trudny</option></select></label><label>Liczba graczy<select id="scenario-players" aria-label="Liczba graczy"><option value="2">2 — Ty + 1 AI</option><option value="3">3 — Ty + 2 AI</option><option value="4">4 — Ty + 3 AI</option></select></label><label>Tryb<select id="scenario-mode" aria-label="Tryb scenariusza">${Object.entries(
+					.join("")}<option value="custom">Własne</option></select></label><p id="preset-description"></p></div><div class="scenario-config"><label>Nazwa gracza<input id="scenario-name" maxlength="24" aria-label="Nazwa gracza"></label><label>Kolor<select id="scenario-color" aria-label="Kolor gracza">${(RTS.PLAYER_COLORS || []).map((c) => `<option value="${c}">${RTS.PLAYER_COLOR_NAMES?.[c] || c}</option>`).join("")}</select></label><label>Poziom trudności<select id="scenario-difficulty" aria-label="Poziom trudności"><option value="easy">Łatwy</option><option value="normal">Średni</option><option value="hard">Trudny</option></select></label><label>Liczba graczy<select id="scenario-players" aria-label="Liczba graczy"><option value="2">2 — Ty + 1 AI</option><option value="3">3 — Ty + 2 AI</option><option value="4">4 — Ty + 3 AI</option></select></label><label>Tryb<select id="scenario-mode" aria-label="Tryb scenariusza">${Object.entries(
 					RTS.MODES || {},
 				)
 					.map(

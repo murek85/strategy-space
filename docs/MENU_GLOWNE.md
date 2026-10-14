@@ -35,6 +35,13 @@ Status: pierwszy zakres wdrożony w 0.5 (2026-09-21). Na życzenie użytkownika 
 - `style.css`: domyślny wygląd w `:where()` (zerowa szczegółowość, reguły paneli wygrywają) — suwak z torem wypełnionym do `--fill` i jasnym uchwytem (jak `.has-backdrop .menu-setting`), szklane pola tekstowe/liczbowe/`textarea` z poświatą przy fokusie, bez strzałek pola liczbowego, `accent-color` pól wyboru. `app.js` (`updateAudioControls`) ustawia `--fill` suwaka głośności.
 - `menu.css`: pola sieciowe i czat w kolorach szkła scenariuszy; pola tekstowe menu przy fokusie mają turkusową poświatę zamiast złotej ramki przycisków.
 
+## Dziesięć kolorów gracza (wersja 0.177.3, 2026-10-14)
+
+- `advanced-rules.js`: `RTS.PLAYER_COLORS` ma 10 kolorów; doszły `#5fd8e8` turkusowy, `#c8ee6a` limonkowy, `#ffa04d` pomarańczowy, `#eef3f6` śnieżny i `#3fcf8e` szmaragdowy. `RTS.PLAYER_COLOR_NAMES` to wspólne nazwy dla scenariuszy (`menu.js`) i gry sieciowej (`netplay-menu.js`); sieć nazywała niebieski „Błękitnym”.
+- `RTS.sideColor(team, kolorGracza)`, czyli `colorFor` strony komputerowej w potyczce. Strony 1–4 zachowują swój kolor (czerwony `#f07d78`, złoty `#e4b968`, niebieski `#819dff`, fioletowy `#d2a1ef`), chyba że jest podobny do koloru gracza (odległość RGB poniżej 70) albo już przydzielony. Wtedy dostają kolor z zapasu najbardziej oddalony od gracza i od pozostałych stron. Przykłady: Złoty → złoty wróg staje się morski; Pomarańczowy → czerwony i złoty stają się morski i zielony; Różowy → czerwony staje się ciemnoczerwony. W grze sieciowej każdy gracz ma swój wybrany kolor, jak dotąd.
+- `app.js` `repaint`: kropki legendy mapy (`.map-legend .friendly`, `.hostile`) dostają kolor gracza i pierwszej wrogiej strony, także w palecie dla daltonistów (`colorFor`).
+- Test: `tests/player-colors.test.js`.
+
 ## Osobne przyciski w oknach planszy (wersja 0.177.2, 2026-10-14)
 
 - `.briefing > :is(.primary-button, .resume-button) + :is(.primary-button, .resume-button)` dostaje `margin-top: 10px`. Wcześniej `.primary-button` nie miał odstępu, więc przyciski dokładane do raportu w `app-story.js` (np. „SPRÓBUJ PONOWNIE”, „NASTĘPNY ROZDZIAŁ”) i pary w `app-network.js` („REWANŻ” i menu) stykały się. Okna decyzji (`.act2-choice`) mają własne 12 px.

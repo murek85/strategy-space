@@ -11,7 +11,8 @@
 	const PROFILE_KEY = "pogranicze-network-v1";
 	const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 	const option = (value, label, selected) => `<option value="${esc(value)}" ${value === selected ? "selected" : ""}>${esc(label)}</option>`;
-	const colorName = { "#b0efd0": "Miętowy", "#72b7ff": "Błękitny", "#d3a0ff": "Fioletowy", "#f0cb70": "Złoty", "#f59caf": "Różowy" };
+	// (The names are the game's own, advanced-rules.js — the scenarios use the same.)
+	const colorName = RTS.PLAYER_COLOR_NAMES || {};
 	const DEFAULT_RULES = { mode: "conquest", map: "horizon", seed: 0, size: "medium", resources: "normal", weather: "normal", fauna: "normal", dayLength: "normal", startLevel: "outpost" };
 	// The scenario mode of a network battle (network-modes.js): every mode listed, the ones this battle cannot have
 	// disabled with the reason; a note when the chosen one falls back to conquest. ctx: { lobby, seats, aiFoes }.

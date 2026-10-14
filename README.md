@@ -1,4 +1,6 @@
-# Pogranicze Galaktyki — prototyp RTS 0.177.2
+# Pogranicze Galaktyki — prototyp RTS 0.177.3
+
+**Wersja 0.177.3 — dziesięć kolorów gracza.** W scenariuszach i w grze sieciowej jest 10 kolorów zamiast 5. Nowe to turkusowy, limonkowy, pomarańczowy, śnieżny i szmaragdowy; nazwy są w jednym miejscu (`RTS.PLAYER_COLOR_NAMES`). Strony komputerowe miały stałe kolory (czerwony, złoty, niebieski, fioletowy), więc „Złoty” gracz walczył z prawie tak samo złotym przeciwnikiem. Teraz strona, której kolor jest podobny do koloru gracza, dostaje inny z zapasu (`RTS.sideColor`): ten najbardziej różny od gracza i od pozostałych stron. Przy kolorach niepodobnych zostają dawne. Legenda mapy (Kolonie / Przeciwnicy) była zawsze miętowa i czerwona; teraz pokazuje kolor gracza i pierwszego przeciwnika.
 
 **Wersja 0.177.2 — osobne przyciski w raportach.** W oknach na planszy (raport końca bitwy, raport rozdziału aktu II, gra sieciowa, Inwazja) kolejne przyciski stały jeden pod drugim bez odstępu, więc „NOWA OPERACJA” i „SPRÓBUJ PONOWNIE” albo „NASTĘPNY ROZDZIAŁ” wyglądały jak jeden zielony blok. Teraz każdy przycisk po innym ma 10 px odstępu (`style.css`, `.briefing`). Okna decyzji kampanii miały już własne odstępy i zostały bez zmian.
 

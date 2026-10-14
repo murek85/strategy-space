@@ -22,13 +22,63 @@
 					"Wytrzymałość +18%, obrażenia +8%, koszt +12%, ruch −12%. Unikalny bastion; redukcja ostrzału w bezruchu.",
 			},
 		};
+		// The player's colours (0.177.3: ten, were five) and their names (the scenarios, the network game).
 		RTS.PLAYER_COLORS = [
 			"#b0efd0",
 			"#72b7ff",
 			"#d3a0ff",
 			"#f0cb70",
 			"#f59caf",
+			"#5fd8e8",
+			"#c8ee6a",
+			"#ffa04d",
+			"#eef3f6",
+			"#3fcf8e",
 		];
+		RTS.PLAYER_COLOR_NAMES = {
+			"#b0efd0": "Miętowy",
+			"#72b7ff": "Niebieski",
+			"#d3a0ff": "Fioletowy",
+			"#f0cb70": "Złoty",
+			"#f59caf": "Różowy",
+			"#5fd8e8": "Turkusowy",
+			"#c8ee6a": "Limonkowy",
+			"#ffa04d": "Pomarańczowy",
+			"#eef3f6": "Śnieżny",
+			"#3fcf8e": "Szmaragdowy",
+		};
+		// A computer side's colour: its own, unless it is too like the player's (the "Złoty" player beside the gold enemy,
+		// orange beside the red one) — then the first of the spare ones that is not like the player's nor another side's.
+		const SIDE_COLORS = { 1: "#f07d78", 2: "#e4b968", 3: "#819dff", 4: "#d2a1ef" },
+			SPARE_COLORS = ["#e04a4a", "#9fe36a", "#3fe0c8", "#5cc8ff", "#c79bff", "#ffd75e", "#b8c4cc"],
+			rgbOf = (hex) => [1, 3, 5].map((i) => parseInt(String(hex).slice(i, i + 2), 16) || 0),
+			distance = (a, b) => {
+				const [p, q] = [rgbOf(a), rgbOf(b)];
+				return Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
+			},
+			alike = (a, b) => distance(a, b) < 70,
+			sides = new Map();
+		// The four computer sides' colours for a player's colour, one after another: a side keeps its own unless it is
+		// like the player's (or already given to another side); then the spare farthest from the player's and from the
+		// other sides' colours.
+		function sidesFor(playerColor) {
+			let out = sides.get(playerColor);
+			if (out) return out;
+			out = {};
+			const given = [];
+			for (const team of [1, 2, 3, 4]) {
+				const free = (c) => !(playerColor && alike(c, playerColor)) && !given.includes(c);
+				const others = [playerColor, ...given, ...[1, 2, 3, 4].filter((t) => t > team).map((t) => SIDE_COLORS[t])].filter(Boolean),
+					far = (c) => Math.min(...others.map((o) => distance(c, o))),
+					spare = SPARE_COLORS.filter(free).sort((a, b) => far(b) - far(a))[0];
+				const c = free(SIDE_COLORS[team]) ? SIDE_COLORS[team] : spare || SIDE_COLORS[team];
+				out[team] = c;
+				given.push(c);
+			}
+			sides.set(playerColor, out);
+			return out;
+		}
+		RTS.sideColor = (team, playerColor) => (SIDE_COLORS[team] ? sidesFor(playerColor || null)[team] : "#cccccc");
 		Object.assign(TYPES, {
 			battery: {
 				name: "Akumulator energii",
@@ -822,14 +872,7 @@
 				const view = typeof Access !== "undefined" && Access.teamColor?.(this, team);
 				if (view) return view;
 				if (this.players?.[team]?.color) return this.players[team].color;
-				return team === 0
-					? this.scenario?.color || "#b0efd0"
-					: {
-							1: "#f07d78",
-							2: "#e4b968",
-							3: "#819dff",
-							4: "#d2a1ef",
-						}[team] || "#cccccc";
+				return team === 0 ? this.scenario?.color || "#b0efd0" : RTS.sideColor(team, this.scenario?.color);
 			},
 			unitName(type) {
 				return TYPES[type].name;

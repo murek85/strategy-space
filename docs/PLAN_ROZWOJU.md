@@ -1,6 +1,6 @@
 # Plan rozwoju prototypu
 
-Aktualizacja: 2026-10-14. Aktualna wersja: 0.177.2.
+Aktualizacja: 2026-10-14. Aktualna wersja: 0.177.3.
 
 Ten plik jest punktem wejścia do dokumentacji: opisuje bieżący stan, otwarte kierunki i historię wersji. Instrukcja gry i sterowanie: [README](../README.md).
 
@@ -293,6 +293,7 @@ Przy każdym kolejnym etapie należy uruchomić pełny zestaw, nie tylko testy u
 | 0.152 | Etap G2: desant z orbity — tryb „Inwazja” (orbita, potem planeta; kapsuły, uderzenie i skan z orbity) — [opis](DESANT_Z_ORBITY.md) |
 | 0.152.1 | Szuflada celów bez poziomego przewijania, ukryta pod raportem końca — [opis](KAMPANIA_OPRAWA.md) |
 | 0.153 | Etap G4: serwer lobby, lista gier, 2 na 2 przez sieć z komputerem na wolnym miejscu, powrót do bitwy po zerwaniu połączenia — [opis](MULTIPLAYER.md) |
+| 0.177.3 | 10 kolorów gracza; przeciwnik nie dostaje koloru podobnego do gracza (`RTS.sideColor`); legenda mapy w kolorach bitwy — [opis](MENU_GLOWNE.md) |
 | 0.177.2 | Okna planszy: odstęp 10 px między kolejnymi przyciskami (raporty, gra sieciowa, Inwazja) — [opis](MENU_GLOWNE.md) |
 | 0.177.1 | Kosmos: we wraku stacji lub okrętu gasną płomienie silników i poświata platformy (ok. 1 s, z migotaniem) — [opis](RENDERER_3D.md) |
 | 0.177 | Dźwięk „Wysoka”: kontekst 48 kHz zamiast częstotliwości urządzenia (96 kHz) — koniec przerw i zaników w walce; przerwy w diagnostyce — [opis](AUDIO.md) |

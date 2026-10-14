@@ -343,6 +343,16 @@
 	function repaint() {
 		for (let t = 0; t < colors.length; t++) colors[t] = game.colorFor(t);
 		if (typeof Access !== "undefined") Access.retint(game);
+		// The legend's dots in the battle's own colours (0.177.3): the player's and the first enemy's — it was mint and
+		// red whatever the colours chosen.
+		const me = game.viewer ?? 0,
+			foe = [1, 2, 3, 4, 5].find((t) => t !== me && !game.allied?.(me, t) && game.entities.some((e) => e.team === t)),
+			dot = (cls, color) => {
+				const el = document.querySelector(".map-legend ." + cls);
+				if (el) el.style.background = color || "";
+			};
+		dot("friendly", game.colorFor(me));
+		dot("hostile", foe !== undefined ? game.colorFor(foe) : "");
 	}
 	function terrainTexture() {
 		syncWorld();
