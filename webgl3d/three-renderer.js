@@ -2530,7 +2530,10 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		const o = typeof SceneFX !== "undefined" ? SceneFX.options : {},
 			level = { high: 0, medium: 1, low: 2 },
 			terrainLevel = level[o.terrain] ?? 0,
-			key = [o.terrain, o.particles, o.shadows, o.clouds, o.lights, o.water, o.scars, o.relief, o.flashes, o.cinema, o.ao, o.bloom, o.pbr, o.reflect, o.atmo, o.surface, o.dof, o.haze, o.shake].join("|");
+			// Automatic quality (0.175.8, scene-fx.js autoTune): steps taken off the chosen settings for the battle only —
+			// never the scatter or the relief, which would rebuild the map.
+			auto = o.autoQuality && typeof SceneFX !== "undefined" ? SceneFX.autoLevel || 0 : 0,
+			key = [o.terrain, o.particles, o.shadows, o.clouds, o.lights, o.water, o.scars, o.relief, o.flashes, o.cinema, o.ao, o.bloom, o.pbr, o.reflect, o.atmo, o.surface, o.dof, o.haze, o.shake, auto].join("|");
 		if (key === qualityKey) return;
 		const first = qualityKey === null,
 			reliefChanged = !first && quality.relief !== (o.relief !== false),
@@ -2561,18 +2564,24 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			haze: o.cinema !== false && o.haze !== false,
 			shake: o.shake !== false,
 		});
+		// 1: the post effects that cost the most for the least (occlusion, depth of field, haze); 2: half the
+		// anti-aliasing, no water reflections, smaller shadow map, resolution at most 1×; 3: no bloom, atmosphere or
+		// cloud shadows, half the particles, no anti-aliasing; 4: no sun shadows, a slightly lower resolution.
+		if (auto >= 1) Object.assign(quality, { ao: false, dof: false, haze: false });
+		if (auto >= 2) Object.assign(quality, { reflect: false, samples: Math.min(quality.samples, 2) });
+		if (auto >= 3) Object.assign(quality, { bloom: false, atmo: false, clouds: false, samples: 0, particles: quality.particles * 0.5 });
 		models3d.setSurface(quality.surface);
 		groundWeather.pbrOn.value = o.pbr !== false && !spaceMap() ? 1 : 0;
 		postSamples = quality.samples;
 		post.setSize(host.clientWidth * renderer.getPixelRatio(), host.clientHeight * renderer.getPixelRatio(), postSamples);
-		sun.castShadow = o.shadows !== false;
-		const size = [4096, 2048, 1024][terrainLevel];
+		sun.castShadow = o.shadows !== false && auto < 4;
+		const size = Math.min([4096, 2048, 1024][terrainLevel], auto >= 3 ? 1024 : auto >= 2 ? 2048 : 4096);
 		if (sun.shadow.mapSize.x !== size) {
 			sun.shadow.mapSize.set(size, size);
 			sun.shadow.map?.dispose();
 			sun.shadow.map = null;
 		}
-		const ratio = Math.min(window.devicePixelRatio || 1, [2, 1.5, 1][terrainLevel]);
+		const ratio = Math.min(window.devicePixelRatio || 1, [2, 1.5, 1][terrainLevel], auto >= 4 ? 0.85 : auto >= 2 ? 1 : 2);
 		if (renderer.getPixelRatio() !== ratio) {
 			renderer.setPixelRatio(ratio);
 			resize();

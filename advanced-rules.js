@@ -818,6 +818,9 @@
 				return { key, ...RTS.FACTIONS[key] };
 			},
 			colorFor(team) {
+				// The palette for colour-blind players (accessibility.js, the view only): colours by relation.
+				const view = typeof Access !== "undefined" && Access.teamColor?.(this, team);
+				if (view) return view;
 				if (this.players?.[team]?.color) return this.players[team].color;
 				return team === 0
 					? this.scenario?.color || "#b0efd0"
@@ -1580,38 +1583,12 @@
 			return g;
 		};
 	};
-	if (typeof module !== "undefined" && module.exports) {
-		const baseInstall = install;
+	// Node (tests, tools): this module and then the others, in the order of RTS.RULE_MODULES (engine.js) — the same
+	// list the browser's scripts are checked against.
+	if (typeof module !== "undefined" && module.exports)
 		module.exports = function (RTS) {
-			baseInstall(RTS);
-			require("./army-rules.js")(RTS);
-			require("./campaign-act2.js")(RTS);
-			require("./scenario-modes.js")(RTS);
-			require("./frontier-maps.js")(RTS);
-			require("./themed-maps.js")(RTS);
-			require("./campaign-maps.js")(RTS);
-			require("./support-rules.js")(RTS);
-			require("./scenario-setup.js")(RTS);
-			require("./scenario-challenges.js")(RTS);
-			require("./enemy-ai.js")(RTS);
-			require("./teams-rules.js")(RTS);
-			require("./factions-rules.js")(RTS);
-			require("./swarm-rules.js")(RTS);
-			require("./campaign-act3.js")(RTS);
-			require("./campaign-ai.js")(RTS);
-			require("./campaign-events.js")(RTS);
-			require("./campaign-choices.js")(RTS);
-			require("./trade-rules.js")(RTS);
-			require("./network-rules.js")(RTS);
-			require("./doctrine-rules.js")(RTS);
-			require("./patrol-rules.js")(RTS);
-			require("./space-rules.js")(RTS);
-			require("./world-rules.js")(RTS);
-			require("./deposit-rules.js")(RTS);
-			require("./invasion-rules.js")(RTS);
-			require("./watchers-rules.js")(RTS);
-			require("./campaign-act4.js")(RTS);
-			require("./network-modes.js")(RTS);
+			RTS.rule("advanced-rules", install);
+			for (const name of RTS.RULE_MODULES.slice(1)) RTS.rule(name, require("./" + name + ".js"));
 		};
-	} else install(root.RTS);
+	else root.RTS.rule("advanced-rules", install);
 })(typeof window !== "undefined" ? window : globalThis);

@@ -1,3 +1,5 @@
+/* FROZEN since 0.173 (I4): the PixiJS board is a fallback for where 3D cannot start. Bug fixes only — new effects
+   and new looks go to the 3D renderer (webgl3d/); tests/frozen-renderers.test.js keeps the settings it reads. */
 /* Prototype WebGL renderer on PixiJS 8: a layered 2D scene with a light map, sun shadows, bloom,
    water shimmer, weather particles, soft fog of war and colour grading. It draws the same
    code-generated art as the Canvas renderer (baked once into textures); the simulation is untouched. */

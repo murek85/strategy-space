@@ -1,3 +1,5 @@
+/* FROZEN since 0.173 (I4): the PixiJS board is a fallback for where 3D cannot start. Bug fixes only — new effects
+   and new looks go to the 3D renderer (webgl3d/); tests/frozen-renderers.test.js keeps the settings it reads. */
 /* The ground of the board as native PixiJS objects (WebGL/WebGPU renderer).
    Replaces the most expensive Canvas phase, which repainted every deposit, relay, puddle and track
    in every frame:

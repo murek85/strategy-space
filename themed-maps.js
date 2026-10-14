@@ -201,7 +201,6 @@
 			return g;
 		};
 	}
-	if (typeof module !== "undefined" && module.exports)
-		module.exports = install;
-	else install(root.RTS);
+	if (typeof module !== "undefined" && module.exports) module.exports = install;
+	else root.RTS.rule("themed-maps", install);
 })(typeof window !== "undefined" ? window : globalThis);

@@ -1,5 +1,67 @@
 # Renderer 3D (wersje 0.52–0.96, 0.125–0.147.9, 0.171.1–0.171.17)
 
+## Równe kafelki badań (wersja 0.175.15, 2026-10-14)
+
+- `hud-compact.css`: `--deck-slot: 148px` oraz kolumny `32px minmax(0, 1fr)` z odstępem 10 px obejmują także `.unit-cards:has(.research-card)` i `.research-card`. Wcześniej tylko karty z `.has-model`, więc badania, które nie mają modelu, zostawały przy 132 px i kolumnie 20 px. Symbol badania ma 32 px i jest wyśrodkowany. Zmierzone: Armia, Budowa i Badania mają kafelki 166 px, symbol 32 px, odstęp 10 px i 8 px od krawędzi.
+
+## Modele w kolejkach i zaznaczeniu (wersja 0.175.14, 2026-10-14)
+
+- `ModelIcons.url(e, o)` zwraca adres obrazka ikony (ten sam wygląd co na kartach: 96 px, wspólne `ICON`) albo `null`, zlecając go. `ModelIcons.version` rośnie z każdym nowym obrazkiem. Służy to dla HTML pisanego jako tekst, który HUD przebudowuje.
+- `app-hud.js`:
+  - `modelIcon(type, cls)` daje `<img>` dla listy „Kolejki budynków”: `queue-icon` dla budynku, `queue-unit-icon` przed czasem produkcji. Wersja ikon jest w sygnaturze listy, więc lista pisze się na nowo, gdy dojdzie obrazek.
+  - `setIcon(el, type, team, zapas)` obsługuje `#selection-icon` (najliczniejszy typ zaznaczenia, w kolorze i frakcji jego strony; zapas „⌁”) i nowe `#queue-icon` przed `#queue-status` (bez ikony dla badań). Element jest zapisywany tylko przy zmianie.
+- Style: `expansion.css` (kolejki, pasek) i `style.css` (zaznaczenie).
+
+## Odstęp ikon na kartach produkcji (wersja 0.175.13, 2026-10-14)
+
+- `hud-compact.css`: karta z ikoną (`.unit-card:has(.unit-symbol.has-model)`) ma kolumny `32px minmax(0, 1fr)` i odstęp 10 px (było 20 px na znak i 6 px — ikona wchodziła na nazwę). Talia z ikonami ma `--deck-slot: 148px` (było 132 px). Sprawdzone: na żadnej karcie armii i budowy nazwa ani koszt nie są obcięte.
+
+## Modele 3D w interfejsie (wersja 0.175.12, 2026-10-14)
+
+- **Studio:** `webgl3d/model-portraits.js` → `createModelPortraits()`. Jeden ukryty `WebGLRenderer` (przezroczysty, ACES, sRGB, miękkie cienie) i własne `createModels3D`, czyli modele takie jak na planszy. Światło jak w `model-gallery.js` plus kontra, otoczenie z gradientu nieba (PMREM) i grunt `ShadowMaterial`, który pokazuje sam cień. Kamera patrzy w ujęciu ¾ od przodu, z góry pod kątem `pitch`.
+  - Kadrowanie odbywa się w dwóch krokach. Pierwszy rzut idzie z ostrożnym kadrem kuli otaczającej, potem mierzone są narysowane piksele (model i ciemny cień). Drugi rzut przycina widok `setViewOffset` do sylwetki: środek kadru i `fill` (0,82, ikony 0,96) węższego boku.
+  - `space: true` ustawia misję „orbit”, więc budynek stoi na platformie stacji.
+  - Dostęp przez `modelPortraits()` z `three-game-renderer.js`: jedno studio na stronę, także w `bundle-3d.js` (`window.Board3D.modelPortraits`).
+- **Klient:** `model-icons.js` (`ModelIcons`), ładowany przed `knowledge.js`.
+  - Kod 3D bierze z `load3D` w `app.js` (`ModelIcons.loader`).
+  - Pamięć podręczna trzyma klucz: typ, strona, frakcja, kolor, kosmos, rozmiar i kadr. Kolejka renderuje jeden obrazek na klatkę (ok. 11 ms).
+  - `paint(canvas, e)` nakłada obrazek na płótno, na którym do tego czasu jest rysunek 2D. Ostatnie żądanie wygrywa (`data-model-key`), co ma znaczenie dla podglądu w drzewie.
+  - `icon(el, e)` wstawia `<img class="model-icon">` do `.unit-symbol` (klasa `has-model` ukrywa znak).
+  - Działa tylko przy silniku 3D. Błąd wczytania lub brak WebGL wyłącza mechanizm na resztę sesji, a rysunki 2D zostają.
+- **Użycie:**
+  - `knowledge.js` `draw()`: kolory jak dotąd.
+  - `development.js` `View.draw()`: frakcja i kolor gracza, kosmos.
+  - `app-deck.js` `deck()`: karty armii i budowy (nie badań), frakcja i kolor gracza.
+  - Style w `style.css` i `hud-compact.css`: ikona 38 / 32 px.
+- **Testy:** `tests/model-icons.test.js`.
+
+## Automatyczna jakość (wersja 0.175.8, 2026-10-14)
+
+- **Sterownik:** `SceneFX.autoTune(fps, teraz)` w `scene-fx.js`, karmiony co 0,5 s z licznika klatek w `app.js`. Pomiar trwa tylko w bitwie na planszy 3D: bez pauzy, menu i ekranu wczytywania, przy widocznym oknie. Przerwa między próbkami ponad 1,5 s zaczyna pomiar od nowa, więc zasłonięte lub dławione okno (np. ~1 klatka na kilka sekund) nie obniża jakości.
+  - **W dół:** 75. percentyl z ostatnich 6 s poniżej 40 FPS (pojedyncze przycięcie się nie liczy) → `autoLevel + 1`, najwyżej co 8 s, do `AUTO_MAX = 4`.
+  - **W górę:** przez `upWait` (od 20 s) mediana co najmniej 55 i żadnej próbki poniżej 50 → `autoLevel − 1`. Obniżenie w ciągu 20 s po podniesieniu podwaja `upWait` (do 160 s), co tłumi huśtawkę na maszynach na granicy.
+  - Stopień nie jest zapisywany. Opcja `autoQuality` (domyślnie włączona) jest zwykłym ustawieniem w `pogranicze-visual-v1`; po wyłączeniu stopień wraca do 0.
+- **Plansza:** `applyQuality` w `webgl3d/three-renderer.js` dodaje stopień do klucza jakości i odejmuje od ustawień:
+  1. okluzja otoczenia, głębia ostrości, drganie powietrza;
+  2. odbicia w wodzie, wygładzanie (MSAA) najwyżej 2×, mapa cieni najwyżej 2048, rozdzielczość najwyżej 1×;
+  3. poświata, atmosfera, cienie chmur, połowa cząsteczek, bez MSAA, mapa cieni 1024;
+  4. cienie od słońca, rozdzielczość 0,85×.
+  Rozproszenie roślinności i rzeźba terenu zostają jak w ustawieniach — ich zmiana przebudowałaby mapę w trakcie bitwy.
+- **Interfejs:** komunikat przy każdym obniżeniu (podniesienie jest ciche). W ustawieniach przełącznik `#visual-autoQuality` i stan `#auto-quality-status`. Testy: `tests/auto-quality.test.js`.
+
+## Bitwa od razu w 3D (wersja 0.175.5, 2026-10-14)
+
+Po wejściu na stronę pierwsza bitwa pokazywała się przez chwilę w Canvas 2D, a potem przeskakiwała na 3D. W menu rysuje Canvas 2D, a wybrany silnik startuje w pierwszej klatce bez menu (`applyRenderer` w pętli klatek). Budowa 3D jest asynchroniczna: najpierw import modułów `webgl3d/`, potem świat. Ekran wczytywania znikał jednak 3 klatki po zbudowaniu bitwy.
+
+- **Nowa bitwa i wczytany zapis:** `boardReady(screen)` w `app.js` woła `applyRenderer()` od razu i zamyka ekran dopiero po pierwszej klatce nowego silnika (3 klatki później). Ekran znika w każdym razie po 15 s.
+- **Bitwa sieciowa i rewanż** nie miały własnego ekranu. `boardScreen(…)` pokazuje go tylko wtedy, gdy wybrany silnik jeszcze nie działa.
+- **Kod silnika 3D wczytuje się w tle** 1,5 s po załadowaniu strony, gdy wybrane jest 3D. Wczytuje się sam kod, bez kontekstu grafiki i bez świata, więc ekran bitwy czeka krócej.
+- Sprawdzone w przeglądarce dla nowej bitwy i dla „Kontynuuj”: w chwili zniknięcia ekranu działa 3D, a kolejne klatki też są w 3D.
+
+## Jedyny rozwijany silnik (wersja 0.173, 2026-10-13)
+
+Od 0.173 renderer 3D jest domyślny (od 0.172.7) i jako jedyny rozwijany: PixiJS i Canvas 2D są zamrożone jako tryby awaryjne. Nowe efekty, ustawienia grafiki i wygląd trafiają tylko do `webgl3d/`. Wspólne z 3D i nadal rozwijane: `webgl/terrain-height.js`, `webgl/model-light.js` i warstwy `render-canvas.js`, z których rysuje plansza 3D (nakładka, ekran, minimapa, mgła). Szczegóły: [Architektura](ARCHITEKTURA.md).
+
 ## Testy i narzędzia (wersja 0.171.17, 2026-10-10)
 
 - **`tests/render-3d-browser.html`:** sprawdzenia idą krok po kroku (`step`: przerwa `setTimeout` między scenami i etapami), z linią postępu „Sprawdzanie… n/15 · scena” i ostrzeżeniem, gdy strona jest w tle (przeglądarka może wtedy wstrzymywać WebGL). Jeden długi przebieg wyglądał na zawieszony.

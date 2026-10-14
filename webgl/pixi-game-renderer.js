@@ -1,3 +1,5 @@
+/* FROZEN since 0.173 (I4): the PixiJS board is a fallback for where 3D cannot start. Bug fixes only — new effects
+   and new looks go to the 3D renderer (webgl3d/); tests/frozen-renderers.test.js keeps the settings it reads. */
 /* WebGL/WebGPU renderer for the game (PixiJS 8), with the same interface as createCanvasRenderer.
    The whole board is native PixiJS; the Canvas art is still the single source of every look:
    - terrain texture (with mipmaps), terrain height with relief light and cast shadows

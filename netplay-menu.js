@@ -140,6 +140,16 @@
 		if (screen === "lobby" || screen === "room") this.root.querySelector(".menu-layout").insertAdjacentHTML("beforeend", this.chatPanelHtml());
 		this.root.querySelector(".menu-scroll").scrollTop = scrolled;
 		if (draft && this.root.querySelector("#net-chat-input")) this.root.querySelector("#net-chat-input").value = draft;
+		// The battle's map (rulesHtml): drawn again only when the rules or the seats change, not for every chat line.
+		const map = this.root.querySelector("#map-preview"),
+			shown = this.netMapShown;
+		if (map && shown?.key === this.netPreviewKey) {
+			map.width = shown.canvas.width;
+			map.height = shown.canvas.height;
+			map.getContext("2d").drawImage(shown.canvas, 0, 0);
+			map.setAttribute("aria-label", shown.canvas.getAttribute("aria-label"));
+		} else if (map && this.netPreview) this.drawMapPreview(this.netPreview);
+		if (map) this.netMapShown = { key: this.netPreviewKey, canvas: map };
 		if (screen === "lobby") this.mountLobby();
 		else if (screen === "rooms") this.mountRooms();
 		else if (screen === "room") this.mountRoom();
@@ -289,7 +299,7 @@
 						: `<div class="net-player"><span class="net-swatch"></span><span><b>…</b><small>${esc(label)}</small></span></div>`;
 			const hostPlayer = host ? me : n.peer,
 				guestPlayer = host ? n.peer : me;
-			const rules = this.rulesHtml(r, host, { lobby: false, seats: 2, aiFoes: false });
+			const rules = this.rulesHtml(r, host, { lobby: false, seats: 2, aiFoes: false, players: [hostPlayer, guestPlayer].map((p) => p && cleanPlayer(p)) });
 			return `<div class="net-players">${card(hostPlayer, "Gospodarz · drużyna 1", "")}${card(guestPlayer, "Gość · drużyna 2", n.peer || !host ? (host ? n.peerReady : n.ready) ? "gotowy" : "czeka" : "")}</div><h2>Ty</h2>${this.profileFields(n.profile, "lobby")}<h2>Zasady ${host ? "" : "<small>(wybiera gospodarz)</small>"}</h2>${rules}<p id="net-status" class="net-status" role="status">${esc(n.status || "")}</p>${host ? this.button("net-start", "Rozpocznij bitwę", true) : this.button("net-ready", n.ready ? "Nie jestem gotowy" : "Jestem gotowy", !n.ready)}${this.button("net-leave", "Rozłącz i wróć")}`;
 		},
 		chatPanelHtml() {
@@ -502,8 +512,18 @@
 		},
 		// The rules: fields for the host; for a guest, who cannot change them (0.172.6), a short summary instead of nine
 		// locked selects — the mode with its goal, then the rest in a grid of name and value.
+		// Beside the rules, the map the battle is played on (0.175.7): the board-drawn preview of the scenarios
+		// (menu.js drawMapPreview), from the battle's own setup — the seats' colours, the seed, the size.
 		rulesHtml(r, editable, ctx = { lobby: true, seats: 2, aiFoes: false }) {
-			if (!editable) return this.rulesSummary(r, ctx);
+			const map = RTS.MISSIONS[r.map];
+			const setup = { ...r, seed: r.seed || 42, players: ctx.players || [] };
+			this.netPreview = () => RTS.createNetworkGame(setup);
+			this.netPreviewKey = JSON.stringify(setup);
+			const preview = `<figure class="net-map"><canvas id="map-preview" width="960" height="560" aria-label="Podgląd mapy bitwy"></canvas><figcaption>${map?.space ? "Przestrzeń kosmiczna" : "Powierzchnia planety"} · ${esc(map?.planet || "")}${r.seed ? "" : " · ziarno losowe przy starcie"}</figcaption></figure>`;
+			return `<div class="net-rules-layout">${editable ? this.rulesFields(r, ctx) : this.rulesSummary(r, ctx)}${preview}</div>`;
+		},
+		rulesFields(r, ctx) {
+			const editable = true;
 			const O = RTS.SCENARIO_OPTIONS,
 				dis = editable ? "" : "disabled",
 				select = (id, entries, value) => `<select id="net-rule-${id}" ${dis}>${entries.map(([k, label]) => option(k, label, value)).join("")}</select>`;
@@ -551,7 +571,7 @@
 			const all = room.seats.every((s) => s.taken || s.ai),
 				readyAll = room.seats.every((s) => s.ai || !s.taken || s.ready || s.host);
 			r.canStart = host && all && readyAll;
-			return `<p class="net-server">Serwer: <b>${esc(r.url)}</b> · ${room.size === 4 ? "2 na 2" : "1 na 1"}${host ? " · gospodarz: Ty" : ""}</p>${seats}<h2>Ty</h2>${this.profileFields(n.profile, "room")}<h2>Zasady ${host ? "" : "<small>(wybiera gospodarz)</small>"}</h2>${this.rulesHtml(rules, host, { lobby: true, seats: room.size === 4 ? 4 : 2, aiFoes: room.seats.filter((s, i) => (room.size === 4 ? i >= 2 : i === 1)).every((s) => s.ai) })}<p id="net-status" class="net-status" role="status">${esc(host ? (all ? (readyAll ? "Wszyscy gotowi." : "Czekam, aż gracze będą gotowi.") : "Zajmij lub oddaj komputerowi każde miejsce.") : r.error || (me?.ready ? "Jesteś gotowy — gospodarz rozpocznie bitwę, gdy wszyscy będą gotowi." : "Sprawdź zasady i kliknij „Jestem gotowy”."))}</p>${host ? this.button("net-room-start", "Rozpocznij bitwę", true) : this.button("net-room-ready", me?.ready ? "Nie jestem gotowy" : "Jestem gotowy", !me?.ready)}${this.button("net-room-leave", host ? "Zamknij grę" : "Opuść grę")}`;
+			return `<p class="net-server">Serwer: <b>${esc(r.url)}</b> · ${room.size === 4 ? "2 na 2" : "1 na 1"}${host ? " · gospodarz: Ty" : ""}</p>${seats}<h2>Ty</h2>${this.profileFields(n.profile, "room")}<h2>Zasady ${host ? "" : "<small>(wybiera gospodarz)</small>"}</h2>${this.rulesHtml(rules, host, { lobby: true, seats: room.size === 4 ? 4 : 2, aiFoes: room.seats.filter((s, i) => (room.size === 4 ? i >= 2 : i === 1)).every((s) => s.ai), players: room.seats.map((s, i) => ({ ...(s.player ? cleanPlayer(s.player) : {}), team: (room.size === 4 ? [0, 3, 1, 4] : [0, 1])[i], ai: !s.player })) })}<p id="net-status" class="net-status" role="status">${esc(host ? (all ? (readyAll ? "Wszyscy gotowi." : "Czekam, aż gracze będą gotowi.") : "Zajmij lub oddaj komputerowi każde miejsce.") : r.error || (me?.ready ? "Jesteś gotowy — gospodarz rozpocznie bitwę, gdy wszyscy będą gotowi." : "Sprawdź zasady i kliknij „Jestem gotowy”."))}</p>${host ? this.button("net-room-start", "Rozpocznij bitwę", true) : this.button("net-room-ready", me?.ready ? "Nie jestem gotowy" : "Jestem gotowy", !me?.ready)}${this.button("net-room-leave", host ? "Zamknij grę" : "Opuść grę")}`;
 		},
 		mountRoom() {
 			const n = this.net,

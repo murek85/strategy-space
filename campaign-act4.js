@@ -999,5 +999,5 @@
 		};
 	}
 	if (typeof module !== "undefined" && module.exports) module.exports = install;
-	else install(root.RTS);
+	else root.RTS.rule("campaign-act4", install);
 })(typeof window !== "undefined" ? window : globalThis);

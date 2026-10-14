@@ -243,6 +243,49 @@
 	color: var(--muted);
 	margin-top: 5px;
 }
+/* Icons of the 3D models (0.175.14, model-icons.js): the building on the left, the unit it makes before its time. */
+.building-queue:has(.queue-icon) {
+	display: flex;
+	align-items: center;
+	gap: 9px;
+}
+.building-queue .building-queue-copy {
+	display: block;
+	flex: 1;
+	min-width: 0;
+}
+.building-queue .building-queue-copy > span {
+	display: flex;
+	justify-content: space-between;
+}
+.building-queue img.queue-icon {
+	flex: 0 0 auto;
+	width: 30px;
+	height: 30px;
+	object-fit: contain;
+	filter: drop-shadow(0 1px 2px #0009);
+}
+.building-queue img.queue-unit-icon {
+	width: 16px;
+	height: 16px;
+	margin: -4px 4px -4px 0;
+	vertical-align: middle;
+	object-fit: contain;
+}
+.queue-controls .queue-icon {
+	flex: 0 0 auto;
+	width: 0;
+	overflow: visible;
+}
+.queue-controls .queue-icon.has-model {
+	width: 18px;
+}
+.queue-controls .queue-icon img {
+	display: block;
+	width: 18px;
+	height: 18px;
+	object-fit: contain;
+}
 .orphan-queue {
 	color: var(--gold);
 	font-size: 10px;

@@ -85,12 +85,17 @@ test("packaging: the app entry, the scripts and the files left out of the instal
 	assert.ok(pkg.build.win.target.some((t) => (t.target || t) === "nsis"));
 	for (const out of ["!tests/**", "!tools/**", "!docs/**"]) assert.ok(pkg.build.files.includes(out), out);
 	assert.ok(fs.existsSync(path.join(ROOT, "build", "icon.png")));
+	for (const icon of ["favicon.ico", "favicon.svg"]) {
+		assert.ok(fs.existsSync(path.join(ROOT, icon)), icon);
+		assert.ok(fs.readFileSync(path.join(ROOT, "index.html"), "utf8").includes(`href="${icon}"`), icon);
+	}
+	assert.ok(fs.readFileSync(path.join(ROOT, "electron", "main.js"), "utf8").includes(`path.join(ROOT, "favicon.ico")`));
 	assert.ok(fs.readFileSync(path.join(ROOT, "index.html"), "utf8").includes('src="save-transfer.js"'));
 });
 
 test("the game's own confirmation window replaces the browser's confirm() for doctrines and save imports", () => {
 	const html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8"),
-		app = fs.readFileSync(path.join(ROOT, "app.js"), "utf8"),
+		app = require("./app-source.js")(),
 		menu = fs.readFileSync(path.join(ROOT, "menu.js"), "utf8");
 	assert.ok(html.includes('src="game-dialog.js"'));
 	assert.match(app, /await confirmDoctrine\(kind\)/);

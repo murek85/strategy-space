@@ -1,3 +1,7 @@
+/* The app of the battle: the game's state, the camera, the renderer, saves, the menu and the frame loop. Since 0.173
+   (I4) its parts live in modules created here with one context each (getters for the state that changes):
+   app-hud.js (the HUD), app-network.js (a network battle), app-story.js (decisions, epilogues, the end of a battle),
+   app-deck.js (the command deck), app-controls.js (the side panel, mouse and keys) — docs/ARCHITEKTURA.md. */
 (() => {
 	"use strict";
 	const { Game, TYPES, RESEARCH, MISSIONS, dist, clamp } = RTS;
@@ -171,6 +175,8 @@
 			el.textContent = text;
 			toastTimer = 4;
 		}
+		// Longer messages for whoever needs the time (Ustawienia → Dostępność, 0.175.3).
+		if (typeof Access !== "undefined") toastTimer *= Access.toastFactor;
 		el.classList.add("visible");
 	}
 	function updateAudioControls() {
@@ -249,6 +255,8 @@
 		rendererMode = "canvas",
 		rendererRequested = null,
 		rendererNote = "";
+	// The interface's pictures of the 3D models (model-icons.js) come from the same 3D code.
+	if (typeof ModelIcons !== "undefined") ModelIcons.loader = () => load3D();
 	async function load3D() {
 		if (location.protocol !== "file:")
 			try {
@@ -278,6 +286,15 @@
 		const lost = () => useCanvasRenderer("Utracono kontekst grafiki — gra przełączyła się na renderer Canvas 2D.");
 		let board = null,
 			note = "";
+		// The board in use goes first (0.175.2): for a moment two of them held the GPU — two contexts, two worlds
+		// in its memory — while the new one was built; meanwhile the Canvas 2D board stands in.
+		if (renderer !== canvasRenderer) {
+			const old = renderer;
+			renderer = canvasRenderer;
+			rendererMode = "canvas";
+			canvasRenderer.setGame(game);
+			old.destroy?.();
+		}
 		if (wanted === "three") {
 			// Loaded on demand: the ES modules of webgl3d/ when served over http, else (page opened from
 			// disk, where modules cannot load) the same code built into one classic script (npm run build:3d).
@@ -316,6 +333,32 @@
 			useCanvasRenderer("WebGL jest niedostępny w tej przeglądarce — gra używa renderera Canvas 2D.");
 		}
 	}
+	// Another board chosen in the settings during a battle (0.175.2): built at once behind a loading screen, not on
+	// the first frame back on the map — there it froze the page for a second or more (the 3D world, its shaders)
+	// with no word of what was happening.
+	let switching = null;
+	function switchRenderer() {
+		if (switching || !started || finished || SceneFX.options.renderer === rendererRequested) return switching;
+		const names = { three: "3D (Three.js)", webgl: "WebGL (PixiJS)", webgpu: "WebGPU (PixiJS)", canvas: "Canvas 2D" },
+			m = MISSIONS[game.missionId] || {},
+			screen = typeof LoadingScreen !== "undefined" ? LoadingScreen.show({ eyebrow: "GRAFIKA / SILNIK PLANSZY", title: "Zmiana silnika grafiki", planet: names[SceneFX.options.renderer] || SceneFX.options.renderer, biome: m.space ? spaceWorld(m) : m.biome, reduced: !!menu?.reduced, minTime: 0.8 }) : null;
+		// Two frames for the screen to show, then the work; the new board draws once before the screen goes.
+		const frames = (n) => new Promise((resolve) => {
+			afterFrames(n, resolve);
+			setTimeout(resolve, 400);
+		});
+		switching = frames(2)
+			.then(() => applyRenderer())
+			.then(() => {
+				render();
+				return frames(2);
+			})
+			.finally(() => {
+				switching = null;
+				screen?.done();
+			});
+		return switching;
+	}
 	function useCanvasRenderer(note) {
 		if (renderer !== canvasRenderer) {
 			const old = renderer;
@@ -335,8 +378,15 @@
 		camera.y = clamp(camera.y, 0, H);
 		fit();
 	}
+	// The sides' colours of the view (accessibility.js: the palette for colour-blind players) — in the renderers'
+	// table and on each unit and building.
+	function repaint() {
+		for (let t = 0; t < colors.length; t++) colors[t] = game.colorFor(t);
+		if (typeof Access !== "undefined") Access.retint(game);
+	}
 	function terrainTexture() {
 		syncWorld();
+		repaint();
 		renderer.setGame(game);
 	}
 	function refreshFog() {
@@ -350,1090 +400,226 @@
 	}
 	const timeLabel = (n) =>
 		`${String(Math.floor(n / 60)).padStart(2, "0")}:${String(Math.floor(n % 60)).padStart(2, "0")}`;
-	function selectedProducer() {
-		const es = [...selected].map((id) => game.get(id));
-		return es.length === 1 && game.isProducer(es[0]) ? es[0] : null;
-	}
-	function preferredProducer(type) {
-		const b = selectedProducer();
-		return b?.type === game.productionType(type) ? b.id : null;
-	}
-	function selectGroup(number, assign = false, append = false) {
-		if (!started || finished) return;
-		if (assign) {
-			const members = game.assignGroup(number, [...selected], append);
-			toast(
-				members.length
-					? `Grupa ${number}: ${members.length} jednostek.`
-					: `Grupa ${number} wyczyszczona.`,
-			);
-		} else {
-			const ids = game.recallGroup(number);
-			if (!ids.length) {
-				toast(
-					`Grupa ${number} pusta. Zaznacz jednostki i naciśnij Ctrl+${number}.`,
-				);
-				return;
-			}
-			selected = new Set(ids);
-			const now = performance.now();
-			if (lastGroupKey === number && now - lastGroupAt < 400) {
-				const es = ids.map((id) => game.get(id));
-				camera.x = es.reduce((n, e) => n + e.x, 0) / es.length;
-				camera.y = es.reduce((n, e) => n + e.y, 0) / es.length;
-				fit();
-			}
-			lastGroupKey = number;
-			lastGroupAt = now;
-		}
-		updateHud();
-	}
-	function focusAlert() {
-		const a = game.baseAlert;
-		if (!a) return;
-		camera.x = a.x;
-		camera.y = a.y;
-		camera.zoom = Math.max(camera.zoom, 1.6);
-		fit();
-	}
-	function updateCommandHud() {
-		const b = selectedProducer();
-		$("rally-hint").hidden = !b;
-		$("rally-hint").textContent = b
-			? `${game.entityName(b)} #${b.id} · PPM na mapie ustawia punkt zbiórki`
-			: "";
-		document.querySelectorAll("[data-group]").forEach((button) => {
-			const ids = game.recallGroup(button.dataset.group);
-			button.querySelector("small").textContent = ids.length || "—";
-			button.classList.toggle("assigned", !!ids.length);
-			button.classList.toggle(
-				"selected",
-				ids.length > 0 &&
-					ids.length === selected.size &&
-					ids.every((id) => selected.has(id)),
-			);
-		});
-		const alarm = game.baseAlert && game.baseAlert.until > game.time;
-		$("base-alert").hidden = !alarm;
-		if (alarm)
-			$("base-alert").textContent =
-				`⚠ BAZA ATAKOWANA · ${game.baseAlert.name} · pokaż [J]`;
-		const factories = game.entities.filter((e) => game.isProducer(e));
-		const model = factories.map((e) => {
-			const queue = game.buildingQueue(e.id),
-				q = queue[0];
-			return {
-				id: e.id,
-				type: e.type,
-				construction: Math.ceil(e.constructionLeft),
-				count: queue.length,
-				unit: q?.type,
-				left: q ? Math.ceil(q.left) : 0,
-				selected: selected.has(e.id),
-			};
-		});
-		const orphanCount = game.queue.filter(
-			(q) => q.producerId == null,
-		).length;
-		const signature = JSON.stringify([model, orphanCount]);
-		if (signature !== productionSignature) {
-			productionSignature = signature;
-			$("building-queues").innerHTML =
-				model
-					.map(
-						(e) =>
-							`<button class="building-queue ${e.selected ? "selected" : ""}" data-producer="${e.id}"><span>${game.unitName(e.type)} #${e.id}<b>${e.count}/10</b></span><small>${e.construction ? "Budowa · " + e.construction + " s" : e.unit ? game.unitName(e.unit) + " · " + e.left + " s" : "Wolna kolejka · wybierz budynek"}</small></button>`,
-					)
-					.join("") +
-				(orphanCount
-					? `<p class="orphan-queue">${orphanCount} zadań czeka na odbudowę.</p>`
-					: "");
-			document.querySelectorAll("[data-producer]").forEach(
-				(button) =>
-					(button.onclick = () => {
-						selected = new Set([Number(button.dataset.producer)]);
-						deck("army");
-					}),
-			);
-		}
-	}
-	function workersForExtractor(id) {
-		return game
-			.units((game.viewer ?? 0))
-			.filter(
-				(e) => e.order?.kind === "gas" && e.order.extractorId === id,
-			).length;
-	}
-	function updateHud() {
-		const weather = game.weather,
-			forecast = game.forecast;
-		// Space (the orbital battle): no weather and no night.
-		if ($("weather-status") && game.space)
-			$("weather-status").textContent =
-				"✦ ORBITA · " +
-				(weather.intensity > 0.05
-					? weather.name +
-						(weather.kind === "ion"
-							? " · celność −" + Math.round(weather.intensity * 30 * (game.upgrades.guidance ? 0.25 : 1)) + "%" + (game.ionStorm?.() ? " · osłony nie odnawiają się" : "")
-							: weather.kind === "solar"
-								? " · promieniowanie wyczerpuje osłony, nie odnawiają się"
-								: " · uderzenia odłamków" + (game.upgrades.meteorShield ? " (osłony −80%)" : " · zbadaj osłony przeciwmeteorytowe"))
-					: "Spokojnie") +
-				(forecast ? " · " + (weather.remaining > 0 ? "Koniec za " + Math.ceil(weather.remaining) + " s" : weather.name + " za " + Math.ceil(weather.until) + " s") : game.stormOutlook?.near ? " · " + weather.name + " nadciąga · ok. " + Math.ceil(game.stormOutlook.until) + " s" : " · Prognoza: zbadaj monitoring w laboratorium");
-		else if ($("weather-status"))
-			$("weather-status").textContent =
-				`${game.night > 0.5 ? "☾ NOC" : "☀ DZIEŃ"} · ${weather.intensity > 0.05 ? weather.name + " · ruch −" + Math.round(weather.intensity * 35 * (game.upgrades.mobility ? 0.25 : 1)) + "% · celność −" + Math.round(weather.intensity * 30 * (game.upgrades.guidance ? 0.25 : 1)) + "%" : "Spokojna pogoda"}${forecast ? " · " + (weather.remaining > 0 ? "Koniec za " + Math.ceil(weather.remaining) + " s" : weather.name + " " + (game.stormOutlook?.from || "") + " za " + Math.ceil(weather.until) + " s") : game.stormOutlook?.near ? " · " + weather.name + " nadciąga " + game.stormOutlook.from + " · ok. " + Math.ceil(game.stormOutlook.until) + " s" : " · Prognoza: zbadaj monitoring w laboratorium"}`;
-
-		if ($("toggle-gate")) {
-			const gate = game.get([...selected][0]);
-			$("toggle-gate").hidden =
-				selected.size !== 1 || gate?.type !== "gate";
-			$("toggle-gate").textContent = gate?.open
-				? "Zamknij bramę"
-				: "Otwórz bramę";
-		}
-		if ($("development-open"))
-			$("development-open").disabled = !started || finished;
-		economyPanel?.update(game, started);
-		refreshFog();
-		for (const id of selected) if (!game.get(id)) selected.delete(id);
-		$("credits").textContent = Math.floor(game.credits).toLocaleString(
-			"pl-PL",
-		);
-		$("income").textContent = `+${game.income}/s`;
-		$("income").title =
-			"Dochód pasywny centrum i przekaźników. Pełny dochód: Logistyka → Bilans.";
-		// The viewer's army (0.171.13: team 0's — a network guest saw the host's).
-		$("population").textContent = `${game.population(game.viewer ?? 0)} / ${RTS.POP_CAP}`;
-		$("clock").textContent = timeLabel(game.time);
-		if (game.network) networkIntel();
-		else {
-			const waves = Number.isFinite(game.nextWave) && (game.enemyBases().length || game.modeState?.mode === "survival");
-			$("wave").previousElementSibling.textContent = game.aiActive?.()
-				? "Planowany atak"
-				: "Następny desant";
-			$("wave").textContent = waves ? timeLabel(Math.max(0, game.nextWave - game.time)) : "—";
-			// Clamped (0.152.1): an attack overdue or far off gave widths beyond the track (a long sideways scroll).
-			$("wave-progress").style.width = waves
-				? `${Math.max(0, Math.min(100, 100 * (1 - (game.nextWave - game.time) / Math.max(35, 65 - game.wave * 3))))}%`
-				: "0%";
-		}
-		$("obj-capture").classList.toggle("done", game.captured);
-		$("obj-army").classList.toggle("done", game.population(game.viewer ?? 0) >= 12);
-		$("obj-hq").classList.toggle("done", (game.resultFor?.() ?? game.result) === "victory");
-		const es = [...selected].map((id) => game.get(id)).filter(Boolean);
-		$("selection-title").textContent =
-			es.length === 1
-				? TYPES[es[0].type].name
-				: es.length
-					? `Oddział · ${es.length} jednostek`
-					: "Brak zaznaczenia";
-		$("selection-detail").textContent = es.length
-			? `${Math.ceil(es.reduce((a, e) => a + e.hp, 0))} PW · ${es.some((e) => e.order?.kind === "build") ? "buduje" : es.some((e) => e.order?.kind === "gas") ? "wydobywa gaz" : es.some((e) => e.order?.kind === "gather") ? "wydobywa rudę" : es.some((e) => e.order?.kind === "repair") ? "naprawia" : es.some((e) => e.order?.kind === "hold") ? "utrzymuje pozycję" : es.some((e) => e.order?.kind === "escort") ? "eskortuje" : es.some((e) => e.patrol) ? "patroluje" : es.some((e) => e.target) ? "w walce" : es.some((e) => ["trooper", "rocket"].includes(e.type) && game.cover(e)) ? "w osłonie" : "gotowość"}`
-			: "LPM lub przeciągnij ramkę";
-		if (es.length === 1 && es[0].type === "extractor") {
-			const b = es[0],
-				field = game.gasFields.find((o) => o.id === b.gasId),
-				assigned = workersForExtractor(b.id);
-			$("selection-detail").textContent =
-				`${assigned}/1 robot · ${Math.floor(field?.amount || 0)} gazu · ${b.constructionLeft ? "budowa" : assigned ? "operator przydzielony" : "PPM robotem"}`;
-		} else if (es.length === 1 && es[0].type === "depot")
-			$("selection-detail").textContent = es[0].constructionLeft
-				? "Magazyn w budowie"
-				: "Punkt rozładunku rudy · badanie [L]";
-		if (es.length === 1 && es[0].type === "workshop")
-			$("selection-detail").textContent = es[0].constructionLeft
-				? "Warsztat w budowie"
-				: `${(es[0].repairTargets || []).length}/2 stanowiska · ${game.credits <= 0 ? "brak metalu" : `${Math.round(16 * game.power.factor)} PW/s na pojazd`} · 1 metal / 5 PW · pod ostrzałem ×¼`;
-		if (es.length === 1 && es[0].type === "battery")
-			$("selection-detail").textContent = es[0].constructionLeft
-				? "Akumulator w budowie"
-				: `${Math.floor(es[0].energy || 0)}/900 energii · ładowanie do 15/s · oddawanie do 30 mocy`;
-		// Stage E: status of support buildings, units and modules.
-		const one = es.length === 1 ? es[0] : null,
-			support = RTS.SUPPORT;
-		if (one?.type === "medbay")
-			$("selection-detail").textContent = one.constructionLeft
-				? "Punkt medyczny w budowie"
-				: `${(one.healTargets || []).length}/${support.medbay.slots} stanowiska · ${support.medbay.rate} PW/s · zasięg ${support.medbay.range} · 1 metal / 8 PW`;
-		if (one?.type === "shieldgen")
-			$("selection-detail").textContent = one.constructionLeft
-				? "Generator w budowie"
-				: one.overload > 0
-					? `Przeciążenie · tarcza wróci za ${Math.ceil(one.overload)} s`
-					: `Tarcza ${Math.floor(one.shield || 0)}/${support.shield.capacity} · pochłania 70% w promieniu ${support.shield.range}`;
-		if (one?.type === "salvageYard")
-			$("selection-detail").textContent = one.constructionLeft
-				? "Plac w budowie"
-				: `${(game.wrecks || []).length} wraków na mapie · PPM robotem na wraku`;
-		if (one?.type === "saboteur")
-			$("selection-detail").textContent = `${one.stealth ? "Ukryci" : "WYKRYCI"} · ${(one.chargeReady || 0) > game.time ? "ładunek za " + Math.ceil(one.chargeReady - game.time) + " s" : "ładunek gotowy"} · PPM na wrogim budynku`;
-		if (one?.type === "drone") $("selection-detail").textContent = `${Math.ceil(one.hp)} PW · zwiad z powietrza, widzi na ${support.drone.sight}`;
-		if (one?.module && one.team === (game.viewer ?? 0))
-			$("selection-detail").textContent += ` · ${RTS.MODULES[one.module].name}${one.moduleLeft > 0 ? " (montaż " + Math.ceil(one.moduleLeft) + " s)" : ""}`;
-		if ($("orbital-strike")) {
-			const uplink = one?.type === "uplink" && one.team === (game.viewer ?? 0) ? one : null;
-			$("orbital-strike").hidden = !uplink;
-			if (uplink) {
-				const why = game.strikeRequirement(uplink.id);
-				$("orbital-strike").disabled = !!why;
-				$("orbital-strike").textContent = strikeMode ? "Wskaż cel (Esc — anuluj)" : why && /gotowe za/.test(why) ? why.replace("Uderzenie gotowe", "Uderzenie") : "Uderzenie orbitalne";
-				$("orbital-strike").title = why || "Wskaż zbadany punkt na mapie. Po 3 s: do 420 obrażeń w promieniu 110 — tylko wrogom. Odnowienie 100 s.";
-			}
-		}
-		if ($("module-a")) {
-			const options = one && one.team === (game.viewer ?? 0) && !one.constructionLeft && !one.module ? game.moduleOptions(one) : [];
-			[$("module-a"), $("module-b")].forEach((button, i) => {
-				const option = options[i];
-				button.hidden = !option;
-				if (!option) return;
-				button.textContent = "Moduł: " + option.name;
-				button.title = `${option.effect} Koszt ${support.module.metal} metalu + ${support.module.gas} gazu, montaż ${support.module.install} s. Jeden moduł na budynek. ${game.moduleRequirement(one)}`;
-				button.disabled = !!game.moduleRequirement(one);
-			});
-		}
-		if (es.length === 1 && es[0].type === "hq" && es[0].team === (game.viewer ?? 0))
-			$("selection-detail").textContent =
-				`Centrum ${game.centerLevel()} — ${["", "Przyczółek · rozbudowa w BADANIA / F2", "Kolonia", "Twierdza"][game.centerLevel()]}${game.doctrineOf?.(game.viewer ?? 0) ? " · " + game.doctrineOf(game.viewer ?? 0).name.replace("Doktryna: ", "doktryna ") : ""}${["colony", "fortress"].includes(game.research?.kind) ? " · rozbudowa " + Math.floor(100 * (1 - game.research.left / game.research.total)) + "%" : ""}`;
-		if ($("army-formation")) {
-			for (const button of $("army-formation").querySelectorAll("button"))
-				button.setAttribute("aria-checked", String(button.dataset.formation === (game.formation || "line")));
-			const carrier = es.find(
-				(e) => e.type === "transport" && e.team === (game.viewer ?? 0),
-			);
-			$("load-transport").hidden = !carrier;
-			// Watchers (0.154): abilities, merging, jumps between Anchors, the flying Core.
-			const mine = es.filter((e) => e.team === (game.viewer ?? 0) && e.hp > 0),
-				anchors = game.entities.filter((e) => e.type === "anchor" && e.team === (game.viewer ?? 0) && e.hp > 0 && !e.constructionLeft);
-			$("watcher-ability").hidden = !mine.some((e) => e.type === "spark" || e.type === "warden");
-			$("watcher-merge").hidden = mine.filter((e) => e.type === "warden").length < 2;
-			$("watcher-jump").hidden = anchors.length < 2 || !mine.some((e) => RTS.TYPES[e.type].speed && anchors.some((a) => Math.hypot(a.x - e.x, a.y - e.y) < RTS.WATCHERS.anchor.jumpReach));
-			$("core-relocate").hidden = !(mine.length === 1 && mine[0].type === "hq" && mine[0].faction === "watchers");
-			$("unload-transport").hidden = !carrier;
-			$("load-transport").disabled =
-				!carrier || (carrier.passengers || []).length >= 4;
-			$("unload-transport").disabled =
-				!carrier ||
-				!es.some((e) => e.type === "transport" && e.passengers?.length);
-			if (carrier && es.length === 1)
-				$("selection-detail").textContent =
-					`${Math.ceil(carrier.hp)} PW · załoga ${(carrier.passengers || []).length}/4 · PPM piechotą: załaduj`;
-			// Rebuilt only when what it shows changes (0.171.13: about 8 times a second, also hidden).
-			const rows = game.combatReport([...selected]),
-				inspectorSignature = JSON.stringify(rows);
-			if (inspectorSignature !== armyInspectorSignature) {
-			armyInspectorSignature = inspectorSignature;
-			$("army-inspector").innerHTML =
-				'<h3>Wybrany oddział</h3><p class="eco-note">Parametry w obecnej pogodzie. Obrażenia przed premiami przeciw typom celów i ich osłonom; premie badań i frakcji uwzględnione. Porównaj typy, zaznaczając kilka jednostek.</p>' +
-				rows
-					.map(
-						(r) =>
-							`<article class="army-stat"><strong>${r.name} × ${r.count}</strong><p>${r.role}</p><dl><dt>Wytrzymałość</dt><dd>${r.hp} / ${r.maxHp}</dd><dt>Zasięg / trafienie</dt><dd>${r.range} / ${r.damage}</dd><dt>Odstęp strzałów</dt><dd>${r.cooldown} s</dd><dt>Ruch / celność</dt><dd>${r.speed} / ${r.accuracy}%</dd><dt>Cena jednostkowa</dt><dd>${r.cost || 0} metalu</dd>${r.type === "transport" ? `<dt>Załoga</dt><dd>${r.passengers} / ${r.count * 4}</dd>` : ""}${r.cover ? `<dt>W osłonie</dt><dd>${r.cover}</dd>` : ""}</dl></article>`,
-					)
-					.join("");
-			}
-		}
-		if ($("demolish"))
-			$("demolish").hidden = !es.some(
-				(e) => e.team === (game.viewer ?? 0) && !TYPES[e.type].speed && e.type !== "hq",
-			);
-		const chosen = selectedProducer(),
-			displayQueue = chosen ? game.buildingQueue(chosen.id) : game.queue;
-		const construction =
-			game.entities.find(
-				(e) => e.team === (game.viewer ?? 0) && e.constructionLeft && selected.has(e.id),
-			) || game.entities.find((e) => e.team === (game.viewer ?? 0) && e.constructionLeft);
-		const q =
-			activeTab === "research"
-				? game.research
-				: activeTab === "build"
-					? construction
-						? {
-								type: construction.type,
-								left: construction.constructionLeft,
-								total: TYPES[construction.type].construction,
-							}
-						: null
-					: displayQueue[0];
-		const productionBlocked =
-			activeTab === "army" && q?.type && !game.get(q.producerId);
-		$("queue-status").textContent = q
-			? `${q.kind ? RESEARCH[q.kind].name.toUpperCase() : game.unitName(q.type).toUpperCase()} · ${productionBlocked ? "BRAK BUDYNKU" : Math.ceil(q.left) + " S"}${activeTab === "army" ? " · " + displayQueue.length : ""}`
-			: "BRAK ZADAŃ";
-		$("queue-progress").style.width = q
-			? `${100 * (1 - q.left / q.total)}%`
-			: "0%";
-		const track = document.querySelector(".queue-track");
-		track.setAttribute("role", "progressbar");
-		track.setAttribute(
-			"aria-label",
-			activeTab === "build"
-				? "Postęp budowy"
-				: activeTab === "research"
-					? "Postęp badań"
-					: "Postęp produkcji",
-		);
-		track.setAttribute("aria-valuemin", "0");
-		track.setAttribute("aria-valuemax", "100");
-		track.setAttribute(
-			"aria-valuenow",
-			String(q ? Math.round(100 * (1 - q.left / q.total)) : 0),
-		);
-		document.querySelectorAll("[data-unit]").forEach((b) => {
-			const type = b.dataset.unit,
-				p = game.producer(type, preferredProducer(type)),
-				requirement = game.developmentRequirement(type),
-				locked = !p || !!requirement,
-				full = p && game.buildingQueue(p.id).length >= 10;
-			b.disabled =
-				!started ||
-				!!game.result ||
-				game.credits < game.cost(type) ||
-				locked ||
-				full ||
-				game.population(game.viewer ?? 0) + game.queue.length >= RTS.POP_CAP;
-			b.classList.toggle("locked", locked);
-			b.querySelector("small").textContent = requirement
-				? requirement
-				: full
-					? "Kolejka pełna"
-					: !p
-						? "Brak wolnego budynku"
-						: `${game.entityName(p)} #${p.id}${p.module ? " · " + RTS.MODULES[p.module].name : ""}`;
-		});
-		document.querySelectorAll("[data-build]").forEach((b) => {
-			b.disabled =
-				!started ||
-				!!game.result ||
-				!!game.developmentRequirement(b.dataset.build) ||
-				game.credits < game.cost(b.dataset.build) ||
-				!game.units((game.viewer ?? 0)).some((e) => e.type === "worker");
-			b.dataset.tip =
-				b.disabled && !game.units((game.viewer ?? 0)).some((e) => e.type === "worker")
-					? "Potrzebny robot budowlany"
-					: game.developmentRequirement(b.dataset.build) ||
-						b.dataset.description;
-			const status = b.querySelector(".card-status");
-			if (status)
-				status.textContent = game.developmentRequirement(
-					b.dataset.build,
-				);
-		});
-		document.querySelectorAll("[data-research]").forEach((b) => {
-			const kind = b.dataset.research,
-				availability = game.researchStatus(kind),
-				status = availability.reason;
-			const working = game.research?.kind === kind,
-				done = working ? 1 - game.research.left / game.research.total : 0;
-			b.disabled = !started || !availability.allowed;
-			b.querySelector("small").textContent = working ? `${Math.floor(done * 100)}% · zostało ${Math.ceil(game.research.left)} s${game.power.factor < 1 ? " · tempo " + Math.round(game.power.factor * 100) + "%" : ""}` : status;
-			b.dataset.state = availability.state;
-			b.classList.toggle("is-complete", !!game.upgrades[kind]);
-			b.classList.toggle("is-working", working);
-			const bar = b.querySelector(".research-progress");
-			if (bar) bar.style.width = `${working ? done * 100 : availability.state === "done" ? 100 : 0}%`;
-		});
-		renderCardTip();
-		renderOrbitPanel();
-		// With no research under way, the research tab counts what has been researched.
-		if (activeTab === "research" && !game.research) {
-			const all = [...document.querySelectorAll("[data-research]")];
-			$("queue-status").textContent = `ZBADANE ${all.filter((b) => b.dataset.state === "done").length} / ${all.length} · BRAK BADANIA`;
-		}
-		const workers = game.units((game.viewer ?? 0)).filter((e) => e.type === "worker");
-		$("workers-status").textContent =
-			`${workers.filter((e) => ["gather", "gas", "repair", "build", "salvage"].includes(e.order?.kind)).length} / ${workers.length}`;
-		$("mined-status").textContent = Math.floor(game.mined);
-		$("explored-status").textContent =
-			`${Math.round((game.explored.filter(Boolean).length / game.explored.length) * 100)}%`;
-		$("cancel-queue").title =
-			activeTab === "research"
-				? "Anuluj badanie — pełny zwrot wszystkich surowców"
-				: "Anuluj ostatnią jednostkę i odzyskaj metal";
-		$("gas").textContent = Math.floor(game.gas);
-		$("crystals").textContent = Math.floor(game.crystals);
-		const power = game.power;
-		$("power").textContent =
-			`${power.demand}/${power.supply}${power.discharge > 0 ? " +" + Math.round(power.discharge) : ""}`;
-		$("power").classList.toggle("power-shortage", power.factor < 1);
-		$("power").parentElement.title =
-			`Zapotrzebowanie / moc. Tempo produkcji wojska i badań: ${Math.round(power.factor * 100)}%.`;
-		$("power-warning").hidden = power.factor >= 1;
-		$("power-warning").textContent =
-			`NIEDOBÓR MOCY · tempo ${Math.round(power.factor * 100)}% · zbuduj reaktor [C]`;
-		const modeText = game.modeStatus?.() || "";
-		$("campaign-objectives").hidden =
-			!MISSIONS[game.missionId].campaign && !modeText;
-		if (game.act2) renderAct2Objectives();
-		else
-			$("campaign-objectives").textContent = modeText || campaignStatus();
-		for (const id of ["obj-capture", "obj-army", "obj-hq"])
-			$(id).hidden = game.missionId === "training" || !!game.act2;
-		document.querySelector(".intel").hidden =
-			game.missionId === "training" ||
-			(!!game.act2 && !game.enemyBases().length);
-		if (
-			game.act2?.decision === "pending" &&
-			started &&
-			!finished &&
-			!choiceOpen &&
-			!menu?.active
-		)
-			showChoice();
-		if (game.campaignDecision?.state === "pending" && started && !finished && !choiceOpen && !menu?.active) showDecision();
-		$("idle-workers").textContent =
-			`Bezczynne roboty: ${game.idleWorkers().length} [Z]`;
-		$("idle-workers").disabled = !started || !game.idleWorkers().length;
-		$("economy-tip").textContent =
-			`Ładunek: ${game.cargoCapacity} rudy lub kryształów. PPM na ekstraktorze: przydziel jednego robota. Gaz: 2/s podczas pracy.`;
-		$("cancel-queue").disabled =
-			activeTab === "build"
-				? true
-				: activeTab === "research"
-					? !game.research
-					: !displayQueue.length;
-		$("save-game").disabled = !started;
-		updateCommandHud();
-		$("pause").textContent = paused ? "▶" : "Ⅱ";
-		$("pause").setAttribute("aria-label", "Otwórz menu pauzy");
-		$("pause").title = "Menu pauzy [Esc]";
-		if (game.network);
-		else if (game.aiActive?.())
-			$("intel-text").textContent = game.wave
-				? `Atak ${game.wave} wykryty. Przeciwnik ma własne roboty i koszary — zniszczenie jego robotów i fabryk osłabi kolejne ataki.`
-				: "Przeciwnik rozbudowuje bazę i wydobywa rudę. Atak nastąpi, gdy zbierze wystarczające siły.";
-		else if (game.wave)
-			$("intel-text").textContent =
-				`Desant ${game.wave} wykryty. Rakietowcy są skuteczni przeciw pancerzowi i wrogim budynkom.`;
-		if (game.events.length) toast(game.events.splice(0).at(-1));
-		if (game.result && !finished) {
-			finished = true;
-			showEnd();
-		}
-	}
-	// The victory / defeat screen: the banner, the styling of the report, numbers counting up and the animated
-	// backdrop (end-screen.js) under it.
-	function decorateEnd(victory) {
-		const box = $("overlay").querySelector(".briefing");
-		if (!box) return;
-		box.classList.add("end-report", victory ? "victory" : "defeat");
-		$("overlay").classList.add("end-overlay");
-		const banner = document.createElement("div");
-		banner.className = "end-banner";
-		banner.innerHTML = `<span>${victory ? "ZWYCIĘSTWO" : "PORAŻKA"}</span>`;
-		box.prepend(banner);
-		if (typeof EndScreen === "undefined") return;
-		EndScreen.countUp(box, !!menu?.reduced);
-		const m = MISSIONS[game.missionId] || {};
-		EndScreen.mount($("overlay"), { victory, biome: m.biome, reduced: !!menu?.reduced });
-	}
-	// The epilogue of an act (epilogue-films.js) at the top of the report: it plays once and stops on its last
-	// shot (the title), with a button to play it again.
-	function showEpilogue() {
-		const f = Epilogues.film(game.missionId, game),
-			box = $("overlay").querySelector(".briefing");
-		if (!f || !box) return;
-		box.classList.add("with-epilogue");
-		const wrap = document.createElement("div");
-		wrap.className = "epilogue-film";
-		wrap.innerHTML = `<span class="eyebrow">${f.title.toUpperCase()}</span><canvas width="960" height="400" aria-label="${f.title}"></canvas><p class="epilogue-caption" aria-live="polite"></p><button type="button" class="epilogue-replay">Odtwórz epilog ponownie ↺</button>`;
-		box.insertBefore(wrap, box.firstChild);
-		const canvas = wrap.querySelector("canvas"),
-			caption = wrap.querySelector("p"),
-			c = canvas.getContext("2d"),
-			reduced = !!menu?.reduced,
-			end = f.duration - 0.5;
-		canvas.width = 1920;
-		canvas.height = 800;
-		c.scale(2, 2);
-		// The film's clock runs only while the window is in front (0.171.14): the sound waits when it is left
-		// (sound.suspend), and the picture waits with it.
-		let t = 0,
-			prev = null,
-			last = -1,
-			running = false;
-		const frame = (now) => {
-			if (!canvas.isConnected) return (running = false);
-			const dt = prev == null ? 0 : (now - prev) / 1000;
-			prev = now;
-			if (document.hasFocus() && !document.hidden) t = Math.min(end, t + Math.min(dt, 0.1));
-			const shot = f.draw(c, t, reduced);
-			if (shot.scene !== last) {
-				caption.textContent = shot.caption;
-				last = shot.scene;
-			}
-			if (t < end) requestAnimationFrame(frame);
-			else running = false;
-		};
-		const play = (again) => {
-			t = 0;
-			prev = null;
-			last = -1;
-			if (!running) {
-				running = true;
-				requestAnimationFrame(frame);
-			}
-			// A replay starts the music over too (0.171.14: the mode did not change, and the replay was silent).
-			if (again) sound.restartMusic("intro");
-		};
-		wrap.querySelector("button").onclick = () => play(true);
-		play(false);
-		sound.setMusicMode("intro");
-	}
-	function showChoice() {
-		choiceOpen = true;
-		paused = true;
-		$("overlay").hidden = false;
-		$("overlay").innerHTML =
-			`<div class="briefing act2-choice"><span class="eyebrow">DECYZJA DOWÓDCY / SERCE POPIOŁU</span><h2>Zniszczyć<br>czy odłączyć?</h2><p>Węzły sterujące są w Twoich rękach. Tej decyzji nie można cofnąć; zmienia przebieg misji, premię i epilog.</p><button id="choose-destroy" class="primary-button"><b>ZNISZCZ INSTALACJĘ</b><small>Przeciążenie za 20 s niszczy wszystko w promieniu 380. Wieże Dominium tracą 50% PW, odzysk 400 metalu. Cel dodatkowy: bez strat od wybuchu.</small></button><button id="choose-evacuate" class="primary-button"><b>ODŁĄCZ I EWAKUUJ PERSONEL</b><small>Sześcioro techników musi dotrzeć na lądowisko — co najmniej czworo. Pajęczaki wpadną w szał. Premia: plany od techników — pancerz kompozytowy (gdy już go masz: broń plazmowa, a gdy i ją — 300 metalu). Cel dodatkowy: ocal wszystkich.</small></button></div>`;
-		for (const kind of ["destroy", "evacuate"])
-			$("choose-" + kind).onclick = () => {
-				game.act2Choose(kind);
-				choiceOpen = false;
-				$("overlay").hidden = true;
-				paused = false;
-				updateHud();
-			};
-		$("choose-destroy").focus();
-	}
-	// A story decision of the campaign (campaign-choices.js): two options, the game paused until one is taken.
-	function showDecision() {
-		const D = game.campaignDecisionInfo();
-		if (!D) return;
-		choiceOpen = true;
-		paused = true;
-		$("overlay").hidden = false;
-		const keys = Object.keys(D.options);
-		$("overlay").innerHTML = `<div class="briefing act2-choice"><span class="eyebrow">${D.eyebrow}</span><h2>${D.title}</h2><p>${D.prompt} Tej decyzji nie można cofnąć.</p>${keys.map((k) => `<button id="decide-${k}" class="primary-button"><b>${D.options[k].label}</b><small>${D.options[k].text}</small></button>`).join("")}</div>`;
-		for (const k of keys)
-			$("decide-" + k).onclick = () => {
-				game.decideCampaign(k);
-				choiceOpen = false;
-				$("overlay").hidden = true;
-				paused = false;
-				updateHud();
-			};
-		$("decide-" + keys[0]).focus();
-	}
-	function renderAct2Objectives() {
-		const speakers = RTS.ACT2_SPEAKERS,
-			line = game.act2.radio.at(-1),
-			key = JSON.stringify([
-				game.act2Objectives(),
-				line,
-				game.missionId === "colony5" && game.convoyStatus(),
-			]);
-		if (key === act2Signature) return;
-		act2Signature = key;
-		$("campaign-objectives").innerHTML =
-			`<ul class="act2-objectives">${game
-				.act2Objectives()
-				.map(
-					(o) =>
-						`<li class="${o.done ? "done" : o.failed ? "failed" : ""}${o.secondary ? " secondary" : ""}">${o.text}</li>`,
-				)
-				.join("")}</ul>` +
-			(game.missionId === "colony5"
-				? `<p class="act2-status">${game.convoyStatus()}</p>`
-				: "") +
-			(line
-				? `<p class="act2-line">${typeof Portraits !== "undefined" && Portraits.known(line.who) ? `<img class="act2-face" src="${Portraits.still(line.who, 34)}" alt="">` : ""}<b style="color:${speakers[line.who]?.color || "#c5d7d9"}">${speakers[line.who]?.name || line.who}:</b> ${line.text}</p>`
-				: "");
-	}
-	function act2Report(victory) {
-		const r = game.act2Summary(),
-			speakers = RTS.ACT2_SPEAKERS;
-		return `<ul class="act2-objectives">${r.objectives.map((o) => `<li class="${o.done ? "done" : o.failed ? "failed" : ""}${o.secondary ? " secondary" : ""}">${o.text}</li>`).join("")}</ul><div class="briefing-controls act2-summary"><span><b>${timeLabel(r.time)}</b>Czas operacji</span><span><b>${r.kills}</b>Zniszczonych celów</span><span><b>${r.losses}</b>Utraconych jednostek</span><span><b>${Math.round(r.lostValue)}</b>Metalu w stratach</span><span><b>${r.secondary ? "◆ zdobyta" : "—"}</b>Odznaka celu dodatkowego</span><span><b>${r.bonus === 200 ? "+200 metalu" : r.bonus === "salvage" ? "odzysk 400 metalu" : r.bonus === "armor" ? "pancerz kompozytowy" : r.bonus === "weapons" ? "broń plazmowa" : r.bonus === "metal" ? "300 metalu" : "—"}</b>Premia</span></div>${victory && r.secondary && !["colony6", "colony9", "colony14"].includes(game.missionId) ? "<p>Odznaka da +200 metalu na start następnego rozdziału.</p>" : ""}`;
-	}
-	// Battle chat (network): recent lines over the battlefield, a line opened with Enter.
-	const CHAT_SHOW = 15;
-	let chatLog = [],
-		chatBox = null;
-	function chatHud() {
-		if (chatBox) return chatBox;
-		chatBox = document.createElement("div");
-		chatBox.className = "battle-chat";
-		chatBox.innerHTML = '<ol class="battle-chat-log" aria-live="polite" aria-label="Czat"></ol><input class="battle-chat-input" maxlength="200" autocomplete="off" aria-label="Wiadomość" hidden>';
-		$("battlefield").append(chatBox);
-		const input = chatBox.querySelector("input");
-		input.addEventListener("keydown", (e) => {
-			// The game's own shortcuts never see the keys typed here.
-			e.stopPropagation();
-			if (e.key === "Enter") {
-				e.preventDefault();
-				const text = NetPlay.sendChat(netSession?.link, input.value);
-				if (text) addChat(game.players[game.viewer], text, true);
-				closeChat();
-			} else if (e.key === "Escape") {
-				e.preventDefault();
-				closeChat();
-			}
-		});
-		input.addEventListener("blur", () => closeChat(false));
-		return chatBox;
-	}
-	function addChat(player, text, mine = false) {
-		chatLog.push({ name: player?.name || "Gracz", color: player?.color || "#cfe6df", text, mine, at: performance.now() });
-		if (chatLog.length > 50) chatLog.shift();
-		renderChat();
-	}
-	function openChat() {
-		const input = chatHud().querySelector("input");
-		input.hidden = false;
-		input.placeholder = `Wiadomość do: ${netRelay ? "wszystkich w bitwie" : game.players[1 - game.viewer].name} · Enter wysyła, Esc zamyka`;
-		input.focus();
-		renderChat();
-	}
-	function closeChat(blur = true) {
-		const input = chatBox?.querySelector("input");
-		if (!input || input.hidden) return;
-		input.value = "";
-		input.hidden = true;
-		if (blur) input.blur();
-		renderChat();
-	}
-	// The last lines: those of the last 15 s, or all recent ones while typing.
-	function renderChat() {
-		if (!chatBox) return;
-		const typing = !chatBox.querySelector("input").hidden,
-			now = performance.now(),
-			shown = chatLog.filter((e) => typing || now - e.at < CHAT_SHOW * 1000).slice(-6),
-			log = chatBox.querySelector("ol"),
-			key = shown.map((e) => e.at).join() + typing;
-		chatBox.hidden = !netSession && !typing;
-		if (log.dataset.key === key) return;
-		log.dataset.key = key;
-		log.replaceChildren(
-			...shown.map((e) => {
-				const li = document.createElement("li"),
-					who = document.createElement("b");
-				who.textContent = e.name + ": ";
-				who.style.color = e.color;
-				li.append(who, document.createTextNode(e.text));
-				if (e.mine) li.className = "mine";
-				return li;
-			}),
-		);
-	}
-	// Tactical intel in a network battle: the opponent, the relays, the connection and the pauses left.
-	function networkIntel() {
-		const me = game.viewer,
-			mySide = game.sideLeader?.(me) ?? me,
-			ping = netSession?.ping,
-			nodes = game.nodes.length,
-			mine = game.nodes.filter((n) => n.owner === me).length,
-			theirs = game.nodes.filter((n) => n.owner != null && n.owner >= 0 && n.owner !== 2 && n.owner !== mySide).length;
-		$("wave").previousElementSibling.textContent = "Opóźnienie sieci";
-		$("wave").textContent = ping != null ? ping + " ms" : "—";
-		// The bar: the share of relays held (yours against the opponent's).
-		$("wave-progress").style.width = `${nodes ? (100 * mine) / nodes : 0}%`;
-		$("intel-text").textContent =
-			`${foes(me).length > 1 ? "Przeciwnicy" : "Przeciwnik"}: ${foes(me).map((p) => `${p.name} (${game.factionFor(p.team)?.name || "frakcja nieznana"}${p.ai ? ", komputer" : ""})`).join(", ")}. Przekaźniki: Twoje ${mine}, przeciwnika ${theirs} z ${nodes}. ` +
-			`Zniszcz jego centrum dowodzenia. Wspólna pauza [Spacja]: zostało ${game.pausesLeft?.[me] ?? 0} z ${RTS.NET_PAUSE.count}.`;
-	}
-	// Shared pause (network): a request goes to both players as an ordinary action.
-	function sharedPause() {
-		if (!netSession || !started || finished) return;
-		const pause = game.netPause,
-			me = game.viewer;
-		if (pause) {
-			if (pause.resumeIn === null) {
-				act("resumeGame");
-				toast("Wznawiam grę…");
-			}
-			return;
-		}
-		if ((game.pausesLeft?.[me] ?? 0) <= 0) {
-			toast(`Wykorzystano wszystkie pauzy (${RTS.NET_PAUSE.count}).`);
-			return;
-		}
-		act("pauseGame");
-	}
-	let pauseBox = null,
-		pauseSeen = null;
-	function renderSharedPause() {
-		const pause = netSession && started && !finished ? game.netPause : null;
-		if (!pause && !pauseBox) return;
-		if (!pauseBox) {
-			pauseBox = document.createElement("div");
-			pauseBox.className = "net-pause";
-			pauseBox.setAttribute("role", "status");
-			pauseBox.innerHTML = '<span class="eyebrow">WSPÓLNA PAUZA</span><strong></strong><p></p><button type="button" class="net-pause-resume">Wznów grę [Spacja]</button>';
-			pauseBox.querySelector("button").onclick = sharedPause;
-			$("battlefield").append(pauseBox);
-		}
-		// A pause began or ended: say who did it.
-		const key = pause ? pause.by + ":" + (pause.resumeIn === null) : null;
-		if (key !== pauseSeen) {
-			if (pause && pause.resumeIn === null) {
-				toast(`${game.players[pause.by].name} zatrzymuje grę.`);
-				sound.play("radio");
-			} else if (pause && pauseSeen) toast(pause.resumedBy != null ? `${game.players[pause.resumedBy].name} wznawia grę.` : "Koniec czasu pauzy.");
-			pauseSeen = key;
-		}
-		pauseBox.hidden = !pause;
-		if (!pause) return;
-		const me = game.viewer,
-			counting = pause.resumeIn !== null;
-		pauseBox.classList.toggle("counting", counting);
-		pauseBox.querySelector("strong").textContent = counting ? `Wznowienie za ${Math.max(1, Math.ceil(pause.resumeIn))}…` : pause.by === me ? "Twoja pauza" : `Pauza gracza ${game.players[pause.by].name}`;
-		pauseBox.querySelector("p").textContent = counting
-			? "Przygotuj się — bitwa zaraz rusza."
-			: `Gra ruszy sama za ${Math.ceil(pause.left)} s. Rozkazy wydane teraz wykonają się po wznowieniu. Twoje pauzy: ${game.pausesLeft[me]} z ${RTS.NET_PAUSE.count}.`;
-		pauseBox.querySelector("button").hidden = counting;
-	}
-	// Network battle: start, end of the session (leave, lost connection, desync), rematch.
-	// netLink: the connection to the other player; it outlives a battle (the end screen offers a rematch on it).
-	let netLink = null,
-		netLast = null,
-		// A lobby battle (G4): { url, room, client, player } — the server to come back to.
-		netRelay = null,
-		rematch = null;
-	const hookedLinks = new WeakSet();
-	// Listeners of the application on a link, once per connection: chat, rematch, the other player leaving.
-	function hookLink(link) {
-		if (hookedLinks.has(link)) return;
-		hookedLinks.add(link);
-		link.on("message", (msg) => {
-			if (link !== netLink) return;
-			if (msg.k === "chat") {
-				const text = NetPlay.chatText(msg.text);
-				if (!text || !netSession) return;
-				// A lobby battle names the sender (team); 1 on 1 has only the other player.
-				addChat(Number.isInteger(msg.team) ? game.players[msg.team] || { name: msg.name, color: msg.color } : game.players[1 - game.viewer], text);
-				sound.play("radio");
-			} else if (["dropped", "back", "takeover"].includes(msg.k) && netSession) {
-				const who = game.players[msg.team]?.name || msg.name || "Gracz";
-				toast(msg.k === "dropped" ? `${who} traci połączenie — bitwa trwa, jego wojska czekają.` : msg.k === "back" ? `${who} wraca do bitwy.` : `${who} nie wraca — jego stronę prowadzi komputer.`);
-				sound.play("radio");
-			} else if (msg.k === "rematch" && rematch) {
-				rematch.theirs = true;
-				if (!rematch.mine) {
-					toast(`${game.players[1 - game.viewer].name} proponuje rewanż.`);
-					sound.play("radio");
-				}
-				tryRematch();
-			} else if (msg.k === "rematch-start" && rematch && netLast.team === 1 && Number.isInteger(msg.seed) && msg.seed > 0 && msg.seed < 2 ** 32)
-				// The guest takes the host's new seed; everything else stays as agreed in the lobby.
-				startNetwork({ link, team: 1, settings: { ...netLast.settings, seed: msg.seed } });
-		});
-		link.on("close", () => {
-			if (link !== netLink || !rematch) return;
-			rematch.gone = true;
-			renderRematch();
-		});
-	}
-	// Both players asked for a rematch: the host picks a new map seed and starts; the guest follows its message.
-	function tryRematch() {
-		renderRematch();
-		if (!rematch?.mine || !rematch.theirs || netLast.team !== 0 || !netLink?.open) return;
-		const seed = RTS.randomSeed();
-		netLink.send({ k: "rematch-start", seed });
-		startNetwork({ link: netLink, team: 0, settings: { ...netLast.settings, seed } });
-	}
-	function askRematch() {
-		if (!rematch || rematch.mine || rematch.gone || !netLink?.open) return;
-		rematch.mine = true;
-		netLink.send({ k: "rematch" });
-		tryRematch();
-	}
-	function renderRematch() {
-		const button = $("rematch"),
-			status = $("rematch-status");
-		if (!button || !rematch) return;
-		const other = game.players[1 - game.viewer].name;
-		button.disabled = rematch.gone || rematch.mine;
-		button.firstChild.textContent = rematch.gone ? "REWANŻ NIEMOŻLIWY " : rematch.mine ? "CZEKAM NA ZGODĘ… " : rematch.theirs ? "PRZYJMIJ REWANŻ " : "REWANŻ ";
-		status.textContent = rematch.gone
-			? `${other} opuszcza grę — rewanż jest niemożliwy.`
-			: rematch.mine
-				? `Propozycja wysłana. Czekam na odpowiedź gracza ${other}.`
-				: rematch.theirs
-					? `${other} proponuje rewanż — te same zasady i frakcje, nowy układ mapy.`
-					: "Rewanż: te same zasady i frakcje, nowy układ mapy. Obaj gracze muszą się zgodzić.";
-		status.classList.toggle("rematch-offer", !!rematch.theirs && !rematch.mine && !rematch.gone);
-	}
-	// The players of the other side of a network battle (1 on 1: the opponent; 2 vs 2: both of them).
-	function foes(me = game.viewer) {
-		return Object.entries(game.players || {})
-			.map(([t, p]) => ({ ...p, team: Number(t) }))
-			.filter((p) => p.team !== me && !game.allied(me, p.team));
-	}
-	// relay (G4): a lobby battle through the server — { url, room, client, player }; resume: the server's log after
-	// coming back (the battle is rebuilt by replaying it).
-	function startNetwork({ link, team, settings, relay = null, resume = null }) {
-		// A rematch reuses the connection: only the finished battle ends.
-		const again = link === netLink;
-		endNetwork(again);
-		netLink = link;
-		netLast = { team, settings };
-		netRelay = relay;
-		rematch = null;
-		hookLink(link);
-		const prepared = RTS.createNetworkGame(settings);
-		prepared.viewer = team;
-		netSession = new NetPlay.Lockstep(prepared, team, link, {
-			teams: relay ? prepared.humans.slice() : [0, 1],
-			relay: !!relay,
-			resuming: !!resume,
-			onDesync: () => networkOver("Rozsynchronizowanie gry", "Symulacje graczy przestały się zgadzać — bitwa została przerwana. Zgłoś to twórcy gry (mapa, frakcje, co działo się tuż przed)."),
-			onClose: () => (relay ? relayLost() : networkOver("Połączenie zerwane", "Drugi gracz opuścił bitwę albo połączenie zostało przerwane.")),
-			onPhase: networkPhase,
-			pump: advanceHidden,
-		});
-		if (resume) netSession.replay(resume.log, resume.from, resume.release);
-		// (The log may have carried the battle into its next phase — the landing of an Inwazja.)
-		const current = netSession.game;
-		// The lobby conversation continues in the battle (and from one battle to its rematch).
-		if (!again) chatLog = (menu.net?.chat || []).slice(-6).map((e) => ({ ...e, at: performance.now() }));
-		chatHud().hidden = false;
-		menu.hide();
-		restart(current.missionId, null, current);
-		const mine = Object.entries(game.players).filter(([t]) => game.allied(team, Number(t)) || Number(t) === team).map(([, p]) => p.name),
-			theirs = foes(team).map((p) => p.name),
-			mode = game.modeState?.mode || "conquest",
-			// The goal: the scenario mode's (network-modes.js), the orbit of an Inwazja, or the enemy centres.
-			goal =
-				game.invasion?.phase === "orbit"
-					? "Inwazja — faza 1: zdobądź orbitę (zniszcz stację wroga albo miej silniejszą flotę po 8 minutach), potem lądowanie."
-					: mode !== "conquest" && game.modeObjective
-						? `${RTS.MODES[mode]?.name || ""}: ${game.modeObjective()}`
-						: `Zniszcz ${theirs.length > 1 ? "wszystkie centra dowodzenia przeciwników" : "centrum dowodzenia przeciwnika"}.`;
-		toast(resume ? "Powrót do bitwy — dogoniono jej przebieg." : `${again ? "Rewanż" : "Bitwa sieciowa"}: ${mine.join(" i ")} kontra ${theirs.join(" i ")}. ${goal}`);
-	}
-	// Inwazja through the network: the orbit is decided and every computer has built the ground battle at the same
-	// step — the board takes it at once (the battle goes on, no landing screen to wait on).
-	function networkPhase(next) {
-		const I = next.invasion,
-			O = I?.orbit || {},
-			mine = I?.owner === (next.viewer ?? 0),
-			how = O.decided === "time" ? "Po 8 minutach o orbicie zdecydowała siła flot i stacji." : mine ? "Stacja dowodzenia wroga na orbicie zniszczona." : "Twoja stacja dowodzenia na orbicie zniszczona.";
-		restart(next.missionId, null, next);
-		toast(`Inwazja — faza 2: lądowanie. ${how} ${mine ? `Orbita Twoja: ${O.pods} kapsuł desantowych, uderzenie z orbity i skan (panel orbity).` : `Orbita wroga: ma ${O.pods} kapsuł desantowych — buduj baterie przeciwlotnicze.`}`);
-	}
-	// A lobby battle lost its server: reconnect (every 2 s, for a minute) and come back by the server's log.
-	function relayLost() {
-		const relay = netRelay;
-		if (!relay || finished) return networkOver("Połączenie zerwane", "Połączenie z serwerem gry zostało przerwane.");
-		const team = netLast.team;
-		netSession?.stop();
-		netSession = null;
-		paused = true;
-		$("overlay").hidden = false;
-		$("overlay").innerHTML = `<div class="briefing"><span class="eyebrow">GRA WIELOOSOBOWA / ${timeLabel(game.time)}</span><div class="briefing-symbol">⌁</div><h2>Łączenie ponownie…</h2><p id="relay-status">Połączenie z serwerem gry zostało przerwane. Bitwa trwa u pozostałych graczy — wracam do niej.</p><button id="end-menu" class="primary-button end-secondary">ZREZYGNUJ <span>↗</span></button></div>`;
-		$("end-menu").onclick = () => {
-			netRelay = null;
-			endNetwork();
-			started = false;
-			menu.show("home");
-		};
-		let tries = 0;
-		const attempt = () => {
-			if (netRelay !== relay) return;
-			if (++tries > 30) return networkOver("Nie udało się wrócić", "Serwer gry nie odpowiada. Spróbuj później: Gra wieloosobowa → Przez serwer — trwająca bitwa pojawi się na liście.");
-			if ($("relay-status")) $("relay-status").textContent = `Połączenie z serwerem przerwane — próba ${tries} z 30…`;
-			const link = new NetPlay.RelayLink(relay.url);
-			link.on("open", () => link.send({ k: "hello", v: 1, game: typeof GAME_VERSION !== "undefined" ? GAME_VERSION : "", client: relay.client, player: relay.player }));
-			link.on("message", (msg) => {
-				if (msg.k === "welcome") link.send({ k: "rejoin", room: relay.room });
-				else if (msg.k === "resume") {
-					$("overlay").hidden = true;
-					paused = false;
-					startNetwork({ link, team: msg.team ?? team, settings: msg.settings, relay, resume: msg });
-				} else if (msg.k === "error" && netRelay === relay) {
-					// A few more tries (0.171.16: the first refusal ended the battle — e.g. while the server still held
-					// the seat for the lost connection); the server's text is shown as text.
-					if (tries < 5) {
-						link.close();
-						return;
-					}
-					networkOver("Nie udało się wrócić", escHtml(String(msg.text || "")));
-				}
-			});
-			link.on("close", () => {
-				if (netRelay === relay && !netSession) setTimeout(attempt, 2000);
-			});
-		};
-		attempt();
-	}
-	// keepLink: the battle ends but the connection stays (end screen with a rematch, or the rematch itself).
-	function endNetwork(keepLink = false) {
-		closeChat();
-		if (chatBox) chatBox.hidden = true;
-		if (pauseBox) pauseBox.hidden = true;
-		pauseSeen = null;
-		if (netSession) {
-			netSession.stop();
-			netSession = null;
-		}
-		if (keepLink) return;
-		rematch = null;
-		netRelay = null;
-		if (netLink) {
-			netLink.close();
-			netLink = null;
-		}
-		if (menu?.net) menu.net = null;
-	}
-	const escHtml = (s) => s.replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]);
-	function networkOver(title, text) {
-		if (!netSession || finished) {
-			endNetwork();
-			return;
-		}
-		finished = true;
-		endNetwork();
-		$("overlay").hidden = false;
-		$("overlay").innerHTML = `<div class="briefing"><span class="eyebrow">GRA WIELOOSOBOWA / ${timeLabel(game.time)}</span><div class="briefing-symbol">⌁</div><h2>${title}</h2><p>${text}</p><button id="end-menu" class="primary-button">MENU GŁÓWNE <span>↗</span></button></div>`;
-		$("end-menu").onclick = () => {
-			started = false;
-			menu.show("home");
-		};
-	}
-	// Inwazja (G2): the orbit is decided — who holds it and with how many drop pods; then the landing.
-	function showInvasionLanding() {
-		const I = game.invasion,
-			C = I.carry,
-			mine = C.owner === (game.viewer ?? 0),
-			target = MISSIONS[I.target] || {},
-			how = I.decided === "time" ? "Po 8 minutach walki o orbitę zdecydowała siła flot i stacji." : mine ? "Stacja dowodzenia wroga na orbicie zniszczona." : "Twoja stacja dowodzenia na orbicie zniszczona.";
-		$("overlay").hidden = false;
-		$("overlay").innerHTML = `<div class="briefing invasion-landing ${mine ? "victory" : "defeat"}"><span class="eyebrow">INWAZJA · FAZA 1 ZAKOŃCZONA / ${timeLabel(game.time)}</span><div class="briefing-symbol">${mine ? "◈" : "⌁"}</div><h2>${mine ? "Orbita zdobyta." : "Orbita utracona."}</h2><p>${how} ${mine ? `Twoja flota osłania ${C.pods} kapsuł desantowych; na planecie masz też uderzenie z orbity i skan orbitalny.` : `Wróg ma ${C.pods} kapsuł desantowych, uderzenie z orbity i skan — buduj baterie przeciwlotnicze, by zestrzeliwać kapsuły.`}</p><div class="briefing-controls"><span><b>${C.mine}</b>Twoje siły na orbicie</span><span><b>${C.theirs}</b>Siły wroga na orbicie</span><span><b>${C.pods}</b>Kapsuły ${mine ? "Twoje" : "wroga"}</span></div><button id="invasion-land" class="primary-button">LĄDOWANIE — ${(target.name || "").toUpperCase()} <span>↓</span></button><button id="end-menu" class="primary-button end-secondary">MENU GŁÓWNE <span>↗</span></button></div>`;
-		$("invasion-land").onclick = () => {
-			$("overlay").hidden = true;
-			launchWithScreen(I.target, { ...game.scenario, mode: "invasion", invasion: { phase: "ground", owner: C.owner, pods: C.pods, from: game.missionId } });
-		};
-		$("end-menu").onclick = () => {
-			started = false;
-			menu.show("home");
-		};
-	}
-	function showEnd() {
-		const victory = (game.resultFor?.() ?? game.result) === "victory";
-		if (netSession) {
-			const me = game.viewer,
-				others = foes(me),
-				other = { name: others.map((p) => p.name).join(" i ") };
-			$("overlay").hidden = false;
-			// A scenario mode ends with its own account (worded for this player); conquest with the centres.
-			const modeText = game.modeResult?.();
-			$("overlay").innerHTML = `<div class="briefing"><span class="eyebrow">GRA WIELOOSOBOWA / ${timeLabel(game.time)}</span><div class="briefing-symbol">${victory ? "◈" : "⌁"}</div><h2>${victory ? "Zwycięstwo." : "Porażka."}</h2><p>${modeText ? modeText : netRelay ? (victory ? `Wszystkie centra dowodzenia strony ${other.name} zniszczone.` : `Strona ${other.name} zniszczyła wszystkie centra dowodzenia Twojej strony.`) : victory ? `Centrum dowodzenia gracza ${other.name} zniszczone.` : `${other.name} zniszczył Twoje centrum dowodzenia.`}</p><div class="briefing-controls"><span><b>${game.sideOf(me).kills}</b>Twoje zniszczone cele</span><span><b>${others.reduce((n, p) => n + (game.sideOf(p.team)?.kills || 0), 0)}</b>Cele zniszczone przez przeciwnika</span><span><b>${game.nodes.filter((n) => n.owner === (game.sideLeader?.(me) ?? me)).length} / ${game.nodes.length}</b>Twoje przekaźniki</span></div><p id="rematch-status" class="rematch-status" role="status"></p>${netRelay ? "" : '<button id="rematch" class="primary-button">REWANŻ <span>↻</span></button>'}<button id="end-menu" class="primary-button end-secondary">MENU GŁÓWNE <span>↗</span></button></div>`;
-			// The connection stays for a rematch; the lockstep stops a moment later (the other computer still gets
-			// the last turn).
-			const ended = netSession;
-			setTimeout(() => {
-				if (netSession === ended) endNetwork(true);
-			}, 1500);
-			decorateEnd(victory);
-			rematch = { mine: false, theirs: false, gone: !netLink?.open };
-			renderRematch();
-			if ($("rematch")) $("rematch").onclick = askRematch;
-			$("end-menu").onclick = () => {
-				endNetwork();
-				started = false;
-				menu.show("home");
-			};
-			return;
-		}
-		// (A campaign chapter in orbit ends with its report; its pods go to the next chapter.)
-		if (game.invasion?.phase === "orbit" && game.invasionResult?.() && !MISSIONS[game.missionId].campaign) return showInvasionLanding();
-		// Survival keeps the best time per map and level.
-		let modeText = game.modeResult?.() || null;
-		if (modeText && game.modeState?.mode === "survival" && RTS.recordSurvival) {
-			const r = RTS.recordSurvival(audioStorage, game);
-			modeText += r.isNew ? " Nowy rekord!" : ` Rekord: ${timeLabel(r.best.time)}, fala ${r.best.wave}.`;
-		}
-		const campaignSaved =
-			MISSIONS[game.missionId].campaign && victory
-				? campaign.record(game)
-				: true;
-		saveGame(true);
-		$("overlay").hidden = false;
-		if (game.act2) {
-			$("overlay").innerHTML =
-				`<div class="briefing act2-report"><span class="eyebrow">RAPORT Z OPERACJI / ${MISSIONS[game.missionId].name}</span><div class="briefing-symbol">${victory ? "◈" : "⌁"}</div><h2>${victory ? (game.missionId === "colony6" ? "Koniec<br>aktu II." : game.missionId === "colony9" ? "Koniec<br>aktu III." : game.missionId === "colony14" ? "Koniec<br>aktu IV." : "Rozdział<br>ukończony.") : "Misja<br>nieudana."}</h2><p>${victory ? game.act2Epilogue() + " " + (campaignSaved ? "Postęp kampanii zapisano." : "Nie można zapisać postępu kampanii na tym urządzeniu.") : game.act2.failReason || "Centrum dowodzenia zostało zniszczone. Odbuduj siły i spróbuj ponownie."}</p>${act2Report(victory)}<button id="play-again" class="primary-button">NOWA OPERACJA <span>↗</span></button></div>`;
-			if (!victory) {
-				const retry = document.createElement("button");
-				retry.className = "primary-button";
-				retry.textContent = "SPRÓBUJ PONOWNIE →";
-				retry.onclick = () => {
-					menu.selectedMission = game.missionId;
-					menu.missionOrigin = "campaign";
-					menu.show("briefing");
-				};
-				$("overlay").querySelector(".briefing").append(retry);
-			}
-		} else
-			$("overlay").innerHTML =
-				`<div class="briefing"><span class="eyebrow">RAPORT Z OPERACJI / ${timeLabel(game.time)}</span><div class="briefing-symbol">${victory ? "◈" : "⌁"}</div><h2>${victory ? "Sektor<br>odzyskany." : "Utraciliśmy<br>przyczółek."}</h2><p>${victory ? (MISSIONS[game.missionId].campaign ? { training: "Poligon zaliczony. Załoga potrafi rozwijać kolonię, podtrzymać sieć i naprawić pojazdy. ", colony1: "Latarnia Eos znów nadaje. Lira odczytała współrzędne archiwum na Vesperze. Konwój wyrusza po klucz do sieci. ", colony2: "Archiwum ujawniło plan blokady. Klucz jest bezpieczny; teraz flota może dotrzeć do centralnego węzła na Nadirze. ", colony3: "Węzeł Nadir odzyskany. Lira uruchamia sieć, latarnie rozbłyskują jedna po drugiej, a transporty pomocy ruszają ku Koloniom. Nadszedł Odzyskany Świt. " }[game.missionId] + (campaignSaved ? "Postęp kampanii zapisano." : "Nie można zapisać postępu kampanii na tym urządzeniu.") : modeText || "Operacja " + MISSIONS[game.missionId].name + " zakończona zwycięstwem.") : modeText || "Centrum dowodzenia zostało zniszczone. Odbuduj siły i spróbuj ponownie."}</p><div class="briefing-controls"><span><b>${timeLabel(game.time)}</b>Czas operacji</span><span><b>${game.kills}</b>Zniszczonych celów</span><span><b>${game.nodes.filter((n) => n.owner === (game.viewer ?? 0)).length} / ${game.nodes.length}</b>Przekaźników pod kontrolą</span><span><b>${Math.round(game.mined || 0)}</b>Wydobytego metalu</span><span><b>${game.units(game.viewer ?? 0).filter((e) => e.type !== "worker").length}</b>Jednostek na koniec</span></div><button id="play-again" class="primary-button">NOWA OPERACJA <span>↗</span></button></div>`;
-		// The end of an act: its epilogue film over the report.
-		if (victory && typeof Epilogues !== "undefined" && Epilogues.has(game.missionId)) showEpilogue();
-		decorateEnd(victory);
-		const nextChapter = {
-			training: "colony1",
-			colony1: "colony2",
-			colony2: "colony3",
-			colony3: "colony4",
-			colony4: "colony5",
-			colony5: "colony6",
-			colony9: "colony10",
-			colony10: "colony11",
-			colony11: "colony12",
-			colony12: "colony13",
-			colony13: "colony14",
-		}[game.missionId];
-		// The end of the campaign: its finale film (campaign-finale.js), full screen.
-		if (victory && game.missionId === "colony14" && typeof FinaleFilm !== "undefined") {
-			const button = document.createElement("button");
-			button.className = "primary-button";
-			button.textContent = "FINAŁ KAMPANII ▶";
-			button.onclick = () => {
-				started = false;
-				menu.afterFinale = "campaign";
-				menu.show("finale");
-			};
-			$("overlay").querySelector(".briefing").append(button);
-		}
-		if (victory && MISSIONS[game.missionId].campaign && nextChapter) {
-			const button = document.createElement("button");
-			button.className = "primary-button";
-			button.textContent =
-				nextChapter === "colony4"
-					? "AKT II: CENA ŚWITU →"
-					: nextChapter === "colony10"
-						? "AKT IV: INWAZJA →"
-						: "NASTĘPNY ROZDZIAŁ →";
-			button.onclick = () => {
-				menu.selectedMission = nextChapter;
-				menu.missionOrigin = "campaign";
-				if (nextChapter === "colony4" && !campaign.completed.colony4) {
-					menu.afterIntro2 = "briefing";
-					menu.act2IntroSeen = true;
-					menu.show("intro2");
-				} else if (nextChapter === "colony10" && !campaign.completed.colony10 && typeof Act4Film !== "undefined") {
-					menu.afterIntro4 = "briefing";
-					menu.act4IntroSeen = true;
-					menu.show("intro4");
-				} else menu.show("briefing");
-			};
-			$("overlay").querySelector(".briefing").append(button);
-		}
-		$("play-again").onclick = () => {
-			menu.origin = "home";
-			menu.show("single");
-		};
-		$("overlay")
-			.querySelector(".briefing")
-			.insertAdjacentHTML(
-				"beforeend",
-				'<button id="end-menu" class="resume-button">MENU GŁÓWNE</button>',
-			);
-		$("end-menu").onclick = () => {
-			saveGame(true);
-			started = false;
-			menu.show("home");
-		};
-	}
+	// HUD (app-hud.js, 0.173): resources, the selection and its commands, alerts, the side panel's figures.
+	const hud = createAppHud({
+		$,
+		MISSIONS,
+		RESEARCH,
+		TYPES,
+		campaignStatus,
+		fit,
+		refreshFog,
+		renderAct2Objectives: (...args) => story.renderAct2Objectives(...args),
+		showChoice: (...args) => story.showChoice(...args),
+		showDecision: (...args) => story.showDecision(...args),
+		showEnd: (...args) => story.showEnd(...args),
+		timeLabel,
+		toast,
+		get activeTab() {
+			return activeTab;
+		},
+		set activeTab(value) {
+			activeTab = value;
+		},
+		get armyInspectorSignature() {
+			return armyInspectorSignature;
+		},
+		set armyInspectorSignature(value) {
+			armyInspectorSignature = value;
+		},
+		get camera() {
+			return camera;
+		},
+		set camera(value) {
+			camera = value;
+		},
+		get choiceOpen() {
+			return choiceOpen;
+		},
+		set choiceOpen(value) {
+			choiceOpen = value;
+		},
+		get deckUi() {
+			return deckUi;
+		},
+		get economyPanel() {
+			return economyPanel;
+		},
+		set economyPanel(value) {
+			economyPanel = value;
+		},
+		get finished() {
+			return finished;
+		},
+		set finished(value) {
+			finished = value;
+		},
+		get game() {
+			return game;
+		},
+		set game(value) {
+			game = value;
+		},
+		get lastGroupAt() {
+			return lastGroupAt;
+		},
+		set lastGroupAt(value) {
+			lastGroupAt = value;
+		},
+		get lastGroupKey() {
+			return lastGroupKey;
+		},
+		set lastGroupKey(value) {
+			lastGroupKey = value;
+		},
+		get menu() {
+			return menu;
+		},
+		set menu(value) {
+			menu = value;
+		},
+		get network() {
+			return network;
+		},
+		get paused() {
+			return paused;
+		},
+		set paused(value) {
+			paused = value;
+		},
+		get productionSignature() {
+			return productionSignature;
+		},
+		set productionSignature(value) {
+			productionSignature = value;
+		},
+		get selected() {
+			return selected;
+		},
+		set selected(value) {
+			selected = value;
+		},
+		get started() {
+			return started;
+		},
+		set started(value) {
+			started = value;
+		},
+		get strikeMode() {
+			return strikeMode;
+		},
+		set strikeMode(value) {
+			strikeMode = value;
+		},
+	});
+	// Network battle (app-network.js, 0.173): chat, shared pause, rematch, the session's start and end.
+	const network = createAppNetwork({
+		boardScreen,
+		$,
+		act,
+		advanceHidden,
+		decorateEnd: (...args) => story.decorateEnd(...args),
+		restart,
+		sound,
+		timeLabel,
+		toast,
+		get finished() {
+			return finished;
+		},
+		set finished(value) {
+			finished = value;
+		},
+		get game() {
+			return game;
+		},
+		set game(value) {
+			game = value;
+		},
+		get menu() {
+			return menu;
+		},
+		set menu(value) {
+			menu = value;
+		},
+		get netSession() {
+			return netSession;
+		},
+		set netSession(value) {
+			netSession = value;
+		},
+		get paused() {
+			return paused;
+		},
+		set paused(value) {
+			paused = value;
+		},
+		get started() {
+			return started;
+		},
+		set started(value) {
+			started = value;
+		},
+	});
+	// Story and end screens (app-story.js, 0.173): decisions, act II objectives, epilogues, the end of a battle.
+	const story = createAppStory({
+		$,
+		MISSIONS,
+		campaign,
+		hud,
+		launchWithScreen,
+		network,
+		saveGame,
+		sound,
+		timeLabel,
+		get act2Signature() {
+			return act2Signature;
+		},
+		set act2Signature(value) {
+			act2Signature = value;
+		},
+		get audioStorage() {
+			return audioStorage;
+		},
+		set audioStorage(value) {
+			audioStorage = value;
+		},
+		get choiceOpen() {
+			return choiceOpen;
+		},
+		set choiceOpen(value) {
+			choiceOpen = value;
+		},
+		get game() {
+			return game;
+		},
+		set game(value) {
+			game = value;
+		},
+		get menu() {
+			return menu;
+		},
+		set menu(value) {
+			menu = value;
+		},
+		get netSession() {
+			return netSession;
+		},
+		set netSession(value) {
+			netSession = value;
+		},
+		get paused() {
+			return paused;
+		},
+		set paused(value) {
+			paused = value;
+		},
+		get started() {
+			return started;
+		},
+		set started(value) {
+			started = value;
+		},
+	});
 	function campaignStatus() {
 		if (game.missionId === "training") return game.trainingStatus();
 		const nodes = game.nodes.filter((n) => n.owner === (game.viewer ?? 0)).length;
@@ -1494,11 +680,11 @@
 					: "Roboty wydobywają rudę. Rozwiń centrum do Kolonii, zbuduj fabrykę i wyślij zwiad do AUREK.",
 		);
 		sound.play("start");
-		updateHud();
+		hud.updateHud();
 		saveGame(true);
 	}
 	function restart(missionId = "horizon", scenario = null, prepared = null) {
-		if (!prepared) endNetwork();
+		if (!prepared) network.endNetwork();
 		game = prepared || new Game(42, missionId);
 		if (scenario && !prepared) game.configureSkirmish(scenario);
 		// The campaign difficulty: the commander AI in its chapters and the enemy's strength.
@@ -1513,7 +699,7 @@
 		act2Signature = "";
 		for (let t = 0; t < colors.length; t++) colors[t] = game.colorFor(t);
 		productionSignature = "";
-		deck(activeTab);
+		deckUi.deck(activeTab);
 		selected = new Set(
 			game
 				.units((game.viewer ?? 0))
@@ -1563,10 +749,35 @@
 				try {
 					restart(missionId, scenario, prepared);
 				} finally {
-					afterFrames(3, () => screen.done());
+					boardReady(screen);
 				}
 			}),
 		);
+	}
+	// The loading screen goes once the chosen board is up and has drawn (0.175.5): it went three frames after the
+	// battle was built, but the board starts only on the first frame without the menu and the 3D one builds
+	// asynchronously (its code, then its world) — so the battle showed first on the Canvas 2D board for a moment and
+	// then jumped to 3D.
+	// A battle that starts without a loading screen of its own (a network battle, its rematch): one while the chosen
+	// board is not up yet.
+	function boardScreen(eyebrow) {
+		if (typeof LoadingScreen === "undefined" || SceneFX.options.renderer === rendererRequested) return;
+		const m = MISSIONS[game.missionId] || {};
+		boardReady(LoadingScreen.show({ eyebrow, title: m.name, planet: m.planet, biome: m.space ? spaceWorld(m) : m.theme === "ocean" || m.theme === "crystal" ? m.theme : m.biome, reduced: !!menu?.reduced, minTime: 0.6 }));
+	}
+	function boardReady(screen) {
+		let gone = false;
+		const done = () => {
+			if (gone) return;
+			gone = true;
+			afterFrames(3, () => screen.done());
+		};
+		// (Should the board never come, the screen still goes: the battle is there on Canvas 2D.)
+		setTimeout(done, 15000);
+		Promise.resolve(applyRenderer())
+			.then(() => render())
+			.catch((error) => console.warn(error))
+			.finally(done);
 	}
 	// Loading a save: the screen covers the board being rebuilt.
 	function loadWithScreen(key) {
@@ -1574,7 +785,7 @@
 		if (ok && typeof LoadingScreen !== "undefined") {
 			const m = MISSIONS[game.missionId] || {},
 				screen = LoadingScreen.show({ eyebrow: "WCZYTANY ZAPIS · " + timeLabel(game.time), title: m.name, planet: m.planet, biome: m.space ? spaceWorld(m) : m.theme === "ocean" || m.theme === "crystal" ? m.theme : m.biome, reduced: !!menu?.reduced, minTime: 1.2 });
-			afterFrames(3, () => screen.done());
+			boardReady(screen);
 		}
 		return ok;
 	}
@@ -1582,25 +793,77 @@
 		if (n <= 0) return fn();
 		requestAnimationFrame(() => afterFrames(n - 1, fn));
 	}
-	function togglePause() {
+	// The pause and why (0.175.3): "player" (Space, the button) or "blur" (the window lost focus). A bar over the board
+	// says it for as long as the pause lasts — the message alone went in a few seconds, and whoever came back to the
+	// window later saw a still board and a ▶ on the top bar.
+	let pauseInfo = null,
+		pauseBarShown = null;
+	function togglePause(reason = "player") {
 		// Not while a story decision waits (0.171.10): it holds the battle until one is taken.
 		if (!started || finished || choiceOpen) return;
 		if (netSession) {
-			sharedPause();
+			network.sharedPause();
 			return;
 		}
 		paused = !paused;
+		pauseInfo = paused ? { reason, since: performance.now(), at: game.time } : null;
+		updatePauseBar();
 		if (paused) sound.silence();
 		// The music again after the pause (0.172.8): silence() stops its scheduler, and only a change of theme (the
 		// menu, a loaded save) started it — after Space, Space the battle went on without music.
 		else sound.setMusicMode(musicModeFor(game));
-		toast(
-			paused
-				? "Pauza taktyczna — możesz wydawać rozkazy."
-				: "Operacja wznowiona.",
-		);
-		updateHud();
+		// The bar says the pause; the message only the way back (0.175.3).
+		if (!paused) toast("Operacja wznowiona.");
+		hud.updateHud();
 	}
+	function pauseBar() {
+		let bar = $("pause-bar");
+		if (!bar) {
+			bar = document.createElement("div");
+			bar.id = "pause-bar";
+			bar.className = "pause-bar";
+			bar.setAttribute("role", "status");
+			bar.hidden = true;
+			bar.innerHTML = '<b class="pause-bar-title">Ⅱ PAUZA TAKTYCZNA</b><span class="pause-bar-why"></span><span class="pause-bar-time"></span><button type="button" id="pause-bar-resume" class="net-small">Wznów <kbd>Spacja</kbd></button>';
+			$("battlefield").append(bar);
+			$("pause-bar-resume").onclick = () => paused && togglePause();
+		}
+		return bar;
+	}
+	const clockOf = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+	// Shown while a battle with the computer is paused (not under a menu, not a network battle's shared pause);
+	// written only when what it says changes.
+	function updatePauseBar() {
+		if (paused && !pauseInfo && started) pauseInfo = { reason: "player", since: performance.now(), at: game.time };
+		if (!paused) pauseInfo = null;
+		const show = !!(pauseInfo && started && !finished && !netSession && !choiceOpen);
+		$("battlefield").classList.toggle("battle-paused", show);
+		const bar = pauseBar();
+		if (!show) {
+			if (!bar.hidden) bar.hidden = true;
+			pauseBarShown = null;
+			return;
+		}
+		const away = Math.floor((performance.now() - pauseInfo.since) / 1000),
+			why = pauseInfo.reason === "blur" ? "Gra wstrzymana, bo okno straciło fokus" : "Wstrzymana przez Ciebie — możesz wydawać rozkazy",
+			time = `T+${clockOf(pauseInfo.at)} · pauza trwa ${away < 60 ? away + " s" : clockOf(away)}`,
+			key = why + time;
+		if (key === pauseBarShown) return;
+		pauseBarShown = key;
+		bar.hidden = false;
+		bar.querySelector(".pause-bar-why").textContent = why;
+		bar.querySelector(".pause-bar-time").textContent = time;
+	}
+	// Coming back to a battle that paused when the window was left: the bar flashes once.
+	window.addEventListener("focus", () => {
+		if (!pauseInfo || pauseInfo.reason !== "blur") return;
+		updatePauseBar();
+		const bar = $("pause-bar");
+		if (!bar || bar.hidden) return;
+		bar.classList.remove("flash");
+		void bar.offsetWidth;
+		bar.classList.add("flash");
+	});
 	function selectAll() {
 		selected = new Set(
 			game
@@ -1608,14 +871,14 @@
 				.filter((e) => e.type !== "worker")
 				.map((e) => e.id),
 		);
-		updateHud();
+		hud.updateHud();
 	}
 	function economyAction(action) {
 		if (!started) return;
 		if (action.trade) {
 			act("trade", ...action.trade);
 			economyPanel.lastRefresh = -Infinity;
-			updateHud();
+			hud.updateHud();
 			return;
 		}
 		if (action.role) {
@@ -1634,7 +897,7 @@
 			camera.zoom = Math.max(1.8, camera.zoom);
 			fit();
 		} else toast("Złoże jest obecnie poza widocznym terenem.");
-		updateHud();
+		hud.updateHud();
 	}
 	// Watchers (0.154): the ability of the selection — Sparks need a point (the next left click), Wardens phase at once.
 	function watcherAbility() {
@@ -1649,7 +912,7 @@
 		strikeMode = null;
 		orbitMode = mode;
 		toast(text);
-		updateHud();
+		hud.updateHud();
 	}
 	// DOW-01: the next right click patrols to a point or escorts a unit.
 	function beginOrder(mode) {
@@ -1672,7 +935,7 @@
 			camera.zoom = Math.max(1.8, camera.zoom);
 			fit();
 		}
-		updateHud();
+		hud.updateHud();
 	}
 	function selectWorkers() {
 		selected = new Set(
@@ -1684,14 +947,14 @@
 		toast(
 			"Roboty: PPM na rudzie — wydobycie; na uszkodzonym sojuszniku — naprawa.",
 		);
-		updateHud();
+		hud.updateHud();
 	}
 	function buy(type) {
 		if (!started || finished) return;
 		// In space the keys of the ground classes order the ships of the same class (space-rules.js).
 		if (game.space) type = { trooper: "corvette", rocket: "frigate", tank: "lancer", heavy: "cruiser" }[type] || type;
-		act("enqueue", type, preferredProducer(type));
-		updateHud();
+		act("enqueue", type, hud.preferredProducer(type));
+		hud.updateHud();
 	}
 	function zoom(factor) {
 		camera.zoom = clamp(camera.zoom * factor, 1, 5.5);
@@ -1746,7 +1009,7 @@
 			game = restored;
 			colors[0] = game.colorFor((game.viewer ?? 0));
 			productionSignature = "";
-			deck(activeTab);
+			deckUi.deck(activeTab);
 			camera =
 				saved.camera &&
 				[saved.camera.x, saved.camera.y, saved.camera.zoom].every(
@@ -1783,7 +1046,7 @@
 			terrainTexture();
 			fit();
 			sound.setMusicMode(musicModeFor(game));
-			updateHud();
+			hud.updateHud();
 			toast("Wczytano zapis operacji.");
 			autosaveClock = 0;
 			return true;
@@ -1794,1255 +1057,292 @@
 			return false;
 		}
 	}
-	const deckPages = { army: 0, build: 0, research: 0 };
-	// The field of each research, shown as a tag on its card.
-	const RESEARCH_FIELDS = {
-		colony: "KOLONIA",
-		fortress: "TWIERDZA",
-		doctrineMobility: "DOKTRYNA",
-		doctrineBridgehead: "DOKTRYNA",
-		doctrineBarrage: "DOKTRYNA",
-		doctrineShields: "DOKTRYNA",
-		doctrineTide: "DOKTRYNA",
-		doctrineCarapace: "DOKTRYNA",
-		meteorology: "POGODA",
-		meteorShield: "ORBITA",
-		guidance: "POGODA",
-		mobility: "POGODA",
-		weapons: "WALKA",
-		armor: "WALKA",
-		precision: "WALKA",
-		infantryTraining: "WALKA",
-		cargo: "GOSPODARKA",
-		efficiency: "GOSPODARKA",
-		extraction: "GOSPODARKA",
-		assembly: "GOSPODARKA",
-	};
-	function paginateDeck(delta = 0) {
-		const list = document.querySelector(".unit-cards"),
-			cards = [...list.children];
-		if (!list.clientWidth || !cards.length || !$("deck-page")) return;
-		// Compact cards (0.150): the slot width and the number of rows come from the stylesheet.
-		const style = getComputedStyle(list),
-			slot = parseFloat(style.getPropertyValue("--deck-slot")) || 180,
-			rows = parseInt(style.getPropertyValue("--deck-rows")) || 1,
-			columns = Math.max(1, Math.min(12, Math.floor((list.clientWidth + 8) / slot))),
-			count = columns * rows,
-			pages = Math.ceil(cards.length / count);
-		const focused = cards.indexOf(document.activeElement);
-		if (focused >= 0 && !delta)
-			deckPages[activeTab] = Math.floor(focused / count);
-		const page = clamp(deckPages[activeTab] + delta, 0, pages - 1);
-		deckPages[activeTab] = page;
-		// The same tile width in every tab (0.150.1): a tab with fewer cards than columns leaves the rest of the row
-		// empty instead of stretching its tiles.
-		list.style.setProperty("--deck-columns", columns);
-		cards.forEach(
-			(card, i) =>
-				(card.hidden = i < page * count || i >= (page + 1) * count),
-		);
-		$("deck-page").textContent = `${page + 1} / ${pages}`;
-		$("deck-range").textContent =
-			`${page * count + 1}–${Math.min(cards.length, (page + 1) * count)} z ${cards.length}`;
-		$("deck-prev").disabled = page === 0;
-		$("deck-next").disabled = page === pages - 1;
-	}
-	// A window over a production card (0.150): the compact card shows its name and cost, the rest is here — the
-	// description, the unit's figures, the building or what is missing, the full cost and the key.
-	let tipCard = null;
-	function setupCardTip() {
-		const tip = document.createElement("div");
-		tip.id = "card-tip";
-		tip.className = "card-tip";
-		tip.setAttribute("role", "tooltip");
-		tip.hidden = true;
-		document.body.append(tip);
-		// Hit-testing finds disabled cards too (they get no mouse events of their own).
-		const pick = (card) => {
-			if (card === tipCard) return;
-			tipCard = card;
-			renderCardTip();
-		};
-		document.addEventListener("pointermove", (e) => pick(document.elementFromPoint(e.clientX, e.clientY)?.closest?.(".production .unit-card") || null));
-		document.addEventListener("focusin", (e) => pick(e.target.closest?.(".production .unit-card") || null));
-		document.addEventListener("pointerdown", () => pick(null), true);
-	}
-	function renderCardTip() {
-		const tip = $("card-tip");
-		if (!tip) return;
-		const card = tipCard;
-		if (!card || card.hidden || !card.isConnected || menu?.active) {
-			tip.hidden = true;
-			return;
-		}
-		const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]),
-			name = card.querySelector("strong")?.textContent || "",
-			description = card.dataset.description || card.querySelector(".card-description")?.textContent || "",
-			status = card.querySelector(".card-status")?.textContent || "",
-			extra = card.dataset.tip && card.dataset.tip !== description && card.dataset.tip !== status ? card.dataset.tip : "",
-			s = card.dataset.unit ? TYPES[card.dataset.unit] : null,
-			figures = s ? [`${s.hp} PW`, s.damage ? `obrażenia ${s.damage}` : "", s.range ? `zasięg ${s.range}` : "", s.speed ? `ruch ${s.speed}` : ""].filter(Boolean).join(" · ") : "",
-			key = card.querySelector("kbd")?.textContent || "",
-			warn = card.disabled || card.classList.contains("locked");
-		tip.innerHTML =
-			`<strong>${esc(name)}${key ? ` <kbd>${esc(key)}</kbd>` : ""}</strong>` +
-			(description ? `<p>${esc(description)}</p>` : "") +
-			(figures ? `<p class="card-tip-figures">${esc(figures)}</p>` : "") +
-			(status ? `<p class="card-tip-status${warn ? " warn" : ""}">${esc(status)}</p>` : "") +
-			(extra ? `<p class="card-tip-status${warn ? " warn" : ""}">${esc(extra)}</p>` : "") +
-			`<p class="card-tip-cost">${card.querySelector(".unit-copy b")?.innerHTML || ""}</p>`;
-		tip.hidden = false;
-		const r = card.getBoundingClientRect(),
-			w = tip.offsetWidth;
-		tip.style.left = `${clamp(r.left + r.width / 2 - w / 2, 8, innerWidth - w - 8)}px`;
-		tip.style.bottom = `${innerHeight - r.top + 8}px`;
-	}
-	// The game's confirmation window (game-dialog.js); a single-player battle waits while it is open, as it did
-	// under the browser's confirm().
-	async function confirmInGame(options) {
-		if (typeof GameDialog === "undefined") return window.confirm(`${options.title}\n\n${options.text || ""}`);
-		const hold = !netSession && started && !paused;
-		if (hold) paused = true;
-		try {
-			return await GameDialog.confirm(options);
-		} finally {
-			if (hold) paused = false;
-			updateHud();
-		}
-	}
-	// A doctrine: what it gives, which one it locks for the rest of the operation, what it costs.
-	function confirmDoctrine(kind) {
-		const r = RESEARCH[kind],
-			list = RTS.DOCTRINES?.[game.doctrineFaction?.()] || [],
-			d = list.find((x) => x.id === kind),
-			other = list.find((x) => x.id !== kind);
-		return confirmInGame({
-			eyebrow: "DOKTRYNA FRAKCJI · WYBÓR OSTATECZNY",
-			title: r.name.replace("Doktryna: ", ""),
-			text: d?.effect || r.description,
-			sections: other ? [{ label: "Zostanie zablokowana do końca operacji", text: `${other.name.replace("Doktryna: ", "")} — ${other.effect}`, tone: "warn" }] : [],
-			facts: [
-				["Koszt", `${r.metal} metalu${r.gas ? ` · ${r.gas} gazu` : ""}${r.crystals ? ` · ${r.crystals} kryształów` : ""}`],
-				["Czas", `${r.time} s w centrum dowodzenia`],
-			],
-			ok: "Przyjmij doktrynę",
-			cancel: "Anuluj",
-		});
-	}
-	function deck(tabName) {
-		activeTab = tabName;
-		document
-			.querySelector(".unit-cards")
-			.classList.toggle(
-				"expanded-build",
-				tabName === "build" || tabName === "research",
-			);
-		document.querySelectorAll(".deck-tabs button").forEach((b) => {
-			b.classList.toggle("active", b.dataset.tab === tabName);
-			b.setAttribute("aria-pressed", String(b.dataset.tab === tabName));
-		});
-		const groups = {
-			army: [
-				["trooper", "Piechota", "Przeciw piechocie", "♟", "Q"],
-				["rocket", "Rakietowiec", "Przeciw pojazdom", "⌁", "W"],
-				["tank", "Czołg", "Pancerz i siła ognia", "⬡", "E"],
-				["worker", "Robot", "Budowa, wydobycie i obrona", "⚙", "D"],
-				["heavy", "Ciężka maszyna", "950 PW · fabryka", "▣", "Y"],
-				[
-					"artillery",
-					"Artyleria",
-					"Zasięg 420 · ostrzał obszaru",
-					"⌁",
-					"O",
-				],
-			],
-			build: [
-				["turret", "Wieżyczka", "Obrona przyczółka", "⌖", "T"],
-				["barracks", "Koszary", "Produkcja piechoty", "▤", "B"],
-				["factory", "Fabryka", "Czołgi i badania", "▥", "V"],
-				["depot", "Magazyn polowy", "Rozładunek rudy", "▦", "G"],
-				[
-					"extractor",
-					"Ekstraktor gazu",
-					"Na złożu · wymaga robota",
-					"♧",
-					"X",
-				],
-				["reactor", "Reaktor", "+60 mocy", "ϟ", "C"],
-				["lab", "Laboratorium", "Nowe technologie · 30 mocy", "⌬", "N"],
-				["wall", "Mur", "Przeciągnij LPM — odcinek muru", "▰", "K"],
-				["gate", "Brama", "Przejście otwierane ręcznie", "Π", "P"],
-			],
-			research: [
-				[
-					"meteorology",
-					"Monitoring pogody",
-					"Prognoza i alarm 30 s wcześniej",
-					"☁",
-					"",
-				],
-				[
-					"guidance",
-					"Celowanie adaptacyjne",
-					"−75% kary celności przy złej pogodzie",
-					"⌖",
-					"",
-				],
-				[
-					"mobility",
-					"Napędy terenowe",
-					"−75% spowolnienia przez pogodę",
-					"➤",
-					"",
-				],
-				["weapons", "Broń plazmowa", "+25% obrażeń", "✧", "U"],
-				[
-					"armor",
-					"Pancerz kompozytowy",
-					"−20% obrażeń od wroga",
-					"⬡",
-					"I",
-				],
-				[
-					"cargo",
-					"Powiększone ładownie",
-					"30 → 60 ładunku · magazyn",
-					"▦",
-					"L",
-				],
-				[
-					"efficiency",
-					"Stabilizacja reaktorów",
-					"60 → 90 mocy · laboratorium",
-					"ϟ",
-					"",
-				],
-				[
-					"precision",
-					"Optyka kryształowa",
-					"+15% obrażeń · laboratorium",
-					"⌬",
-					"",
-				],
-			],
-		};
-		groups.army.push([
-			"transport",
-			"Transporter opancerzony",
-			"4 pasażerów · fabryka",
-			"▰",
-			"",
-		]);
-		groups.build.push([
-			"flak",
-			"Bateria przeciwlotnicza",
-			"Tylko lotnictwo · 15 mocy",
-			"⌖",
-			"",
-		]);
-		groups.army.push(
-			[
-				"interceptor",
-				"Myśliwiec",
-				"Szybki · atakuje cele w powietrzu i na ziemi",
-				"✦",
-				"",
-			],
-			[
-				"bomber",
-				"Bombowiec",
-				"Wolny · +50% obrażeń przeciw budynkom",
-				"✥",
-				"",
-			],
-		);
-		const faction = game.factionFor((game.viewer ?? 0))?.key;
-		if (faction === "colonies" || faction === "dominion")
-			groups.army.push(
-				faction === "colonies"
-					? [
-							"raider",
-							"Zwiadowca Kolonii",
-							"Szybki zwiad i ostrzał · koszary",
-							"➤",
-							"",
-						]
-					: [
-							"sentinel",
-							"Bastion Dominium",
-							"Ciężki obrońca · fabryka",
-							"▣",
-							"",
-						],
-			);
-		for (const id of ["extraction", "assembly", "infantryTraining"])
-			groups.research.push([
-				id,
-				RESEARCH[id].name,
-				RESEARCH[id].description,
-				"⌬",
-				"",
-			]);
-		groups.research.unshift([
-			"colony",
-			"Centrum II — Kolonia",
-			RESEARCH.colony.description,
-			"Ⅱ",
-			"",
-		]);
-		// Centre level III and the doctrines of the side's faction (doctrine-rules.js), after the Colony.
-		if (RESEARCH.fortress)
-			groups.research.splice(
-				1,
-				0,
-				["fortress", RESEARCH.fortress.name, RESEARCH.fortress.description, "Ⅲ", ""],
-				...(game.doctrines?.(game.viewer ?? 0) || []).map((d) => [d.id, d.name.replace("Doktryna: ", "Doktryna · "), d.effect, "✪", ""]),
-			);
-		groups.build.push([
-			"battery",
-			"Akumulator energii",
-			"900 energii · do 30 mocy rezerwowej",
-			"▥",
-			"",
-		]);
-		groups.build.push([
-			"workshop",
-			"Warsztat polowy",
-			"Naprawa 2 pojazdów · 20 mocy",
-			"⚒",
-			"",
-		]);
-		groups.build.push([
-			"hangar",
-			"Hangar lotniczy",
-			"Myśliwce i bombowce · 25 mocy",
-			"✈",
-			"",
-		]);
-		// Stage E: support buildings and units.
-		groups.build.push(
-			["medbay", "Punkt medyczny", "Leczy 3 piechurów · 10 mocy", "✚", ""],
-			["shieldgen", "Generator osłon", "Tarcza nad budynkami · 35 mocy", "◎", ""],
-			["salvageYard", "Plac odzysku", "Metal z wraków · 5 mocy", "♻", ""],
-		);
-		// Faction units and buildings (Stage F4).
-		const kit = {
-			colonies: {
-				build: [["outpost", "Placówka polowa", "Rozładunek, strefa budowy, widzenie · wszędzie", "⬡", ""]],
-				army: [
-					["grenadier", "Grenadierzy", "Granaty ranią grupy piechoty · koszary", "✹", ""],
-					["serviceRover", "Łazik serwisowy", "Naprawia pojazdy i budynki · fabryka", "⚙", ""],
-				],
-			},
-			swarm: {
-				build: [["monolith", "Monolit rezonansowy", "Spowalnia wrogów w promieniu 260 · 20 mocy", "◈", ""]],
-				army: [
-					["crawler", "Pełzacz", "Tani, szybki, wybucha po śmierci · koszary", "✳", ""],
-					["spitter", "Pluwacz", "Kwas i korozja, silny przeciw budynkom · koszary", "❂", ""],
-					["colossus", "Kolos", "Regenerujący się tytan · fabryka", "⬢", ""],
-				],
-			},
-			watchers: {
-				build: [
-					["anchor", "Kotwica", "Strefa budowy, szczeliny i teleporty · wszędzie przy bazie", "⟐", ""],
-					["resonator", "Rezonator", "Dochód ze złoża lub przekaźnika — zamiast górników", "◎", ""],
-				],
-				army: [
-					["spark", "Iskra", "Szybka · Skok co 10 s (⇧Q) · kuźnia fazowa", "✦", ""],
-					["prism", "Pryzmat", "Wiązka narasta na jednym celu · wielka kuźnia", "◇", ""],
-					["arc", "Łuk", "Wyładowanie łańcuchowe · wielka kuźnia", "⌒", ""],
-					["warden", "Strażnik", "Faza 3 s (⇧Q); dwóch scala się w konstrukt · wielka kuźnia", "⬢", ""],
-				],
-			},
-			dominion: {
-				build: [["uplink", "Stacja orbitalna", "Uderzenie orbitalne co 100 s · 40 mocy", "⊕", ""]],
-				army: [
-					["flamer", "Miotacze ognia", "Pali piechotę i budynki · koszary", "♨", ""],
-					["destroyer", "Niszczyciel czołgów", "Daleki zasięg przeciw pojazdom · fabryka", "➹", ""],
-				],
-			},
-		}[game.factionFor((game.viewer ?? 0))?.key];
-		if (kit) {
-			groups.build.push(...kit.build);
-			groups.army.push(...kit.army);
-		}
-		// Act III after the evacuation of Hefajstos: the Dominium's tank destroyer, lent by Varn.
-		if (game.loanedUnit?.("destroyer") && !groups.army.some(([type]) => type === "destroyer"))
-			groups.army.push(["destroyer", "Niszczyciel czołgów", "Wsparcie Dominium (akt II) · fabryka", "➹", ""]);
-		groups.army.push(
-			["skyguard", "Wóz przeciwlotniczy", "Mobilna OPL · fabryka", "✺", ""],
-			["drone", "Dron zwiadowczy", "Zwiad z powietrza · koszary", "✢", ""],
-			["saboteur", "Sabotażyści", "Wyłączają wrogie budynki · koszary", "☍", ""],
-		);
-		// Orbital battle (space-rules.js): ships instead of ground units, orbital descriptions of the stations.
-		if (game.space) {
-			const ground = new Set(["trooper", "rocket", "tank", "heavy", "artillery", "raider", "grenadier", "flamer", "destroyer", "sentinel", "skyguard", "saboteur", "crawler", "spitter", "colossus", "transport", "serviceRover"]);
-			groups.army = [
-				["corvette", "Korweta", "Szybka · roje na niszczyciele i krążowniki · stocznia lekka", "➤", "Q"],
-				["frigate", "Fregata", "Łowca korwet i myśliwców · stocznia lekka", "◆", "W"],
-				["lancer", "Niszczyciel", "Działo liniowe na duże okręty · stocznia ciężka", "➹", "E"],
-				["cruiser", "Krążownik", "Silne osłony, burzy stacje · wymaga laboratorium", "⬢", "Y"],
-				["carrier", "Lotniskowiec", "Wypuszcza do 4 myśliwców · wymaga laboratorium", "✈", ""],
-				...groups.army.filter(([type]) => !ground.has(type)),
-			];
-			groups.research.push(["meteorShield", "Osłony przeciwmeteorytowe", "−80% obrażeń od deszczu asteroid", "☄", ""]);
-			const SPACE_DESC = { barracks: "Korwety i fregaty", factory: "Niszczyciele i krążowniki", turret: "Obrona stacji", depot: "Rozładunek rudy z asteroid", extractor: "Na obłoku mgławicy · wymaga drona" };
-			groups.build = groups.build.map((g) => (SPACE_DESC[g[0]] ? [g[0], g[1], SPACE_DESC[g[0]], g[3], g[4]] : g));
-		}
-		// Research: the one under way first, then what can be started, what is locked, and what is done.
-		if (tabName === "research") {
-			const rank = (kind) => ({ working: 0, paused: 0, ready: 1, poor: 1, locked: 2, done: 3 })[game.researchStatus(kind).state] ?? 2;
-			groups.research = groups.research.map((g, i) => [g, i]).sort((a, b) => rank(a[0][0]) - rank(b[0][0]) || a[1] - b[1]).map(([g]) => g);
-		}
-		document.querySelector(".unit-cards").innerHTML = groups[tabName]
-			.map(([type, name, desc, symbol, key]) => {
-				const stats = TYPES[type],
-					r = RESEARCH[type],
-					cost = stats ? game.cost(type) : r.metal,
-					duration = r ? r.time : stats.build || stats.construction;
-				// A research card: a short line, the full description in the tooltip, its field and a progress bar.
-				if (tabName === "research")
-					return `<button class="unit-card research-card" data-research="${type}" data-description="${r.description || desc}"><span class="unit-symbol">${symbol}</span><span class="unit-copy"><i class="research-tag" data-tag="${RESEARCH_FIELDS[type] || "GOSPODARKA"}">${RESEARCH_FIELDS[type] || "GOSPODARKA"}</i><strong>${name}</strong><span class="card-description">${desc === r.description ? desc.split(/[.;]/)[0] : desc}</span><small class="card-status"></small><b>◇ ${cost}${r.gas ? ` · ⬡ ${r.gas}` : ""}${r.crystals ? ` · ✦ ${r.crystals}` : ""} <em>· ${duration} s</em></b></span><i class="research-progress" aria-hidden="true"></i>${key ? `<kbd>${key}</kbd>` : ""}</button>`;
-				return `<button class="unit-card" data-${tabName === "army" ? "unit" : tabName === "build" ? "build" : "research"}="${type}" data-description="${desc}"><span class="unit-symbol">${symbol}</span><span class="unit-copy"><strong>${stats ? game.unitName(type) : name}</strong><span class="card-description">${r?.description || desc}</span><small class="card-status"></small><b>◇ ${cost}${r?.gas ? " + " + r.gas + " gazu" : ""}${r?.crystals ? " + " + r.crystals + " krysz." : ""} <em>· ${duration} s</em></b></span>${key ? `<kbd>${key}</kbd>` : ""}</button>`;
-			})
-			.join("");
-		document
-			.querySelectorAll("[data-unit]")
-			.forEach((b) => (b.onclick = () => buy(b.dataset.unit)));
-		document
-			.querySelectorAll("[data-build]")
-			.forEach((b) => (b.onclick = () => beginBuild(b.dataset.build)));
-		document.querySelectorAll("[data-research]").forEach(
-			(b) =>
-				(b.onclick = async () => {
-					const kind = b.dataset.research,
-						r = RESEARCH[kind];
-					// A doctrine is final: say so before it starts (in the game's own window, 0.151.2).
-					if (r?.doctrine && !(await confirmDoctrine(kind))) return;
-					act("startResearch", kind);
-					updateHud();
-				}),
-		);
-		updateHud();
-		paginateDeck();
-	}
-	function setupDeck() {
-		document.querySelector(".production-heading").innerHTML =
-			'<div class="deck-tabs"><button data-tab="army" class="active">ARMIA</button><button data-tab="build">BUDOWA</button><button data-tab="research">BADANIA</button><button id="development-open" aria-haspopup="dialog" title="Drzewo rozwoju [F2]">ROZWÓJ</button></div><div class="queue-controls"><span id="queue-status"></span><button id="cancel-queue" title="Anuluj ostatnią jednostkę i odzyskaj metal">Anuluj ×</button></div>';
-		document
-			.querySelector(".queue-track")
-			.insertAdjacentHTML(
-				"beforebegin",
-				'<nav class="deck-pagination" aria-label="Strony poleceń"><span id="deck-range"></span><div><button id="deck-prev" aria-label="Poprzednia strona poleceń">‹</button><span id="deck-page" aria-live="polite"></span><button id="deck-next" aria-label="Następna strona poleceń">›</button></div></nav>',
-			);
-		$("development-open").onclick = () => {
-			if (started && !finished) development?.open();
-		};
-		setupCardTip();
-		$("deck-prev").onclick = () => paginateDeck(-1);
-		$("deck-next").onclick = () => paginateDeck(1);
-		new ResizeObserver(() => paginateDeck()).observe(
-			document.querySelector(".unit-cards"),
-		);
-		document
-			.querySelectorAll("[data-tab]")
-			.forEach((b) => (b.onclick = () => deck(b.dataset.tab)));
-		$("cancel-queue").onclick = () => {
-			if (activeTab === "research") act("cancelResearch");
-			else act("cancelQueue", selectedProducer()?.id ?? null);
-			updateHud();
-		};
-		$("battlefield").insertAdjacentHTML(
-			"beforeend",
-			'<div class="group-dock" aria-label="Grupy jednostek">' +
-				Array.from(
-					{ length: 9 },
-					(_, i) =>
-						`<button data-group="${i + 1}" title="${i + 1}: wybierz · Ctrl+${i + 1}: przypisz · dwukrotnie: kamera"><b>${i + 1}</b><small>—</small></button>`,
-				).join("") +
-				'</div><div id="rally-hint" hidden></div><button id="base-alert" hidden></button>',
-		);
-		document
-			.querySelectorAll("[data-group]")
-			.forEach(
-				(button) =>
-					(button.onclick = (e) =>
-						selectGroup(
-							button.dataset.group,
-							e.ctrlKey || e.metaKey,
-							e.shiftKey,
-						)),
-			);
-		$("base-alert").onclick = focusAlert;
-		document
-			.querySelector(".economy-card")
-			.insertAdjacentHTML(
-				"beforebegin",
-				'<div class="production-roster"><span class="eyebrow">KOLEJKI BUDYNKÓW</span><div id="building-queues"></div></div>',
-			);
-		document
-			.querySelector(".selection-actions")
-			.insertAdjacentHTML(
-				"beforeend",
-				'<button id="select-workers">Roboty <kbd>R</kbd></button>',
-			);
-		$("select-workers").onclick = selectWorkers;
-		document
-			.querySelector(".map-heading")
-			.insertAdjacentHTML(
-				"beforeend",
-				'<span id="weather-status" class="weather-status"></span>',
-			);
-		document
-			.querySelector(".map-heading")
-			.insertAdjacentHTML(
-				"beforeend",
-				'<span class="fog-note">MGŁA WOJNY AKTYWNA · ZWIAD ODSŁANIA TEREN</span>',
-			);
-		document.querySelector(".briefing p").textContent =
-			"Roboty przewożą rudę do bazy. Zbuduj fabrykę, ulepsz armię i odkrywaj teren. Przejmuj przekaźniki, aby tworzyć nowe przyczółki.";
-		document.querySelector(".briefing>small").textContent =
-			"Wersja 0.11 · proceduralna muzyka i dźwięk · M: wyciszenie";
-		document.querySelector(".briefing-controls").innerHTML =
-			"<span><b>Ctrl+1–9 / 1–9</b>Zapisz / wybierz grupę</span><span><b>Wybierz budynek → PPM</b>Ustaw punkt zbiórki</span><span><b>Kilka koszar / fabryk</b>Produkuj równolegle</span><span><b>J / kliknij alarm</b>Pokaż atakowaną bazę</span>";
-		document.querySelector(".controls-note p").innerHTML =
-			"<b>Ctrl+1–9</b> przypisz · <b>1–9</b> grupa<br><b>Shift+S</b> utrzymaj pozycję<br><b>J</b> alarm · <b>Ctrl+S</b> zapis<br><b>, / .</b> lub <b>Alt+ŚPM</b> obrót kamery 3D · <b>PgUp / PgDn</b> pochylenie (niebo) · <b>/</b> od południa";
-		try {
-			const save = JSON.parse(localStorage.getItem(SAVE_KEY));
-			if ([2, 3, 4, 5, 6].includes(save?.state?.version)) {
-				$("start").insertAdjacentHTML(
-					"afterend",
-					`<button id="resume-game" class="resume-button">WZNÓW ZAPIS · ${timeLabel(Number(save.state.time) || 0)}</button>`,
-				);
-				$("resume-game").onclick = () => loadGame();
-			}
-		} catch {}
-		$("sound-toggle").parentElement.insertAdjacentHTML(
-			"beforebegin",
-			'<div class="resource gas-resource"><div><strong id="gas">0</strong><small>GAZ</small></div></div><div class="resource crystal-resource"><div><strong id="crystals">0</strong><small>KRYSZTAŁY</small></div></div><div class="resource army"><span class="resource-icon">⌁</span><div><strong id="population">0 / 60</strong><small>JEDNOSTKI</small></div></div><div class="resource power-resource"><div><strong id="power">0/40</strong><small>MOC</small></div></div>',
-		);
-		document
-			.querySelector(".economy-card")
-			.insertAdjacentHTML(
-				"beforeend",
-				'<button id="idle-workers">Bezczynne roboty [Z]</button>',
-			);
-		$("idle-workers").onclick = selectIdle;
-		document
-			.querySelector(".economy-card")
-			.insertAdjacentHTML(
-				"afterbegin",
-				'<p id="power-warning" hidden></p><p id="campaign-objectives" hidden></p>',
-			);
-		setupSidebar();
-		setupOrbitPanel();
-		watchOverlay();
-		economyPanel = new EconomyPanel(
-			document.querySelector(".economy-card"),
-			economyAction,
-		);
-		deck("army");
-	}
-	// Inwazja (G2): the orbit panel on the board — who holds the orbit, the drop and the strike from orbit.
-	// While the overlay (briefing, victory / defeat report, the landing of an invasion) is up, the drawer and the
-	// orbit panel step aside (0.152.1): body.overlay-open follows the overlay's hidden attribute.
-	function watchOverlay() {
-		const overlay = $("overlay"),
-			sync = () => document.body.classList.toggle("overlay-open", !overlay.hidden);
-		new MutationObserver(sync).observe(overlay, { attributes: true, attributeFilter: ["hidden"] });
-		sync();
-	}
-	function setupOrbitPanel() {
-		const panel = document.createElement("div");
-		panel.id = "orbit-panel";
-		panel.className = "orbit-panel";
-		panel.hidden = true;
-		panel.innerHTML = '<span class="orbit-owner"></span><button type="button" id="orbit-drop"></button><button type="button" id="orbit-strike"></button>';
-		$("battlefield").append(panel);
-		const begin = (mode, text) => {
-			const why = mode === "drop" ? game.dropRequirement((game.viewer ?? 0)) : game.orbitStrikeRequirement((game.viewer ?? 0));
-			if (why) return toast(why);
-			building = attackMode = orderMode = false;
-			strikeMode = null;
-			orbitMode = mode;
-			toast(text);
-			updateHud();
-		};
-		$("orbit-drop").onclick = () => begin("drop", "Desant z orbity: wskaż lądowisko (LPM) w zbadanym terenie, z dala od wrogiego centrum. PPM lub Esc — anuluj.");
-		$("orbit-strike").onclick = () => begin("strike", "Uderzenie z orbity: wskaż cel (LPM). PPM lub Esc — anuluj.");
-	}
-	function renderOrbitPanel() {
-		const panel = $("orbit-panel");
-		if (!panel) return;
-		const I = game.invasion;
-		panel.hidden = I?.phase !== "ground";
-		if (panel.hidden) return;
-		const me = game.viewer ?? 0,
-			mine = I.owner === me;
-		panel.classList.toggle("enemy", !mine);
-		panel.querySelector(".orbit-owner").textContent = mine ? "ORBITA · TWOJA" : `ORBITA · WROGA — kapsuły wroga: ${game.podsLeft(I.owner)}`;
-		const drop = $("orbit-drop"),
-			strike = $("orbit-strike");
-		drop.hidden = strike.hidden = !mine;
-		if (!mine) return;
-		const dropWhy = game.dropRequirement(me),
-			strikeWhy = game.orbitStrikeRequirement(me);
-		drop.textContent = orbitMode === "drop" ? "Wskaż lądowisko…" : `Desant · ${game.podsLeft(me)} kaps.${dropWhy && /za \d/.test(dropWhy) ? " · " + dropWhy.match(/\d+ s/)[0] : ""}`;
-		strike.textContent = orbitMode === "strike" ? "Wskaż cel…" : `Uderzenie z orbity${strikeWhy && /za \d/.test(strikeWhy) ? " · " + strikeWhy.match(/\d+ s/)[0] : ""}`;
-		drop.disabled = !!dropWhy && orbitMode !== "drop";
-		strike.disabled = !!strikeWhy && orbitMode !== "strike";
-		drop.title = dropWhy || `Zrzuć do ${RTS.INVASION.dropSize} kapsuł z oddziałami (lądowanie po ${RTS.INVASION.fall} s; baterie przeciwlotnicze mogą je zestrzelić).`;
-		strike.title = strikeWhy || "Uderzenie z orbity w zbadany cel.";
-		drop.classList.toggle("armed", orbitMode === "drop");
-		strike.classList.toggle("armed", orbitMode === "strike");
-	}
-	function setupSidebar() {
-		const meter = document.createElement("div");
-		meter.id = "render-meter";
-		meter.hidden = true;
-		meter.setAttribute("aria-label", "Czas renderowania");
-		document.body.append(meter);
-		// The frames-per-second counter (settings: "Licznik FPS", 0.171.18): the first item of the board's tool strip,
-		// in line with the zoom buttons (0.171.19: it stood over them at the edge of the board).
-		const fpsMeter = document.createElement("div");
-		fpsMeter.id = "fps-meter";
-		fpsMeter.hidden = true;
-		fpsMeter.setAttribute("aria-label", "Klatki na sekundę");
-		const tools = document.querySelector(".map-tools");
-		if (tools) tools.prepend(fpsMeter);
-		else document.body.append(fpsMeter);
-		const sidebar = document.querySelector(".sidebar");
-		sidebar.insertAdjacentHTML(
-			"beforeend",
-			'<div id="army-inspector"></div>',
-		);
-		const nav = document.createElement("div");
-		nav.className = "intel-tabs";
-		const panels = [];
-		for (const [name, selectors] of [
-			[
-				"Cele",
-				[
-					".operation-card",
-					"#obj-capture",
-					"#obj-army",
-					"#obj-hq",
-					"#campaign-objectives",
-					".intel",
-				],
-			],
-			["Logistyka", [".economy-card"]],
-			["Kolejki", [".production-roster"]],
-			["Oddział", ["#army-inspector"]],
-		]) {
-			const panel = document.createElement("section");
-			panel.className = "intel-panel";
-			panel.hidden = panels.length > 0;
-			for (const selector of selectors) {
-				const node = sidebar.querySelector(selector);
-				if (node) panel.append(node);
-			}
-			const button = document.createElement("button");
-			button.textContent = name;
-			button.setAttribute("aria-pressed", String(!panel.hidden));
-			button.title = `${name} — ponowne kliknięcie zwija panel`;
-			button.onclick = () => {
-				// The drawer over the board (0.149): the open tab clicked again folds it, any tab unfolds it.
-				const fold = button.getAttribute("aria-pressed") === "true" && !sidebar.classList.contains("collapsed");
-				sidebar.classList.toggle("collapsed", fold);
-				try {
-					localStorage.setItem("hud.drawerCollapsed", fold ? "1" : "0");
-				} catch {}
-				panels.forEach((p) => (p.hidden = p !== panel));
-				[...nav.children].forEach((b) =>
-					b.setAttribute("aria-pressed", String(b === button)),
-				);
-			};
-			nav.append(button);
-			panels.push(panel);
-		}
-		sidebar
-			.querySelectorAll(":scope > .section-label")
-			.forEach((n) => n.remove());
-		sidebar.prepend(nav, ...panels);
-		try {
-			sidebar.classList.toggle("collapsed", localStorage.getItem("hud.drawerCollapsed") === "1");
-		} catch {}
-		document
-			.querySelector(".selection-actions")
-			.insertAdjacentHTML(
-				"beforeend",
-				'<button id="inspect-army">Statystyki</button><div class="formation-control" id="army-formation" role="radiogroup" aria-label="Formacja oddziału"><span class="formation-label">Formacja</span><div class="formation-options"><button type="button" role="radio" data-formation="line" title="Linia — jeden szereg w poprzek kierunku marszu: cały oddział strzela naraz"><svg viewBox="0 0 16 10" aria-hidden="true"><circle cx="2" cy="5" r="1.5"/><circle cx="6" cy="5" r="1.5"/><circle cx="10" cy="5" r="1.5"/><circle cx="14" cy="5" r="1.5"/></svg>Linia</button><button type="button" role="radio" data-formation="column" title="Kolumna — dwójkami, wąski szyk na przejścia i mosty"><svg viewBox="0 0 16 10" aria-hidden="true"><circle cx="6" cy="1.6" r="1.3"/><circle cx="10" cy="1.6" r="1.3"/><circle cx="6" cy="5" r="1.3"/><circle cx="10" cy="5" r="1.3"/><circle cx="6" cy="8.4" r="1.3"/><circle cx="10" cy="8.4" r="1.3"/></svg>Kolumna</button><button type="button" role="radio" data-formation="spread" title="Rozproszenie — siatka z dużymi odstępami"><svg viewBox="0 0 16 10" aria-hidden="true"><circle cx="2" cy="1.6" r="1.3"/><circle cx="8" cy="1.6" r="1.3"/><circle cx="14" cy="1.6" r="1.3"/><circle cx="2" cy="8.4" r="1.3"/><circle cx="8" cy="8.4" r="1.3"/><circle cx="14" cy="8.4" r="1.3"/></svg>Rozprosz.</button></div></div><button id="load-transport" hidden>Załaduj</button><button id="unload-transport" hidden>Wyładuj</button><button id="hold-position">Pozycja <kbd>⇧S</kbd></button><button id="watcher-ability" hidden title="Umiejętność: iskry skaczą we wskazany punkt (LPM), strażnicy wchodzą w fazę.">Umiejętność <kbd>⇧Q</kbd></button><button id="watcher-merge" hidden title="Dwaj strażnicy obok siebie scalają się w konstrukt.">Scal</button><button id="watcher-jump" hidden title="Jednostki przy kotwicy przeskakują do wskazanej kotwicy (LPM).">Do kotwicy</button><button id="core-relocate" hidden title="Rdzeń wznosi się i leci na wskazane miejsce (LPM), co 120 s.">Przenieś rdzeń</button><button id="patrol-order" title="Patrol: PPM wskazuje drugi koniec trasy — oddział krąży między nim a obecną pozycją, walcząc po drodze.">Patrol <kbd>⇧P</kbd></button><button id="escort-order" title="Eskorta: PPM na własnej jednostce lub budynku — oddział trzyma się przy nim i go broni.">Eskorta <kbd>⇧E</kbd></button><button id=toggle-gate hidden>Otwórz / zamknij</button><button id="module-a" hidden></button><button id="module-b" hidden></button><button id="orbital-strike" hidden>Uderzenie orbitalne</button><button id="demolish" hidden title="Zwrot: do 50% za budowlę, 100% za fundament. Centrum nie można rozebrać.">Rozbierz</button>',
-			);
-		// The shortcut also in the tooltip (a narrow panel hides the key badges).
-		for (const button of document.querySelectorAll(".selection-actions button"))
-			if (!button.title && button.querySelector("kbd"))
-				button.title = `${button.firstChild.textContent.trim()} [${button.querySelector("kbd").textContent}]`;
-		const statsDialog = document.createElement("dialog");
-		statsDialog.id = "army-stats-dialog";
-		statsDialog.setAttribute("aria-label", "Parametry oddziału");
-		statsDialog.innerHTML =
-			'<button id="close-army-stats">Zamknij</button><div id="army-stats-content"></div>';
-		document.body.append(statsDialog);
-		$("inspect-army").onclick = () => {
-			const wasPaused = paused;
-			paused = true;
-			$("army-stats-content").innerHTML = $("army-inspector").innerHTML;
-			statsDialog.onclose = () => {
-				paused = wasPaused;
-			};
-			statsDialog.showModal();
-		};
-		$("close-army-stats").onclick = () => statsDialog.close();
-		for (const button of $("army-formation").querySelectorAll("button"))
-			button.onclick = () => {
-				act("setFormation", button.dataset.formation);
-				updateHud();
-			};
-		$("load-transport").onclick = () => {
-			const c = [...selected]
-				.map((id) => game.get(id))
-				.find((e) => e?.type === "transport" && e.team === (game.viewer ?? 0));
-			if (!c) return;
-			const nearby = game
-				.units((game.viewer ?? 0))
-				.filter(
-					(e) =>
-						["trooper", "rocket"].includes(e.type) &&
-						dist(e, c) < 240,
-				)
-				.sort((a, b) => dist(a, c) - dist(b, c));
-			toast(
-				act("board", 
-					nearby.map((e) => e.id),
-					c.id,
-				)
-					? "Załadunek rozpoczęty."
-					: "Brak wolnych miejsc lub pobliskiej piechoty.",
-			);
-			updateHud();
-		};
-		$("unload-transport").onclick = () => {
-			for (const id of selected) act("unload", id);
-			updateHud();
-		};
-		$("demolish").onclick = () => {
-			act("demolish", [...selected]);
-			selected = new Set([...selected].filter((id) => game.get(id)));
-			updateHud();
-		};
-		$("watcher-ability").onclick = () => watcherAbility();
-		$("watcher-merge").onclick = () => {
-			const n = act("mergeWardens", [...selected]);
-			if (!n) toast("Strażnicy muszą stać obok siebie (do 140).");
-		};
-		$("watcher-jump").onclick = () => beginTarget("jump", "Do kotwicy: wskaż LPM kotwicę docelową. PPM lub Esc — anuluj.");
-		$("core-relocate").onclick = () => beginTarget("core", "Przenieś rdzeń: wskaż LPM miejsce lądowania (widoczny, wolny teren, do 1100). PPM lub Esc — anuluj.");
-		$("patrol-order").onclick = () => beginOrder("patrol");
-		$("escort-order").onclick = () => beginOrder("escort");
-		$("hold-position").onclick = () => {
-			const count = act("hold", [...selected]);
-			toast(
-				count
-					? `${count} jednostek utrzymuje pozycję.`
-					: "Wybierz jednostki bojowe.",
-			);
-			updateHud();
-		};
-		$("orbital-strike").onclick = () => {
-			const b = game.get([...selected][0]);
-			if (!b || b.type !== "uplink") return;
-			const why = game.strikeRequirement(b.id);
-			if (why) return toast(why);
-			strikeMode = b.id;
-			building = false;
-			attackMode = orderMode = false;
-			orbitMode = null;
-			toast("Wskaż cel uderzenia orbitalnego (LPM). PPM lub Esc — anuluj.");
-		};
-		for (const [id, index] of [
-			["module-a", 0],
-			["module-b", 1],
-		])
-			$(id).onclick = () => {
-				const b = game.get([...selected][0]),
-					option = game.moduleOptions?.(b)[index];
-				if (!b || !option) return;
-				toast(
-					act("installModule", b.id, option.key)
-						? `${option.name} — montaż rozpoczęty.`
-						: game.moduleRequirement(b) || "Nie można zamontować modułu.",
-				);
-				updateHud();
-			};
-		$("toggle-gate").onclick = () => {
-			const gate = game.get([...selected][0]);
-			toast(
-				act("toggleGate", gate?.id)
-					? gate.open
-						? "Brama otwarta."
-						: "Brama zamknięta."
-					: "Brama zajęta przez jednostkę lub w budowie.",
-			);
-			updateHud();
-		};
-	}
-	canvas.addEventListener("contextmenu", (e) => e.preventDefault());
-	// The middle button pans the map; stop the browser's own autoscroll from moving the page meanwhile.
-	canvas.addEventListener("mousedown", (e) => {
-		if (e.button === 1) e.preventDefault();
-	});
-	canvas.addEventListener("pointerdown", (e) => {
-		if (!started || finished) return;
-		canvas.focus();
-		mouse = pointer(e);
-		const p = world(mouse);
-		if (e.button === 1) {
-			e.preventDefault();
-			// On the 3D board: Alt + middle button turns (sideways) and tilts (up and down) the camera; a plain drag keeps the grabbed ground
-			// point under the pointer (the board is in perspective, so flat-frame deltas are not enough).
-			pan = { ...mouse, cx: camera.x, cy: camera.y, ground: p, turn: e.altKey && rendererMode === "three", sx: e.clientX, sy: e.clientY, client: { x: e.clientX, y: e.clientY }, yaw: camera.yaw || 0, tilt: camera.tilt || 0 };
-			canvas.setPointerCapture(e.pointerId);
-			return;
-		}
-		if (e.button === 2) {
-			e.preventDefault();
-			if (strikeMode) {
-				strikeMode = null;
-				toast("Uderzenie orbitalne anulowane.");
-				return;
-			}
-			if (orbitMode) {
-				orbitMode = null;
-				toast(game.invasion ? "Rozkaz z orbity anulowany." : "Anulowano.");
-				updateHud();
-				return;
-			}
-			if (building) {
-				building = false;
-				wallDrag = null;
-				$("placement").hidden = true;
-				return;
-			}
-			if (!selected.size) {
-				toast("Najpierw zaznacz oddział (LPM lub F).");
-				return;
-			}
-			const ore = game.ores.find(
-				(o) =>
-					o.amount > 0 && game.isVisible(o.x, o.y) && dist(o, p) < 55,
-			);
-			const friendly = at(p, 0);
-			const ids = [...selected];
-			// DOW-01: patrol to the point, or escort the own (or allied) unit or building under the cursor.
-			if (orderMode) {
-				const mode = orderMode;
-				orderMode = false;
-				if (mode === "patrol") {
-					const count = act("patrol", ids, p.x, p.y);
-					toast(count ? `${count} jednostek patroluje trasę.` : "Patrol: wybierz jednostki bojowe i dalszy punkt trasy.");
-					if (count) game.effects.push({ kind: "command", x: p.x, y: p.y, attack: true, life: 0.7, maxLife: 0.7 });
-				} else {
-					const viewer = game.viewer ?? 0,
-						guarded =
-							friendly ||
-							game.entities
-								.filter((u) => u.hp > 0 && game.allied?.(viewer, u.team) && game.isVisible(u.x, u.y) && dist(p, u) < Math.max(TYPES[u.type].radius + 10, 16 / scale))
-								.sort((a, b) => dist(a, p) - dist(b, p))[0];
-					const count = guarded ? act("escort", ids, guarded.id) : 0;
-					toast(count ? `${count} jednostek eskortuje: ${TYPES[guarded.type].name}.` : "Eskorta: wskaż PPM własną jednostkę lub budynek.");
-				}
-				updateHud();
-				return;
-			}
-			if (
-				friendly?.type === "transport" &&
-				ids.some((id) =>
-					["trooper", "rocket"].includes(game.get(id)?.type),
-				)
-			) {
-				toast(
-					act("board", ids, friendly.id)
-						? "Piechota idzie do transportera."
-						: "Transporter pełny lub brak piechoty.",
-				);
-				return;
-			}
-			if (ids.every((id) => game.isProducer(game.get(id)))) {
-				const count = act("setRally", ids, p.x, p.y);
-				toast(
-					count
-						? "Ustawiono punkt zbiórki nowych jednostek."
-						: "Nie można wyznaczyć drogi do punktu.",
-				);
-				return;
-			}
-			// Stage E: workers on a wreck recover metal; saboteurs on an enemy building plant a charge.
-			const wreck = (game.wrecks || []).find(
-				(w) => game.explored[game.visionIndex(w.x, w.y)] && dist(w, p) < w.size + 22,
-			);
-			if (wreck && ids.some((id) => game.get(id)?.type === "worker")) {
-				toast(
-					act("salvage", ids, wreck.id)
-						? `Odzysk wraku: ${wreck.value} metalu po dowiezieniu na plac.`
-						: "Odzysk wymaga ukończonego placu odzysku.",
-				);
-				return;
-			}
-			const enemyBuilding = at(p, 1);
-			if (
-				enemyBuilding &&
-				!TYPES[enemyBuilding.type].speed &&
-				ids.some((id) => game.get(id)?.type === "saboteur")
-			) {
-				const saboteurs = ids.filter((id) => game.get(id)?.type === "saboteur");
-				if (act("sabotage", saboteurs, enemyBuilding.id)) {
-					toast(`Sabotaż: ${TYPES[enemyBuilding.type].name} zostanie wyłączony.`);
-					const rest = ids.filter((id) => !saboteurs.includes(id));
-					if (rest.length) act("command", rest, p.x, p.y, enemyBuilding.id, true);
-					return;
-				}
-			}
-			if (friendly?.type === "extractor") {
-				toast(
-					act("assignGas", ids, friendly.id)
-						? "Robot skierowany do ekstraktora."
-						: "Ekstraktor wymaga ukończenia, wolnego stanowiska, gazu w złożu i zaznaczonego robota.",
-				);
-				return;
-			}
-			const crystal = game.crystalFields.find(
-				(o) =>
-					o.amount > 0 && game.isVisible(o.x, o.y) && dist(o, p) < 50,
-			);
-			if (crystal && act("gatherCrystal", ids, crystal.id)) {
-				toast("Roboty przewożą kryształy do centrum lub magazynu.");
-				return;
-			}
-			if (ore && act("gather", ids, ore.id)) {
-				toast("Roboty rozpoczynają wydobycie.");
-				return;
-			}
-			if (
-				friendly?.constructionLeft &&
-				act("buildWith", ids, friendly.id)
-			) {
-				toast("Roboty dołączają do budowy.");
-				return;
-			}
-			if (friendly && act("repair", ids, friendly.id)) {
-				toast("Naprawa rozpoczęta: 1 metal za 5 PW.");
-				return;
-			}
-			const target = at(p, 1);
-			act("command", 
-				ids,
-				p.x,
-				p.y,
-				target?.id,
-				attackMode || keys.has("a"),
-			);
-			game.effects.push({
-				kind: "command",
-				x: p.x,
-				y: p.y,
-				attack: !!target || attackMode,
-				life: 0.7,
-				maxLife: 0.7,
-			});
-			attackMode = orderMode = false;
-			orbitMode = null;
-			return;
-		}
-		if (e.button === 0) {
-			if (orbitMode) {
-				const mode = orbitMode;
-				orbitMode = null;
-				const ids = [...selected];
-				if (mode === "blink") {
-					const n = act("ability", ids, p.x, p.y);
-					if (!n) toast("Skok jeszcze się odnawia.");
-				} else if (mode === "jump") {
-					const anchor = game.entities.filter((e) => e.type === "anchor" && e.team === (game.viewer ?? 0) && e.hp > 0).sort((a, b) => Math.hypot(a.x - p.x, a.y - p.y) - Math.hypot(b.x - p.x, b.y - p.y))[0];
-					const n = anchor && Math.hypot(anchor.x - p.x, anchor.y - p.y) < 90 ? act("anchorJump", ids, anchor.id) : 0;
-					if (!n) toast("Wskaż kotwicę docelową; skaczą jednostki stojące przy innej kotwicy (co 8 s).");
-				} else if (mode === "core") act("relocateCore", ids[0], p.x, p.y);
-				else act(mode === "drop" ? "orbitalDrop" : "orbitStrike", p.x, p.y);
-				updateHud();
-				return;
-			}
-			if (strikeMode) {
-				const id = strikeMode;
-				strikeMode = null;
-				act("orbitalStrike", id, p.x, p.y);
-				return;
-			}
-			if (building) {
-				if (building === "wall") {
-					wallDrag = { ...p, circle: e.altKey };
-					canvas.setPointerCapture(e.pointerId);
-					return;
-				}
-				if (act("buildStructure", building, p.x, p.y, [...selected])) {
-					building = false;
-					wallDrag = null;
-					$("placement").hidden = true;
-				}
-				updateHud();
-				return;
-			}
-			drag = { ...mouse, shift: e.shiftKey };
-			canvas.setPointerCapture(e.pointerId);
-		}
-	});
-	canvas.addEventListener("pointermove", (e) => {
-		mouse = pointer(e);
-		if (pan?.turn) {
-			camera.yaw = pan.yaw + (e.clientX - pan.sx) * 0.008;
-			camera.tilt = clamp(pan.tilt + (pan.sy - e.clientY) * 0.004, 0, 1);
-		}
-		// 3D: only remember where the pointer is; the camera follows once per frame (panTowardsPointer),
-		// because the 3D view (and so the ground under the pointer) changes only when a frame is drawn.
-		else if (pan && rendererMode === "three") pan.client = { x: e.clientX, y: e.clientY };
-		else if (pan) {
-			camera.x = clamp(pan.cx - (mouse.x - pan.x) / scale, 0, W);
-			camera.y = clamp(pan.cy - (mouse.y - pan.y) / scale, 0, H);
-		}
-	});
-	canvas.addEventListener("pointerup", (e) => {
-		if (wallDrag && e.button === 0) {
-			mouse = pointer(e);
-			if (act("buildWallLine", wallDrag, world(mouse), [...selected])) {
-				building = false;
-				$("placement").hidden = true;
-			}
-			wallDrag = null;
-			updateHud();
-			return;
-		}
-
-		if (e.button === 1) {
-			pan = null;
-			return;
-		}
-		if (!drag || e.button !== 0) return;
-		mouse = pointer(e);
-		if (!drag.shift) selected.clear();
-		if (dist(drag, mouse) > 5) {
-			// The box is a rectangle on the screen; with the 2.5D tilt the board is in perspective beneath it.
-			const onScreen = (p) => (renderer.fromFlat ? renderer.fromFlat(p) : p),
-				a = onScreen(drag),
-				b = onScreen(mouse);
-			game.units((game.viewer ?? 0))
-				.filter((u) => {
-					const q = onScreen(screen(u));
-					return (
-						q.x >= Math.min(a.x, b.x) &&
-						q.x <= Math.max(a.x, b.x) &&
-						q.y >= Math.min(a.y, b.y) &&
-						q.y <= Math.max(a.y, b.y)
-					);
-				})
-				.forEach((u) => selected.add(u.id));
-		} else {
-			const unit = at(world(mouse), 0);
-			if (unit) {
-				if (drag.shift && selected.has(unit.id))
-					selected.delete(unit.id);
-				else selected.add(unit.id);
-			}
-		}
-		drag = null;
-		if (selected.size) sound.play("radio");
-		updateHud();
-	});
-	canvas.addEventListener("pointercancel", () => {
-		wallDrag = null;
-		drag = null;
-		pan = null;
-	});
-	canvas.addEventListener(
-		"wheel",
-		(e) => {
-			e.preventDefault();
-			zoom(e.deltaY < 0 ? 1.12 : 1 / 1.12);
+	// The command deck (app-deck.js, 0.173): production, building and research cards, their tip, confirmations, the orbit panel.
+	const deckUi = createAppDeck({
+		$,
+		RESEARCH,
+		SAVE_KEY,
+		TYPES,
+		act,
+		beginBuild,
+		buy,
+		clamp,
+		economyAction,
+		focusAlert: hud.focusAlert,
+		loadGame,
+		selectGroup: hud.selectGroup,
+		selectIdle,
+		selectWorkers,
+		selectedProducer: hud.selectedProducer,
+		// (Created after the deck: called when the deck is set up.)
+		setupSidebar: () => controls.setupSidebar(),
+		timeLabel,
+		toast,
+		updateHud: hud.updateHud,
+		get activeTab() {
+			return activeTab;
 		},
-		{ passive: false },
-	);
-	mini.addEventListener("pointerdown", (e) => {
-		const r = mini.getBoundingClientRect();
-		camera.x = ((e.clientX - r.left) / r.width) * W;
-		camera.y = ((e.clientY - r.top) / r.height) * H;
-		if (camera.zoom === 1) camera.zoom = 1.65;
-		fit();
+		set activeTab(value) {
+			activeTab = value;
+		},
+		get attackMode() {
+			return attackMode;
+		},
+		set attackMode(value) {
+			attackMode = value;
+		},
+		get building() {
+			return building;
+		},
+		set building(value) {
+			building = value;
+		},
+		get development() {
+			return development;
+		},
+		set development(value) {
+			development = value;
+		},
+		get economyPanel() {
+			return economyPanel;
+		},
+		set economyPanel(value) {
+			economyPanel = value;
+		},
+		get finished() {
+			return finished;
+		},
+		set finished(value) {
+			finished = value;
+		},
+		get game() {
+			return game;
+		},
+		set game(value) {
+			game = value;
+		},
+		get menu() {
+			return menu;
+		},
+		set menu(value) {
+			menu = value;
+		},
+		get netSession() {
+			return netSession;
+		},
+		set netSession(value) {
+			netSession = value;
+		},
+		get orbitMode() {
+			return orbitMode;
+		},
+		set orbitMode(value) {
+			orbitMode = value;
+		},
+		get orderMode() {
+			return orderMode;
+		},
+		set orderMode(value) {
+			orderMode = value;
+		},
+		get paused() {
+			return paused;
+		},
+		set paused(value) {
+			paused = value;
+		},
+		get started() {
+			return started;
+		},
+		set started(value) {
+			started = value;
+		},
+		get strikeMode() {
+			return strikeMode;
+		},
+		set strikeMode(value) {
+			strikeMode = value;
+		},
 	});
-	window.addEventListener("keydown", (e) => {
-		if (development?.active) {
-			if (e.key === "Escape") {
-				e.preventDefault();
-				development.close();
-			}
-			return;
-		}
-		// Tests: Ctrl+Shift+L in the menu unlocks the whole campaign, pressed again brings back the earlier progress.
-		if (menu?.active && e.ctrlKey && e.shiftKey && e.code === "KeyL") {
-			e.preventDefault();
-			if (e.repeat) return;
-			const unlocked = campaign.toggleUnlockAll();
-			if (["home", "single", "campaign"].includes(menu.screen)) menu.show(menu.screen);
-			menu.notice?.(unlocked ? "Tryb testowy: cała kampania odblokowana (Ctrl+Shift+L przywraca postęp)." : "Przywrócono wcześniejszy postęp kampanii.");
-			return;
-		}
-		if (e.key === "F2" && !menu?.active && started && !finished) {
-			e.preventDefault();
-			if (!e.repeat) development?.open();
-			return;
-		}
-		// A story decision on screen holds the battle (0.171.10): Space and Escape resumed it behind the choice. Only
-		// Tab, Enter and Space on its buttons get through (to move between them and take one).
-		if (choiceOpen && !menu?.active) {
-			if (!(["Tab", "Enter", " "].includes(e.key) && closestTo(e.target, "#overlay button"))) e.preventDefault();
-			return;
-		}
-		// An open dialog (army statistics, a confirmation) has the keys first: Escape closes it, not the battle
-		// (0.171.13: Escape opened the pause menu behind the army statistics).
-		if (!menu?.active && (document.querySelector("#army-stats-dialog")?.open || (typeof GameDialog !== "undefined" && GameDialog.isOpen()))) return;
-		if (e.key === "Escape") {
-			e.preventDefault();
-			if (e.repeat) return;
-			if (menu?.active) menu.escape();
-			else if (building || attackMode || orderMode || strikeMode || orbitMode) {
-				building = false;
-				wallDrag = null;
-				attackMode = orderMode = false;
-				strikeMode = null;
-				orbitMode = null;
-				$("placement").hidden = true;
-			} else if (started && !finished) menu.show("pause");
-			return;
-		}
-		if (menu?.active) {
-			if (
-				e.key.toLowerCase() === "m" &&
-				!e.ctrlKey &&
-				!e.metaKey &&
-				!closestTo(e.target, "input,select,textarea")
-			) {
-				e.preventDefault();
-				if (!e.repeat) toggleSound();
-			}
-			return;
-		}
-		if (closestTo(e.target, "input,select,textarea")) return;
-		// Space and Enter press a focused button (0.171.13: Space paused the battle instead).
-		if ((e.key === " " || e.key === "Enter") && closestTo(e.target, "button")) return;
-		if (e.key === "Enter" && netSession && started && !finished) {
-			e.preventDefault();
-			openChat();
-			return;
-		}
-		if (e.key.toLowerCase() === "m" && !e.ctrlKey && !e.metaKey) {
-			e.preventDefault();
-			if (!e.repeat) toggleSound();
-			return;
-		}
-		const key = e.key.toLowerCase(),
-			groupKey = /^(Digit|Numpad)[1-9]$/.test(e.code)
-				? e.code.at(-1)
-				: key;
-		if (/^[1-9]$/.test(groupKey) && started) {
-			e.preventDefault();
-			if (!e.repeat)
-				selectGroup(groupKey, e.ctrlKey || e.metaKey, e.shiftKey);
-			return;
-		}
-		if (e.ctrlKey || e.metaKey) {
-			if (key === "s") {
-				e.preventDefault();
-				saveGame();
-			}
-			return;
-		}
-		if (
-			[
-				" ",
-				"arrowup",
-				"arrowdown",
-				"arrowleft",
-				"arrowright",
-				"home",
-				"pageup",
-				"pagedown",
-			].includes(key)
-		)
-			e.preventDefault();
-		keys.add(key);
-		if (e.repeat || !started) return;
-		if (e.shiftKey && (key === "p" || key === "e")) beginOrder(key === "p" ? "patrol" : "escort");
-		else if (e.shiftKey && key === "q" && selected.size) watcherAbility();
-		else if (key === " ") togglePause();
-		else if (key === "/") {
-			camera.yaw = 0;
-			camera.tilt = 0;
-		}
-		else if (key === "j") focusAlert();
-		else if (key === "f") selectAll();
-		else if (key === "r") selectWorkers();
-		else if (key === "z") selectIdle();
-		else if (key === "g") beginBuild("depot");
-		else if (key === "c") beginBuild("reactor");
-		else if (key === "n") beginBuild("lab");
-		else if (key === "x") beginBuild("extractor");
-		else if (key === "l") {
-			act("startResearch", "cargo");
-			updateHud();
-		} else if (key === "s") {
-			if (e.shiftKey) {
-				const count = act("hold", [...selected]);
-				toast(
-					count
-						? `${count} jednostek utrzymuje pozycję.`
-						: "Wybierz jednostki bojowe.",
-				);
-			} else act("stop", [...selected]);
-			updateHud();
-		} else if (key === "q") buy("trooper");
-		else if (key === "w") buy("rocket");
-		else if (key === "e") buy("tank");
-		else if (key === "d") buy("worker");
-		else if (key === "y") buy("heavy");
-		else if (key === "o") buy("artillery");
-		else if (key === "k") beginBuild("wall");
-		else if (key === "p") beginBuild("gate");
-		else if (key === "t") beginBuild("turret");
-		else if (key === "b") beginBuild("barracks");
-		else if (key === "v") beginBuild("factory");
-		else if (key === "u" || key === "i") {
-			act("startResearch", key === "u" ? "weapons" : "armor");
-			updateHud();
-		} else if (key === "a") {
-			attackMode = true;
-			toast("Atak w marszu: wskaż cel prawym przyciskiem myszy.");
-		} else if (key === "h") {
-			const b = game.hq((game.viewer ?? 0));
-			if (b) {
-				camera.x = b.x + 150;
-				camera.y = b.y - 150;
-				camera.zoom = 1.8;
-				fit();
-			}
-		} else if (key === "home") {
-			camera = { x: W / 2, y: H / 2, zoom: 1 };
-			fit();
-		}
-	});
-	window.addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
-	window.addEventListener("blur", () => {
-		keys.clear();
-		drag = null;
-		pan = null;
-		// A network battle never pauses (the other player keeps playing).
-		if (started && !finished && !paused && !netSession) togglePause();
+	// Controls (app-controls.js, 0.173): the side panel, the mouse and keys on the board and the minimap.
+	const controls = createAppControls({
+		$,
+		TYPES,
+		act,
+		at,
+		beginBuild,
+		beginOrder,
+		beginTarget,
+		buy,
+		campaign,
+		canvas,
+		clamp,
+		closestTo,
+		dist,
+		fit,
+		focusAlert: hud.focusAlert,
+		keys,
+		mini,
+		network,
+		pointer,
+		saveGame,
+		screen,
+		selectAll,
+		selectGroup: hud.selectGroup,
+		selectIdle,
+		selectWorkers,
+		sound,
+		toast,
+		togglePause,
+		toggleSound,
+		updateHud: hud.updateHud,
+		watcherAbility,
+		world,
+		zoom,
+		get H() {
+			return H;
+		},
+		set H(value) {
+			H = value;
+		},
+		get W() {
+			return W;
+		},
+		set W(value) {
+			W = value;
+		},
+		get attackMode() {
+			return attackMode;
+		},
+		set attackMode(value) {
+			attackMode = value;
+		},
+		get building() {
+			return building;
+		},
+		set building(value) {
+			building = value;
+		},
+		get camera() {
+			return camera;
+		},
+		set camera(value) {
+			camera = value;
+		},
+		get choiceOpen() {
+			return choiceOpen;
+		},
+		set choiceOpen(value) {
+			choiceOpen = value;
+		},
+		get development() {
+			return development;
+		},
+		set development(value) {
+			development = value;
+		},
+		get drag() {
+			return drag;
+		},
+		set drag(value) {
+			drag = value;
+		},
+		get finished() {
+			return finished;
+		},
+		set finished(value) {
+			finished = value;
+		},
+		get game() {
+			return game;
+		},
+		set game(value) {
+			game = value;
+		},
+		get menu() {
+			return menu;
+		},
+		set menu(value) {
+			menu = value;
+		},
+		get mouse() {
+			return mouse;
+		},
+		set mouse(value) {
+			mouse = value;
+		},
+		get netSession() {
+			return netSession;
+		},
+		set netSession(value) {
+			netSession = value;
+		},
+		get orbitMode() {
+			return orbitMode;
+		},
+		set orbitMode(value) {
+			orbitMode = value;
+		},
+		get orderMode() {
+			return orderMode;
+		},
+		set orderMode(value) {
+			orderMode = value;
+		},
+		get pan() {
+			return pan;
+		},
+		set pan(value) {
+			pan = value;
+		},
+		get paused() {
+			return paused;
+		},
+		set paused(value) {
+			paused = value;
+		},
+		get renderer() {
+			return renderer;
+		},
+		set renderer(value) {
+			renderer = value;
+		},
+		get rendererMode() {
+			return rendererMode;
+		},
+		set rendererMode(value) {
+			rendererMode = value;
+		},
+		get scale() {
+			return scale;
+		},
+		set scale(value) {
+			scale = value;
+		},
+		get selected() {
+			return selected;
+		},
+		set selected(value) {
+			selected = value;
+		},
+		get started() {
+			return started;
+		},
+		set started(value) {
+			started = value;
+		},
+		get strikeMode() {
+			return strikeMode;
+		},
+		set strikeMode(value) {
+			strikeMode = value;
+		},
+		get wallDrag() {
+			return wallDrag;
+		},
+		set wallDrag(value) {
+			wallDrag = value;
+		},
 	});
 	function beginBuild(type = "turret") {
 		if (game.developmentRequirement(type)) {
@@ -3063,7 +1363,7 @@
 			`${game.unitName(type)} · robot zbuduje obiekt · ${type === "wall" ? "przeciągnij LPM: odcinek · Alt + przeciągnij: okrąg" : type === "gate" || type === "turret" ? "LPM na murze lub wolnym terenie" : type === "extractor" ? "LPM na fioletowym złożu gazu" : "LPM przy bazie / przekaźniku"} · Esc anuluje`;
 		$("placement").hidden = !building;
 	}
-	setupDeck();
+	deckUi.setupDeck();
 	development = new DevelopmentTree.View({
 		game: () => game,
 		freeze: () => {
@@ -3082,13 +1382,13 @@
 		},
 		resume: (previous) => {
 			paused = previous;
-			updateHud();
+			hud.updateHud();
 		},
 		build: (type) => {
 			beginBuild(type);
-			updateHud();
+			hud.updateHud();
 		},
-		changed: () => updateHud(),
+		changed: () => hud.updateHud(),
 	});
 	$("sound-toggle").onclick = toggleSound;
 	$("sound-volume").oninput = (e) => {
@@ -3119,7 +1419,7 @@
 	window.addEventListener("resize", fit);
 	terrainTexture();
 	fit();
-	updateHud();
+	hud.updateHud();
 	function inspectSave(key = SAVE_KEY) {
 		let raw;
 		try {
@@ -3162,6 +1462,8 @@
 		}
 	}
 	menu = new CommandMenu({
+		repaint,
+		rendererChanged: switchRenderer,
 		slots: () =>
 			Array.from({ length: 5 }, (_, i) =>
 				inspectSave("pogranicze-slot-" + (i + 1)),
@@ -3223,16 +1525,16 @@
 		load: () => loadWithScreen(),
 		save: () => saveGame(true),
 		leave: () => {
-			endNetwork();
+			network.endNetwork();
 			started = false;
 		},
-		startNetwork,
+		startNetwork: network.startNetwork,
 		isNetwork: () => !!netSession,
 		networkInfo: () =>
 			netSession
-				? { ping: netSession.ping, waiting: netSession.waiting, players: game.players, viewer: game.viewer, foes: foes().map((p) => p.name).join(" i "), pause: game.netPause, pausesLeft: game.pausesLeft?.[game.viewer] ?? 0 }
+				? { ping: netSession.ping, waiting: netSession.waiting, players: game.players, viewer: game.viewer, foes: network.foes().map((p) => p.name).join(" i "), pause: game.netPause, pausesLeft: game.pausesLeft?.[game.viewer] ?? 0 }
 				: null,
-		sharedPause,
+		sharedPause: network.sharedPause,
 		surrender: () => act("surrender"),
 		holdSaves: () => {
 			savesHeld = true;
@@ -3242,7 +1544,7 @@
 			paused = choiceOpen;
 			sound.setMusicMode(musicModeFor(game));
 			fit();
-			updateHud();
+			hud.updateHud();
 		},
 		music: (mode) => sound.setMusicMode(mode),
 		speak: (who, text, opts) => sound.speak?.(who, text, opts),
@@ -3270,9 +1572,9 @@
 		const now = performance.now();
 		if (document.hidden && netSession && started && !finished) {
 			netSession.advance(Math.min((now - hiddenLast) / 1000, 3));
-			renderSharedPause();
+			network.renderSharedPause();
 			// The end screen (and its rematch offer) is ready when the player comes back.
-			if (game.result && !finished) updateHud();
+			if (game.result && !finished) hud.updateHud();
 		}
 		hiddenLast = now;
 	}
@@ -3339,9 +1641,10 @@
 		}
 		hudTimer += dt;
 		if (hudTimer > 0.12) {
-			updateHud();
-			renderChat();
-			renderSharedPause();
+			hud.updateHud();
+			updatePauseBar();
+			network.renderChat();
+			network.renderSharedPause();
 			hudTimer = 0;
 		}
 		applyRenderer();
@@ -3363,6 +1666,13 @@
 				const v = Math.round(fpsCount.value);
 				fpsEl.textContent = `${v} FPS`;
 				fpsEl.dataset.level = v >= 55 ? "good" : v >= 30 ? "fair" : "poor";
+			}
+			// Automatic quality (0.175.8): only a running battle on the 3D board counts — a pause, the menu, a hidden
+			// window or a loading screen leaves a gap, and the watch starts again (scene-fx.js autoTune).
+			if (started && !paused && !menu?.active && rendererMode === "three" && document.visibilityState === "visible" && !document.querySelector(".loading-screen")) {
+				const before = SceneFX.autoLevel,
+					level = SceneFX.autoTune(fpsCount.value, clockNow);
+				if (level !== null && level > before) toast(`Automatyczna jakość: grafika uproszczona (stopień ${level} z ${SceneFX.AUTO_MAX}), bo liczba klatek spadła. Wróci sama, gdy będzie zapas — Ustawienia → Grafika.`);
 			}
 		}
 		if (fpsEl && fpsEl.hidden === fpsOn) fpsEl.hidden = !fpsOn;
@@ -3388,5 +1698,12 @@
 		if (document.readyState === "complete") settle();
 		else addEventListener("load", settle, { once: true });
 		LoadingScreen.boot({ version: typeof GAME_VERSION !== "undefined" ? GAME_VERSION : "", reduced: !!menu?.reduced, ready: () => settled, onPress: unlockSound });
+		// The 3D board's code loads while the menu is up (only the code: no GPU context, no world), so a battle's
+		// loading screen waits for less (0.175.5).
+		if (SceneFX.options.renderer === "three") {
+			const warm = () => setTimeout(() => load3D().catch(() => {}), 1500);
+			if (document.readyState === "complete") warm();
+			else addEventListener("load", warm, { once: true });
+		}
 	} else document.getElementById("boot-cover")?.remove();
 })();

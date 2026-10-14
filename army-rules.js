@@ -267,22 +267,24 @@
 					count++;
 				}
 				carrier.passengers = remaining;
+				// The messages are the player's: a computer's transport (0.174.1) unloads in silence.
+				const told = this.isHuman(carrier.team);
 				if (emergency && remaining.length) {
-					this.notify(
+					if (told) this.notify(
 						"Brak miejsca na awaryjny desant — utracono " +
 							remaining.length +
 							" członków załogi.",
 					);
 					carrier.passengers = [];
 				}
-				if (count)
+				if (count && told)
 					this.notify(
 						emergency
 							? "Awaryjny desant: załoga straciła 50% pozostałych PW."
 							: "Załoga wysiadła i utrzymuje pozycję.",
 						"order-unload",
 					);
-				else if (!emergency && remaining.length)
+				else if (!emergency && remaining.length && told)
 					this.notify(
 						"Brak miejsca na desant. Przestaw transporter na otwarty teren.",
 					);
@@ -480,7 +482,6 @@
 			return g;
 		};
 	}
-	if (typeof module !== "undefined" && module.exports)
-		module.exports = install;
-	else install(root.RTS);
+	if (typeof module !== "undefined" && module.exports) module.exports = install;
+	else root.RTS.rule("army-rules", install);
 })(typeof window !== "undefined" ? window : globalThis);

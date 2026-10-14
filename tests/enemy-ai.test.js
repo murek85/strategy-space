@@ -281,11 +281,12 @@ test("operation code carries the classic waves choice", () => {
 
 test("faction styles: the Dominium fortifies and hits rarely but hard, the Colonies harass and take relays", () => {
 	for (const difficulty of ["easy", "normal", "hard"]) {
-		const L = RTS.AI_LEVELS[difficulty],
+		// A scenario's level with its extras (0.174.1: aircraft, artillery, transports, saboteurs outside the campaign).
+		const L = RTS.AI_LEVELS[difficulty].extras ? { ...RTS.AI_LEVELS[difficulty], ...RTS.AI_LEVELS[difficulty].extras } : RTS.AI_LEVELS[difficulty],
 			dom = skirmish({ difficulty, enemyFaction: "dominion" }).aiLevel(1),
 			col = skirmish({ difficulty, enemyFaction: "colonies" }).aiLevel(1),
 			swarm = skirmish({ difficulty, enemyFaction: "swarm" }).aiLevel(1);
-		assert.equal(swarm, L, "the Swarm keeps the level");
+		assert.deepEqual(swarm, L, "the Swarm keeps the level");
 		// Dominium: more towers, rarer and bigger attacks, fewer relays, no raids.
 		assert.ok(dom.turrets.length > L.turrets.length, difficulty);
 		assert.ok(dom.interval > L.interval && dom.firstAttack > L.firstAttack);
@@ -299,7 +300,7 @@ test("faction styles: the Dominium fortifies and hits rarely but hard, the Colon
 		assert.equal(col.retreat, difficulty !== "easy");
 		assert.ok(col.units.raider > 1 && dom.units.sentinel > 1);
 	}
-	assert.equal(skirmish({ difficulty: "normal" }).aiLevel(), RTS.AI_LEVELS.normal, "without a team: the plain level");
+	assert.deepEqual(skirmish({ difficulty: "normal" }).aiLevel(), { ...RTS.AI_LEVELS.normal, ...RTS.AI_LEVELS.normal.extras }, "without a team: the plain level");
 });
 
 test("faction styles in play: the Dominium raises more towers, the Colonies send raiders at the workers", () => {
@@ -341,4 +342,84 @@ test("faction styles in play: the Dominium raises more towers, the Colonies send
 	g.enemyAiTick(1 / 30);
 	assert.ok(own(g, 1).some((e) => e.aiRole === "raid"), "raiders sent");
 	assert.ok(T.raidAt >= g.time + 50 && T.raidAt <= g.time + 60, "next raid after the style's interval");
+});
+
+// 0.174.1: outside the campaign the commander also builds aircraft, artillery, transports and saboteurs — and uses them.
+test("the commander's extras: scenarios only, from their minute, up to their count", () => {
+	const L = skirmish({ difficulty: "normal" }).aiLevel(1);
+	assert.equal(L.hangarAt, 600);
+	assert.equal(L.artilleryAt, 540);
+	assert.ok(L.transportAt > 0 && L.saboteurAt > 0);
+	const campaign = new Game(42, "colony2");
+	campaign.campaignLevel = "normal";
+	assert.equal(campaign.aiLevel().transportAt, undefined, "a campaign chapter keeps its tuned plan");
+	assert.equal(campaign.aiLevel().hangarAt, null);
+	assert.equal(skirmish({ difficulty: "easy" }).aiLevel(1).transportAt, undefined, "easy keeps its gentle plan");
+	const g = skirmish({ difficulty: "normal" });
+	const T = g.enemyAi.teams[1],
+		hq = g.hq(1),
+		factory = g.spawn("factory", 1, hq.x + 220, hq.y),
+		barracks = own(g, 1, "barracks")[0] || g.spawn("barracks", 1, hq.x - 220, hq.y);
+	const pick = (b, n = 300) => {
+		const c = {};
+		for (let i = 0; i < n; i++) {
+			const u = g.aiPickUnit(T, g.aiLevel(1), b);
+			c[u] = (c[u] || 0) + 1;
+		}
+		return c;
+	};
+	g.time = 200;
+	assert.ok(!pick(factory).transport && !pick(barracks).saboteur, "not before their minute");
+	g.time = 700;
+	assert.ok(pick(factory).transport > 0, "transports from the factory");
+	assert.ok(pick(barracks).saboteur > 0, "saboteurs from the barracks");
+	g.spawn("transport", 1, hq.x, hq.y + 150);
+	assert.ok(!pick(factory).transport, "no more than the level's count (1 on normal)");
+});
+
+test("a transport takes the attack's infantry along and sets it down by the target, without the player's messages", () => {
+	const g = peaceful(skirmish({ difficulty: "normal" }));
+	const T = g.enemyAi.teams[1],
+		hq = g.hq(1),
+		target = g.hq(0);
+	const c = g0(g.spawn("transport", 1, hq.x + 150, hq.y + 150));
+	c.aiRole = "carrier";
+	const inf = [0, 1, 2].map((i) => g0(g.spawn("trooper", 1, hq.x + 120 + i * 20, hq.y + 190)));
+	for (const e of inf) e.aiRole = "attack";
+	T.attack = { ids: inf.map((e) => e.id), target: { id: target.id, x: target.x, y: target.y, name: "centrum" }, startValue: 1, since: g.time };
+	const events = g.events.length;
+	g.aiTransports(T, own(g, 1).filter((e) => TYPES[e.type].damage && TYPES[e.type].speed));
+	assert.ok(T.attack.ids.includes(c.id), "the waiting transport joins the attack");
+	assert.ok(inf.every((e) => e.boardTargetId === c.id), "the infantry walks to it");
+	for (let i = 0; i < 30 * 8; i++) g.tick(1 / 30);
+	assert.equal((c.passengers || []).length, 3, "all three aboard");
+	// By the target: out and into the fight.
+	c.x = target.x + 300;
+	c.y = target.y;
+	T.attack.boardUntil = 0;
+	g.aiTransports(T, [c]);
+	assert.equal((c.passengers || []).length, 0);
+	for (const e of inf) {
+		assert.ok(g.get(e.id), "back on the board");
+		assert.equal(e.aiRole, "attack");
+	}
+	assert.ok(!g.events.slice(events).some((t) => /Piechota kieruje|Załoga|desant/.test(t)), "no messages of the player's transport");
+});
+
+test("saboteurs go for the least guarded enemy building they know, a producer among equals", () => {
+	const g = peaceful(skirmish({ difficulty: "normal" }));
+	const T = g.enemyAi.teams[1],
+		h0 = g.hq(0);
+	const guarded = g.spawn("factory", 0, h0.x + 200, h0.y),
+		lone = g.spawn("barracks", 0, h0.x - 380, h0.y + 120);
+	for (let i = 0; i < 4; i++) g.spawn("tank", 0, guarded.x + 30 * i, guarded.y + 60);
+	RTS.AI_FOG.on = false;
+	try {
+		const s = g0(g.spawn("saboteur", 1, g.hq(1).x + 100, g.hq(1).y));
+		g.aiSaboteurs(T, [s]);
+		assert.equal(s.aiRole, "sabotage");
+		assert.equal(s.sabotageTarget, lone.id, "not the factory with four tanks by it");
+	} finally {
+		RTS.AI_FOG.on = true;
+	}
 });

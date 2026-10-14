@@ -172,6 +172,8 @@ const KnowledgeBase = (() => {
 		)
 			BoardArt.body(c, e, 1.4, null, type === "extractor");
 		AdvancedArt.factionDetails(c, e, 1.4);
+		// The game's own 3D model over the drawing once it is rendered (0.175.12, model-icons.js).
+		if (typeof ModelIcons !== "undefined") ModelIcons.paint(canvas, e, { colors: [e.tint || "#9ae5cb"] });
 	}
 	function mount(root) {
 		const panel = root.querySelector("#knowledge-panel"),

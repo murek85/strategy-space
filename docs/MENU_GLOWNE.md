@@ -35,6 +35,45 @@ Status: pierwszy zakres wdrożony w 0.5 (2026-09-21). Na życzenie użytkownika 
 - `style.css`: domyślny wygląd w `:where()` (zerowa szczegółowość, reguły paneli wygrywają) — suwak z torem wypełnionym do `--fill` i jasnym uchwytem (jak `.has-backdrop .menu-setting`), szklane pola tekstowe/liczbowe/`textarea` z poświatą przy fokusie, bez strzałek pola liczbowego, `accent-color` pól wyboru. `app.js` (`updateAudioControls`) ustawia `--fill` suwaka głośności.
 - `menu.css`: pola sieciowe i czat w kolorach szkła scenariuszy; pola tekstowe menu przy fokusie mają turkusową poświatę zamiast złotej ramki przycisków.
 
+## Nagłówki menu w jednej linii (wersja 0.175.19, 2026-10-14)
+
+- `menu.css`: `#command-menu h1` ma `clamp(34px, 3vw, 42px)` (było `clamp(36px, 4vw, 62px)`), a przy wysokości do 780 px 38 px (było 44 px). Okna (`.menu-window`) zostają przy 34 px.
+- Przy 62 px łamały się „Gra jednoosobowa” (489/460 px), „Pauza taktyczna” (465/460), „Rozpocząć od nowa?” (611/500) i „Nie zapisano postępu” (625/500). Po angielsku przy 46 px „Command of the Frontier.” potrzebowało 485/460 px, stąd 42 px.
+- `menu.js`: tytuł ekranu głównego „Dowództwo pogranicza.” bez `<br>`, z nowym wpisem w `lang/en.js`.
+- Zmierzone na wszystkich ekranach menu i w pauzie, przy 1920×1080 i 725 px wysokości, po polsku i po angielsku: jedna linia.
+
+## Symbol obok tytułu w oknach planszy (wersja 0.175.16, 2026-10-14; jedna linia od 0.175.17)
+
+- 0.175.18: `.briefing:has(> .briefing-symbol):not(.act2-report, .end-report)` ma 500 px (było 430 px), a tytuł obok symbolu poza raportem końca bitwy 29 px. Angielski tytuł startu wrócił do „Commander, the sector awaits.”. Raport końca bitwy (560 px, 38/32 px) i aktu II (520 px) bez zmian.
+- 0.175.17: tytuły bez `<br>` w `app-story.js` (raporty) i `index.html` (okno startowe), z nowymi wpisami w `lang/en.js`. Zmierzone: jedna linia dla wszystkich tytułów, także na karcie 430 px i po angielsku (okno startowe: „The sector awaits you.”).
+
+- Okna `.briefing` mają wszędzie układ `eyebrow` → `.briefing-symbol` → `h2` → reszta. Dotyczy to raportu końca bitwy i aktu II, końca fazy Inwazji (`app-story.js`), okien gry sieciowej (`app-network.js`) i okna startowego (`index.html`).
+- `style.css`: symbol jest `float: left` z odstępem 16 px (12 px na niskim ekranie) na wysokości pierwszej linii tytułu. `h2` za nim ma `overflow: hidden`, czyli blok obok, a następny element `clear: left`, czyli pod spodem. `eyebrow` w `.briefing` jest blokiem, żeby symbol nie wskoczył do jego linii.
+
+## Lobby wyrównane do lewej (wersja 0.175.11, 2026-10-14)
+
+- `.menu-layout.net-lobby-layout` (lobby i pokój gry: okno i panel czatu obok siebie) miał `justify-content: center`. Na szerokim ekranie para stała przez to na prawo od logo (np. 175 px zamiast 95 px przy 1589 px szerokości), inaczej niż pozostałe okna menu. Teraz `flex-start`, okno zaczyna się równo z logo.
+
+## Ustawienia: jedna zakładka grafiki (wersja 0.175.10, 2026-10-14)
+
+- Zakładki ustawień powstają z nagłówków `<h2>` (`tabbed()` w `menu.js`). „Grafika planszy” i „Renderer” to teraz jeden `<h2>Grafika</h2>`, a jego części to `<h3 class="menu-subhead">`: Silnik (`#visual-renderer`, `#renderer-status`), Jakość (detale terenu, cząsteczki, automatyczna jakość i jej stan), Efekty (`#visual-flashes` i przełączniki `.webgl-effect`), Pomiary (`#visual-metrics`, `#visual-fps`). Identyfikatory pól bez zmian, więc ich obsługa też.
+- `menu.css`: `.menu-subhead` na całą szerokość siatki panelu, mały nagłówek z linią.
+
+## Gra wieloosobowa: podgląd mapy bitwy (wersja 0.175.7, 2026-10-14)
+
+- `rulesHtml` w `netplay-menu.js` (lobby gry bezpośredniej i pokój na serwerze) zwraca `.net-rules-layout`: pola zasad gospodarza albo podsumowanie gościa, a obok `<figure class="net-map">` z `#map-preview` i podpisem (planeta / kosmos · miejsce, „ziarno losowe przy starcie” przy ziarnie 0). Poniżej 760 px podgląd schodzi pod zasady.
+- Bitwę do podglądu buduje `RTS.createNetworkGame` z zasad i miejsc (w pokoju: drużyny miejsc jak w `createLobbyGame`, wolne miejsca jako komputer; ziarno 0 rysowane jako 42). `drawMapPreview(make)` w `menu.js` przyjmuje taką funkcję budującą.
+- Ekrany sieciowe odświeżają się przy każdej wiadomości. Podgląd rysuje się więc tylko przy zmianie klucza (zasady i gracze jako JSON, `netPreviewKey`); inaczej obraz jest kopiowany z poprzedniego płótna (`netMapShown`).
+
+## Scenariusze: mapa w rzędzie i prawdziwy podgląd (wersja 0.175.6, 2026-10-14)
+
+- **Układ:** „Gotowe ustawienia” z opisem stoją w osobnym bloku (`.scenario-config.scenario-presets`), na całą szerokość ekranu scenariuszy. Obie kolumny zaczynają się więc tym samym rzędem: po lewej nazwa gracza i kolor, po prawej mapa. Etykieta i pole mapy mają budowę pól obok (etykieta nad polem, ta sama wysokość, 36 px).
+- **Podgląd mapy:** `drawMapPreview` w `menu.js` rysuje planszą gry. Ukryty `createCanvasRenderer`, stworzony raz i dostający każdą nową mapę, rysuje warstwy `terrain`, `ground` i `units` przez `drawLayer` na całą mapę, bez mgły wojny. Na wierzch idą kręgi przekaźników i startów w kolorach stron oraz artefakt Ekspedycji.
+  - Płótno ma proporcje mapy (960 × wysokość), a CSS `object-fit: contain` przy `max-height: 240px`.
+  - Mapy kosmiczne pokazują kosmos (mgławice, asteroidy, pierścienie, stacje), a planety swój teren.
+  - Rysowanie trwa ok. 40–70 ms.
+  - Wcześniej był to szkic: kolor według biomu, prostokąty przeszkód, złóż i centrów, rozciągnięty do 480 × 190 bez względu na proporcje i taki sam dla mapy kosmicznej jak dla planety.
+
 ## Paski przewijania (wersja 0.172.2, 2026-10-12)
 
 - Styl przewijania był ustawiany osobno dla kilku paneli; reszta (np. `.menu-layout`, które przewija całe menu w niskim oknie, listy w `act2.css`, panele w `expansion.css`) miała szary pasek systemu ze strzałkami. Reguła `*` na początku `style.css` daje wszystkim `scrollbar-width: thin` i `scrollbar-color: rgba(127, 231, 200, 0.38) transparent`; reguły paneli (np. `#101e2b` w `menu.css`) dalej wygrywają, bo dotyczą samego elementu.

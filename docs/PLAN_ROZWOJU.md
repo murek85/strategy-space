@@ -1,6 +1,6 @@
 # Plan rozwoju prototypu
 
-Aktualizacja: 2026-10-13. Aktualna wersja: 0.172.8.
+Aktualizacja: 2026-10-14. Aktualna wersja: 0.175.19.
 
 Ten plik jest punktem wejścia do dokumentacji: opisuje bieżący stan, otwarte kierunki i historię wersji. Instrukcja gry i sterowanie: [README](../README.md).
 
@@ -14,6 +14,10 @@ Gra zawiera trzy frakcje (Wolne Kolonie, Dominium, Rój Kryształowy), osiem map
 
 | Dokument | Rodzaj | Status |
 |---|---|---|
+| [Przegląd i kierunki 2026-10](KIERUNKI_2026_10.md) | Przegląd prototypu (0.172.8) i propozycja Etapu I | I4 wykonany w 0.173; reszta — propozycja |
+| [Języki i dostępność (I6)](JEZYKI.md) | Opis wdrożenia | Wersja angielska 0.175, dostępność 0.175.1 |
+| [Balans — symulator I1](BALANS.md) | Narzędzie i wnioski; [raport](BALANS_RAPORT.md) generowany | Pierwszy przebieg 2026-10-14 (0.174) |
+| [Architektura — porządki I4](ARCHITEKTURA.md) | Opis wdrożenia | Silniki grafiki (3D rozwijany, reszta zamrożona), rejestr reguł, moduły `app.js` (0.173) |
 | [Kierunki rozwoju](KIERUNKI_ROZWOJU.md) | Koncepcja etapów A–D | Etapy ukończone; poziom III i doktryny — propozycje |
 | [Etap A — Rozwój kolonii](ETAP_A_ROZWOJ_KOLONII.md) | Opis wdrożenia | Ukończony 2026-09-24 |
 | ↳ [Drzewo rozwoju](DRZEWO_ROZWOJU.md), [Panel gospodarki](PANEL_GOSPODARKI.md), [Poziomy centrum](POZIOMY_CENTRUM.md), [Akumulator](AKUMULATOR_ENERGII.md), [Warsztat](WARSZTAT_POLOWY.md) | Podetapy A | Wdrożone (wygląd drzewa odnowiony w 0.116 — [opis](KAMPANIA_OPRAWA.md)) |
@@ -43,7 +47,7 @@ Gra zawiera trzy frakcje (Wolne Kolonie, Dominium, Rój Kryształowy), osiem map
 
 ## Otwarte kierunki
 
-Wpis nie oznacza zlecenia realizacji ani terminu. Wybrane do realizacji: [Etap G](ETAP_G.md) (G1 AI nowych mechanik → G2 desant z orbity → G3 aplikacja Electron → G4 lobby, ponowne dołączenie, 2 na 2).
+Wpis nie oznacza zlecenia realizacji ani terminu. Przegląd z 2026-10-13 i propozycja kolejności (Etap I: symulator balansu, CI, powtórki, porządki w kodzie, jedna duża nowość, wersja angielska, wydanie): [Przegląd i kierunki 2026-10](KIERUNKI_2026_10.md). Wybrane do realizacji: [Etap G](ETAP_G.md) (G1 AI nowych mechanik → G2 desant z orbity → G3 aplikacja Electron → G4 lobby, ponowne dołączenie, 2 na 2).
 
 | Kierunek | Źródło | Status |
 |---|---|---|
@@ -53,7 +57,7 @@ Wpis nie oznacza zlecenia realizacji ani terminu. Wybrane do realizacji: [Etap G
 | Scenariusze dalej: edytor map, wyzwania z ziarnem i tabele wyników; balans Ekspedycji, Króla wzgórza i Przetrwania | [Kierunki §9](KIERUNKI_ROZWOJU.md), [Etap F](ETAP_F.md) | Propozycja |
 | Kampania: nagrane głosy (dziś syntezowane, 0.101), balans aktów II–III | [Kampania — oprawa](KAMPANIA_OPRAWA.md) | Propozycja |
 | Oprawa: dźwięki leczenia, osłony i sabotażu; dalsza czytelność efektów walki (OPR-02) | [Etap E](ETAP_E_WSPARCIE_I_MODULY.md), [Pomysły](POMYSLY.md) | Propozycja |
-| Balans trzech frakcji, kosztów i dochodu pasywnego (BAL-01, GOS-03) | [Pomysły](POMYSLY.md), [Etap F](ETAP_F.md) | Wymaga rozgrywek porównawczych |
+| Balans czterech frakcji, kosztów i dochodu pasywnego (BAL-01, GOS-03) | [Pomysły](POMYSLY.md), [Balans](BALANS.md) | Pomiar gotowy (symulator 0.174): Rój za silny, Dominium za słabe — strojenie do decyzji |
 | Bitwy kosmiczne i transport między planetami | [Bitwa na orbicie](BITWA_NA_ORBICIE.md), [Desant z orbity](DESANT_Z_ORBITY.md), [Pomysły](POMYSLY.md) | W toku: bitwa na orbicie (0.130–0.142), desant z orbity — tryb Inwazja (0.152); dalej transport w kampanii, inwazja w grze sieciowej |
 
 ## Testy
@@ -289,6 +293,29 @@ Przy każdym kolejnym etapie należy uruchomić pełny zestaw, nie tylko testy u
 | 0.152 | Etap G2: desant z orbity — tryb „Inwazja” (orbita, potem planeta; kapsuły, uderzenie i skan z orbity) — [opis](DESANT_Z_ORBITY.md) |
 | 0.152.1 | Szuflada celów bez poziomego przewijania, ukryta pod raportem końca — [opis](KAMPANIA_OPRAWA.md) |
 | 0.153 | Etap G4: serwer lobby, lista gier, 2 na 2 przez sieć z komputerem na wolnym miejscu, powrót do bitwy po zerwaniu połączenia — [opis](MULTIPLAYER.md) |
+| 0.175.19 | Nagłówki menu najwyżej 42 px (było 62 px) — ekran główny, gra jednoosobowa, pauza i okna potwierdzeń w jednej linii — [opis](MENU_GLOWNE.md) |
+| 0.175.18 | Okna na planszy: węższe karty 500 px, tytuł obok symbolu 29 px — także „Commander, the sector awaits.” w jednej linii — [opis](MENU_GLOWNE.md) |
+| 0.175.17 | Tytuły obok symbolu w oknach planszy w jednej linii (bez `<br>`) — [opis](MENU_GLOWNE.md) |
+| 0.175.16 | Okna na planszy (raporty, gra sieciowa, Inwazja): symbol obok tytułu zamiast nad nim — [opis](MENU_GLOWNE.md) |
+| 0.175.15 | Karta produkcji: kafelki badań tej samej szerokości co armia i budowa, symbol z tymi samymi odstępami — [opis](RENDERER_3D.md) |
+| 0.175.14 | Modele 3D w liście kolejek budynków, na pasku statusu kolejki i przy zaznaczeniu — [opis](RENDERER_3D.md) |
+| 0.175.13 | Karty produkcji: ikona modelu we własnej kolumnie z odstępem od tekstu, kafelki nieco szersze — [opis](RENDERER_3D.md) |
+| 0.175.12 | Modele 3D w interfejsie: baza wiedzy, drzewo rozwoju i ikony karty produkcji z modeli gry (`model-portraits.js`, `model-icons.js`) — [opis](RENDERER_3D.md) |
+| 0.175.11 | Lobby i pokój gry wieloosobowej wyrównane do lewej, jak inne okna menu — [opis](MENU_GLOWNE.md) |
+| 0.175.10 | Ustawienia: „Grafika planszy” i „Renderer” w jednej zakładce „Grafika” (silnik, jakość, efekty, pomiary) — [opis](MENU_GLOWNE.md) |
+| 0.175.9 | Domyślna głośność: efekty 70%, muzyka 90% (zapisana zostaje) — [opis](AUDIO.md) |
+| 0.175.8 | Automatyczna jakość grafiki: plansza 3D upraszcza efekty w 4 stopniach, gdy FPS spada, i przywraca je przy zapasie; ustawienia gracza bez zmian — [opis](RENDERER_3D.md) |
+| 0.175.7 | Gra wieloosobowa: podgląd mapy bitwy obok zasad w lobby i pokoju gry (gospodarz i gość), rysowany planszą gry z ustawień bitwy — [opis](MENU_GLOWNE.md) |
+| 0.175.6 | Scenariusze: „Gotowe ustawienia” nad obiema kolumnami (mapa w rzędzie z nazwą i kolorem), podgląd mapy rysowany planszą gry (planeta lub kosmos, proporcje mapy) — [opis](MENU_GLOWNE.md) |
+| 0.175.5 | Ekran wczytywania bitwy czeka na wybrany silnik (`boardReady`, `boardScreen`) — bez chwilowej planszy 2D przed 3D; kod 3D wczytywany w tle przy menu — [opis](RENDERER_3D.md) |
+| 0.175.4 | Favicon ◈ (`favicon.ico` + `favicon.svg`) w karcie przeglądarki i jako ikona okna Electrona — [opis](APLIKACJA.md) |
+| 0.175.3 | Pasek pauzy z przyczyną, czasem i „Wznów”, przyciemnienie planszy, mignięcie po powrocie fokusu; ustawienia: pauza przy utracie fokusu, dłuższe komunikaty — [opis](JEZYKI.md#dostępność-01751) |
+| 0.175.2 | Skala interfejsu z potwierdzeniem (Zastosuj → Zachowaj / Cofnij, powrót po 15 s); zmiana silnika w bitwie od razu za ekranem wczytywania (`switchRenderer`), stary silnik niszczony przed budową nowego — [opis](JEZYKI.md#dostępność-01751) |
+| 0.175.1 | I6 (dostępność): własne klawisze, skala interfejsu, paleta dla daltonistów (`accessibility.js`) — [opis](JEZYKI.md#dostępność-01751) |
+| 0.175 | I6 (język): wersja angielska do wyboru — warstwa tłumaczenia na wyjściu (`i18n.js`), słownik `lang/en.js`, narzędzie i test pokrycia — [opis](JEZYKI.md) |
+| 0.174.1 | Dowódca AI (scenariusze, sieć): hangar i artyleria od poziomu średniego, transportery z piechotą w natarciu, sabotażyści na słabo pilnowane budynki — [opis](AI_PRZECIWNIKA.md) |
+| 0.174 | I1: symulator balansu AI kontra AI (`tools/balance.js`, `npm run balance`) i pierwszy raport — Rój 86%, Dominium 19% — [opis](BALANS.md) |
+| 0.173 | I4: rozwijany tylko silnik 3D (PixiJS i Canvas 2D zamrożone), rejestr reguł `RTS.RULE_MODULES` z mapą warstw, podział `app.js` na pięć modułów — [opis](ARCHITEKTURA.md) |
 | 0.172.8 | Dźwięk: muzyka po pauzie, wznowienie po utracie fokusu kliknięciem, komunikat wyciszenia M, próbki efektów a głosy radia — [opis](AUDIO.md) |
 | 0.172.7 | Domyślny silnik planszy: 3D (Three.js) — `SceneFX` `renderer: "three"` — [opis](MENU_GLOWNE.md) |
 | 0.172.6 | Podsumowanie zasad dla gościa (`rulesSummary`) i wskazówka zamiast powitania serwera — [opis](MENU_GLOWNE.md) |

@@ -56,7 +56,7 @@ function createWindow() {
 		show: false,
 		backgroundColor: "#02050a",
 		title: "Pogranicze Galaktyki",
-		icon: path.join(ROOT, "build", "icon.png"),
+		icon: path.join(ROOT, "favicon.ico"), // build/ is not packed
 		autoHideMenuBar: true,
 		webPreferences: {
 			preload: path.join(__dirname, "preload.js"),

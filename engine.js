@@ -3213,7 +3213,35 @@
 				(this.sides[this.me] ?? this.sides[this.humans[0]])[key] = value;
 			},
 		});
+	// The rule modules (0.173, I4): each extends the game by wrapping methods of Game.prototype, so their order is
+	// part of the rules — and it stood in two places (the scripts of index.html, a list of requires for Node). Now one
+	// list: a module hands its install over (RTS.rule), is installed at once (as before: a page may load a subset) and
+	// refused when it comes after one that follows it on the list. RULE_LAYERS keeps which modules wrapped which
+	// method, in order — what a new module changes is in sight (tests/rules-registry.test.js).
+	const RULE_MODULES = Object.freeze(["advanced-rules", "army-rules", "campaign-act2", "scenario-modes", "frontier-maps", "themed-maps", "campaign-maps", "support-rules", "scenario-setup", "scenario-challenges", "enemy-ai", "teams-rules", "factions-rules", "swarm-rules", "campaign-act3", "campaign-ai", "campaign-events", "campaign-choices", "trade-rules", "network-rules", "doctrine-rules", "patrol-rules", "space-rules", "world-rules", "deposit-rules", "invasion-rules", "watchers-rules", "campaign-act4", "network-modes"]);
+	const ruleInstalled = [],
+		ruleLayers = {};
+	function rule(name, install) {
+		const at = RULE_MODULES.indexOf(name);
+		if (at < 0) throw Error("Nieznany moduł reguł: " + name + " (dopisz go do RULE_MODULES w engine.js)");
+		if (ruleInstalled.includes(name)) return false;
+		const later = ruleInstalled.find((n) => RULE_MODULES.indexOf(n) > at);
+		if (later) throw Error(`Moduł reguł ${name} wczytany po ${later} — kolejność: RULE_MODULES w engine.js`);
+		const proto = Game.prototype,
+			before = new Map(Object.getOwnPropertyNames(proto).map((k) => [k, Object.getOwnPropertyDescriptor(proto, k).value]));
+		install(api);
+		ruleInstalled.push(name);
+		for (const k of Object.getOwnPropertyNames(proto)) {
+			const value = Object.getOwnPropertyDescriptor(proto, k).value;
+			if (typeof value === "function" && value !== before.get(k)) (ruleLayers[k] ||= []).push(name);
+		}
+		return true;
+	}
 	const api = {
+		RULE_MODULES,
+		RULE_LAYERS: ruleLayers,
+		rule,
+		rulesInstalled: () => [...ruleInstalled],
 		Game,
 		SIDE_FIELDS,
 		TYPES,

@@ -1,6 +1,6 @@
 /* Navigation owns screens; the application retains a single simulation loop. */
 // The game's version: the menu's footer and the saves' export (0.171.13: one place; it was written twice by hand).
-const GAME_VERSION = "0.172.8";
+const GAME_VERSION = "0.175.19";
 // Listening to the music in the settings: themes (audio.js music modes) and the game's moods.
 const MUSIC_THEMES = [
 	["menu", "Menu — Odległe światło"],
@@ -146,7 +146,7 @@ class CommandMenu {
 		let title = "",
 			body = "";
 		if (screen === "home") {
-			title = "Dowództwo<br>pogranicza.";
+			title = "Dowództwo pogranicza.";
 			body = `<p class="menu-lead">Sektor zewnętrzny. Nowy front.<br>Twoje rozkazy wyznaczają granice.</p><nav aria-label="Główna nawigacja">${save.valid ? this.button("continue", "Kontynuuj", true) : ""}${this.button("single", "Gra jednoosobowa", !save.valid)}${this.button("slots", "Wczytaj grę — sloty")}${this.button("knowledge", "Baza wiedzy")}${this.button("settings", "Ustawienia")}${typeof window !== "undefined" && window.desktop?.app ? this.button("quit", "Wyjdź z gry") : ""}</nav><p class="menu-message">${save.error || ""}</p>`;
 		} else if (screen === "single") {
 			title = "Gra jednoosobowa";
@@ -289,7 +289,7 @@ class CommandMenu {
 					"",
 				)}<label class="menu-setting"><input type="checkbox" id="menu-muted"> Wycisz dźwięk</label><label class="menu-setting"><input type="checkbox" id="menu-reduced" ${this.reduced ? "checked" : ""}> Ogranicz animacje menu</label><h2>Odsłuch muzyki</h2><label class="menu-setting">Motyw<select id="music-theme" aria-label="Motyw muzyki">${MUSIC_THEMES.map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select></label><label class="menu-setting">Nastrój<select id="music-mood" aria-label="Nastrój muzyki">${MUSIC_MOODS.map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select></label><div class="music-preview"><button type="button" id="music-play" class="menu-action"><span>Odtwórz</span><span>▶</span></button><p id="music-now" role="status"></p></div>${
 				typeof SceneFX !== "undefined"
-					? `<h2>Grafika planszy</h2>${[
+					? `<h2>Grafika</h2><h3 class="menu-subhead">Silnik</h3><label class="menu-setting">Silnik grafiki<select id="visual-renderer" aria-label="Silnik grafiki"><option value="three">3D (Three.js) — zalecany: teren, modele, kamera i wszystkie efekty</option><option value="webgl">WebGL (PixiJS) — tryb awaryjny 2D, bez nowych efektów</option><option value="webgpu">WebGPU (PixiJS) — tryb awaryjny 2D, bez nowych efektów</option><option value="canvas">Canvas 2D — ostatni tryb awaryjny</option></select></label><p id="renderer-status" role="status"></p><h3 class="menu-subhead">Jakość</h3>${[
 							["terrain", "Detale terenu i roślinność"],
 							["particles", "Cząsteczki pogody"],
 						]
@@ -299,7 +299,7 @@ class CommandMenu {
 							)
 							.join(
 								"",
-							)}<label class="menu-setting"><input type="checkbox" id="visual-flashes"> Błyski burzy</label><label class="menu-setting"><input type="checkbox" id="visual-metrics"> Pokaż czas renderowania planszy</label><label class="menu-setting"><input type="checkbox" id="visual-fps"> Licznik FPS (klatki na sekundę)</label><h2>Renderer</h2><label class="menu-setting">Silnik grafiki<select id="visual-renderer" aria-label="Silnik grafiki"><option value="three">3D (Three.js) — teren, modele i kamera 3D</option><option value="webgl">WebGL (PixiJS) — oświetlenie i efekty</option><option value="webgpu">WebGPU (PixiJS) — nowszy interfejs grafiki</option><option value="canvas">Canvas 2D — tryb awaryjny</option></select></label><p id="renderer-status" role="status"></p>${[
+							)}<label class="menu-setting"><input type="checkbox" id="visual-autoQuality"> Automatyczna jakość — plansza 3D upraszcza najdroższe efekty, gdy liczba klatek spada, i przywraca je, gdy jest zapas</label><p id="auto-quality-status" class="menu-audio-status" role="status"></p><h3 class="menu-subhead">Efekty</h3><label class="menu-setting"><input type="checkbox" id="visual-flashes"> Błyski burzy</label>${[
 								["lights", "Oświetlenie dnia i nocy, światła"],
 								["shadows", "Cienie od słońca"],
 								["clouds", "Cienie chmur 3D (przesuwają się po planszy)"],
@@ -320,9 +320,15 @@ class CommandMenu {
 								["shake", "Wstrząs kamery przy dużych wybuchach"],
 							]
 								.map(([key, label]) => `<label class="menu-setting"><input type="checkbox" id="visual-${key}" class="webgl-effect"> ${label}</label>`)
-								.join("")}`
+								.join("")}<h3 class="menu-subhead">Pomiary</h3><label class="menu-setting"><input type="checkbox" id="visual-metrics"> Pokaż czas renderowania planszy</label><label class="menu-setting"><input type="checkbox" id="visual-fps"> Licznik FPS (klatki na sekundę)</label>`
 					: ""
-			}<h2>Aplikacja i zapisy</h2>${
+			}${typeof Access !== "undefined" ? Access.settingsHtml() : ""}<h2>Aplikacja i zapisy</h2>${
+				typeof I18N !== "undefined"
+					? `<label class="menu-setting" data-i18n-skip>Język · Language<select id="app-language" aria-label="Język · Language">${Object.entries(I18N.LANGS)
+							.map(([k, name]) => `<option value="${k}" ${k === I18N.lang ? "selected" : ""}>${name}</option>`)
+							.join("")}</select></label><p class="menu-note" data-i18n-skip>${I18N.lang === "pl" ? "Gra uruchomi się ponownie w wybranym języku (trwająca bitwa zostanie zapisana)." : "The game restarts in the chosen language (a battle in progress is saved)."}</p>`
+					: ""
+			}${
 				typeof window !== "undefined" && window.desktop?.app
 					? `<label class="menu-setting"><input type="checkbox" id="app-fullscreen"> Pełny ekran <kbd>F11</kbd></label>`
 					: ""
@@ -352,6 +358,29 @@ class CommandMenu {
 				body;
 		if (screen === "news")
 			body =
+				"<h2>0.175.19 / Nagłówki menu w jednej linii</h2><p>Duże nagłówki menu — ekran główny, gra jednoosobowa, pauza i okna potwierdzeń — są mniejsze i mieszczą się w jednej linii, po polsku i po angielsku.</p>" +
+				"<h2>0.175.18 / Tytuł w linii także po angielsku</h2><p>Węższe okna na planszy są nieco szersze, a tytuł obok symbolu nieco mniejszy, więc i „Commander, the sector awaits.” mieści się w jednej linii.</p>" +
+				"<h2>0.175.17 / Tytuł w jednej linii</h2><p>Tytuły obok symbolu w raportach i oknach planszy są w jednej linii („Sektor odzyskany.”), bez wymuszonego łamania.</p>" +
+				"<h2>0.175.16 / Symbol obok tytułu</h2><p>W raportach końca bitwy i innych oknach na planszy symbol ◈ / ⌁ stoi obok tytułu, a nie nad nim.</p>" +
+				"<h2>0.175.15 / Równe kafelki badań</h2><p>Kafelki badań w karcie produkcji mają tę samą szerokość co armia i budowa, a ich symbol te same odstępy co ikony modeli.</p>" +
+				"<h2>0.175.14 / Modele w kolejkach i zaznaczeniu</h2><p>Lista kolejek budynków pokazuje model budynku i produkowanej jednostki, pasek nad kartami — model tego, co powstaje, a zaznaczenie — model zaznaczonej jednostki lub budynku.</p>" +
+				"<h2>0.175.13 / Odstęp ikon na kartach</h2><p>Ikona modelu na karcie produkcji ma własne miejsce i odstęp od nazwy, a kafelki są odrobinę szersze.</p>" +
+				"<h2>0.175.12 / Modele 3D w interfejsie</h2><p>Baza wiedzy, drzewo rozwoju i karta produkcji pokazują prawdziwe modele 3D z gry zamiast starych rysunków 2D — karty produkcji i budowy mają ikony modeli w kolorze i frakcji gracza.</p>" +
+				"<h2>0.175.11 / Lobby przy lewej krawędzi</h2><p>Okno lobby i pokoju gry wieloosobowej stoi przy lewej krawędzi, równo z logo, jak pozostałe okna menu.</p>" +
+				"<h2>0.175.10 / Jedna zakładka grafiki</h2><p>Ustawienia „Grafika planszy” i „Renderer” są w jednej zakładce „Grafika”: silnik, jakość, efekty i pomiary.</p>" +
+				"<h2>0.175.9 / Głośniej na start</h2><p>Nowa gra zaczyna z głośnością efektów 70% i muzyki 90% (było po 35%). Ustawiona wcześniej głośność zostaje.</p>" +
+				"<h2>0.175.8 / Automatyczna jakość grafiki</h2><p>Gdy liczba klatek w bitwie 3D długo spada poniżej 40, plansza sama upraszcza najdroższe efekty — w czterech stopniach — i przywraca je, gdy jest zapas. Twoje ustawienia się nie zmieniają; przełącznik i bieżący stan są w Ustawieniach → Grafika planszy.</p>" +
+				"<h2>0.175.7 / Mapa w grze wieloosobowej</h2><p>Lobby i pokój gry na serwerze pokazują obok zasad podgląd mapy bitwy — teren planety albo kosmos i starty graczy w ich kolorach; widzi go też gość.</p>" +
+				"<h2>0.175.6 / Podgląd mapy w scenariuszach</h2><p>Wybór mapy stoi w rzędzie z nazwą gracza i kolorem, a podgląd pokazuje prawdziwy teren planety albo kosmos — tak jak w bitwie.</p>" +
+				"<h2>0.175.5 / Bitwa od razu w 3D</h2><p>Plansza nie mignie już na chwilę w innym silniku: ekran wczytywania czeka, aż wybrany silnik jest gotowy.</p>" +
+				"<h2>0.175.4 / Ikona w karcie</h2><p>Gra ma własną ikonę ◈ w karcie przeglądarki i na pasku okna aplikacji.</p>" +
+				"<h2>0.175.3 / Pasek pauzy</h2><p>Pauza taktyczna ma stały pasek nad planszą: dlaczego gra stoi, od kiedy i przycisk Wznów. W Dostępności: pauza przy utracie fokusu (wł./wył.) i dłuższe komunikaty.</p>" +
+				"<h2>0.175.2 / Skala z potwierdzeniem, silnik bez zawieszenia</h2><p>Skalę interfejsu wprowadza „Zastosuj” i trzeba ją zachować (inaczej wraca po 15 s). Zmiana silnika grafiki w bitwie dzieje się od razu, za ekranem wczytywania — powrót na mapę bez zawieszenia.</p>" +
+				"<h2>0.175.1 / Dostępność</h2><p>Ustawienia → Dostępność: własne klawisze, skala interfejsu 80–150% i paleta dla daltonistów.</p>" +
+				"<h2>0.175 / English version</h2><p>Gra po polsku albo po angielsku — wybór w Ustawieniach → Aplikacja i zapisy albo przyciskiem „English” w stopce menu. Dziennik zmian zostaje po polsku.</p>" +
+				"<h2>0.174.1 / Dowódca z lotnictwem i sabotażystami</h2><p>W scenariuszach komputer buduje też lotnictwo, artylerię, transportery i sabotażystów: wozi piechotę do natarcia i wyłącza Twoje słabo pilnowane budynki.</p>" +
+				"<h2>0.174 / Symulator balansu</h2><p>Narzędzie, które rozgrywa setki meczów komputera z komputerem i mierzy balans frakcji i map — pierwsze dane: Rój za silny, Dominium za słabe. Sama gra bez zmian.</p>" +
+				"<h2>0.173 / Jeden silnik grafiki: 3D</h2><p>Grafika rozwija się już tylko w trybie 3D; WebGL i Canvas 2D zostają jako tryby awaryjne. Kto miał zapisany WebGL, gra teraz w 3D — można to zmienić w ustawieniach. Pod spodem: porządki w kodzie gry.</p>" +
 				"<h2>0.172.8 / Dźwięk, który się gubił</h2><p>Muzyka wraca po pauzie spacją, dźwięk wraca po powrocie do okna przy pierwszym kliknięciu, a wyciszenie klawiszem M pokazuje komunikat.</p>" +
 				"<h2>0.172.7 / Domyślnie grafika 3D</h2><p>Nowa gra startuje z silnikiem 3D (Three.js); wybór z ustawień zostaje.</p>" +
 				"<h2>0.172.6 / Zasady i wskazówka dla gościa</h2><p>Gość widzi zasady gry jako zwarte podsumowanie, a pod nim, co ma teraz zrobić.</p>" +
@@ -627,9 +656,9 @@ class CommandMenu {
 		) {
 			body = body.replace(
 				"<h2>Cele operacji</h2>",
-				`<div class="scenario-config"><label class="wide-field">Gotowe ustawienia<select id="scenario-preset" aria-label="Gotowe ustawienia">${Object.entries(RTS.SCENARIO_PRESETS || {})
+				`<div class="scenario-config scenario-presets"><label class="wide-field">Gotowe ustawienia<select id="scenario-preset" aria-label="Gotowe ustawienia">${Object.entries(RTS.SCENARIO_PRESETS || {})
 					.map(([id, p]) => `<option value="${id}">${p.name}</option>`)
-					.join("")}<option value="custom">Własne</option></select></label><p id="preset-description"></p><label>Nazwa gracza<input id="scenario-name" maxlength="24" aria-label="Nazwa gracza"></label><label>Kolor<select id="scenario-color" aria-label="Kolor gracza">${(RTS.PLAYER_COLORS || []).map((c, i) => `<option value="${c}">${["Miętowy", "Niebieski", "Fioletowy", "Złoty", "Różowy"][i]}</option>`).join("")}</select></label><label>Poziom trudności<select id="scenario-difficulty" aria-label="Poziom trudności"><option value="easy">Łatwy</option><option value="normal">Średni</option><option value="hard">Trudny</option></select></label><label>Liczba graczy<select id="scenario-players" aria-label="Liczba graczy"><option value="2">2 — Ty + 1 AI</option><option value="3">3 — Ty + 2 AI</option><option value="4">4 — Ty + 3 AI</option></select></label><label>Tryb<select id="scenario-mode" aria-label="Tryb scenariusza">${Object.entries(
+					.join("")}<option value="custom">Własne</option></select></label><p id="preset-description"></p></div><div class="scenario-config"><label>Nazwa gracza<input id="scenario-name" maxlength="24" aria-label="Nazwa gracza"></label><label>Kolor<select id="scenario-color" aria-label="Kolor gracza">${(RTS.PLAYER_COLORS || []).map((c, i) => `<option value="${c}">${["Miętowy", "Niebieski", "Fioletowy", "Złoty", "Różowy"][i]}</option>`).join("")}</select></label><label>Poziom trudności<select id="scenario-difficulty" aria-label="Poziom trudności"><option value="easy">Łatwy</option><option value="normal">Średni</option><option value="hard">Trudny</option></select></label><label>Liczba graczy<select id="scenario-players" aria-label="Liczba graczy"><option value="2">2 — Ty + 1 AI</option><option value="3">3 — Ty + 2 AI</option><option value="4">4 — Ty + 3 AI</option></select></label><label>Tryb<select id="scenario-mode" aria-label="Tryb scenariusza">${Object.entries(
 					RTS.MODES || {},
 				)
 					.map(
@@ -651,7 +680,10 @@ class CommandMenu {
 		this.root.classList.toggle("reduced-motion", this.reduced);
 		// Films (the intro, the prologues, the radio scenes) take the whole screen.
 		this.root.classList.toggle("film-screen", ["intro", "intro2", "intro3", "intro4", "finale", "interlude"].includes(screen));
-		this.root.innerHTML = `<div class="menu-stars" aria-hidden="true"></div><div class="menu-orbit" aria-hidden="true"><div class="menu-planet"><div class="planet-surface"></div><div class="planet-clouds"></div><div class="planet-shade"></div></div></div><header class="menu-brand"><span>◈</span> POGRANICZE <small>GALAKTYKI / POKŁAD DOWODZENIA</small></header><div class="menu-layout"><section class="menu-content ${["knowledge", "scenarios", "intro", "intro2", "intro3", "intro4", "finale", "interlude", "campaign"].includes(screen) ? "wide" : ""}"><span class="eyebrow">${EYEBROWS[screen] || "WOLNE KOLONIE / SEKTOR 07"}</span><h1 tabindex="-1">${title}</h1>${body}</section>${screen === "pause" ? this.situationHtml() : ""}${screen === "home" ? `<aside class="menu-mission"><span class="eyebrow">${save.valid ? "OSTATNIA OPERACJA" : "SYGNAŁ Z POWIERZCHNI"}</span><h2>${save.valid ? RTS.MISSIONS[save.missionId]?.planet || "Khepri IV" : "Khepri IV"}</h2><p>${save.valid ? RTS.MISSIONS[save.missionId]?.name || "Cichy Horyzont" : "Ekspedycja Wolnych Kolonii"}</p><p>${save.valid ? `Czas bitwy: ${save.time}<br>Zapis: ${save.date}` : "Dominium zajęło północny kompleks.<br>Przywróć kontrolę nad sektorem."}</p><span class="menu-tag">${save.valid ? "ZAPIS GOTOWY DO WZNOWIENIA" : "OCZEKIWANIE NA ROZKAZY"}</span></aside>` : ""}</div><footer class="menu-footer"><span>PROTOTYP ${GAME_VERSION} · ZAPIS LOKALNY</span><button id="menu-news">Co nowego i plany</button><button id="menu-sound">Dźwięk</button></footer>`;
+		// I6 (0.175): the changelog and the plans stay in Polish — said in English, and left out of the translation.
+		if (screen === "news" && typeof I18N !== "undefined" && I18N.lang !== "pl")
+			body = `<p class="menu-note" data-i18n-skip>The changelog and the development plans are kept in Polish.</p><div data-i18n-skip lang="pl">${body}</div>`;
+		this.root.innerHTML = `<div class="menu-stars" aria-hidden="true"></div><div class="menu-orbit" aria-hidden="true"><div class="menu-planet"><div class="planet-surface"></div><div class="planet-clouds"></div><div class="planet-shade"></div></div></div><header class="menu-brand"><span>◈</span> POGRANICZE <small>GALAKTYKI / POKŁAD DOWODZENIA</small></header><div class="menu-layout"><section class="menu-content ${["knowledge", "scenarios", "intro", "intro2", "intro3", "intro4", "finale", "interlude", "campaign"].includes(screen) ? "wide" : ""}"><span class="eyebrow">${EYEBROWS[screen] || "WOLNE KOLONIE / SEKTOR 07"}</span><h1 tabindex="-1">${title}</h1>${body}</section>${screen === "pause" ? this.situationHtml() : ""}${screen === "home" ? `<aside class="menu-mission"><span class="eyebrow">${save.valid ? "OSTATNIA OPERACJA" : "SYGNAŁ Z POWIERZCHNI"}</span><h2>${save.valid ? RTS.MISSIONS[save.missionId]?.planet || "Khepri IV" : "Khepri IV"}</h2><p>${save.valid ? RTS.MISSIONS[save.missionId]?.name || "Cichy Horyzont" : "Ekspedycja Wolnych Kolonii"}</p><p>${save.valid ? `Czas bitwy: ${save.time}<br>Zapis: ${save.date}` : "Dominium zajęło północny kompleks.<br>Przywróć kontrolę nad sektorem."}</p><span class="menu-tag">${save.valid ? "ZAPIS GOTOWY DO WZNOWIENIA" : "OCZEKIWANIE NA ROZKAZY"}</span></aside>` : ""}</div><footer class="menu-footer"><span>PROTOTYP ${GAME_VERSION} · ZAPIS LOKALNY</span><button id="menu-news">Co nowego i plany</button><button id="menu-sound">Dźwięk</button>${typeof I18N !== "undefined" ? `<button id="menu-lang" data-i18n-skip title="Język gry · Game language" lang="${I18N.lang === "pl" ? "en" : "pl"}">${I18N.lang === "pl" ? "English" : "Polski"}</button>` : ""}</footer>`;
 		// The living backdrop (menu-backdrop.js), one canvas kept across the screens.
 		if (this.backdrop === undefined) this.backdrop = typeof MenuBackdrop !== "undefined" ? MenuBackdrop.create(this) : null;
 		if (this.backdrop) {
@@ -1027,17 +1059,30 @@ class CommandMenu {
 				this.show(id);
 			});
 		on("sound", () => this.api.toggleSound());
+		// I6 (0.175): the other language — kept, and the game loads again in it.
+		on("lang", () => I18N.set(I18N.lang === "pl" ? "en" : "pl"));
 		if (screen === "settings") {
+			// Where the automatic quality stands now (0.175.8).
+			const autoStatus = () => {
+				const el = this.root.querySelector("#auto-quality-status");
+				if (!el || typeof SceneFX === "undefined") return;
+				const level = SceneFX.autoLevel || 0;
+				el.textContent = !SceneFX.options.autoQuality ? "Wyłączona: plansza zawsze rysuje według ustawień poniżej." : level ? `Teraz: grafika uproszczona o ${level} z ${SceneFX.AUTO_MAX} stopni — na czas bitwy, ustawienia bez zmian.` : "Teraz: pełna jakość według ustawień.";
+			};
+			autoStatus();
 			if (typeof SceneFX !== "undefined") {
 				for (const key of ["terrain", "particles"]) {
 					const el = this.root.querySelector("#visual-" + key);
 					el.value = SceneFX.options[key];
 					el.onchange = () => SceneFX.set(key, el.value);
 				}
-				for (const key of ["flashes", "metrics", "fps", "lights", "shadows", "clouds", "bloom", "water", "volume", "scars", "relief", "tilt", "cinema", "ao", "pbr", "reflect", "atmo", "surface", "dof", "haze", "shake"]) {
+				for (const key of ["flashes", "metrics", "fps", "lights", "shadows", "clouds", "bloom", "water", "volume", "scars", "relief", "tilt", "cinema", "ao", "pbr", "reflect", "atmo", "surface", "dof", "haze", "shake", "autoQuality"]) {
 					const el = this.root.querySelector("#visual-" + key);
 					el.checked = SceneFX.options[key];
-					el.onchange = () => SceneFX.set(key, el.checked);
+					el.onchange = () => {
+						SceneFX.set(key, el.checked);
+						autoStatus();
+					};
 				}
 				const rendererSelect = this.root.querySelector("#visual-renderer"),
 					status = this.root.querySelector("#renderer-status"),
@@ -1057,6 +1102,8 @@ class CommandMenu {
 				rendererSelect.value = SceneFX.options.renderer;
 				rendererSelect.onchange = () => {
 					SceneFX.set("renderer", rendererSelect.value);
+					// During a battle the board is rebuilt now, behind a loading screen (app.js switchRenderer).
+					this.api.rendererChanged?.();
 					showStatus();
 					setTimeout(showStatus, 600);
 				};
@@ -1151,6 +1198,12 @@ class CommandMenu {
 				}
 			};
 			this.mountAppSettings();
+			// Dostępność (accessibility.js): new keys show at once in the list; the palette repaints the battle.
+			if (typeof Access !== "undefined")
+				Access.mount(this.root, (what) => {
+					if (what === "palette") this.api.repaint?.();
+					else this.show("settings", "access-reset");
+				});
 		}
 		this.syncAudio();
 		(
@@ -1178,7 +1231,7 @@ class CommandMenu {
 		}
 		const musicSlider = this.root.querySelector("#menu-music-volume");
 		if (musicSlider) {
-			musicSlider.value = Math.round((s.musicVolume ?? 0.35) * 100);
+			musicSlider.value = Math.round((s.musicVolume ?? 0.9) * 100);
 			this.root.querySelector("#menu-music-value").textContent =
 				musicSlider.value + "%";
 		}
@@ -1334,61 +1387,65 @@ class CommandMenu {
 			`<label class="wide-field">Kod operacji — do udostępnienia<span class="inline-field"><input id="scenario-code" maxlength="48" spellcheck="false" autocomplete="off" aria-label="Kod operacji"><button type="button" id="scenario-code-apply">Wczytaj kod</button></span></label><p id="scenario-code-feedback" role="status"></p>`
 		);
 	}
-	drawMapPreview() {
-		const canvas = this.root.querySelector("#map-preview"),
-			c = canvas.getContext("2d"),
-			g = new RTS.Game(42, this.selectedMission),
-			m = RTS.MISSIONS[this.selectedMission];
-		g.configureSkirmish(this.scenario);
-		c.fillStyle =
-			m.biome === "ice"
-				? "#b4c5cb"
-				: m.biome === "ash"
-					? "#615962"
-					: "#b9a579";
-		c.fillRect(0, 0, 480, 190);
-		c.save();
-		c.scale(480 / g.W, 190 / g.H);
-		if (typeof BoardArt !== "undefined") BoardArt.terrain(c, g);
-		if (typeof PlanetArt !== "undefined") PlanetArt.terrain(c, g);
-		for (const w of g.waters) {
-			c.fillStyle =
-				(typeof MapArt !== "undefined" && MapArt.color(w.kind)) ||
-				"#467b8e";
-			c.beginPath();
-			if (typeof PlanetArt !== "undefined") PlanetArt.lakePath(c, w);
-			else {
-				for (let i = 0; i <= 80; i++) {
-					const a = (i * Math.PI) / 40,
-						r = RTS.waterRadius(w, a),
-						x = w.x + Math.cos(a) * w.rx * r,
-						y = w.y + Math.sin(a) * w.ry * r;
-					if (!i) c.moveTo(x, y);
-					else c.lineTo(x, y);
-				}
-				c.closePath();
+	// The preview of the chosen map (0.175.6): drawn by the game's own Canvas 2D board — the real terrain of a planet,
+	// space with its nebulae and asteroids for a space map, deposits, relays, the bases — in the map's proportions,
+	// with no fog; the starting bases and the relays marked over it. (It was a plain sketch: a colour by biome and
+	// rectangles, the same for a space map as for a planet.)
+	// make: the battle to show (a network game's, built by its rules); by default the selected mission.
+	drawMapPreview(make = null) {
+		const canvas = this.root.querySelector("#map-preview");
+		if (!canvas) return;
+		let g;
+		if (make) g = make();
+		else {
+			g = new RTS.Game(42, this.selectedMission);
+			g.configureSkirmish(this.scenario);
+		}
+		const m = RTS.MISSIONS[g.missionId] || RTS.MISSIONS[this.selectedMission];
+		g.isVisible = () => true;
+		g.isVisibleTo = () => true;
+		const width = 960,
+			height = Math.round((width * g.H) / g.W);
+		if (canvas.width !== width || canvas.height !== height) {
+			canvas.width = width;
+			canvas.height = height;
+		}
+		const c = canvas.getContext("2d"),
+			k = width / g.W;
+		c.setTransform(1, 0, 0, 1, 0, 0);
+		c.fillStyle = "#060b10";
+		c.fillRect(0, 0, width, height);
+		if (typeof createCanvasRenderer === "function") {
+			// One hidden board for the previews, given each new map.
+			if (!this.previewBoard) {
+				const own = document.createElement("canvas"),
+					mini = document.createElement("canvas");
+				mini.width = 220;
+				mini.height = 135;
+				this.previewBoard = createCanvasRenderer(own, mini);
 			}
-			c.fill();
+			this.previewBoard.setGame(g);
+			this.previewBoard.drawLayer(c, { game: g, width, height, dpr: 1, scale: k, camera: { x: g.W / 2, y: g.H / 2, zoom: 1 }, selected: new Set(), colors: [0, 1, 2, 3, 4, 5].map((t) => g.colorFor(t)), mouse: null, drag: null, building: false, wallDrag: null }, ["terrain", "ground", "units"]);
 		}
-		for (const r of g.obstacles) {
-			c.fillStyle =
-				(typeof MapArt !== "undefined" && MapArt.color(r.kind)) ||
-				"#454f4b";
-			c.fillRect(r.x, r.y, r.w, r.h);
-		}
-		for (const o of g.ores) {
-			c.fillStyle = "#82b5be";
-			c.fillRect(o.x - 28, o.y - 28, 56, 56);
-		}
+		// Marks over the art: the relays and the starting bases in their sides' colours.
+		c.save();
+		c.scale(k, k);
+		c.lineWidth = 2.2 / k;
 		for (const n of g.nodes) {
-			c.fillStyle = "#efd17e";
+			c.strokeStyle = "rgba(245, 226, 122, 0.95)";
 			c.beginPath();
-			c.arc(n.x, n.y, 36, 0, Math.PI * 2);
-			c.fill();
+			c.arc(n.x, n.y, 44, 0, Math.PI * 2);
+			c.stroke();
 		}
 		for (const e of g.entities.filter((e) => e.type === "hq")) {
-			c.fillStyle = g.colorFor(e.team);
-			c.fillRect(e.x - 55, e.y - 55, 110, 110);
+			const color = g.colorFor(e.team);
+			c.fillStyle = color + "33";
+			c.strokeStyle = color;
+			c.lineWidth = 3 / k;
+			c.beginPath();
+			c.arc(e.x, e.y, 120, 0, Math.PI * 2);
+			c.fill();
+			c.stroke();
 		}
 		const artifact = g.modeState?.artifact;
 		if (artifact) {
@@ -1405,7 +1462,9 @@ class CommandMenu {
 			c.stroke();
 		}
 		c.restore();
-		this.root.querySelector("#map-description").textContent = m.description;
+		canvas.setAttribute("aria-label", `Podgląd mapy: ${m.name} — ${m.space ? "kosmos" : "planeta"}`);
+		const description = this.root.querySelector("#map-description");
+		if (description) description.textContent = m.description;
 	}
 	// Long screens get the knowledge-base layout: fixed title and actions, scrolled content between them.
 	// Act III briefing: the consequences of the act II decision about the Hefajstos complex.
@@ -1500,6 +1559,8 @@ class CommandMenu {
 	// Ustawienia → Aplikacja i zapisy (G3, 0.151): full screen in the desktop app; saves to a file and back
 	// (save-transfer.js) — in the browser too.
 	mountAppSettings() {
+		const language = this.root.querySelector("#app-language");
+		if (language) language.onchange = () => I18N.set(language.value);
 		const fullscreen = this.root.querySelector("#app-fullscreen"),
 			status = this.root.querySelector("#saves-status"),
 			file = this.root.querySelector("#saves-file"),

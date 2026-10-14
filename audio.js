@@ -105,8 +105,9 @@
 			this.master = null;
 			this.musicGain = null;
 			this.muted = false;
-			this.volume = 0.35;
-			this.musicVolume = 0.35;
+			// The defaults (0.175.9): effects 70%, music 90% (were 35% both); a saved setting stays.
+			this.volume = 0.7;
+			this.musicVolume = 0.9;
 			this.effectsGain = null;
 			this.channels = { combat: 1, units: 1, ambient: 1, alerts: 1 };
 			this.musicMood = "explore";

@@ -4,6 +4,8 @@
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width,initial-scale=1" />
 		<title>Pogranicze Galaktyki — RTS</title>
+		<link rel="icon" href="favicon.ico" sizes="any" />
+		<link rel="icon" href="favicon.svg" type="image/svg+xml" />
 		<link rel="stylesheet" href="style.css" />
 		<link rel="stylesheet" href="cursor.css" />
 		<link rel="stylesheet" href="expansion.css" />
@@ -50,7 +52,7 @@
 					type="range"
 					min="0"
 					max="100"
-					value="35"
+					value="70"
 					aria-label="Głośność dźwięków"
 					title="Głośność dźwięków"
 				/><button
@@ -187,7 +189,7 @@
 							>SYGNAŁ PRZYCHODZĄCY / KHEPRI IV</span
 						>
 						<div class="briefing-symbol">◈</div>
-						<h2>Dowódco,<br />sektor czeka.</h2>
+						<h2>Dowódco, sektor czeka.</h2>
 						<p>
 							Dominium zajęło północny kompleks. Przejmij
 							przekaźniki, rozbuduj oddział i odzyskaj planetę.
@@ -274,6 +276,9 @@
 				<button id="restart">↻ Nowa operacja</button>
 			</div>
 		</footer>
+		<script src="i18n.js"></script>
+		<script src="lang/en.js"></script>
+		<script src="accessibility.js"></script>
 		<script src="engine.js"></script>
 		<script src="advanced-rules.js"></script>
 		<script src="army-rules.js"></script>
@@ -307,6 +312,7 @@
         <script src="campaign-act4.js"></script>
         <script src="network-modes.js"></script>
 		<script src="scene-fx.js"></script>
+		<script src="model-icons.js"></script>
 		<script src="audio.js"></script>
 		<script src="audio-hq.js"></script>
 		<script src="audio-radio.js"></script>
@@ -351,6 +357,11 @@
 		<script src="webgl/fauna-native.js"></script>
 		<script src="webgl/canvas-replay.js"></script>
 		<script src="webgl/pixi-game-renderer.js"></script>
+		<script src="app-hud.js"></script>
+		<script src="app-network.js"></script>
+		<script src="app-story.js"></script>
+		<script src="app-deck.js"></script>
+		<script src="app-controls.js"></script>
 		<script src="app.js"></script>
 		<script src="cursor.js"></script>
 	</body>

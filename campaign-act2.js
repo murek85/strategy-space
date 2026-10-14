@@ -1568,7 +1568,6 @@
 			return g;
 		};
 	}
-	if (typeof module !== "undefined" && module.exports)
-		module.exports = install;
-	else install(root.RTS);
+	if (typeof module !== "undefined" && module.exports) module.exports = install;
+	else root.RTS.rule("campaign-act2", install);
 })(typeof window !== "undefined" ? window : globalThis);

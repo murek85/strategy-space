@@ -1,6 +1,9 @@
 /* Canvas 2D renderer: the battlefield and minimap, drawn from the game state and the current view
    (camera, selection, placement preview). Split out of app.js unchanged, so the picture is identical;
-   a WebGL renderer can implement the same interface (setGame, refreshFog, render). */
+   a WebGL renderer can implement the same interface (setGame, refreshFog, render).
+   Since 0.173 (I4) only the 3D board is developed on. Here the board itself (terrain, ground, units, sky, lighting,
+   post) is FROZEN — the fallback of the fallback, bug fixes only; the overlay, the screen layer, the minimap and the
+   fog of war are drawn for the 3D board too (drawLayer, drawMinimap, refreshFog) and stay in development. */
 function createCanvasRenderer(canvas, mini) {
 	"use strict";
 	const { TYPES, MISSIONS, dist } = RTS;

@@ -11,7 +11,7 @@ Plan: [Etap G](ETAP_G.md). Gra działa jak dotąd w przeglądarce (`npm start`, 
 | `npm run app:check` | Samokontrola: buduje bundle 3D, uruchamia aplikację, startuje bitwę z rendererem 3D, wypisuje raport i błędy strony, kończy (kod wyjścia 0 = działa) |
 | `npm run dist` | Buduje do `dist/`: instalator `Pogranicze-Galaktyki-<wersja>-instalator.exe` (NSIS) i wersję przenośną `Pogranicze-Galaktyki-<wersja>-przenosna.exe` (x64, ok. 110 MB). `tools/dist.js`: electron-builder wymaga wersji trzyczęściowej (semver), więc na czas budowania `package.json` dostaje np. `0.151.0` zamiast `0.151` i potem zawsze wraca oryginał (także przy błędzie i Ctrl+C) |
 | `npm run dist:dir` | Tylko rozpakowana aplikacja (`dist/win-unpacked/`) — do szybkich prób |
-| `npm run icon` | Odtwarza ikonę `build/icon.png` (`tools/make-icon.js`) |
+| `npm run icon` | Odtwarza ikony: `build/icon.png` (instalator), `favicon.ico` i `favicon.svg` (karta przeglądarki, okno aplikacji) — `tools/make-icon.js` |
 
 Przed `npm run dist` warto przebudować bundle 3D (`npm run build:3d`) — robi to `app:check`.
 

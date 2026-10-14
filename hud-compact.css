@@ -38,7 +38,7 @@ body .topbar .icon-button {
 /* The board over the whole width; the drawer floats over it. */
 body .workspace {
 	position: relative;
-	height: calc(100% - var(--hud-top) - var(--hud-bottom));
+	height: calc(100% - (var(--hud-top) + var(--hud-bottom)) * var(--ui-scale-bar, var(--ui-scale, 1)));
 }
 body .battlefield {
 	flex: 1 1 auto;
@@ -223,6 +223,32 @@ body .production .unit-symbol {
 	font-size: 18px;
 	margin: 0;
 	align-self: center;
+}
+/* A model's icon (0.175.13): its own 32 px column and a gap before the text (it sat in the symbol's 20 px column,
+   over the name), the tiles a little wider for it. */
+body .production .unit-cards:has(.unit-symbol.has-model),
+body .production .unit-cards.expanded-build:has(.unit-symbol.has-model),
+body .production .unit-cards:has(.research-card) {
+	--deck-slot: 148px;
+}
+/* Research (0.175.15): no model, but the tiles as wide as the army's and the building's, and the symbol in the same
+   32 px column with the same gap. */
+body .production .unit-card:has(.unit-symbol.has-model),
+body .production .unit-card.research-card {
+	grid-template-columns: 32px minmax(0, 1fr);
+	gap: 10px;
+}
+body .production .research-card .unit-symbol {
+	width: 32px;
+	text-align: center;
+}
+body .production .unit-symbol.has-model {
+	width: 32px;
+	font-size: 0;
+}
+body .production .unit-symbol img.model-icon {
+	width: 32px;
+	height: 32px;
 }
 body .production .unit-copy {
 	gap: 3px;

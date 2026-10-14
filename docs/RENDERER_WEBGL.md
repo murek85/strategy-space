@@ -1,5 +1,7 @@
 # Nowy renderer 2D na WebGL (PixiJS)
 
+> **Zamrożony od 0.173 (2026-10-13):** tryb awaryjny dla miejsc, gdzie 3D się nie uruchamia; tylko poprawki błędów, nowe efekty — w [rendererze 3D](RENDERER_3D.md). Zob. [Architektura](ARCHITEKTURA.md#1-silniki-grafiki-rozwijamy-tylko-3d).
+
 Data: 2026-09-26. Status: etapy 1–5 wykonane — prototyp (`prototyp-webgl.html`), wydzielenie rysowania (`render-canvas.js`), renderer WebGL w grze (`webgl/pixi-game-renderer.js`, wersja 0.21) z trybem awaryjnym Canvas 2D, ulepszenia grafiki (0.22), wysokość terenu, perspektywa 2,5D i WebGPU (0.23), a jako natywne obiekty PixiJS: grunt (0.24), modele (0.25), przyroda (0.26), poświata i efekty map (0.27) oraz interfejs na planszy (0.28). Cała plansza jest natywna — żadna warstwa Canvas nie jest przesyłana do karty graficznej (warstwy zostały jako tryb awaryjny). Rysunek Canvas 2D pozostaje jedynym źródłem wyglądu i trybem awaryjnym bez WebGL.
 
 ## Cel

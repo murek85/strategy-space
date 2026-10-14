@@ -512,7 +512,6 @@
 			return g;
 		};
 	}
-	if (typeof module !== "undefined" && module.exports)
-		module.exports = install;
-	else install(root.RTS);
+	if (typeof module !== "undefined" && module.exports) module.exports = install;
+	else root.RTS.rule("scenario-modes", install);
 })(typeof window !== "undefined" ? window : globalThis);

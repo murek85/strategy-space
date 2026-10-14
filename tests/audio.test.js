@@ -115,7 +115,7 @@ test("menu freeze and repeated theme selection preserve the playing music", () =
 	audio.musicTimer = setTimeout(() => {}, 10000);
 	audio.musicTimer.unref();
 	const timer = audio.musicTimer;
-	const source = readFileSync(require.resolve("../app.js"), "utf8");
+	const source = require("./app-source.js")();
 	// The development dialog has its own pause callback; inspect the main menu callback.
 	const freeze = source
 		.slice(source.indexOf("menu = new CommandMenu"))
@@ -657,8 +657,24 @@ test("after a pause the battle music goes on; radio speech does not take the sam
 		path = require("node:path"),
 		root = path.join(__dirname, ".."),
 		hq = fs.readFileSync(path.join(root, "audio-hq.js"), "utf8"),
-		app = fs.readFileSync(path.join(root, "app.js"), "utf8");
+		app = require("./app-source.js")();
 	assert.match(hq, /if \(!list \|\| this\.effectVoices\(\) >= this\.maxVoices\) return false;/, "samples count effect voices");
 	assert.match(app, /if \(paused\) sound\.silence\(\);[\s\S]{0,300}else sound\.setMusicMode\(musicModeFor\(game\)\);/, "togglePause brings the music back");
 	assert.match(app, /const pressBack = \(\) => \{[\s\S]{0,200}state === "suspended"/, "a press resumes held sound");
+});
+test("0.175.9: a new player starts with effects at 70% and music at 90%; a saved choice stays", () => {
+	const data = new Map(),
+		storage = {
+			getItem: (k) => data.get(k),
+			setItem: (k, v) => data.set(k, v),
+		};
+	const fresh = new GameAudio({ storage });
+	assert.equal(fresh.volume, 0.7);
+	assert.equal(fresh.musicVolume, 0.9);
+	fresh.setVolume(0.35);
+	fresh.setMusicVolume(0.35);
+	const saved = new GameAudio({ storage });
+	assert.equal(saved.volume, 0.35);
+	assert.equal(saved.musicVolume, 0.35);
+	assert.match(require("node:fs").readFileSync(require("node:path").join(__dirname, "..", "index.html"), "utf8"), /id="sound-volume"[\s\S]{0,80}value="70"/);
 });

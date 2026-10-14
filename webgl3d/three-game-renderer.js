@@ -14,6 +14,13 @@
    - Sun from the game (game.night and the day phase, as in the WebGL renderer). */
 import * as THREE from "../vendor/three.module.js";
 import { createThreeRenderer } from "./three-renderer.js";
+import { createModelPortraits } from "./model-portraits.js";
+
+// Pictures of the 3D models for the interface (model-icons.js): one studio for the page, made on first use.
+let portraitStudio = null;
+export function modelPortraits() {
+	return (portraitStudio ||= createModelPortraits());
+}
 
 export function createThreeGameRenderer({ gameCanvas, canvasRenderer, onContextLost }) {
 	const FOV = 38,

@@ -1,3 +1,5 @@
+/* FROZEN since 0.173 (I4): the PixiJS board is a fallback for where 3D cannot start. Bug fixes only — new effects
+   and new looks go to the 3D renderer (webgl3d/); tests/frozen-renderers.test.js keeps the settings it reads. */
 /* Units and buildings as native PixiJS objects (WebGL/WebGPU renderer), made the same way as the ground:
    the look of a model is painted by the same art code as the Canvas board, into its own small texture,
    and repainted only when its state changes. Everything that moves every frame is native.

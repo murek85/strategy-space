@@ -1,3 +1,4 @@
+/* Shared with the 3D renderer (webgl3d/three-renderer.js) — developed on, unlike the frozen PixiJS files (0.173). */
 /* Terrain height for the WebGL renderer (visual only: movement, vision and saves do not change).
    A coarse height map is derived from the map itself — gentle hills from seeded noise, raised rock
    (mesas, spires, outcrops, wrecks, groves, dunes) and sunken water (lakes, rivers, chasms, lava) —

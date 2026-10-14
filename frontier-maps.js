@@ -413,7 +413,6 @@
 			},
 		});
 	}
-	if (typeof module !== "undefined" && module.exports)
-		module.exports = install;
-	else install(root.RTS);
+	if (typeof module !== "undefined" && module.exports) module.exports = install;
+	else root.RTS.rule("frontier-maps", install);
 })(typeof window !== "undefined" ? window : globalThis);

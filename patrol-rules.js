@@ -128,5 +128,5 @@
 		});
 	}
 	if (typeof module !== "undefined" && module.exports) module.exports = install;
-	else install(root.RTS);
+	else root.RTS.rule("patrol-rules", install);
 })(typeof window !== "undefined" ? window : globalThis);

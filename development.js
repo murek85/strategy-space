@@ -547,6 +547,8 @@
 			if ((typeof Act2Art === "undefined" || !Act2Art.body(c, e, 1.4)) && !AdvancedArt.body(c, e, 1.4, "dust"))
 				BoardArt.body(c, e, 1.4, null, false);
 			AdvancedArt.factionDetails(c, e, 1.4);
+			// The 3D model in the player's faction and colour (0.175.12, model-icons.js).
+			if (typeof ModelIcons !== "undefined") ModelIcons.paint(canvas, e, { colors: [e.tint], space: !!game.space });
 		}
 	}
 	const api = { groups, node, View };

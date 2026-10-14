@@ -1,3 +1,4 @@
+/* Shared with the 3D renderer (webgl3d/three-renderer.js) — developed on, unlike the frozen PixiJS files (0.173). */
 /* Code-generated lighting data for the board models, used by the WebGL renderer.
    - paint(): a model drawn alone on its own canvas by the same art code as the board (silhouettes for shadows).
    - volume(): a building lit from a direction. A height field is derived from the model itself (soft

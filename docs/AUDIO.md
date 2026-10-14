@@ -1,5 +1,9 @@
 # Dźwięk i muzyka
 
+## Wersja 0.175.9 — domyślna głośność (2026-10-14)
+
+- `GameAudio` zaczyna z `volume = 0.7` i `musicVolume = 0.9` (było 0,35 i 0,35). Suwak górnego paska (`#sound-volume` w `index.html`) ma `value="70"`, a ustawienia biorą 0,9 jako zapas dla muzyki. Zapisane `pogranicze-audio-v1` wygrywa, więc dotyczy to tylko nowych graczy i wyczyszczonych ustawień. Test: `tests/audio.test.js`.
+
 ## Wersja 0.172.8 — dźwięk, który się gubił (2026-10-13)
 
 Sprawdzone w przeglądarce (prawdziwy kontekst dźwięku, bez uruchamiania bitwy) i w `tests/audio.test.js`.

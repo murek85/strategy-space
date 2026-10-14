@@ -86,6 +86,8 @@
 				upgrades: [{ kind: "armor", at: 540, cost: 300 }],
 				heavyAt: 420,
 				artilleryAt: null,
+				// I1 follow-up (0.174.1): outside the campaign the commander also flies, shells, carries and sabotages.
+				extras: { hangarAt: 600, artilleryAt: 540, transportAt: 360, transports: 1, saboteurAt: 420, saboteurs: 2 },
 				fortressAt: 660,
 				patrols: 1,
 				escorts: 1,
@@ -126,6 +128,7 @@
 				],
 				heavyAt: 300,
 				artilleryAt: 480,
+				extras: { transportAt: 240, transports: 2, saboteurAt: 300, saboteurs: 3 },
 				fortressAt: 480,
 				patrols: 2,
 				escorts: 2,
@@ -226,7 +229,7 @@
 		const value = (e) => ((TYPES[e.type].cost || 60) * e.hp) / Math.max(1, e.maxHp || TYPES[e.type].hp);
 		const total = (list) => list.reduce((n, e) => n + value(e), 0);
 		const centre = (list) => ({ x: list.reduce((n, e) => n + e.x, 0) / list.length, y: list.reduce((n, e) => n + e.y, 0) / list.length });
-		const PRODUCERS = { hq: ["worker"], barracks: ["trooper", "rocket", "raider", "grenadier", "flamer", "crawler", "spitter", "spark"], factory: ["tank", "sentinel", "destroyer", "colossus", "heavy", "artillery", "skyguard", "prism", "arc", "warden"], hangar: ["interceptor", "bomber"] };
+		const PRODUCERS = { hq: ["worker"], barracks: ["trooper", "rocket", "raider", "grenadier", "flamer", "crawler", "spitter", "spark", "saboteur"], factory: ["tank", "sentinel", "destroyer", "colossus", "heavy", "artillery", "skyguard", "transport", "prism", "arc", "warden"], hangar: ["interceptor", "bomber"] };
 		const disabled = (g, e) => (e.disabledUntil || 0) > g.time || (e.moduleLeft || 0) > 0;
 
 		Object.assign(Game.prototype, {
@@ -353,7 +356,10 @@
 			},
 			// The level, shaped by the faction's style when a team is given.
 			aiLevel(team = null) {
-				const L = LEVELS[this.scenario?.difficulty || this.campaignLevel] || LEVELS.normal,
+				const level = LEVELS[this.scenario?.difficulty || this.campaignLevel] || LEVELS.normal,
+					// The level's extras (aircraft, artillery, transports, saboteurs) outside the campaign only: its chapters
+					// were tuned on the plan without them.
+					L = level.extras && !this.campaignAi && !MISSIONS[this.missionId]?.campaign ? { ...level, ...level.extras } : level,
 					S = team == null ? null : STYLES[this.aiStyleKey(team)];
 				if (!S || S.interval == null) return L;
 				const scale = (n, k) => (n == null ? n : Math.round(n * k));
@@ -916,6 +922,7 @@
 					vehicles = share((e) => !TYPES[e.type].flying && TYPES[e.type].hp >= 300),
 					infantry = share((e) => !TYPES[e.type].flying && TYPES[e.type].hp < 300),
 					c = L.counter,
+					count = (type) => this.entities.filter((e) => e.team === T.team && e.type === type && e.hp > 0).length + this.entities.filter((b) => b.team === T.team && b.aiQueue?.type === type).length,
 					weights = {
 						trooper: 3 + 2 * c * infantry,
 						rocket: 2 + 6 * c * vehicles,
@@ -933,8 +940,10 @@
 						arc: faction === "watchers" ? 1 + 3 * c * infantry : 0,
 						warden: faction === "watchers" && L.heavyAt != null && t >= L.heavyAt - 60 ? 1.5 + c * vehicles : 0,
 						heavy: L.heavyAt != null && t >= L.heavyAt ? 1.2 + 2 * c * vehicles : 0,
-						artillery: L.artilleryAt != null && t >= L.artilleryAt ? 0.8 : 0,
-						skyguard: TYPES.skyguard && air > 0 ? 8 * c * air : 0,
+						artillery: L.artilleryAt != null && t >= L.artilleryAt ? 0.9 : 0,
+						skyguard: TYPES.skyguard && air > 0 ? 0.6 + 8 * c * air : 0,
+						transport: L.transportAt != null && t >= L.transportAt && count("transport") < (L.transports || 0) ? 1.2 : 0,
+						saboteur: L.saboteurAt != null && t >= L.saboteurAt && count("saboteur") < (L.saboteurs || 0) ? 1.2 : 0,
 						interceptor: 2 + 6 * c * air,
 						bomber: 1.5,
 					};
@@ -985,12 +994,122 @@
 						const spot = this.aiRallySpot(T, e);
 						if (!e.target && dist(e, spot) > 120) this.aiGoTo(e, spot, "attackMove");
 					}
+				this.aiSaboteurs(T, army);
 				this.aiRelays(T, L, army);
 				this.aiScout(T, L, army);
 				this.aiAttack(T, L, hq, army, attack);
+				this.aiTransports(T, army);
 				// Patrols and escorts from what the attack and the relay squads left (an attack comes first).
 				if (!threats.length) this.aiPatrols(T, L, hq, army);
 				this.aiEscorts(T, L, hq, army);
+			},
+			// Saboteurs (0.174.1): apart from the army, each charged one goes for an enemy building it knows of — a
+			// producer first (factory, hangar, barracks), then the command centre — and disables it for a while (the
+			// charge itself is the game's: support-rules.js). Set directly, not through sabotage(): that is the player's
+			// order, with its messages.
+			aiSaboteurs(T, army) {
+				const known = this.aiKnown(T.team),
+					rank = { factory: 0, hangar: 1, barracks: 2, hq: 3, uplink: 4, monolith: 4, turret: 5 };
+				for (const e of army) {
+					if (e.type !== "saboteur") continue;
+					e.aiRole = "sabotage";
+					if (e.sabotageTarget != null && this.get(e.sabotageTarget)) continue;
+					if ((e.chargeReady || 0) > this.time + 8) {
+						// Recharging: back to the rally point, out of the way.
+						if (!e.order || e.order.kind !== "move") this.aiGoTo(e, this.aiRallySpot(T, e), "move");
+						continue;
+					}
+					// Guards the commander sees near a building spot a saboteur (80 hit points) before it plants: the
+					// least guarded targets first, the producers among equals.
+					const guards = (s) => this.entities.filter((o) => o.hp > 0 && armed(o) && o.team === s.team && o.type !== "worker" && dist(o, s) < 320 && this.aiSees(T.team, o.x, o.y)).length;
+					const targets = known
+						.filter((s) => (s.type in rank || s.type === "depot" || s.type === "outpost") && this.get(s.id) && !((this.get(s.id).disabledUntil || 0) > this.time + 6))
+						.map((s) => ({ ...s, score: guards(s) * 3 + (rank[s.type] ?? 4) }))
+						.sort((a, b) => a.score - b.score || dist(a, e) - dist(b, e));
+					const t = targets.find((s) => !army.some((o) => o !== e && o.sabotageTarget === s.id)) || targets[0];
+					if (!t) continue;
+					e.sabotageTarget = t.id;
+					e.planting = 0;
+					e.target = null;
+					this.aiGoTo(e, t, "move");
+				}
+			},
+			// Transports (0.174.1): when an attack sets out, the infantry of the group boards the transports in it
+			// (they wait a few seconds); near the target, or when hit hard, the transport unloads them into the fight.
+			aiTransports(T, army) {
+				const A = T.attack;
+				// A new attack takes every waiting transport along (they wait at home in their own role, apart from
+				// escorts, relay squads and patrols, which took them first as fast units).
+				if (A && A.boardUntil == null)
+					for (const c of army)
+						if (c.type === "transport" && !A.ids.includes(c.id) && c.aiRole === "carrier") {
+							c.aiRole = "attack";
+							A.ids.push(c.id);
+						}
+				let boarding = 0;
+				for (const c of army) {
+					if (c.type !== "transport") continue;
+					const riders = c.passengers || [];
+					if (!A || !A.ids.includes(c.id)) {
+						c.aiRole = "carrier";
+						// Not in an attack: anyone aboard gets off at home; the vehicle waits by the rally point.
+						if (riders.length && !this.aiNearFoes(c, 500)) this.aiUnload(c, T);
+						if (!c.target && dist(c, T.rally) > 160) this.aiGoTo(c, this.aiRallySpot(T, c), "move");
+						continue;
+					}
+					if (A.boardUntil == null) {
+						const seats = this.transportSeats(c) - riders.length - this.entities.filter((e) => e.boardTargetId === c.id).length;
+						const infantry = A.ids
+							.map((id) => this.get(id))
+							.filter((e) => e && RTS.PASSENGER_TYPES.includes(e.type) && !e.boardTargetId && dist(e, c) < 900)
+							.sort((a, b) => dist(a, c) - dist(b, c))
+							.slice(0, Math.max(0, seats));
+						for (const e of infantry) {
+							e.boardTargetId = c.id;
+							this.aiGoTo(e, c, "move");
+							boarding = Math.max(boarding, dist(e, c));
+						}
+					}
+				}
+				// The wait: long enough for the farthest to walk to its vehicle (the game boards whoever reaches it).
+				if (A && A.boardUntil == null) A.boardUntil = this.time + (boarding ? Math.min(12, 3 + boarding / 100) : 0);
+				for (const c of army) {
+					if (c.type !== "transport" || !A || !A.ids.includes(c.id)) continue;
+					const riders = c.passengers || [];
+					if (this.time < A.boardUntil) {
+						// Waiting for the boarding (the game boards whoever reaches the vehicle).
+						c.order = { kind: "hold" };
+						c.path = [];
+						continue;
+					}
+					const hurt = c.hp < (c.maxHp || TYPES.transport.hp) * 0.5;
+					if (riders.length && (dist(c, A.target) < 380 || hurt || this.aiNearFoes(c, 260))) this.aiUnload(c, T);
+				}
+			},
+			aiNearFoes(e, r) {
+				return this.entities.some((o) => o.hp > 0 && armed(o) && o.team !== 2 && !this.allied(e.team, o.team) && dist(o, e) < r);
+			},
+			// The passengers out beside the vehicle and into the attack (unload() without the player's messages).
+			aiUnload(c, T) {
+				const out = [],
+					stay = [];
+				for (const p of c.passengers || []) {
+					const spot = this.landingSpot(c, TYPES[p.type].radius, out, 220);
+					if (!spot) {
+						stay.push(p);
+						continue;
+					}
+					Object.assign(p, { x: spot.x, y: spot.y, path: [], target: null, order: null, repath: 0, hit: 0 });
+					delete p.boardTargetId;
+					out.push(p);
+					this.entities.push(p);
+				}
+				c.passengers = stay;
+				for (const p of out) {
+					p.aiRole = T.attack?.ids.includes(c.id) ? "attack" : "defend";
+					this.aiGoTo(p, T.attack?.ids.includes(c.id) ? T.attack.target : this.aiRallySpot(T, p), "attackMove");
+				}
+				return out.length;
 			},
 			// Relay squads: a share of the army takes and holds the nearest relays not owned by the side.
 			aiRelays(T, L, army) {
@@ -1122,7 +1241,7 @@
 						gone = A.target.id != null ? (this.aiIntel(T.team) ? this.aiSees(T.team, A.target.x, A.target.y) && !alive(A.target.id) : !this.get(A.target.id)) : attack.every((e) => dist(e, A.target) < 160 && !e.target);
 					if (gone) A.target = this.aiTarget(T, L, centre(attack)) || A.target;
 					// Escorts of the attack's heavy units keep to them (the order ends when the guarded one falls).
-					for (const e of attack) if (!e.target && e.order?.kind !== "escort") this.aiGoTo(e, A.target, "attackMove");
+					for (const e of attack) if (!e.target && e.order?.kind !== "escort" && !e.boardTargetId && !(e.type === "transport" && this.time < (A.boardUntil || 0))) this.aiGoTo(e, A.target, "attackMove");
 				}
 				// Hard: fast raiders harass workers at the player's outer deposits.
 				if (L.raids && this.time >= T.raidAt) {
@@ -1133,7 +1252,7 @@
 					const home = this.aiFoeHq(T.team, hq);
 					const spot = miners.sort((a, b) => (home ? dist(b, home) - dist(a, home) : 0))[0];
 					const raiders = army
-						.filter((e) => e.aiRole === "defend" && TYPES[e.type].speed >= 100 && !TYPES[e.type].flying)
+						.filter((e) => e.aiRole === "defend" && TYPES[e.type].speed >= 100 && !TYPES[e.type].flying && e.type !== "transport" && e.type !== "saboteur")
 						.sort((a, b) => TYPES[b.type].speed - TYPES[a.type].speed)
 						.slice(0, 3);
 					if (spot && raiders.length >= 2)
@@ -1219,5 +1338,5 @@
 		};
 	}
 	if (typeof module !== "undefined" && module.exports) module.exports = install;
-	else install(root.RTS);
+	else root.RTS.rule("enemy-ai", install);
 })(typeof window !== "undefined" ? window : globalThis);

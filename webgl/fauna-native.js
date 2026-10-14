@@ -1,3 +1,5 @@
+/* FROZEN since 0.173 (I4): the PixiJS board is a fallback for where 3D cannot start. Bug fixes only — new effects
+   and new looks go to the 3D renderer (webgl3d/); tests/frozen-renderers.test.js keeps the settings it reads. */
 /* Wildlife and the sky as native PixiJS objects (WebGL/WebGPU renderer), made like the models:
    each look is painted once by the same art code as the Canvas board (AdvancedArt.animal,
    PlanetArt.bird, PlanetArt.fish, MapArt.island) and reused; motion is native.

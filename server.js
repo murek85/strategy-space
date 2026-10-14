@@ -8,6 +8,8 @@ const mime = {
 	".js": "text/javascript; charset=utf-8",
 	".css": "text/css; charset=utf-8",
 	".svg": "image/svg+xml",
+	".png": "image/png",
+	".ico": "image/x-icon",
 };
 // The lobby of network battles (G4, 0.153) at ws://…/lobby on the same port.
 const { mountLobby } = require("./lobby-server.js");

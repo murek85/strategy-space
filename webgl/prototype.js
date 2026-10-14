@@ -1,3 +1,5 @@
+/* FROZEN since 0.173 (I4): the PixiJS board is a fallback for where 3D cannot start. Bug fixes only — new effects
+   and new looks go to the 3D renderer (webgl3d/); tests/frozen-renderers.test.js keeps the settings it reads. */
 /* Prototype page: one scenario map rendered by PixiRenderer with the real simulation running underneath. */
 (async () => {
 	const $ = (id) => document.getElementById(id),

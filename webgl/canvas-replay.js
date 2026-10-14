@@ -1,3 +1,5 @@
+/* FROZEN since 0.173 (I4): the PixiJS board is a fallback for where 3D cannot start. Bug fixes only — new effects
+   and new looks go to the 3D renderer (webgl3d/); tests/frozen-renderers.test.js keeps the settings it reads. */
 /* Canvas drawing replayed as native PixiJS objects (WebGL/WebGPU renderer).
    Map glow, map effects and the interface on the board (markers, rally flags, placement preview,
    selection box, vignette, sun, moon, stars, snow, lightning, sandstorm) are drawn by the same code

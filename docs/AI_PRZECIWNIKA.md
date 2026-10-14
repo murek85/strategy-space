@@ -2,6 +2,42 @@
 
 Aktualizacja: 2026-09-27. Realizuje pomysły [AI-01–AI-05](POMYSLY.md): gospodarkę, płatną produkcję, obronę, przejmowanie przekaźników, odbudowę i poziomy trudności. Reguły są w `enemy-ai.js` (ładowany jako ostatni moduł reguł); wszystkie liczby w `RTS.AI_LEVELS` i `RTS.AI`.
 
+## Lotnictwo, artyleria, transportery i sabotażyści (wersja 0.174.1, 2026-10-14)
+
+Symulator balansu (I1, [Balans](BALANS.md)) pokazał, że dowódcy nigdy nie budują sześciu jednostek. Przyczyny:
+- hangar i artyleria były w planie tylko poziomu trudnego;
+- wóz przeciwlotniczy powstawał tylko przeciw lotnictwu, którego nikt nie budował;
+- transportera i sabotażystów nie było na liście produkcji, a dowódca nie umiał ich użyć.
+
+- **Plan poziomu** (`AI_LEVELS[…].extras`, tylko poza kampanią — `aiLevel` scala je, gdy nie ma `campaignAi` ani misji kampanii; rozdziały mają strojenie bez nich; łatwy poziom bez zmian):
+
+  | Poziom | Hangar | Artyleria | Transportery | Sabotażyści |
+  |---|---|---|---|---|
+  | Średni | 600 s | 540 s | od 360 s, najwyżej 1 | od 420 s, najwyżej 2 |
+  | Trudny | 420 s, jak dotąd | 480 s, jak dotąd | od 240 s, najwyżej 2 | od 300 s, najwyżej 3 |
+
+  Wóz przeciwlotniczy dostał wagę 0,6 plus dotychczasową zależną od lotnictwa wroga.
+- **Produkcja:** `PRODUCERS` — sabotażyści z koszar, transporter z fabryki. W `aiPickUnit` liczba sztuk obejmuje też te w kolejce.
+- **Transporter** (`aiTransports`):
+  - Czeka przy punkcie zbiórki w roli `carrier`. Dzięki temu nie zabierają go eskorty ani oddziały przekaźników, które wcześniej brały go jako szybką jednostkę.
+  - Przy wyruszeniu natarcia dołącza do oddziału. Piechota oddziału (`PASSENGER_TYPES`) z odległości do 900 idzie do pojazdu, a ten czeka 3–12 s, zależnie od odległości.
+  - Załoga wysiada (`aiUnload`, bez komunikatów gracza) w odległości 380 od celu, przy połowie PW pojazdu albo przy wrogu w promieniu 260. Wysiadła piechota wchodzi do natarcia.
+  - Poza natarciem pojazd wysadza załogę w bazie.
+- **Sabotażyści** (`aiSaboteurs`, rola `sabotage`, poza obroną, natarciem i patrolami):
+  - Idą do znanego wrogiego budynku: fabryki, hangaru, koszar, centrum, stacji orbitalnej, monolitu, wieżyczki, magazynu albo wysuniętej placówki.
+  - Wybierają budynek najmniej pilnowany przez widoczne oddziały (3 punkty za każdego strażnika w promieniu 320), a wśród równych — producenta. Pierwsza wersja szła prosto na fabrykę i ginęła od obrony.
+  - Ładunek i jego działanie należą do gry (`support-rules.js`). Między ładunkami sabotażyści czekają w bazie.
+- **Komunikaty:** `unload()` w `army-rules.js` pokazuje komunikaty o desancie tylko przy transporterze człowieka. Awaryjny desant transportera komputera trafiał do dziennika gracza.
+- **Pomiar** (240 meczów AI kontra AI, poziom średni):
+  - każda z sześciu jednostek jest budowana;
+  - transporter wozi piechotę w 33–91% meczów, zależnie od frakcji (najwięcej Rój: 4,3 żołnierza na mecz);
+  - sabotażyści wyłączają budynki w 16–28% meczów;
+  - lotnictwo i artyleria pojawiają się rzadko (do 0,7 maszyny i 0,8 dział na mecz), bo mecze dowódców kończą się średnio po ok. 12 minutach (na trudnym po ok. 8). W meczu z człowiekiem, dłuższym, dojdą do głosu.
+- **Testy:** w `tests/enemy-ai.test.js` 3 nowe:
+  - plan tylko w scenariuszach, od swojej minuty i do limitu;
+  - transporter zabiera piechotę natarcia i wysadza ją przy celu bez komunikatów gracza;
+  - sabotażyści omijają fabrykę z czterema czołgami.
+
 ## Poprawki rozgrywki z przeglądu gry (wersja 0.171.11, 2026-10-10)
 
 Błędy znalezione symulacjami bez grafiki (każdy ma test w `tests/gameplay-fixes.test.js`):

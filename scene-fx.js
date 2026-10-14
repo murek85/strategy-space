@@ -34,6 +34,9 @@
 			// Heat haze over fires, blasts, lava and engines; the camera shaking at big blasts (0.144).
 			haze: true,
 			shake: true,
+			// Automatic quality (0.175.8): the 3D board steps its costliest effects down while the frame rate stays low
+			// and back up when it has room — for the battle only, the settings themselves stay as chosen.
+			autoQuality: true,
 		},
 		RENDERERS = ["three", "webgpu", "webgl", "canvas"],
 		options = { ...defaults };
@@ -44,9 +47,14 @@
 		for (const key of ["terrain", "particles"])
 			if (["low", "medium", "high"].includes(saved[key]))
 				options[key] = saved[key];
-		for (const key of ["flashes", "metrics", "fps", "lights", "shadows", "clouds", "bloom", "water", "volume", "scars", "relief", "tilt", "cinema", "ao", "pbr", "reflect", "atmo", "surface", "dof", "haze", "shake"])
+		for (const key of ["flashes", "metrics", "fps", "lights", "shadows", "clouds", "bloom", "water", "volume", "scars", "relief", "tilt", "cinema", "ao", "pbr", "reflect", "atmo", "surface", "dof", "haze", "shake", "autoQuality"])
 			if (typeof saved[key] === "boolean") options[key] = saved[key];
 		if (RENDERERS.includes(saved.renderer)) options.renderer = saved.renderer;
+		// 0.173 (I4): PixiJS is frozen as a fallback. "webgl" was the default until 0.172.7 and SceneFX.set saves every
+		// option at once, so almost every player has it saved without having chosen it: moved to 3D once (WebGPU and
+		// Canvas 2D were chosen on purpose and stay). The settings take it back for good.
+		if (saved.renderer === "webgl" && !saved.moved3d) options.renderer = "three";
+		options.moved3d = true;
 	} catch {}
 	const api = {
 		options,
@@ -63,6 +71,7 @@
 				return false;
 			options[key] = value;
 			if (key === "terrain") this.revision++;
+			if (key === "autoQuality" && !value) this.resetAuto(true);
 			try {
 				root.localStorage?.setItem(
 					"pogranicze-visual-v1",
@@ -70,6 +79,57 @@
 				);
 			} catch {}
 			return true;
+		},
+		// Automatic quality: 0 — the settings as chosen; 1–AUTO_MAX — ever more of the board's costliest work left out
+		// (webgl3d/three-renderer.js applyQuality). Fed the frame rate twice a second while a battle runs on the 3D
+		// board (app.js); a gap in the samples (a pause, a hidden window, a loading screen) starts the watch again.
+		AUTO_MAX: 4,
+		autoLevel: 0,
+		auto: { samples: [], changed: -Infinity, upWait: 20000, raisedAt: -Infinity },
+		resetAuto(level = false) {
+			this.auto.samples = [];
+			if (level) {
+				this.autoLevel = 0;
+				this.auto.changed = -Infinity;
+				this.auto.upWait = 20000;
+				this.auto.raisedAt = -Infinity;
+			}
+		},
+		// Returns the new level when it changes, otherwise null.
+		autoTune(fps, now) {
+			const a = this.auto;
+			if (!options.autoQuality || !Number.isFinite(fps)) return null;
+			const last = a.samples.at(-1);
+			if (last && now - last.t > 1500) a.samples = [];
+			a.samples.push({ t: now, fps });
+			while (a.samples.length && now - a.samples[0].t > 170000) a.samples.shift();
+			if (now - a.changed < 8000) return null;
+			const within = (ms) => a.samples.filter((x) => now - x.t <= ms),
+				rank = (xs, p) => {
+					const v = xs.map((x) => x.fps).sort((p, q) => p - q);
+					return v[Math.floor((v.length - 1) * p)];
+				},
+				median = (xs) => rank(xs, 0.5);
+			// Down: three quarters of the last 6 s below 40 frames (so a hitch, a loading spike, does not count).
+			const recent = within(6000);
+			if (this.autoLevel < this.AUTO_MAX && recent.length >= 11 && rank(recent, 0.75) < 40) {
+				// Lowered again soon after a raise: the raise did not hold — wait twice as long before the next one.
+				if (now - a.raisedAt < 20000) a.upWait = Math.min(a.upWait * 2, 160000);
+				this.autoLevel++;
+				a.changed = now;
+				a.samples = [];
+				return this.autoLevel;
+			}
+			// Up: 55 frames or more (the median, no sample under 50) for the whole wait.
+			const long = within(a.upWait);
+			if (this.autoLevel > 0 && now - a.samples[0].t >= a.upWait - 600 && long.length >= (a.upWait / 500) * 0.9 && median(long) >= 55 && long.every((x) => x.fps >= 50)) {
+				this.autoLevel--;
+				a.changed = now;
+				a.raisedAt = now;
+				a.samples = [];
+				return this.autoLevel;
+			}
+			return null;
 		},
 		stride(key) {
 			return { low: 3, medium: 2, high: 1 }[options[key]] || 1;
