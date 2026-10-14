@@ -733,115 +733,8 @@ const MapArt = (() => {
 		}
 		c.restore();
 	}
-	// Emissive layer drawn after night lighting: bioluminescence, glowing water, lava and embers stay bright.
-	function glow(c, g, view) {
-		const t = theme(g),
-			time = g.time,
-			night = g.night || 0;
-		if (t !== "lumen" && t !== "magma") return;
-		c.save();
-		c.globalCompositeOperation = "lighter";
-		for (const [i, w] of (g.waters || []).entries()) {
-			// Thin out narrow chain links only; standalone pools and the caldera always glow.
-			if ((i % 2 && w.rx < 140) || !inView(w, view)) continue;
-			if (w.kind === "lava") {
-				const p = 0.5 + 0.5 * Math.sin(time * 1.7 + w.x * 0.01),
-					r = Math.max(w.rx, w.ry) * 1.6,
-					gr = c.createRadialGradient(w.x, w.y, 0, w.x, w.y, r);
-				gr.addColorStop(
-					0,
-					`rgba(255,110,40,${0.1 + 0.08 * p + night * 0.25})`,
-				);
-				gr.addColorStop(1, "rgba(255,90,30,0)");
-				c.fillStyle = gr;
-				c.fillRect(w.x - r, w.y - r, 2 * r, 2 * r);
-			}
-			if (w.kind === "glow") {
-				const p = 0.5 + 0.5 * Math.sin(time * 1.2 + w.y * 0.01),
-					r = Math.max(w.rx, w.ry) * 1.3,
-					gr = c.createRadialGradient(w.x, w.y, 0, w.x, w.y, r);
-				gr.addColorStop(
-					0,
-					`rgba(70,230,215,${0.03 + 0.03 * p + night * 0.3})`,
-				);
-				gr.addColorStop(1, "rgba(70,230,215,0)");
-				c.fillStyle = gr;
-				c.fillRect(w.x - r, w.y - r, 2 * r, 2 * r);
-			}
-		}
-		if (t === "lumen") {
-			for (const o of g.obstacles) {
-				if (o.kind !== "grove" || !inView(o, view)) continue;
-				const cx = o.x + o.w / 2,
-					cy = o.y + o.h / 2 - o.h * 0.2,
-					r = Math.max(o.w, o.h) * 0.9,
-					p = 0.5 + 0.5 * Math.sin(time * 0.9 + o.x),
-					gr = c.createRadialGradient(cx, cy, 0, cx, cy, r);
-				gr.addColorStop(
-					0,
-					`rgba(90,240,210,${night * (0.22 + 0.1 * p)})`,
-				);
-				gr.addColorStop(1, "rgba(90,240,210,0)");
-				c.fillStyle = gr;
-				c.fillRect(cx - r, cy - r, 2 * r, 2 * r);
-			}
-			for (const [i, { x, y, ph }] of specks(g).entries()) {
-				if (!inView({ x, y }, view, 30)) continue;
-				const a =
-					(0.06 + 0.75 * night) *
-					(0.5 + 0.5 * Math.sin(time * 1.5 + ph));
-				c.fillStyle =
-					i % 3 ? `rgba(110,242,224,${a})` : `rgba(198,140,255,${a})`;
-				c.beginPath();
-				c.arc(x, y, 1.6 + (i % 3), 0, TAU);
-				c.fill();
-			}
-		}
-		if (t === "magma") {
-			const lava = (g.waters || []).filter((w) => w.kind === "lava"),
-				rand = seeded(515);
-			for (let i = 0; i < 140 && lava.length; i++) {
-				const s = lava[i % lava.length];
-				// Draw the random numbers before culling, so every spark keeps its place when the camera moves.
-				const start = rand(),
-					dx = rand() - 0.5,
-					dy = rand() - 0.5,
-					heat = rand();
-				if (!inView(s, view)) continue;
-				const life = (time * 0.35 + start) % 1,
-					x = s.x + dx * s.rx * 1.6 + Math.sin(time + i) * 6,
-					y = s.y + dy * s.ry - life * 130;
-				c.fillStyle = `rgba(255,${150 + Math.round(heat * 80)},60,${(1 - life) * 0.75})`;
-				c.fillRect(x, y, 2.5, 2.5);
-			}
-		}
-		c.restore();
-	}
 	// Firefly positions depend only on the map, so they are computed once per game.
 	const speckCache = new WeakMap();
-	function specks(g) {
-		const key =
-			g.W +
-			"x" +
-			g.H +
-			":" +
-			g.obstacles.length +
-			":" +
-			(g.waters || []).length;
-		let hit = speckCache.get(g);
-		if (hit?.key === key) return hit.list;
-		const rand = seeded(909),
-			n = Math.round((520 * g.W * g.H) / (3360 * 2160)),
-			list = [];
-		for (let i = 0; i < n; i++) {
-			const x = rand() * g.W,
-				y = rand() * g.H,
-				ph = rand() * TAU;
-			if (!g.blocked(x, y, 4)) list.push({ x, y, ph });
-		}
-		speckCache.set(g, { key, list });
-		return list;
-	}
 	// Floating islands hang over impassable ground only, so they never hide units on foot.
 	function islands(g) {
 		const t = theme(g);
@@ -866,104 +759,6 @@ const MapArt = (() => {
 						: 0.7 + (i % 2) * 0.15),
 				seed: i,
 			}));
-	}
-	function sky(c, g, view) {
-		const t = theme(g);
-		if (t !== "lumen" && t !== "skyfall") return;
-		for (const s of islands(g)) {
-			if (!inView(s, view, 300)) continue;
-			island(c, s, t, g.time);
-		}
-	}
-	// One floating island s (from islands()) of theme t, bobbing with time, with its shadow below
-	// (shadow = false leaves the shadow out, for renderers that keep it still while the island moves).
-	function island(c, s, t, time, shadow = true) {
-		const bob = Math.sin(time * 0.6 + s.seed) * 6,
-			x = s.x + (s.seed % 2 ? 18 : -12),
-			y = s.y - 100 + bob,
-			r = s.size,
-			rand = seeded(900 + s.seed),
-			depth = r * (1.3 + rand() * 0.5);
-		const rock =
-			t === "lumen"
-				? ["#3b3440", "#2b2530", "#4a4150"]
-				: ["#626a6e", "#474e52", "#7a8286"];
-		c.save();
-		if (shadow) {
-			c.fillStyle = "#00000030";
-			c.beginPath();
-			c.ellipse(s.x + 30, s.y + 30, r * 0.9, r * 0.38, 0, 0, TAU);
-			c.fill();
-		}
-		const under = [[x - r, y]];
-		for (let k = 1; k < 8; k++) {
-			const f = k / 8,
-				px = x - r + f * 2 * r,
-				py =
-					y +
-					depth * Math.sin(f * Math.PI) * (0.75 + rand() * 0.35);
-			under.push([px, py]);
-		}
-		under.push([x + r, y]);
-		under.splice(4, 0, [
-			x + (rand() - 0.5) * r * 0.2,
-			y + depth * 1.15,
-		]);
-		poly(c, under, rock[0]);
-		poly(c, under.slice(0, 5).concat([[x, y]]), rock[2]);
-		c.strokeStyle = rock[1];
-		c.lineWidth = 2;
-		for (let k = 1; k < 4; k++) {
-			c.beginPath();
-			c.moveTo(x - r * (1 - k * 0.18), y + depth * k * 0.18);
-			c.lineTo(x + r * (1 - k * 0.2), y + depth * k * 0.17);
-			c.stroke();
-		}
-		c.fillStyle = t === "lumen" ? "#23604c" : "#6f8a5a";
-		c.beginPath();
-		c.ellipse(x, y, r * 1.02, r * 0.34, 0, 0, TAU);
-		c.fill();
-		c.fillStyle = t === "lumen" ? "#2e7760" : "#88a66e";
-		c.beginPath();
-		c.ellipse(x - r * 0.12, y - 3, r * 0.76, r * 0.22, 0, 0, TAU);
-		c.fill();
-		for (let k = 0; k < 4; k++) {
-			const tx = x + (rand() - 0.5) * r * 1.3,
-				tr = 5 + rand() * 9;
-			c.fillStyle =
-				t === "lumen"
-					? k % 2
-						? "#1a4a3c"
-						: "#2e7760"
-					: k % 2
-						? "#4c6b44"
-						: "#5f8054";
-			c.beginPath();
-			c.arc(tx, y - tr * 0.8, tr, 0, TAU);
-			c.fill();
-		}
-		c.lineWidth = 1.5;
-		for (let k = 0; k < 6; k++) {
-			const vx = x + (rand() - 0.5) * r * 1.6;
-			c.strokeStyle = t === "lumen" ? "#6ff2e088" : "#9fb58a66";
-			c.beginPath();
-			c.moveTo(vx, y + 4);
-			c.quadraticCurveTo(
-				vx + 5,
-				y + 24,
-				vx - 2,
-				y + 36 + rand() * 30,
-			);
-			c.stroke();
-		}
-		if (t === "skyfall" && s.seed % 2 === 0) {
-			const gr = c.createLinearGradient(0, y, 0, y + 170);
-			gr.addColorStop(0, "rgba(225,238,245,.55)");
-			gr.addColorStop(1, "rgba(225,238,245,0)");
-			c.fillStyle = gr;
-			c.fillRect(x + r * 0.35, y + 2, 7, 170);
-		}
-		c.restore();
 	}
 	// Screen-space second sun for the twin-sun desert.
 	function atmosphere(c, g, width) {
@@ -1002,20 +797,9 @@ const MapArt = (() => {
 			effects(c, g, view);
 			run("effects", c, g, view);
 		},
-		glow(c, g, view) {
-			glow(c, g, view);
-			run("glow", c, g, view);
-		},
-		sky(c, g, view) {
-			sky(c, g, view);
-			run("sky", c, g, view);
-		},
-		// Pieces for renderers that draw the sky themselves (WebGL): the islands one by one, plugin skies.
+		// The floating islands for the 3D board (webgl3d/scene-life-3d.js; 0.176: the 2D sky, glow and their
+		// plugins went with the Canvas 2D board).
 		islands,
-		island,
-		skyPlugins(c, g, view) {
-			run("sky", c, g, view);
-		},
 		atmosphere,
 		baseColor: (g) =>
 			plugins.map((p) => p.baseColor?.(g)).find(Boolean) || baseColor(g),

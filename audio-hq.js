@@ -144,6 +144,10 @@
 			out.samples = this.hq ? this.hq.bank.size : 0;
 			out.tone = this.hq?.toneFailed ? "błąd" : !this.hq?.toneReady ? "wczytywanie" : this.hq?.band ? "gra" : "gotowy";
 			out.voices = this.voices;
+			// The audio thread running out of time (0.177): the dropouts so far, where the browser counts them.
+			out.rate = c.sampleRate;
+			const stats = c.playbackStats;
+			if (stats && Number.isFinite(stats.underrunEvents)) out.dropouts = stats.underrunEvents;
 			return out;
 		},
 		// Reverb, samples and the Tone.js band, once per audio context.

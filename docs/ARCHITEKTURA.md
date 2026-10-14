@@ -2,19 +2,27 @@
 
 Data: 2026-10-13, wersja 0.173. Zakres: krok I4 z [przeglądu i kierunków](KIERUNKI_2026_10.md), czyli jeden rozwijany silnik grafiki, rejestr reguł i podział `app.js`. Zachowanie gry się nie zmienia, zmienia się tylko układ kodu.
 
-## 1. Silniki grafiki: rozwijamy tylko 3D
+## 1. Silnik grafiki: tylko 3D
 
-| Silnik | Pliki | Status od 0.173 |
+Od 0.176 (2026-10-14) gra ma jeden silnik planszy: **3D (Three.js)**. W 0.173 PixiJS i Canvas 2D zostały zamrożone jako tryby awaryjne, a w 0.176 usunięte.
+
+| Część | Pliki | Rola |
 |---|---|---|
-| **3D (Three.js)** — domyślny | `webgl3d/*.js` (paczka `webgl3d/bundle-3d.js`, `npm run build:3d`) | **Rozwijany.** Wszystkie nowe efekty i wygląd trafiają tutaj |
-| Wspólne z 3D | `webgl/terrain-height.js`, `webgl/model-light.js`; w `render-canvas.js` nakładka (zaznaczenia, paski, efekty interfejsu), warstwa ekranu, minimapa i mgła wojny (`drawLayer`, `drawMinimap`, `refreshFog`) | Rozwijane, bo rysuje z nich plansza 3D |
-| WebGL / WebGPU (PixiJS) | `webgl/pixi-game-renderer.js`, `ground-native.js`, `models-native.js`, `fauna-native.js`, `canvas-replay.js` (oraz prototyp `pixi-renderer.js`, `prototype.js`) | **Zamrożony** — tryb awaryjny, tylko poprawki błędów |
-| Canvas 2D | `render-canvas.js`: sama plansza (teren, grunt, jednostki, niebo, światło, obróbka) | **Zamrożony** — ostatni tryb awaryjny |
+| **Plansza 3D (Three.js)** | `webgl3d/*.js` (paczka `webgl3d/bundle-3d.js`, `npm run build:3d`) | Jedyna plansza. Nowe efekty i wygląd trafiają tutaj |
+| Malarz 2D dla planszy 3D | `render-canvas.js` z plikami `*-art.js` | Nie rysuje już własnej planszy, tylko warstwy, które plansza 3D kładzie pod i nad światem: kafle gruntu, nakładkę na mapie, warstwę ekranu, minimapę i mgłę wojny (`drawLayer`, `drawMinimap`, `refreshFog`). Rysuje też podglądy map w scenariuszach i w lobby |
+| Zastępczy obraz modelu | `webgl3d/model-light.js` (`paint()`) | Dla obiektów bez własnego modelu 3D: plansza 3D nakłada go jako teksturę na płaszczyznę |
 
-- Pliki zamrożone mają nagłówek `FROZEN since 0.173`. Test `tests/frozen-renderers.test.js` pilnuje, żeby nie czytały nowych ustawień grafiki. Nowy efekt z przełącznikiem w ustawieniach w zamrożonym pliku nie przejdzie testu.
-- W ustawieniach (Grafika → Silnik grafiki) PixiJS i Canvas 2D są opisane jako tryby awaryjne, a 3D jako zalecany.
-- Gdzie 3D się nie uruchomi, gra jak dotąd przechodzi na WebGL (PixiJS), a potem na Canvas 2D (`applyRenderer` w `app.js`).
-- **Jednorazowe przeniesienie na 3D.** Do 0.172.7 domyślny był WebGL, a `SceneFX.set` zapisuje wszystkie opcje naraz. Prawie każdy gracz miał więc zapisany WebGL, choć go nie wybierał. `scene-fx.js` przenosi zapisany `"webgl"` na `"three"` raz, ze znacznikiem `moved3d`. WebGPU i Canvas 2D zostają, bo były wyborem gracza. Kto potem wybierze WebGL w ustawieniach, ten go zachowa.
+- **Bez WebGL** gra nie przełącza się na inny silnik. Przy próbie bitwy pokazuje warstwę „Brak grafiki 3D” z radą (akceleracja sprzętowa, aktualizacja przeglądarki lub sterowników) i przyciskiem do menu (`showNo3D` w `app.js`).
+- **Utrata kontekstu** karty graficznej (reset sterownika) buduje planszę 3D od nowa za ekranem wczytywania (`contextLost`).
+- Do czasu zbudowania planszy 3D `render-canvas.js` trzyma stan bitwy (`setGame`, `refreshFog`), ale niczego nie rysuje; ekran wczytywania czeka na planszę (`boardReady`).
+- **Ustawienia → Grafika → Silnik** pokazują tylko, czy 3D działa. Nie ma już przełącznika silnika ani przełączników tylko dla PixiJS („Objętość budynków”, „Perspektywa 2,5D”). Zapisany dawniej silnik „webgl”, „webgpu” lub „canvas” wczytuje się jako 3D.
+- **Usunięte w 0.176:**
+  - `vendor/pixi.min.js` i cały katalog `webgl/`: `pixi-game-renderer.js`, `pixi-renderer.js`, `ground-native.js`, `models-native.js`, `fauna-native.js`, `canvas-replay.js` i `prototype.js`;
+  - `prototyp-webgl.html`, `tests/render-webgl-browser.html` i `tests/frozen-renderers.test.js`;
+  - `webgl/terrain-height.js`: plansza 3D go tworzyła, ale nie używała wyniku, bo rzeźbę liczy `relief-3d.js`;
+  - z `webgl/model-light.js` zostało tylko `paint()`, przeniesione do `webgl3d/`;
+  - w `render-canvas.js` wejście pełnej planszy (`render`) i fazy, których używała tylko ona: niebo, światło, obróbka, poświata, pogoda, mgła, efekty i wtyczki nieba map; razem z nimi `MapArt.sky`, `glow`, `skyPlugins` i `island` oraz poświata wtyczek map (`themed-art.js`, `world-art.js`).
+- Test: `tests/three-only.test.js`.
 
 ## 2. Rejestr reguł
 

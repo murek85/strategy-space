@@ -315,7 +315,7 @@ export function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) 
 	// where the shore climbs (rivers and lava flowing down a slope) it lies on the bed instead of hanging
 	// above it. Overlapping bodies of one kind share their grid points (the most opaque wins), so
 	// translucent water never doubles up; each kind is one mesh.
-	// The terrain mesh grid (webgl/terrain-height.js cell): a draped surface matches the ground exactly.
+	// The water surfaces' grid, 12 units: a draped surface follows the ground closely.
 	const STEP = 12;
 	function waterPoints(w, game, kind, points) {
 		let rimLow = Infinity,

@@ -1,6 +1,6 @@
 {
 	"name": "pogranicze-galaktyki",
-	"version": "0.175.19",
+	"version": "0.177.2",
 	"private": true,
 	"description": "Samodzielny prototyp kosmicznego RTS",
 	"author": "Marcin Murawski",
@@ -41,7 +41,6 @@
 			"!**/*.md",
 			"!prototyp-*.html",
 			"!server.js",
-			"!webgl/prototype.js",
 			"!webgl3d/prototype-3d.js",
 			"!assets/models/*.blend*",
 			"!**/*.py",

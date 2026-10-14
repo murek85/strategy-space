@@ -1,7 +1,7 @@
-/* 3D renderer prototype (Three.js). Visual only: the simulation, orders and saves stay 2D (x, y on the
+/* 3D renderer (Three.js), the game's only board since 0.176. Visual only: the simulation, orders and saves stay 2D (x, y on the
    map); the renderer places them in 3D with X = x, Z = y and Y = terrain height.
-   - Terrain: a mesh from the height map (webgl/terrain-height.js), textured with the board ground painted
-     by the Canvas renderer (terrain, deposits, relays) in tiles; a tile is repainted when its deposits,
+   - Terrain: a mesh from the height map (webgl3d/relief-3d.js), textured with the board ground painted
+     by render-canvas.js (terrain, deposits, relays) in tiles; a tile is repainted when its deposits,
      relays, wrecks or craters change.
    - Models: code-built low-poly 3D models (webgl3d/models-3d.js) for the types that have one.
    - Other buildings: a plinth box under a roof painted by the same art code as the board (model-light paint()).
@@ -103,8 +103,7 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		timeOfDay = null,
 		clock = 0,
 		frameDt = 0;
-	const terrainHeight = createTerrainHeight(),
-		relief3d = createRelief3D({ RISE });
+	const relief3d = createRelief3D({ RISE });
 	// Water, night lights, weather and particles (webgl3d/scene-fx-3d.js).
 	const fx = createSceneFx3D(THREE, { world, heightAt: (x, y) => heightAt(x, y), fogged: (m) => fogged(m) });
 	// Stones, grass, drifts, shards and small mushrooms on the ground (webgl3d/scatter-3d.js).
@@ -263,7 +262,6 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 	}
 
 	function buildTerrain() {
-		terrainHeight.setGame(game);
 		// The relief of the 3D board (webgl3d/relief-3d.js): hills, mesa cliffs, peaks, beds; bare rock.
 		const built = relief3d.build(game, { relief: quality.relief }),
 			{ cols, rows, cell, data, rock } = built;
@@ -972,8 +970,6 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		drag: null,
 		building: false,
 		wallDrag: null,
-		shadeBody: null,
-		underUnits: null,
 		groundLabels: false,
 		groundDeposits: false,
 		ground3D: true,
@@ -1225,7 +1221,11 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		const wreck = new THREE.Group(),
 			cut = (d.spin * 0.6) * reach * 0.3,
 			tilt = new THREE.Vector3(1, d.spin * 0.5, 0.35 - d.spin * 0.4).normalize(),
-			halves = [];
+			halves = [],
+			// The lights of the drives (0.177.1): the flames of the thrusters and engines and the glow under a station's
+			// platform — added light (additive) — sputter and go out as the wreck breaks up; they shone on at full in
+			// both halves until it was gone.
+			glows = [];
 		root.matrixWorld.decompose(wreck.position, wreck.quaternion, wreck.scale);
 		for (const side of [1, -1]) {
 			const pivot = new THREE.Group(),
@@ -1237,6 +1237,7 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 				m.clippingPlanes = [clip];
 				m.side = THREE.DoubleSide;
 				materials.push(m);
+				if (m.blending === THREE.AdditiveBlending && m.transparent) glows.push({ m, opacity: m.opacity, n: glows.length });
 				const mesh = new THREE.Mesh(p.geometry, m);
 				mesh.matrixAutoUpdate = false;
 				mesh.matrix.copy(p.rel);
@@ -1270,8 +1271,10 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		}
 		world.add(wreck);
 		root.visible = false;
-		return { wreck, halves, fragments, reach };
+		return { wreck, halves, fragments, reach, glows };
 	}
+	// How long the drives' light lasts after the blast: about a second (a station breaks up in 4.5 s, a ship in 3.5 s).
+	const DRIVES_OUT = 1.0;
 	function animateBreak(d, k, dt) {
 		const b = d.broken,
 			ease = 1 - Math.pow(1 - k, 2),
@@ -1286,6 +1289,13 @@ export function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			h.glow.material.opacity = Math.max(0, 1 - k * 1.6) * (0.75 + 0.25 * Math.sin(d.t * 23 + h.side));
 			const fade = k > 0.85 ? 1 - (k - 0.85) / 0.15 : 1;
 			h.pivot.scale.setScalar(Math.max(0.001, fade));
+		}
+		// The drives die: falling off over DRIVES_OUT seconds, sputtering (each flame and glow on its own beat).
+		const out = Math.max(0, 1 - d.t / DRIVES_OUT);
+		for (const g of b.glows) {
+			const sputter = 0.45 + 0.55 * Math.abs(Math.sin(d.t * 29 + g.n * 1.9) * Math.sin(d.t * 11 + g.n));
+			g.m.opacity = g.opacity * out * out * (out > 0 ? sputter : 0);
+			g.m.visible = g.m.opacity > 0.002;
 		}
 		for (const f of b.fragments) {
 			f.mesh.position.addScaledVector(f.v, dt / Math.max(0.001, b.wreck.scale.x));

@@ -49,7 +49,7 @@
 	<body>
 		<p>
 			Prawdziwa pętla gry: symulacja bitwy (ok. 60 jednostek, dosyłanych na bieżąco, nocna ulewa z piorunami na Świetlistym Gąszczu) i rysowanie w
-			<code>requestAnimationFrame</code>, kolejno w trybach Canvas 2D, WebGL i WebGPU. Mierzone są rzeczywiste odstępy między klatkami (także praca karty
+			<code>requestAnimationFrame</code>, na planszy 3D (Three.js). Mierzone są rzeczywiste odstępy między klatkami (także praca karty
 			graficznej) i czas rysowania na procesorze. Karta musi być widoczna przez cały pomiar. Wyniki zależą od komputera — tę stronę można otworzyć na
 			dowolnym sprzęcie (<code>npm start</code>, potem <code>/tests/benchmark-browser.html</code>).
 		</p>
@@ -97,14 +97,7 @@
 		<script src="../world-art.js"></script>
 		<script src="../space-art.js"></script>
 		<script src="../render-canvas.js"></script>
-		<script src="../vendor/pixi.min.js"></script>
-		<script src="../webgl/model-light.js"></script>
-		<script src="../webgl/terrain-height.js"></script>
-		<script src="../webgl/ground-native.js"></script>
-		<script src="../webgl/models-native.js"></script>
-		<script src="../webgl/fauna-native.js"></script>
-		<script src="../webgl/canvas-replay.js"></script>
-		<script src="../webgl/pixi-game-renderer.js"></script>
+		<script src="../webgl3d/model-light.js"></script>
 		<script>
 			const $ = (id) => document.getElementById(id),
 				canvas = $("game"),
@@ -196,7 +189,7 @@
 				const mean = (a) => a.reduce((s, v) => s + v, 0) / a.length,
 					pick = (a, q) => a[Math.min(a.length - 1, Math.floor(a.length * q))];
 				return {
-					name: name + (kind && kind !== name.toLowerCase() && name !== "Canvas 2D" ? ` (${kind})` : ""),
+					name: name + (kind && kind !== name.toLowerCase() ? ` (${kind})` : ""),
 					fps: 1000 / mean(intervals),
 					p95: pick(intervals, 0.95),
 					slow: (100 * intervals.filter((v) => v > 20).length) / intervals.length,
@@ -222,9 +215,6 @@
 				const seconds = +$("seconds").value,
 					rows = [];
 				for (const [name, make] of [
-					["Canvas 2D", async () => canvasRenderer],
-					["WebGL", () => createPixiGameRenderer({ gameCanvas: canvas, canvasRenderer, preference: "webgl" })],
-					["WebGPU", () => createPixiGameRenderer({ gameCanvas: canvas, canvasRenderer, preference: "webgpu" })],
 					// The 3D board (webgl3d/, ES modules: this page must be served, npm start).
 					["3D", async () => (await import("../webgl3d/three-game-renderer.js")).createThreeGameRenderer({ gameCanvas: canvas, canvasRenderer })],
 				]) {

@@ -627,42 +627,9 @@
 		}
 		c.restore();
 	}
-	// Emissive, drawn after night lighting: egg pods pulse, processor beacons blink.
-	function glow(c, g, view) {
-		const t = theme(g),
-			time = g.time,
-			night = g.night || 0;
-		if (t !== "derelict" && t !== "frozenhive") return;
-		c.save();
-		c.globalCompositeOperation = "lighter";
-		for (const o of g.obstacles) {
-			if (!inView(o, view)) continue;
-			const cx = o.x + o.w / 2,
-				cy = o.y + o.h / 2;
-			if (o.kind === "eggs") {
-				const p = 0.5 + 0.5 * Math.sin(time * 1.3 + o.x),
-					r = Math.max(o.w, o.h) * 1.1,
-					gr = c.createRadialGradient(cx, cy, 0, cx, cy, r),
-					col = t === "derelict" ? "120,220,140" : "150,200,255";
-				gr.addColorStop(0, `rgba(${col},${0.05 + 0.04 * p + night * 0.22})`);
-				gr.addColorStop(1, `rgba(${col},0)`);
-				c.fillStyle = gr;
-				c.fillRect(cx - r, cy - r, 2 * r, 2 * r);
-			}
-			if (o.kind === "processor" && Math.sin(time * 3 + o.x) > 0.2) {
-				const gr = c.createRadialGradient(cx, cy - 20, 0, cx, cy - 20, 40);
-				gr.addColorStop(0, `rgba(255,70,60,${0.35 + night * 0.4})`);
-				gr.addColorStop(1, "rgba(255,70,60,0)");
-				c.fillStyle = gr;
-				c.fillRect(cx - 40, cy - 60, 80, 80);
-			}
-		}
-		c.restore();
-	}
 	MapArt.extend({
 		terrain,
 		effects,
-		glow,
 		baseColor: (g) => BASE[theme(g)] || null,
 		color: (kind) => COLORS[kind] || null,
 	});

@@ -4,6 +4,20 @@
 
 - `hud-compact.css`: `--deck-slot: 148px` oraz kolumny `32px minmax(0, 1fr)` z odstępem 10 px obejmują także `.unit-cards:has(.research-card)` i `.research-card`. Wcześniej tylko karty z `.has-model`, więc badania, które nie mają modelu, zostawały przy 132 px i kolumnie 20 px. Symbol badania ma 32 px i jest wyśrodkowany. Zmierzone: Armia, Budowa i Badania mają kafelki 166 px, symbol 32 px, odstęp 10 px i 8 px od krawędzi.
 
+## Gasnące silniki wraków w kosmosie (wersja 0.177.1, 2026-10-14)
+
+- `breakUp` w `three-renderer.js` kopiuje widoczne części zniszczonej stacji lub okrętu do dwóch połówek z klonami materiałów. Wśród nich są części ze światłem dodawanym (`AdditiveBlending`): płomienie silników manewrowych platformy, tarcze poświaty pod nią (`HALO` w `ships-3d.js`) i płomienie napędu okrętów. Świeciły w pełni przez cały rozpad, 4,5 s dla stacji i 3,5 s dla okrętu.
+- Teraz ich klony trafiają do `glows`. `animateBreak` przygasza je przez `DRIVES_OUT` (1 s): krycie × (1 − t/1 s)², z migotaniem, a potem `visible = false`. Żarzenie przełamanych krawędzi (sprite `glow`) zostaje jak było. Malowane części tracą świecenie przy klonowaniu, więc zmiana ich nie dotyczy.
+- Test: `tests/three-only.test.js`.
+
+## Jedyna plansza gry (wersja 0.176, 2026-10-14)
+
+- PixiJS i plansza Canvas 2D zostały usunięte. Szczegóły i lista plików są w [Architekturze](ARCHITEKTURA.md#1-silnik-grafiki-tylko-3d).
+- `app.js`: `applyRenderer` buduje planszę 3D raz (`build3D`). Przy błędzie ustawia `no3D` i woła `showNo3D`, czyli własną warstwę `#no3d` nad planszą: `#overlay` chowa start bitwy. Pasek pauzy jest wtedy ukryty, a każda kolejna bitwa znów pokazuje okno. `contextLost` niszczy planszę i buduje ją ponownie (`boardScreen`). `render()` nic nie rysuje, dopóki planszy 3D nie ma.
+- `webgl3d/model-light.js`: z dawnego `webgl/model-light.js` został tylko `paint()` (`look()` w `three-renderer.js`). Wywołanie `createTerrainHeight()` usunięte, bo jego wynik nie był używany; rzeźbę liczy `relief-3d.js`.
+- `render-canvas.js`: bez `render`, a w `WORLD_PHASES` zostały fazy używane z zewnątrz: `terrain`, `ground`, `groundTop`, `units` (podglądy map) i `overlay`. Do tego warstwa ekranu, minimapa i mgła. Haki `shadeBody` i `underUnits`, które ustawiał tylko PixiJS, też zniknęły.
+- `scene-fx.js`: `renderer` przyjmuje tylko `"three"`. Opcje `volume` i `tilt` zniknęły, a pochylenie kamery 3D (PageUp i PageDown, `camera.tilt`) zostaje.
+
 ## Modele w kolejkach i zaznaczeniu (wersja 0.175.14, 2026-10-14)
 
 - `ModelIcons.url(e, o)` zwraca adres obrazka ikony (ten sam wygląd co na kartach: 96 px, wspólne `ICON`) albo `null`, zlecając go. `ModelIcons.version` rośnie z każdym nowym obrazkiem. Służy to dla HTML pisanego jako tekst, który HUD przebudowuje.

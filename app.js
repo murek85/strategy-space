@@ -54,7 +54,7 @@
 	window.currentGame = () => game;
 	window.currentNetwork = () => netSession;
 	window.currentMenu = () => menu;
-	// The board's renderer in use: "three", "webgl", "webgpu" or "canvas" (diagnostics, the desktop app's self-check).
+	// The board in use: "three", or "none" while it is being built or without WebGL (diagnostics, the desktop app's self-check).
 	window.currentRendererMode = () => rendererMode;
 	// The render meter (found once) and what the army inspector shows (rebuilt only when it changes).
 	let renderMeter = null,
@@ -249,12 +249,16 @@
 		if (document.hidden) sound.suspend();
 		else soundBack();
 	});
-	// Drawing lives in render-canvas.js; app.js keeps the camera, input and HUD and hands over a view each frame.
+	// The board is 3D (Three.js) only since 0.176. render-canvas.js stays the 2D painter of what the 3D board
+	// lays over and under it (the ground tiles, the overlay, the screen layer, the minimap, the fog of war) and holds
+	// the battle's state for it while the 3D board is being built — it no longer draws a board of its own.
 	const canvasRenderer = createCanvasRenderer(canvas, mini);
 	let renderer = canvasRenderer,
-		rendererMode = "canvas",
-		rendererRequested = null,
-		rendererNote = "";
+		rendererMode = "none",
+		rendererNote = "",
+		building3D = null,
+		// No WebGL here (or the 3D code would not load): the game says so instead of a board (showNo3D).
+		no3D = false;
 	// The interface's pictures of the 3D models (model-icons.js) come from the same 3D code.
 	if (typeof ModelIcons !== "undefined") ModelIcons.loader = () => load3D();
 	async function load3D() {
@@ -274,101 +278,57 @@
 			});
 		return window.Board3D;
 	}
-	// 3D or WebGL when chosen and available; 3D falls back to WebGL, and Canvas 2D stays the fallback at every step.
-	async function applyRenderer() {
-		const wanted = SceneFX.options.renderer;
-		if (wanted === rendererRequested) return;
-		rendererRequested = wanted;
-		if (wanted === "canvas") {
-			useCanvasRenderer("");
-			return;
-		}
-		const lost = () => useCanvasRenderer("Utracono kontekst grafiki — gra przełączyła się na renderer Canvas 2D.");
-		let board = null,
-			note = "";
-		// The board in use goes first (0.175.2): for a moment two of them held the GPU — two contexts, two worlds
-		// in its memory — while the new one was built; meanwhile the Canvas 2D board stands in.
-		if (renderer !== canvasRenderer) {
-			const old = renderer;
-			renderer = canvasRenderer;
-			rendererMode = "canvas";
-			canvasRenderer.setGame(game);
-			old.destroy?.();
-		}
-		if (wanted === "three") {
-			// Loaded on demand: the ES modules of webgl3d/ when served over http, else (page opened from
-			// disk, where modules cannot load) the same code built into one classic script (npm run build:3d).
-			try {
-				board = (await load3D()).createThreeGameRenderer({ gameCanvas: canvas, canvasRenderer, onContextLost: lost });
-			} catch (error) {
-				console.warn(error);
-				note = "Tryb 3D nie uruchomił się w tej przeglądarce — działa WebGL (PixiJS).";
-			}
-		}
+	// The 3D board, built once a battle needs it (the frame loop, boardReady); the same promise while it is built.
+	function applyRenderer() {
+		if (renderer !== canvasRenderer || no3D) return null;
+		return (building3D ||= build3D().finally(() => (building3D = null)));
+	}
+	async function build3D() {
 		try {
-			if (!board) {
-				if (typeof createPixiGameRenderer !== "function" || typeof PIXI === "undefined")
-					throw Error("Brak biblioteki PixiJS");
-				board = await createPixiGameRenderer({
-					gameCanvas: canvas,
-					canvasRenderer,
-					preference: wanted === "webgpu" ? "webgpu" : "webgl",
-					onContextLost: lost,
-				});
-			}
-			if (SceneFX.options.renderer !== wanted) {
-				board.destroy();
-				return;
-			}
+			// Loaded on demand: the ES modules of webgl3d/ when served over http, else (page opened from disk, where
+			// modules cannot load) the same code built into one classic script (npm run build:3d).
+			const board = (await load3D()).createThreeGameRenderer({ gameCanvas: canvas, canvasRenderer, onContextLost: contextLost });
 			board.setGame(game);
-			const old = renderer;
 			renderer = board;
-			if (old !== canvasRenderer) old.destroy?.();
 			rendererMode = board.kind;
-			rendererNote = note || (wanted === "webgpu" && board.kind !== "webgpu" ? "WebGPU jest niedostępny w tej przeglądarce — działa WebGL (PixiJS) z tymi samymi efektami." : "");
-			if (note) toast(note);
+			rendererNote = "";
 		} catch (error) {
 			console.warn(error);
-			board?.destroy?.();
-			useCanvasRenderer("WebGL jest niedostępny w tej przeglądarce — gra używa renderera Canvas 2D.");
+			no3D = true;
+			rendererMode = "none";
+			rendererNote = "Grafika 3D (WebGL) jest niedostępna w tej przeglądarce.";
+			showNo3D();
 		}
 	}
-	// Another board chosen in the settings during a battle (0.175.2): built at once behind a loading screen, not on
-	// the first frame back on the map — there it froze the page for a second or more (the 3D world, its shaders)
-	// with no word of what was happening.
-	let switching = null;
-	function switchRenderer() {
-		if (switching || !started || finished || SceneFX.options.renderer === rendererRequested) return switching;
-		const names = { three: "3D (Three.js)", webgl: "WebGL (PixiJS)", webgpu: "WebGPU (PixiJS)", canvas: "Canvas 2D" },
-			m = MISSIONS[game.missionId] || {},
-			screen = typeof LoadingScreen !== "undefined" ? LoadingScreen.show({ eyebrow: "GRAFIKA / SILNIK PLANSZY", title: "Zmiana silnika grafiki", planet: names[SceneFX.options.renderer] || SceneFX.options.renderer, biome: m.space ? spaceWorld(m) : m.biome, reduced: !!menu?.reduced, minTime: 0.8 }) : null;
-		// Two frames for the screen to show, then the work; the new board draws once before the screen goes.
-		const frames = (n) => new Promise((resolve) => {
-			afterFrames(n, resolve);
-			setTimeout(resolve, 400);
-		});
-		switching = frames(2)
-			.then(() => applyRenderer())
-			.then(() => {
-				render();
-				return frames(2);
-			})
-			.finally(() => {
-				switching = null;
-				screen?.done();
-			});
-		return switching;
+	// The graphics card dropped the board's context (a driver reset, the GPU taken away): the 3D board is built again,
+	// behind a loading screen — there is no 2D board to fall back on any more.
+	function contextLost() {
+		if (renderer === canvasRenderer) return;
+		const old = renderer;
+		renderer = canvasRenderer;
+		rendererMode = "none";
+		old.destroy?.();
+		toast("Karta graficzna odświeżyła obraz — plansza 3D buduje się od nowa.");
+		if (started && !finished) boardScreen("GRAFIKA 3D");
 	}
-	function useCanvasRenderer(note) {
-		if (renderer !== canvasRenderer) {
-			const old = renderer;
-			renderer = canvasRenderer;
-			old.destroy?.();
+	// Without WebGL: a word in place of the board, and the way back to the menu — a layer of its own over the board
+	// (the battle's start hides #overlay after the board was asked for).
+	function showNo3D() {
+		paused = true;
+		let layer = document.getElementById("no3d");
+		if (!layer) {
+			layer = document.createElement("div");
+			layer.id = "no3d";
+			layer.className = "overlay no-3d-overlay";
+			$("overlay").after(layer);
 		}
-		rendererMode = "canvas";
-		canvasRenderer.setGame(game);
-		rendererNote = note;
-		if (note) toast(note);
+		layer.innerHTML = `<div class="briefing no-3d"><span class="eyebrow">GRAFIKA 3D / NIEDOSTĘPNA</span><div class="briefing-symbol">⌁</div><h2>Brak grafiki 3D</h2><p>Pogranicze Galaktyki rysuje planszę w 3D (WebGL), a ta przeglądarka lub karta graficzna go nie udostępnia. Włącz akcelerację sprzętową w ustawieniach przeglądarki, zaktualizuj przeglądarkę albo sterowniki karty graficznej i uruchom grę ponownie.</p><button id="no3d-home" class="primary-button">MENU GŁÓWNE <span>↗</span></button></div>`;
+		layer.hidden = false;
+		$("no3d-home").onclick = () => {
+			layer.hidden = true;
+			started = false;
+			menu.show("home");
+		};
 	}
 	function syncWorld() {
 		if (W === game.W && H === game.H) return;
@@ -396,7 +356,8 @@
 		return { game, width, height, dpr, scale, camera, selected, colors, mouse, drag, building, wallDrag };
 	}
 	function render() {
-		renderer.render(view());
+		// (Until the 3D board is up there is no board to draw; the loading screen covers it.)
+		if (renderer !== canvasRenderer) renderer.render(view());
 	}
 	const timeLabel = (n) =>
 		`${String(Math.floor(n / 60)).padStart(2, "0")}:${String(Math.floor(n % 60)).padStart(2, "0")}`;
@@ -761,7 +722,7 @@
 	// A battle that starts without a loading screen of its own (a network battle, its rematch): one while the chosen
 	// board is not up yet.
 	function boardScreen(eyebrow) {
-		if (typeof LoadingScreen === "undefined" || SceneFX.options.renderer === rendererRequested) return;
+		if (typeof LoadingScreen === "undefined" || renderer !== canvasRenderer || no3D) return;
 		const m = MISSIONS[game.missionId] || {};
 		boardReady(LoadingScreen.show({ eyebrow, title: m.name, planet: m.planet, biome: m.space ? spaceWorld(m) : m.theme === "ocean" || m.theme === "crystal" ? m.theme : m.biome, reduced: !!menu?.reduced, minTime: 0.6 }));
 	}
@@ -772,8 +733,10 @@
 			gone = true;
 			afterFrames(3, () => screen.done());
 		};
-		// (Should the board never come, the screen still goes: the battle is there on Canvas 2D.)
+		// (Should the board never come, the screen still goes: the battle is there, or the word that there is no 3D.)
 		setTimeout(done, 15000);
+		// (No WebGL: every battle says so again — the 3D board is not tried twice.)
+		if (no3D) showNo3D();
 		Promise.resolve(applyRenderer())
 			.then(() => render())
 			.catch((error) => console.warn(error))
@@ -836,7 +799,7 @@
 	function updatePauseBar() {
 		if (paused && !pauseInfo && started) pauseInfo = { reason: "player", since: performance.now(), at: game.time };
 		if (!paused) pauseInfo = null;
-		const show = !!(pauseInfo && started && !finished && !netSession && !choiceOpen);
+		const show = !!(pauseInfo && started && !finished && !netSession && !choiceOpen && !no3D);
 		$("battlefield").classList.toggle("battle-paused", show);
 		const bar = pauseBar();
 		if (!show) {
@@ -1463,7 +1426,6 @@
 	}
 	menu = new CommandMenu({
 		repaint,
-		rendererChanged: switchRenderer,
 		slots: () =>
 			Array.from({ length: 5 }, (_, i) =>
 				inspectSave("pogranicze-slot-" + (i + 1)),
@@ -1700,7 +1662,7 @@
 		LoadingScreen.boot({ version: typeof GAME_VERSION !== "undefined" ? GAME_VERSION : "", reduced: !!menu?.reduced, ready: () => settled, onPress: unlockSound });
 		// The 3D board's code loads while the menu is up (only the code: no GPU context, no world), so a battle's
 		// loading screen waits for less (0.175.5).
-		if (SceneFX.options.renderer === "three") {
+		{
 			const warm = () => setTimeout(() => load3D().catch(() => {}), 1500);
 			if (document.readyState === "complete") warm();
 			else addEventListener("load", warm, { once: true });

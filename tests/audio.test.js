@@ -678,3 +678,24 @@ test("0.175.9: a new player starts with effects at 70% and music at 90%; a saved
 	assert.equal(saved.musicVolume, 0.35);
 	assert.match(require("node:fs").readFileSync(require("node:path").join(__dirname, "..", "index.html"), "utf8"), /id="sound-volume"[\s\S]{0,80}value="70"/);
 });
+test("0.177: the sound runs at 48 kHz whatever the device's rate; a browser without the option still gets a context", () => {
+	const saved = globalThis.AudioContext;
+	try {
+		globalThis.AudioContext = class {
+			constructor(options) {
+				this.options = options;
+			}
+		};
+		assert.equal(new GameAudio({}).contextFactory().options?.sampleRate, 48000, "the device ran at 96 kHz: twice the work on the audio thread");
+		globalThis.AudioContext = class {
+			constructor(options) {
+				if (options) throw TypeError("no options here");
+				this.plain = true;
+			}
+		};
+		assert.equal(new GameAudio({}).contextFactory().plain, true, "an older browser: the device's rate");
+	} finally {
+		globalThis.AudioContext = saved;
+	}
+	assert.match(require("node:fs").readFileSync(require("node:path").join(__dirname, "..", "audio-hq.js"), "utf8"), /out\.dropouts = stats\.underrunEvents/, "the settings count the dropouts");
+});

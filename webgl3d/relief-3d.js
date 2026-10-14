@@ -1,6 +1,5 @@
-/* Relief of the 3D board (visual only: movement, vision and saves do not change; the 2D boards keep
-   webgl/terrain-height.js). A height map twice as fine as the 2D one (6 units a cell) built from the
-   map itself:
+/* Relief of the 3D board (visual only: movement, vision and saves do not change). A height map of 6 units a
+   cell built from the map itself:
    - hills: warped swells, ridges and hollows from seeded noise (gentler on ice, rougher on ash);
    - mesas: steep cliffs with a ragged edge, a flat top, ledges of rock strata on the walls and a talus
      apron of scree at the foot; outcrops and rocks: rugged knolls with steep sides;

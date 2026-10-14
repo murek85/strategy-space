@@ -1,6 +1,6 @@
 /* Navigation owns screens; the application retains a single simulation loop. */
 // The game's version: the menu's footer and the saves' export (0.171.13: one place; it was written twice by hand).
-const GAME_VERSION = "0.175.19";
+const GAME_VERSION = "0.177.2";
 // Listening to the music in the settings: themes (audio.js music modes) and the game's moods.
 const MUSIC_THEMES = [
 	["menu", "Menu — Odległe światło"],
@@ -289,7 +289,7 @@ class CommandMenu {
 					"",
 				)}<label class="menu-setting"><input type="checkbox" id="menu-muted"> Wycisz dźwięk</label><label class="menu-setting"><input type="checkbox" id="menu-reduced" ${this.reduced ? "checked" : ""}> Ogranicz animacje menu</label><h2>Odsłuch muzyki</h2><label class="menu-setting">Motyw<select id="music-theme" aria-label="Motyw muzyki">${MUSIC_THEMES.map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select></label><label class="menu-setting">Nastrój<select id="music-mood" aria-label="Nastrój muzyki">${MUSIC_MOODS.map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select></label><div class="music-preview"><button type="button" id="music-play" class="menu-action"><span>Odtwórz</span><span>▶</span></button><p id="music-now" role="status"></p></div>${
 				typeof SceneFX !== "undefined"
-					? `<h2>Grafika</h2><h3 class="menu-subhead">Silnik</h3><label class="menu-setting">Silnik grafiki<select id="visual-renderer" aria-label="Silnik grafiki"><option value="three">3D (Three.js) — zalecany: teren, modele, kamera i wszystkie efekty</option><option value="webgl">WebGL (PixiJS) — tryb awaryjny 2D, bez nowych efektów</option><option value="webgpu">WebGPU (PixiJS) — tryb awaryjny 2D, bez nowych efektów</option><option value="canvas">Canvas 2D — ostatni tryb awaryjny</option></select></label><p id="renderer-status" role="status"></p><h3 class="menu-subhead">Jakość</h3>${[
+					? `<h2>Grafika</h2><h3 class="menu-subhead">Silnik</h3><p id="renderer-status" role="status"></p><h3 class="menu-subhead">Jakość</h3>${[
 							["terrain", "Detale terenu i roślinność"],
 							["particles", "Cząsteczki pogody"],
 						]
@@ -305,10 +305,8 @@ class CommandMenu {
 								["clouds", "Cienie chmur 3D (przesuwają się po planszy)"],
 								["bloom", "Poświata"],
 								["water", "Połysk wody"],
-								["volume", "Objętość budynków i jednostek (światło z kierunku słońca)"],
 								["scars", "Ślady zniszczeń i pożarów"],
 								["relief", "Wysokość terenu: rzeźba i cienie gór"],
-								["tilt", "Perspektywa 2,5D (lekko pochylona kamera)"],
 								["cinema", "Kinowy obraz 3D: tony filmowe, gradacja, odbicia nieba"],
 								["ao", "Okluzja otoczenia 3D (cień w zakamarkach)"],
 								["pbr", "Teren PBR 3D: skała na zboczach, faktura i rzeźba gruntu"],
@@ -319,7 +317,7 @@ class CommandMenu {
 								["haze", "Falowanie gorącego powietrza 3D (wybuchy, pożary, lawa, silniki)"],
 								["shake", "Wstrząs kamery przy dużych wybuchach"],
 							]
-								.map(([key, label]) => `<label class="menu-setting"><input type="checkbox" id="visual-${key}" class="webgl-effect"> ${label}</label>`)
+								.map(([key, label]) => `<label class="menu-setting"><input type="checkbox" id="visual-${key}" class="board-effect"> ${label}</label>`)
 								.join("")}<h3 class="menu-subhead">Pomiary</h3><label class="menu-setting"><input type="checkbox" id="visual-metrics"> Pokaż czas renderowania planszy</label><label class="menu-setting"><input type="checkbox" id="visual-fps"> Licznik FPS (klatki na sekundę)</label>`
 					: ""
 			}${typeof Access !== "undefined" ? Access.settingsHtml() : ""}<h2>Aplikacja i zapisy</h2>${
@@ -358,6 +356,10 @@ class CommandMenu {
 				body;
 		if (screen === "news")
 			body =
+				"<h2>0.177.2 / Osobne przyciski w raportach</h2><p>Przyciski jeden pod drugim w raportach końca bitwy i innych oknach planszy („Nowa operacja”, „Spróbuj ponownie”, „Następny rozdział”, „Rewanż”) mają odstęp i nie zlewają się w jeden blok.</p>" +
+				"<h2>0.177.1 / Gasnące silniki wraków</h2><p>Zniszczona stacja albo okręt w kosmosie gasną: płomienie silników i poświata pod platformą migoczą i znikają w ciągu sekundy, zamiast świecić we wraku do końca.</p>" +
+				"<h2>0.177 / Dźwięk wysokiej jakości bez przerw</h2><p>W jakości „Wysoka” dźwięk nie rwie się już i nie znika w ciężkiej walce: gra liczy dźwięk w 48 kHz zamiast częstotliwości urządzenia (np. 96 kHz), więc pogłos i instrumenty Tone.js mieszczą się w czasie.</p>" +
+				"<h2>0.176 / Tylko grafika 3D</h2><p>Gra rysuje planszę wyłącznie w 3D (Three.js). Tryby awaryjne WebGL (PixiJS) i Canvas 2D zniknęły; bez obsługi 3D gra mówi, co włączyć. W ustawieniach grafiki silnik pokazuje tylko swój stan.</p>" +
 				"<h2>0.175.19 / Nagłówki menu w jednej linii</h2><p>Duże nagłówki menu — ekran główny, gra jednoosobowa, pauza i okna potwierdzeń — są mniejsze i mieszczą się w jednej linii, po polsku i po angielsku.</p>" +
 				"<h2>0.175.18 / Tytuł w linii także po angielsku</h2><p>Węższe okna na planszy są nieco szersze, a tytuł obok symbolu nieco mniejszy, więc i „Commander, the sector awaits.” mieści się w jednej linii.</p>" +
 				"<h2>0.175.17 / Tytuł w jednej linii</h2><p>Tytuły obok symbolu w raportach i oknach planszy są w jednej linii („Sektor odzyskany.”), bez wymuszonego łamania.</p>" +
@@ -1076,7 +1078,7 @@ class CommandMenu {
 					el.value = SceneFX.options[key];
 					el.onchange = () => SceneFX.set(key, el.value);
 				}
-				for (const key of ["flashes", "metrics", "fps", "lights", "shadows", "clouds", "bloom", "water", "volume", "scars", "relief", "tilt", "cinema", "ao", "pbr", "reflect", "atmo", "surface", "dof", "haze", "shake", "autoQuality"]) {
+				for (const key of ["flashes", "metrics", "fps", "lights", "shadows", "clouds", "bloom", "water", "scars", "relief", "cinema", "ao", "pbr", "reflect", "atmo", "surface", "dof", "haze", "shake", "autoQuality"]) {
 					const el = this.root.querySelector("#visual-" + key);
 					el.checked = SceneFX.options[key];
 					el.onchange = () => {
@@ -1084,29 +1086,12 @@ class CommandMenu {
 						autoStatus();
 					};
 				}
-				const rendererSelect = this.root.querySelector("#visual-renderer"),
-					status = this.root.querySelector("#renderer-status"),
+				// The board is 3D (Three.js) only since 0.176: what the settings show is whether it runs.
+				const status = this.root.querySelector("#renderer-status"),
 					showStatus = () => {
-						const s = this.api.rendererStatus?.() || { mode: "canvas", note: "" };
-						const gpu = SceneFX.options.renderer !== "canvas",
-							name = { webgl: "WebGL (PixiJS)", webgpu: "WebGPU (PixiJS)", three: "3D (Three.js)" };
-						// The effects stay available when WebGPU fell back to WebGL, not when the board fell back to Canvas 2D.
-						// The 3D board uses lights, shadows, water, scars and relief (webgl3d/three-renderer.js applyQuality);
-						// volume light and the 2.5D tilt belong to the PixiJS renderer only, the cinematic image and the ambient
-						// occlusion to the 3D board; bloom serves both.
-						const only2d = ["visual-volume", "visual-tilt"],
-							only3d = ["visual-clouds", "visual-cinema", "visual-ao", "visual-pbr", "visual-reflect", "visual-atmo", "visual-surface", "visual-dof", "visual-haze", "visual-shake"];
-						for (const box of this.root.querySelectorAll(".webgl-effect")) box.disabled = !gpu || (s.mode === "three" && only2d.includes(box.id)) || (SceneFX.options.renderer !== "three" && only3d.includes(box.id)) || (s.mode === "canvas" && !!s.note);
-						status.textContent = s.note || (name[s.mode] ? `Aktywny: ${name[s.mode]}.` : gpu ? `${name[SceneFX.options.renderer]} uruchomi się razem z planszą.` : "Aktywny: Canvas 2D.");
+						const st = this.api.rendererStatus?.() || { mode: "none", note: "" };
+						status.textContent = st.note || (st.mode === "three" ? "3D (Three.js) — aktywny." : "3D (Three.js) — uruchomi się razem z planszą.");
 					};
-				rendererSelect.value = SceneFX.options.renderer;
-				rendererSelect.onchange = () => {
-					SceneFX.set("renderer", rendererSelect.value);
-					// During a battle the board is rebuilt now, behind a loading screen (app.js switchRenderer).
-					this.api.rendererChanged?.();
-					showStatus();
-					setTimeout(showStatus, 600);
-				};
 				showStatus();
 			}
 			// Listening to the score: a theme and a mood, until stopped or the screen is left.
@@ -1168,7 +1153,7 @@ class CommandMenu {
 				const d = this.api.audio().diagnostics?.();
 				if (!d) return;
 				const bars = d.level === undefined ? "—" : "▮".repeat(Math.min(10, Math.round(Math.sqrt(d.level / 0.02) * 10))).padEnd(10, "▯");
-				audioStatus.textContent = `Stan: ${d.state}${d.muted ? " · wyciszony" : ""} · motyw ${d.mode} · próbki ${d.samples}/14 · Tone.js ${d.tone} · wyjście ${bars}${d.invalid ? " · błędny sygnał!" : ""}`;
+				audioStatus.textContent = `Stan: ${d.state}${d.muted ? " · wyciszony" : ""} · motyw ${d.mode} · próbki ${d.samples}/14 · Tone.js ${d.tone} · wyjście ${bars}${d.invalid ? " · błędny sygnał!" : ""} · ${Math.round((d.rate || 0) / 1000)} kHz${d.dropouts ? " · przerwy: " + d.dropouts : ""}`;
 			};
 			showAudio();
 			this.audioTimer = setInterval(showAudio, 400);

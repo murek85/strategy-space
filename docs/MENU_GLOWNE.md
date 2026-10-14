@@ -35,6 +35,11 @@ Status: pierwszy zakres wdrożony w 0.5 (2026-09-21). Na życzenie użytkownika 
 - `style.css`: domyślny wygląd w `:where()` (zerowa szczegółowość, reguły paneli wygrywają) — suwak z torem wypełnionym do `--fill` i jasnym uchwytem (jak `.has-backdrop .menu-setting`), szklane pola tekstowe/liczbowe/`textarea` z poświatą przy fokusie, bez strzałek pola liczbowego, `accent-color` pól wyboru. `app.js` (`updateAudioControls`) ustawia `--fill` suwaka głośności.
 - `menu.css`: pola sieciowe i czat w kolorach szkła scenariuszy; pola tekstowe menu przy fokusie mają turkusową poświatę zamiast złotej ramki przycisków.
 
+## Osobne przyciski w oknach planszy (wersja 0.177.2, 2026-10-14)
+
+- `.briefing > :is(.primary-button, .resume-button) + :is(.primary-button, .resume-button)` dostaje `margin-top: 10px`. Wcześniej `.primary-button` nie miał odstępu, więc przyciski dokładane do raportu w `app-story.js` (np. „SPRÓBUJ PONOWNIE”, „NASTĘPNY ROZDZIAŁ”) i pary w `app-network.js` („REWANŻ” i menu) stykały się. Okna decyzji (`.act2-choice`) mają własne 12 px.
+- Zmierzone na porażce rozdziału IV i zwycięstwie rozdziału I: trzy przyciski, odstępy po 10 px.
+
 ## Nagłówki menu w jednej linii (wersja 0.175.19, 2026-10-14)
 
 - `menu.css`: `#command-menu h1` ma `clamp(34px, 3vw, 42px)` (było `clamp(36px, 4vw, 62px)`), a przy wysokości do 780 px 38 px (było 44 px). Okna (`.menu-window`) zostają przy 34 px.

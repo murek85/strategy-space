@@ -1,7 +1,6 @@
-/* The 3D renderer in the game: the same interface as createCanvasRenderer / createPixiGameRenderer, so
-   app.js keeps its camera, input and HUD. Loaded on demand (import() from app.js) when Settings →
-   Renderer is "3D"; a failure (no WebGL, page opened from disk so ES modules cannot load) makes the
-   game fall back to WebGL and then Canvas 2D.
+/* The 3D renderer in the game, its only board since 0.176: app.js keeps its camera, input and HUD. Loaded on
+   demand (import() from app.js; from disk, where ES modules cannot load, the same code built into bundle-3d.js);
+   without WebGL the game says so instead of a board (app.js).
    - Camera: the game camera (x, y, zoom → scale) drives the 3D camera: it looks at camera.x, camera.y
      from a fixed pitch, at the distance where the centre of the screen has the same pixels per map unit.
    - Pointer: toFlat() casts the pointer onto the terrain and returns where that map point lies on the

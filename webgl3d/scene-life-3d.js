@@ -7,7 +7,7 @@
      leader, hares and lizards in dashes and freezes; units, shots and explosions nearby put it to flight
      (the herd with it), then it stops, alert, and looks round.
    - Birds: 18 crossing the map (PlanetArt.fauna formula), flapping, high over the ground.
-   - Fish: seven per plain lake, circling under the surface (webgl/fauna-native.js formula).
+   - Fish: seven per plain lake, circling under the surface.
    - Floating islands: MapArt.islands() (Lumeria, Aerion), bobbing high over impassable ground; they
      cast real shadows.
    - Wrecks: game.debris, charred scrap that sinks away over the last seconds of its life.

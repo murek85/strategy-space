@@ -6,8 +6,8 @@
 			metrics: false,
 			// The frames-per-second counter over the board (0.171.18).
 			fps: false,
-			// Board renderer and the WebGL-only effects. 3D (Three.js) by default since 0.172.7 — where it cannot start,
-			// app.js falls back to WebGL (PixiJS), then Canvas 2D; a choice saved in the settings stays.
+			// The board: 3D (Three.js), the only one since 0.176 (the 2D boards are gone); kept as an
+			// option for what reads it (the desktop app's self-check).
 			renderer: "three",
 			lights: true,
 			shadows: true,
@@ -15,10 +15,8 @@
 			clouds: true,
 			bloom: true,
 			water: true,
-			volume: true,
 			scars: true,
 			relief: true,
-			tilt: false,
 			// The 3D board's cinematic image (tone mapping, grade, sky reflections) and its ambient occlusion.
 			cinema: true,
 			ao: true,
@@ -38,7 +36,6 @@
 			// and back up when it has room — for the battle only, the settings themselves stay as chosen.
 			autoQuality: true,
 		},
-		RENDERERS = ["three", "webgpu", "webgl", "canvas"],
 		options = { ...defaults };
 	try {
 		const saved = JSON.parse(
@@ -47,14 +44,9 @@
 		for (const key of ["terrain", "particles"])
 			if (["low", "medium", "high"].includes(saved[key]))
 				options[key] = saved[key];
-		for (const key of ["flashes", "metrics", "fps", "lights", "shadows", "clouds", "bloom", "water", "volume", "scars", "relief", "tilt", "cinema", "ao", "pbr", "reflect", "atmo", "surface", "dof", "haze", "shake", "autoQuality"])
+		for (const key of ["flashes", "metrics", "fps", "lights", "shadows", "clouds", "bloom", "water", "scars", "relief", "cinema", "ao", "pbr", "reflect", "atmo", "surface", "dof", "haze", "shake", "autoQuality"])
 			if (typeof saved[key] === "boolean") options[key] = saved[key];
-		if (RENDERERS.includes(saved.renderer)) options.renderer = saved.renderer;
-		// 0.173 (I4): PixiJS is frozen as a fallback. "webgl" was the default until 0.172.7 and SceneFX.set saves every
-		// option at once, so almost every player has it saved without having chosen it: moved to 3D once (WebGPU and
-		// Canvas 2D were chosen on purpose and stay). The settings take it back for good.
-		if (saved.renderer === "webgl" && !saved.moved3d) options.renderer = "three";
-		options.moved3d = true;
+		// (Any other board saved before 0.176 is 3D now: there is no other.)
 	} catch {}
 	const api = {
 		options,
@@ -66,7 +58,7 @@
 			if (
 				typeof defaults[key] === "boolean"
 					? typeof value !== "boolean"
-					: !(key === "renderer" ? RENDERERS : ["low", "medium", "high"]).includes(value)
+					: !(key === "renderer" ? ["three"] : ["low", "medium", "high"]).includes(value)
 			)
 				return false;
 			options[key] = value;

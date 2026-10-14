@@ -62298,7 +62298,7 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
 	// where the shore climbs (rivers and lava flowing down a slope) it lies on the bed instead of hanging
 	// above it. Overlapping bodies of one kind share their grid points (the most opaque wins), so
 	// translucent water never doubles up; each kind is one mesh.
-	// The terrain mesh grid (webgl/terrain-height.js cell): a draped surface matches the ground exactly.
+	// The water surfaces' grid, 12 units: a draped surface follows the ground closely.
 	const STEP = 12;
 	function waterPoints(w, game, kind, points) {
 		let rimLow = Infinity,
@@ -63379,7 +63379,7 @@ function createSceneFx3D(THREE, { world, heightAt, fogged, pointScale }) {
      leader, hares and lizards in dashes and freezes; units, shots and explosions nearby put it to flight
      (the herd with it), then it stops, alert, and looks round.
    - Birds: 18 crossing the map (PlanetArt.fauna formula), flapping, high over the ground.
-   - Fish: seven per plain lake, circling under the surface (webgl/fauna-native.js formula).
+   - Fish: seven per plain lake, circling under the surface.
    - Floating islands: MapArt.islands() (Lumeria, Aerion), bobbing high over impassable ground; they
      cast real shadows.
    - Wrecks: game.debris, charred scrap that sinks away over the last seconds of its life.
@@ -65230,9 +65230,8 @@ function createWorld3D(THREE, { world, heightAt }) {
 }
 
 // ---- webgl3d/relief-3d.js ----
-/* Relief of the 3D board (visual only: movement, vision and saves do not change; the 2D boards keep
-   webgl/terrain-height.js). A height map twice as fine as the 2D one (6 units a cell) built from the
-   map itself:
+/* Relief of the 3D board (visual only: movement, vision and saves do not change). A height map of 6 units a
+   cell built from the map itself:
    - hills: warped swells, ridges and hollows from seeded noise (gentler on ice, rougher on ash);
    - mesas: steep cliffs with a ragged edge, a flat top, ledges of rock strata on the walls and a talus
      apron of scree at the foot; outcrops and rocks: rugged knolls with steep sides;
@@ -66965,10 +66964,10 @@ function createHolo3D(THREE, { world, heightAt }) {
 }
 
 // ---- webgl3d/three-renderer.js ----
-/* 3D renderer prototype (Three.js). Visual only: the simulation, orders and saves stay 2D (x, y on the
+/* 3D renderer (Three.js), the game's only board since 0.176. Visual only: the simulation, orders and saves stay 2D (x, y on the
    map); the renderer places them in 3D with X = x, Z = y and Y = terrain height.
-   - Terrain: a mesh from the height map (webgl/terrain-height.js), textured with the board ground painted
-     by the Canvas renderer (terrain, deposits, relays) in tiles; a tile is repainted when its deposits,
+   - Terrain: a mesh from the height map (webgl3d/relief-3d.js), textured with the board ground painted
+     by render-canvas.js (terrain, deposits, relays) in tiles; a tile is repainted when its deposits,
      relays, wrecks or craters change.
    - Models: code-built low-poly 3D models (webgl3d/models-3d.js) for the types that have one.
    - Other buildings: a plinth box under a roof painted by the same art code as the board (model-light paint()).
@@ -67056,8 +67055,7 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		timeOfDay = null,
 		clock = 0,
 		frameDt = 0;
-	const terrainHeight = createTerrainHeight(),
-		relief3d = createRelief3D({ RISE });
+	const relief3d = createRelief3D({ RISE });
 	// Water, night lights, weather and particles (webgl3d/scene-fx-3d.js).
 	const fx = createSceneFx3D(THREE, { world, heightAt: (x, y) => heightAt(x, y), fogged: (m) => fogged(m) });
 	// Stones, grass, drifts, shards and small mushrooms on the ground (webgl3d/scatter-3d.js).
@@ -67216,7 +67214,6 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 	}
 
 	function buildTerrain() {
-		terrainHeight.setGame(game);
 		// The relief of the 3D board (webgl3d/relief-3d.js): hills, mesa cliffs, peaks, beds; bare rock.
 		const built = relief3d.build(game, { relief: quality.relief }),
 			{ cols, rows, cell, data, rock } = built;
@@ -67925,8 +67922,6 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		drag: null,
 		building: false,
 		wallDrag: null,
-		shadeBody: null,
-		underUnits: null,
 		groundLabels: false,
 		groundDeposits: false,
 		ground3D: true,
@@ -68178,7 +68173,11 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		const wreck = new THREE.Group(),
 			cut = (d.spin * 0.6) * reach * 0.3,
 			tilt = new THREE.Vector3(1, d.spin * 0.5, 0.35 - d.spin * 0.4).normalize(),
-			halves = [];
+			halves = [],
+			// The lights of the drives (0.177.1): the flames of the thrusters and engines and the glow under a station's
+			// platform — added light (additive) — sputter and go out as the wreck breaks up; they shone on at full in
+			// both halves until it was gone.
+			glows = [];
 		root.matrixWorld.decompose(wreck.position, wreck.quaternion, wreck.scale);
 		for (const side of [1, -1]) {
 			const pivot = new THREE.Group(),
@@ -68190,6 +68189,7 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 				m.clippingPlanes = [clip];
 				m.side = THREE.DoubleSide;
 				materials.push(m);
+				if (m.blending === THREE.AdditiveBlending && m.transparent) glows.push({ m, opacity: m.opacity, n: glows.length });
 				const mesh = new THREE.Mesh(p.geometry, m);
 				mesh.matrixAutoUpdate = false;
 				mesh.matrix.copy(p.rel);
@@ -68223,8 +68223,10 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 		}
 		world.add(wreck);
 		root.visible = false;
-		return { wreck, halves, fragments, reach };
+		return { wreck, halves, fragments, reach, glows };
 	}
+	// How long the drives' light lasts after the blast: about a second (a station breaks up in 4.5 s, a ship in 3.5 s).
+	const DRIVES_OUT = 1.0;
 	function animateBreak(d, k, dt) {
 		const b = d.broken,
 			ease = 1 - Math.pow(1 - k, 2),
@@ -68239,6 +68241,13 @@ function createThreeRenderer(THREE, host, { canvasRenderer }) {
 			h.glow.material.opacity = Math.max(0, 1 - k * 1.6) * (0.75 + 0.25 * Math.sin(d.t * 23 + h.side));
 			const fade = k > 0.85 ? 1 - (k - 0.85) / 0.15 : 1;
 			h.pivot.scale.setScalar(Math.max(0.001, fade));
+		}
+		// The drives die: falling off over DRIVES_OUT seconds, sputtering (each flame and glow on its own beat).
+		const out = Math.max(0, 1 - d.t / DRIVES_OUT);
+		for (const g of b.glows) {
+			const sputter = 0.45 + 0.55 * Math.abs(Math.sin(d.t * 29 + g.n * 1.9) * Math.sin(d.t * 11 + g.n));
+			g.m.opacity = g.opacity * out * out * (out > 0 ? sputter : 0);
+			g.m.visible = g.m.opacity > 0.002;
 		}
 		for (const f of b.fragments) {
 			f.mesh.position.addScaledVector(f.v, dt / Math.max(0.001, b.wreck.scale.x));
@@ -70052,10 +70061,9 @@ function createModelPortraits() {
 }
 
 // ---- webgl3d/three-game-renderer.js ----
-/* The 3D renderer in the game: the same interface as createCanvasRenderer / createPixiGameRenderer, so
-   app.js keeps its camera, input and HUD. Loaded on demand (import() from app.js) when Settings →
-   Renderer is "3D"; a failure (no WebGL, page opened from disk so ES modules cannot load) makes the
-   game fall back to WebGL and then Canvas 2D.
+/* The 3D renderer in the game, its only board since 0.176: app.js keeps its camera, input and HUD. Loaded on
+   demand (import() from app.js; from disk, where ES modules cannot load, the same code built into bundle-3d.js);
+   without WebGL the game says so instead of a board (app.js).
    - Camera: the game camera (x, y, zoom → scale) drives the 3D camera: it looks at camera.x, camera.y
      from a fixed pitch, at the distance where the centre of the screen has the same pixels per map unit.
    - Pointer: toFlat() casts the pointer onto the terrain and returns where that map point lies on the

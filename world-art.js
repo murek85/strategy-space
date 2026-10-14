@@ -282,54 +282,9 @@
 		}
 		c.restore();
 	}
-	// A comet crossing the field (space): a curved tail of dust and gas behind a blazing head.
-	function comet(c, k) {
-		const nx = -k.dy,
-			ny = k.dx,
-			len = Math.hypot(k.x - k.tail.x, k.y - k.tail.y);
-		const gr = c.createLinearGradient(k.x, k.y, k.tail.x, k.tail.y);
-		gr.addColorStop(0, "rgba(220,244,255,.75)");
-		gr.addColorStop(0.4, "rgba(140,200,255,.35)");
-		gr.addColorStop(1, "rgba(120,160,255,0)");
-		c.fillStyle = gr;
-		c.beginPath();
-		c.moveTo(k.x + nx * 14, k.y + ny * 14);
-		c.quadraticCurveTo(k.x - k.dx * len * 0.5 + nx * 70, k.y - k.dy * len * 0.5 + ny * 70, k.tail.x + nx * 90, k.tail.y + ny * 90);
-		c.lineTo(k.tail.x - nx * 60, k.tail.y - ny * 60);
-		c.quadraticCurveTo(k.x - k.dx * len * 0.5 - nx * 30, k.y - k.dy * len * 0.5 - ny * 30, k.x - nx * 14, k.y - ny * 14);
-		c.closePath();
-		c.fill();
-		const head = c.createRadialGradient(k.x, k.y, 0, k.x, k.y, 70);
-		head.addColorStop(0, "rgba(255,255,255,1)");
-		head.addColorStop(0.25, "rgba(200,236,255,.8)");
-		head.addColorStop(1, "rgba(120,180,255,0)");
-		c.fillStyle = head;
-		c.fillRect(k.x - 70, k.y - 70, 140, 140);
-	}
-	// Emissive, after night lighting: the crystal pillars glow, more at night; comets blaze.
-	function glow(c, g, view) {
-		const night = g.night || 0;
-		c.save();
-		c.globalCompositeOperation = "lighter";
-		for (const k of g.comets?.() || []) if (inView(k, view, 700)) comet(c, k);
-		for (const o of g.obstacles) {
-			if (o.kind !== "crystal" || !inView(o, view)) continue;
-			const cx = o.x + o.w / 2,
-				cy = o.y + o.h / 2 - 30,
-				r = Math.max(o.w, o.h) * 0.9,
-				p = 0.5 + 0.5 * Math.sin(g.time * 0.8 + o.x),
-				gr = c.createRadialGradient(cx, cy, 0, cx, cy, r);
-			gr.addColorStop(0, `rgba(140,220,255,${0.05 + 0.03 * p + night * 0.25})`);
-			gr.addColorStop(1, "rgba(140,220,255,0)");
-			c.fillStyle = gr;
-			c.fillRect(cx - r, cy - r, 2 * r, 2 * r);
-		}
-		c.restore();
-	}
 	MapArt.extend({
 		terrain,
 		effects,
-		glow,
 		baseColor: (g) => BASE[theme(g)] || null,
 		color: (kind) => COLORS[kind] || null,
 	});

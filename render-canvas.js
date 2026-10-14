@@ -1,13 +1,15 @@
-/* Canvas 2D renderer: the battlefield and minimap, drawn from the game state and the current view
-   (camera, selection, placement preview). Split out of app.js unchanged, so the picture is identical;
-   a WebGL renderer can implement the same interface (setGame, refreshFog, render).
-   Since 0.173 (I4) only the 3D board is developed on. Here the board itself (terrain, ground, units, sky, lighting,
-   post) is FROZEN — the fallback of the fallback, bug fixes only; the overlay, the screen layer, the minimap and the
-   fog of war are drawn for the 3D board too (drawLayer, drawMinimap, refreshFog) and stay in development. */
+/* The 2D painter of the 3D board (0.176: no longer a board of its own — the Canvas 2D board, its sky, lighting,
+   glow, weather and fog phases went). From the game state and the current view it paints, on canvases the 3D board
+   lays over and under its world:
+   - the ground tiles under the terrain mesh (drawLayer "terrain", "ground", "groundTop"; webgl3d/three-renderer.js);
+   - the overlay on the map (placement preview, rally lines, markers, ranges) and the screen layer (the selection
+     box, the storm edge) — drawLayer "overlay" and "screen" (webgl3d/three-game-renderer.js);
+   - the minimap (drawMinimap) and the fog of war (refreshFog, fogCanvas);
+   - the map previews of the scenarios and the lobby (menu.js drawMapPreview: "terrain", "ground", "units"). */
 function createCanvasRenderer(canvas, mini) {
 	"use strict";
 	const { TYPES, MISSIONS, dist } = RTS;
-	// ctx is swapped temporarily while a layer is drawn for the WebGL renderer.
+	// ctx is swapped temporarily while a layer is drawn for the 3D board.
 	let ctx = canvas.getContext("2d");
 	const mc = mini.getContext("2d");
 	// View of the current frame, copied into the names the drawing code has always used.
@@ -25,8 +27,6 @@ function createCanvasRenderer(canvas, mini) {
 		drag = null,
 		building = false,
 		wallDrag = null,
-		shadeBody = null,
-		underUnits = null,
 		viewOutline = null,
 		groundLabels = true,
 		groundDeposits = true,
@@ -42,7 +42,7 @@ function createCanvasRenderer(canvas, mini) {
 		};
 	}
 	function useView(view) {
-		({ game, width, height, dpr, scale, camera, selected, colors, mouse, drag, building, wallDrag, shadeBody, underUnits } = view);
+		({ game, width, height, dpr, scale, camera, selected, colors, mouse, drag, building, wallDrag } = view);
 		// A renderer with a perspective camera outlines on the minimap the ground it shows (map points).
 		viewOutline = view.viewOutline || null;
 		// A renderer that shows the names and amounts itself (the 3D board: signs facing the camera)
@@ -569,8 +569,6 @@ function createCanvasRenderer(canvas, mini) {
 			1 - e.constructionLeft / TYPES[e.type].construction >= 0.65
 		)
 			AdvancedArt.factionDetails(ctx, e, game.time);
-		// Optional extra shading of the model from another renderer (WebGL: volume light, damage).
-		if (shadeBody) shadeBody(ctx, e);
 		PlanetArt.damage(ctx, e, game.time);
 		if (
 			e.constructionLeft &&
@@ -699,15 +697,6 @@ function createCanvasRenderer(canvas, mini) {
 			AdvancedArt.walls(ctx, game);
 		}
 	}
-	// The part of the ground the WebGL renderer keeps in Canvas when it draws the rest natively:
-	// animated map effects (with plugins), habitats and walls.
-	// Sky layers added by map plugins (the WebGL renderer draws wildlife and islands itself).
-	function drawSkyPlugins() {
-		MapArt.skyPlugins(ctx, game, { x: camera.x, y: camera.y, w: width / scale, h: height / scale });
-	}
-	function drawMapEffects() {
-		MapArt.effects(ctx, game, { x: camera.x, y: camera.y, w: width / scale, h: height / scale });
-	}
 	// Dashed paths of the selected units and a ring where each is heading. strong: the 3D board's overlay,
 	// painted at a lower resolution and draped over the terrain, needs wider, brighter lines.
 	function drawPaths(strong) {
@@ -755,8 +744,6 @@ function createCanvasRenderer(canvas, mini) {
 	}
 	// Units and buildings (with selection, health bars, construction) and combat effects.
 	function drawUnits() {
-		// Optional layer under all models from another renderer (WebGL: sun shadows).
-		if (underUnits) underUnits(ctx);
 		[...game.entities]
 			.filter((e) => e.team === (game.viewer ?? 0) || game.isVisible(e.x, e.y))
 			.sort(
@@ -831,43 +818,6 @@ function createCanvasRenderer(canvas, mini) {
 			} else if (typeof FxArt !== "undefined" && FxArt.handles(ef)) FxArt.drawShapes(ctx, FxArt.shapes(ef));
 			ctx.restore();
 		}
-	}
-	// Wildlife in the air and floating scenery above the units.
-	function drawSky() {
-		AdvancedArt.fauna(ctx, game);
-		MapArt.sky(ctx, game, { x: camera.x, y: camera.y, w: width / scale, h: height / scale });
-	}
-	// Canvas night shading and unit lamps; the WebGL renderer uses its light map instead.
-	function drawLighting() {
-		PlanetArt.lighting(ctx, game, {
-			x: camera.x,
-			y: camera.y,
-			w: width / scale,
-			h: height / scale,
-		});
-	}
-	// Emissive map effects and precipitation, drawn after lighting.
-	function drawPost() {
-		drawGlow();
-		drawWeather();
-	}
-	function drawGlow() {
-		BoardArt.depositGlow(ctx, game, { x: camera.x, y: camera.y, w: width / scale, h: height / scale });
-		MapArt.glow(ctx, game, { x: camera.x, y: camera.y, w: width / scale, h: height / scale });
-	}
-	// Rain and snow on the ground; the WebGL renderer draws them as GPU particles instead.
-	function drawWeather() {
-		PlanetArt.precipitation(ctx, game, {
-			x: camera.x,
-			y: camera.y,
-			w: width / scale,
-			h: height / scale,
-		});
-	}
-	// Fog of war.
-	function drawFog() {
-		ctx.imageSmoothingEnabled = true;
-		ctx.drawImage(fog, 0, 0, W, H);
 	}
 	// Campaign markers, rally points and the placement preview, above the fog.
 	// Expedition mode: the artifact is a beacon seen through fog; when carried it floats above the bearer.
@@ -1149,15 +1099,7 @@ function createCanvasRenderer(canvas, mini) {
 		terrain: drawTerrain,
 		ground: drawGround,
 		groundTop: drawGroundTop,
-		mapEffects: drawMapEffects,
-		skyPlugins: drawSkyPlugins,
 		units: drawUnits,
-		sky: drawSky,
-		lighting: drawLighting,
-		post: drawPost,
-		glow: drawGlow,
-		weather: drawWeather,
-		fog: drawFog,
 		overlay: drawOverlay,
 	};
 	function drawWorld(phases) {
@@ -1168,16 +1110,7 @@ function createCanvasRenderer(canvas, mini) {
 		for (const phase of phases) WORLD_PHASES[phase]();
 		ctx.restore();
 	}
-	function render() {
-		refreshTerrainIfNeeded();
-		ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-		ctx.fillStyle = "#111e24";
-		ctx.fillRect(0, 0, width, height);
-		drawWorld(["terrain", "ground", "units", "sky", "lighting", "post", "fog", "overlay"]);
-		drawScreen();
-		drawMinimapPhase();
-	}
-	// Draws selected phases into another canvas (one layer of the WebGL renderer), transparent elsewhere.
+	// Draws selected phases into another canvas (one layer of the 3D board, a map preview), transparent elsewhere.
 	function drawLayer(target, phases) {
 		const own = ctx;
 		ctx = target;
@@ -1277,10 +1210,6 @@ function createCanvasRenderer(canvas, mini) {
 		refreshFog(nextGame) {
 			game = nextGame;
 			refreshFog();
-		},
-		render(view) {
-			useView(view);
-			render();
 		},
 		// Building blocks for other renderers: the painted terrain, single phases into a layer, the minimap.
 		get terrainCanvas() {

@@ -1,5 +1,26 @@
 # Dźwięk i muzyka
 
+## Wersja 0.177 — przerwy i zaniki w jakości „Wysoka” (2026-10-14)
+
+Objaw: w jakości „Wysoka” (Tone.js) dźwięk po chwili znikał, czasem wracał na moment z szarpaniem i znowu znikał. W „Klasycznej” działał.
+
+- **Pomiar:** `AudioContext.playbackStats` (Chromium) liczy przerwy, czyli niedobory bufora wyjścia (underrun). Symulowana ciężka walka trwała 20 s: 3 strzały co 100 ms, rakieta co 300 ms, wybuch co 400 ms.
+
+| Wariant | Przerwy | Cisza łącznie |
+|---|---|---|
+| „Wysoka”, 96 kHz (częstotliwość urządzenia) | 257 | 2570 ms |
+| „Klasyczna”, 96 kHz | 0 | 0 |
+| „Wysoka”, 96 kHz, bez pogłosów splotowych | 0 | 0 |
+| „Wysoka”, 96 kHz, pogłosy o połowę krótsze | 22 | 220 ms |
+| **„Wysoka”, 48 kHz** (poprawka) | **0** | **0** |
+| „Wysoka”, 48 kHz, walka dwa razy cięższa | 0 | 0 |
+
+- **Wykluczone:** NaN w sygnale, bo analizator przed limiterem pokazywał 0 błędnych próbek. Niesłyszalna energia ściskająca limiter też odpada: poniżej 25 Hz było 1–8% energii, powyżej 18 kHz 0%, poziom ok. 40 dB pod progiem. Koszt na wątku głównym to 0,5 ms na serię dźwięków.
+- **Przyczyna:** `new AudioContext()` przejmuje częstotliwość urządzenia, tu 96 kHz. Dwa pogłosy splotowe trybu „Wysoka” (`setupQuality` w `audio-hq.js`: efekty i muzyka, po 2,6 s stereo) kosztowały dwa razy więcej niż przy 48 kHz, tak samo jak instrumenty Tone.js i filtry próbek. W ciężkiej walce oba pogłosy pracują bez przerwy, więc wątek dźwięku nie mieścił się w czasie.
+- **Poprawka:** `contextFactory` w `audio.js` tworzy kontekst z `{ sampleRate: 48000 }`, a przeglądarka bez tej opcji dostaje kontekst urządzenia. 48 kHz to więcej, niż słychać; przeglądarka przelicza na urządzenie.
+- `diagnostics()` podaje `rate` i `dropouts` (`playbackStats.underrunEvents`). Ustawienia → Dźwięk pokazują „48 kHz” i ewentualne „przerwy: N”.
+- Test: `tests/audio.test.js`.
+
 ## Wersja 0.175.9 — domyślna głośność (2026-10-14)
 
 - `GameAudio` zaczyna z `volume = 0.7` i `musicVolume = 0.9` (było 0,35 i 0,35). Suwak górnego paska (`#sound-volume` w `index.html`) ma `value="70"`, a ustawienia biorą 0,9 jako zapas dla muzyki. Zapisane `pogranicze-audio-v1` wygrywa, więc dotyczy to tylko nowych graczy i wyczyszczonych ustawień. Test: `tests/audio.test.js`.

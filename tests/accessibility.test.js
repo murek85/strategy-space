@@ -72,7 +72,7 @@ test("the game loads accessibility first and offers it in the settings", () => {
 	assert.match(fs.readFileSync(path.join(ROOT, "style.css"), "utf8"), /zoom: var\(--ui-scale, 1\)/);
 });
 
-test("0.175.2: the size is applied with a button and kept or undone; a new board is built at once behind a loading screen", () => {
+test("0.175.2: the size is applied with a button and kept or undone", () => {
 	const fs = require("node:fs"),
 		path = require("node:path"),
 		ROOT = path.join(__dirname, ".."),
@@ -82,12 +82,7 @@ test("0.175.2: the size is applied with a button and kept or undone; a new board
 	const src = fs.readFileSync(path.join(ROOT, "accessibility.js"), "utf8");
 	assert.match(src, /scale\.oninput = \(\) => \{\s*\$\("access-scale-value"\)\.textContent/, "the slider only shows its value");
 	assert.match(src, /if \(--scalePending\.left <= 0\) settleScale\(false\)/, "back to the old size when not kept");
-	const app = require("./app-source.js")(),
-		menu = fs.readFileSync(path.join(ROOT, "menu.js"), "utf8");
-	assert.match(app, /function switchRenderer\(\)[\s\S]{0,900}LoadingScreen\.show\(/);
-	assert.match(app, /rendererChanged: switchRenderer/);
-	assert.match(menu, /SceneFX\.set\("renderer", rendererSelect\.value\);[\s\S]{0,200}this\.api\.rendererChanged\?\.\(\)/);
-	assert.match(app, /The board in use goes first[\s\S]{0,600}old\.destroy\?\.\(\);\s*\}\s*if \(wanted === "three"\)/, "the old board is gone before the new one is built");
+	// (The board built again behind a loading screen when the renderer changed went with the other boards, 0.176.)
 });
 
 test("0.175.3: a pause says why and stays on the board; pausing on focus loss and longer messages are settings", () => {
@@ -108,12 +103,12 @@ test("0.175.3: a pause says why and stays on the board; pausing on focus loss an
 	assert.match(app, /toastTimer \*= Access\.toastFactor/);
 });
 
-test("0.175.5: a battle’s loading screen waits for the chosen board (no Canvas 2D first, then 3D)", () => {
+test("0.175.5: a battle’s loading screen waits for the 3D board", () => {
 	const app = require("./app-source.js")();
 	assert.match(app, /function boardReady\(screen\)[\s\S]{0,500}Promise\.resolve\(applyRenderer\(\)\)[\s\S]{0,120}\.finally\(done\)/, "the screen goes after the board is up");
 	assert.match(app, /restart\(missionId, scenario, prepared\);\s*\}\s*finally\s*\{\s*boardReady\(screen\);/, "a new battle");
 	assert.match(app, /screen = LoadingScreen\.show\(\{ eyebrow: "WCZYTANY ZAPIS[\s\S]{0,300}boardReady\(screen\);/, "a loaded save");
 	assert.match(app, /app\.boardScreen\?\.\(again \? "REWANŻ" : "GRA WIELOOSOBOWA"\)/, "a network battle and its rematch");
 	assert.match(app, /setTimeout\(done, 15000\)/, "never stuck behind the screen");
-	assert.match(app, /SceneFX\.options\.renderer === "three"\) \{[\s\S]{0,200}load3D\(\)/, "the 3D code loads while the menu is up");
+	assert.match(app, /const warm = \(\) => setTimeout\(\(\) => load3D\(\)/, "the 3D code loads while the menu is up");
 });

@@ -98,7 +98,15 @@
 				contextFactory ||
 				(() => {
 					const C = root.AudioContext || root.webkitAudioContext;
-					return C ? new C() : null;
+					if (!C) return null;
+					// 48 kHz, whatever the device runs at (0.177): at the device's 96 kHz every node cost twice as much,
+					// and in a heavy battle the high quality's two convolution reverbs ran the audio thread out of time —
+					// the sound broke up and dropped out. 48 kHz is above what anyone hears; the browser resamples.
+					try {
+						return new C({ sampleRate: 48000 });
+					} catch {
+						return new C();
+					}
 				});
 			this.storage = storage;
 			this.context = null;

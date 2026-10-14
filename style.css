@@ -821,6 +821,11 @@ kbd {
 .primary-button:hover {
 	background: #c8f4da;
 }
+/* Buttons one under another in the board's windows (0.177.2): a gap between them — "NOWA OPERACJA" and "SPRÓBUJ
+   PONOWNIE", "NASTĘPNY ROZDZIAŁ", "REWANŻ"… stood flush, one green block. */
+.briefing > :is(.primary-button, .resume-button) + :is(.primary-button, .resume-button) {
+	margin-top: 10px;
+}
 .briefing > small {
 	display: block;
 	text-align: center;

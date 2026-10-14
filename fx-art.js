@@ -1,10 +1,8 @@
-/* Effects of the newer mechanics and the storm outlook, shared by both renderers.
-   An effect is described once as simple shapes (FxArt.shapes); Canvas and the WebGL models draw the same shapes.
-   Craters, the storm band at the screen edge and the storm front on the minimap are drawn here for Canvas;
-   WebGL replays the screen band (interface layer), bakes craters into ground sprites and shares the minimap. */
+/* Effects of the newer mechanics and the storm outlook, painted on a 2D canvas for the 3D board's layers.
+   An effect is described once as simple shapes (FxArt.shapes); craters, the storm band at the screen edge and the
+   storm front on the minimap are drawn here (render-canvas.js layers: the ground, the screen, the minimap). */
 const FxArt = (() => {
 	const TAU = Math.PI * 2;
-	const hex = (color) => parseInt(color.slice(1), 16);
 	// Shapes: ring (circle outline), disc, line, cross (plus sign), arc.
 	function shapes(ef) {
 		const a = Math.max(0, ef.life / ef.maxLife),
@@ -99,18 +97,6 @@ const FxArt = (() => {
 			}
 		}
 		c.globalAlpha = 1;
-	}
-	// The same shapes on a PIXI.Graphics (WebGL models layer).
-	function drawPixi(g, list) {
-		for (const s of list) {
-			if (s.alpha <= 0) continue;
-			const stroke = { width: Math.max(0.5, s.w || 1), color: hex(s.color), alpha: s.alpha };
-			if (s.t === "ring") g.circle(s.x, s.y, s.r).stroke(stroke);
-			else if (s.t === "arc") g.moveTo(s.x + Math.cos(s.a0) * s.r, s.y + Math.sin(s.a0) * s.r).arc(s.x, s.y, s.r, s.a0, s.a1).stroke(stroke);
-			else if (s.t === "disc") g.circle(s.x, s.y, s.r).fill({ color: hex(s.color), alpha: s.alpha });
-			else if (s.t === "line") g.moveTo(s.x, s.y).lineTo(s.x2, s.y2).stroke(stroke);
-			else if (s.t === "cross") g.moveTo(s.x - s.s, s.y).lineTo(s.x + s.s, s.y).moveTo(s.x, s.y - s.s).lineTo(s.x, s.y + s.s).stroke(stroke);
-		}
 	}
 	const KINDS = new Set(["shieldHit", "heal", "sparks", "dust", "emp", "artifact", "flame", "rift", "phase"]);
 	const handles = (ef) => KINDS.has(ef.kind);
@@ -360,6 +346,6 @@ const FxArt = (() => {
 		}
 		mc.restore();
 	}
-	return { shapes, drawShapes, drawPixi, handles, crater, craters, craterAlpha, stormEdge, stormMinimap };
+	return { shapes, drawShapes, handles, crater, craters, craterAlpha, stormEdge, stormMinimap };
 })();
 if (typeof window !== "undefined") window.FxArt = FxArt;

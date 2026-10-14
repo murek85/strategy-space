@@ -34,7 +34,7 @@ Przed `npm run dist` warto przebudować bundle 3D (`npm run build:3d`) — robi 
 ## Paczka (`package.json` → `build`)
 
 - `appId` `pl.pogranicze.galaktyki`, nazwa „Pogranicze Galaktyki”, ikona `build/icon.png` (znak ◈ gry; Windows `.ico` robi z niej electron-builder), `asar`.
-- Poza paczką: `tests/`, `tools/`, `docs/`, `dist/`, `build/`, pliki `.md`, strony `prototyp-*.html` i ich skrypty (`webgl/prototype.js`, `webgl3d/prototype-3d.js`), `server.js`, pliki Blendera, `.py`, `.cmd`. Zależności npm są tylko deweloperskie, więc `node_modules` nie trafia do paczki.
+- Poza paczką: `tests/`, `tools/`, `docs/`, `dist/`, `build/`, pliki `.md`, strony `prototyp-*.html` i ich skrypty (`webgl3d/prototype-3d.js`), `server.js`, pliki Blendera, `.py`, `.cmd`. Zależności npm są tylko deweloperskie, więc `node_modules` nie trafia do paczki.
 - Instalator NSIS: nie jednym kliknięciem — wybór folderu, instalacja dla bieżącego użytkownika (bez uprawnień administratora), skróty na pulpicie i w menu Start, deinstalator.
 
 ## Ograniczenia i decyzje

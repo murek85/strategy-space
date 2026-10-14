@@ -92,6 +92,6 @@ Priorytet: ●●● wysoki, ●● średni, ● niski — z punktu widzenia „
 
 1. **Cel projektu:** gra do wydania publicznie czy rozwijany prototyp dla siebie? Od tego zależą I6–I7 i ranking.
 2. **Duża nowość (I5):** bohaterowie, edytor map, transport międzyplanetarny, kampania drugiej strony czy nagrane głosy?
-3. **Grafika:** zamrozić PixiJS i Canvas 2D jako tryby awaryjne? — *Decyzja 2026-10-13: tak, rozwijamy tylko 3D (0.173).*
+3. **Grafika:** zamrozić PixiJS i Canvas 2D jako tryby awaryjne? — *Decyzja 2026-10-13: tak, rozwijamy tylko 3D (0.173). 2026-10-14: oba usunięte, gra jest tylko 3D (0.176).*
 4. **Język angielski:** teraz (mniej tekstów do przeniesienia) czy przed wydaniem?
 5. **Przeniesienie do Unity:** odłożone bez terminu — zamknąć ten temat czy zostawić otwarty?

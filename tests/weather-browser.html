@@ -37,7 +37,7 @@
 		<script type="module">
 			import { createThreeGameRenderer } from "../webgl3d/three-game-renderer.js";
 			// The game's rules and art in index.html's order (game-scripts.js), without the interface.
-			await window.loadGameScripts(["audio.js", "audio-hq.js", "audio-radio.js", "campaign.js", "campaign-film.js", "act2-film.js", "act3-film.js", "act4-film.js", "campaign-finale.js", "epilogue-films.js", "end-screen.js", "loading-screen.js", "interludes.js", "knowledge.js", "galaxy-map.js", "menu-backdrop.js", "menu.js", "netplay.js", "netplay-menu.js", "development.js", "economy-panel.js", "vendor/pixi.min.js", "webgl/ground-native.js", "webgl/models-native.js", "webgl/fauna-native.js", "webgl/canvas-replay.js", "webgl/pixi-game-renderer.js", "app.js", "cursor.js", "game-dialog.js", "save-transfer.js"]);
+			await window.loadGameScripts(["audio.js", "audio-hq.js", "audio-radio.js", "campaign.js", "campaign-film.js", "act2-film.js", "act3-film.js", "act4-film.js", "campaign-finale.js", "epilogue-films.js", "end-screen.js", "loading-screen.js", "interludes.js", "knowledge.js", "galaxy-map.js", "menu-backdrop.js", "menu.js", "netplay.js", "netplay-menu.js", "development.js", "economy-panel.js", "webgl3d/model-light.js", "app.js", "cursor.js", "game-dialog.js", "save-transfer.js"]);
 			const $ = (id) => document.getElementById(id),
 				q = new URLSearchParams(location.search),
 				canvas = $("game"),

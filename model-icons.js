@@ -2,8 +2,7 @@
    and the icons of the production deck show the game's own 3D models instead of the old 2D drawings. The pictures
    come from webgl3d/model-portraits.js, through the 3D code app.js loads anyway (ModelIcons.loader); each look is
    rendered once — one a frame, so a screen of cards does not stall — and kept for the page.
-   Only with the 3D board chosen (Settings → Graphics): with a fallback board, no WebGL or a failed load, the 2D
-   drawing already in place stays, as before. */
+   Without WebGL or when the 3D code does not load, the 2D drawing already in place stays. */
 const ModelIcons = (() => {
 	const cache = new Map(), // key -> canvas (null: no model for it)
 		waiting = new Map(), // key -> [callbacks]
@@ -15,7 +14,7 @@ const ModelIcons = (() => {
 		// app.js: () => the 3D module (load3D).
 		loader: null,
 		enabled() {
-			return !failed && typeof api.loader === "function" && typeof SceneFX !== "undefined" && SceneFX.options.renderer === "three";
+			return !failed && typeof api.loader === "function";
 		},
 		key(e, o = {}) {
 			return [e.type, e.team ?? 0, e.faction || "", e.tint || "", (o.colors || []).join(","), o.space ? "space" : "", o.width, o.height, o.fill ?? "", o.pitch ?? ""].join("|");
