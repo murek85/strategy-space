@@ -35,6 +35,19 @@ Status: pierwszy zakres wdrożony w 0.5 (2026-09-21). Na życzenie użytkownika 
 - `style.css`: domyślny wygląd w `:where()` (zerowa szczegółowość, reguły paneli wygrywają) — suwak z torem wypełnionym do `--fill` i jasnym uchwytem (jak `.has-backdrop .menu-setting`), szklane pola tekstowe/liczbowe/`textarea` z poświatą przy fokusie, bez strzałek pola liczbowego, `accent-color` pól wyboru. `app.js` (`updateAudioControls`) ustawia `--fill` suwaka głośności.
 - `menu.css`: pola sieciowe i czat w kolorach szkła scenariuszy; pola tekstowe menu przy fokusie mają turkusową poświatę zamiast złotej ramki przycisków.
 
+## Wczytany zapis do 100% (wersja 0.177.5, 2026-10-15)
+
+- Wcześniej po `done()` dobieganie do 100% robiła najbliższa klatka (`requestAnimationFrame`), a zamykała klatka, w której pasek był ≥ 99,9%. Zapasowo działał `setTimeout(close, … + 1200)`. Po wczytaniu zapisu wątek strony odbudowywał świat i klatki prawie nie przychodziły, więc zamykał zapas: w pomiarze po 3,3 s, przy pasku 0,55, nad ekranem pauzy.
+- Teraz `done()` woła `complete()`. Pasek dostaje przejście CSS do 1 (`FINISH` 0,4 s, ease-out), a kolumny procentu i etapu `roll.finish(p)` (Web Animations z tą samą krzywą), więc wszystko jest na kompozytorze. Zamknięcie odbywa się przez `setTimeout(close, wait)` po dobiegnięciu i po minimalnym czasie ekranu. Klatki rysują już tylko tło i opis dla czytników ekranu.
+- Pomiar: wczytanie zapisu ze slotu, ekran zaczyna znikać przy pasku 1,00, liczniku 100 i etapie „Gotowe”.
+
+## Procenty wczytywania na bieżąco (wersja 0.177.4, 2026-10-15)
+
+- Pasek (`.loading-bar b`, `@keyframes loading-fill`: 9 s, trzy odcinki do 85%, `cubic-bezier(0.15, 0.7, 0.3, 1)`) biegnie na kompozytorze. Procent i etap wpisywał wcześniej `requestAnimationFrame` na wątku strony, zablokowanym przez budowę mapy i świata 3D.
+- `loading-screen.js`: `FILL` to ten sam przebieg co w CSS, `bezier` i `fillAt` liczą położenie paska w czasie. `roll(el, wartości, wiersz)` tworzy kolumnę wartości (101 procentów, 6 etapów) i przesuwa ją `animate()` z klatkami `step-end` w chwilach zmiany wartości, czyli też na kompozytorze. Po `done()` pola ustawia wątek strony (`set`) za dobiegającym paskiem; przy 100% etap to „Gotowe”. `aria-label` pola etapu podaje stan czytnikom ekranu.
+- `style.css`: okienka 16 px z `overflow: hidden`.
+- Pomiar: 3 s blokady wątku strony, po niej pasek 0,222 i licznik 22%. Test: `tests/loading-screen.test.js`, który pilnuje też zgodności `FILL` z `@keyframes`.
+
 ## Dziesięć kolorów gracza (wersja 0.177.3, 2026-10-14)
 
 - `advanced-rules.js`: `RTS.PLAYER_COLORS` ma 10 kolorów; doszły `#5fd8e8` turkusowy, `#c8ee6a` limonkowy, `#ffa04d` pomarańczowy, `#eef3f6` śnieżny i `#3fcf8e` szmaragdowy. `RTS.PLAYER_COLOR_NAMES` to wspólne nazwy dla scenariuszy (`menu.js`) i gry sieciowej (`netplay-menu.js`); sieć nazywała niebieski „Błękitnym”.

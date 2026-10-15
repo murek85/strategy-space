@@ -1,6 +1,6 @@
 /* Navigation owns screens; the application retains a single simulation loop. */
 // The game's version: the menu's footer and the saves' export (0.171.13: one place; it was written twice by hand).
-const GAME_VERSION = "0.177.3";
+const GAME_VERSION = "0.177.6";
 // Listening to the music in the settings: themes (audio.js music modes) and the game's moods.
 const MUSIC_THEMES = [
 	["menu", "Menu — Odległe światło"],
@@ -356,6 +356,9 @@ class CommandMenu {
 				body;
 		if (screen === "news")
 			body =
+				"<h2>0.177.6 / Wersja na stronę</h2><p>Polecenie npm run web składa wersję przeglądarkową do wgrania na serwer: folder web/pogranicze/ i to samo w archiwum ZIP.</p>" +
+				"<h2>0.177.5 / Wczytany zapis do 100%</h2><p>Po wczytaniu zapisu ekran ładowania dochodzi do 100% i „Gotowe”, a dopiero potem pokazuje grę — nie znika już w połowie paska nad pauzą taktyczną.</p>" +
+				"<h2>0.177.4 / Procenty wczytywania na bieżąco</h2><p>Na ekranie wczytywania procenty i nazwa etapu rosną razem z paskiem, także gdy gra buduje mapę — nie stoją już do końca, by na koniec przeskoczyć.</p>" +
 				"<h2>0.177.3 / Dziesięć kolorów gracza</h2><p>Do wyboru jest 10 kolorów (nowe: turkusowy, limonkowy, pomarańczowy, śnieżny, szmaragdowy). Przeciwnik nie dostaje już koloru podobnego do Twojego, a legenda mapy pokazuje prawdziwe kolory stron.</p>" +
 				"<h2>0.177.2 / Osobne przyciski w raportach</h2><p>Przyciski jeden pod drugim w raportach końca bitwy i innych oknach planszy („Nowa operacja”, „Spróbuj ponownie”, „Następny rozdział”, „Rewanż”) mają odstęp i nie zlewają się w jeden blok.</p>" +
 				"<h2>0.177.1 / Gasnące silniki wraków</h2><p>Zniszczona stacja albo okręt w kosmosie gasną: płomienie silników i poświata pod platformą migoczą i znikają w ciągu sekundy, zamiast świecić we wraku do końca.</p>" +

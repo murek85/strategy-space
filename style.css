@@ -1430,6 +1430,28 @@ kbd {
 	font-style: normal;
 	color: #7fe7c8;
 }
+/* The stage and the percentage as rolls (0.177.4, loading-screen.js roll): a window one row high over a column of
+   values that the compositor slides — they move with the bar while the page is busy. */
+.loading-stage > span,
+.loading-stage > em {
+	display: block;
+	height: 16px;
+	overflow: hidden;
+	line-height: 16px;
+}
+.loading-stage > em {
+	text-align: right;
+	min-width: 4ch;
+}
+.loading-roll {
+	display: block;
+	will-change: transform;
+}
+.loading-roll > span {
+	display: block;
+	height: 16px;
+	white-space: nowrap;
+}
 .loading-tip {
 	margin: 16px 0 0;
 	font-size: 12px;

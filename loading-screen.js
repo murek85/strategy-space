@@ -18,6 +18,75 @@ const LoadingScreen = (() => {
 	];
 	const WORLD = { dust: ["#c69a5c", "#2a1c12", "#ffd29a"], ice: ["#d9e8f0", "#3a5060", "#bfe6ff"], ash: ["#7a5a50", "#1a100e", "#ff9a6a"], space: ["#c49a6c", "#22140c", "#9cd0ff"], spaceIce: ["#cfe6f2", "#1c3446", "#bff0ff"], spaceLava: ["#3a2420", "#120806", "#ff8a3a"], spaceVoid: ["#1a0c0c", "#000000", "#ff8a4a"], ocean: ["#3f8aa0", "#08202a", "#a8e8ff"], crystal: ["#a8d8ec", "#283a50", "#d4c4ff"] };
 	const STAGES = ["Wyjście z nadprzestrzeni…", "Ustalanie orbity…", "Generowanie terenu…", "Rozmieszczanie jednostek…", "Synchronizacja łączności…", "Gotowe"];
+	// The bar's walk (style.css, loading-fill): 9 s, cubic-bezier(0.15, 0.7, 0.3, 1) in each of its three stretches.
+	const FILL = { seconds: 9, stops: [[0, 0], [0.3, 0.55], [0.65, 0.76], [1, 0.85]], curve: [0.15, 0.7, 0.3, 1] };
+	// A CSS cubic-bezier: the eased progress at a time 0…1.
+	function bezier([x1, y1, x2, y2], t) {
+		const at = (a, b, u) => 3 * a * u * (1 - u) * (1 - u) + 3 * b * u * u * (1 - u) + u * u * u;
+		let lo = 0,
+			hi = 1,
+			u = t;
+		for (let i = 0; i < 30; i++) {
+			u = (lo + hi) / 2;
+			if (at(x1, x2, u) < t) lo = u;
+			else hi = u;
+		}
+		return at(y1, y2, u);
+	}
+	// Where the bar stands at a time 0…1 of its walk.
+	function fillAt(t) {
+		const S = FILL.stops;
+		for (let i = 1; i < S.length; i++)
+			if (t <= S[i][0]) {
+				const [t0, v0] = S[i - 1],
+					[t1, v1] = S[i];
+				return v0 + (v1 - v0) * bezier(FILL.curve, (t - t0) / (t1 - t0));
+			}
+		return S.at(-1)[1];
+	}
+	// The counter and the stage as rolls moved by the compositor (0.177.4): the bar ran there while the page was busy
+	// building the map, but its percentage and stage were written by JavaScript, on the busy thread — they stood
+	// still and jumped at the end. Now a column of values per field slides by a transform animation that jumps, step by
+	// step, at the moments the bar passes each value; the page's thread is free to be busy.
+	const ROW = 16,
+		// The bar's last stretch after the work (a CSS transition "ease-out").
+		FINISH = 0.4,
+		EASE_OUT = [0, 0, 0.58, 1];
+	function roll(el, values, valueAt) {
+		el.innerHTML = `<span class="loading-roll" aria-hidden="true">${values.map((v) => `<span>${v}</span>`).join("")}</span>`;
+		const strip = el.firstChild,
+			frames = [];
+		let last = -1;
+		for (let i = 0; i <= 900; i++) {
+			const t = i / 900,
+				row = valueAt(fillAt(t));
+			if (row !== last) frames.push({ offset: t, transform: `translate(0px, ${-row * ROW}px)`, easing: "step-end" });
+			last = row;
+		}
+		if (frames.at(-1).offset < 1) frames.push({ offset: 1, transform: frames.at(-1).transform });
+		let animation = strip.animate?.(frames, { duration: FILL.seconds * 1000, fill: "forwards" });
+		return {
+			// After the work: from where the bar stands (p0) to the end in FINISH seconds, eased like the bar's last
+			// stretch — again on the compositor (0.177.5: the page is still busy then, raising the loaded world).
+			finish(p0) {
+				animation?.cancel();
+				const end = [];
+				let row0 = -1;
+				for (let i = 0; i <= 60; i++) {
+					const t = i / 60,
+						row = valueAt(p0 + (1 - p0) * bezier(EASE_OUT, t));
+					if (row !== row0) end.push({ offset: t, transform: `translate(0px, ${-row * ROW}px)`, easing: "step-end" });
+					row0 = row;
+				}
+				if (end.at(-1).offset < 1) end.push({ offset: 1, transform: end.at(-1).transform });
+				animation = strip.animate?.(end, { duration: FINISH * 1000, fill: "forwards" });
+				if (!animation) strip.style.transform = end.at(-1).transform;
+			},
+		};
+	}
+	const pctRow = (p) => Math.round(p * 100),
+		// ("Gotowe" with the 100%: at 99.9% the screen may already be closing.)
+		stageRow = (p) => (Math.round(p * 100) >= 100 ? STAGES.length - 1 : Math.min(STAGES.length - 2, Math.floor(p * (STAGES.length - 1))));
 
 	function backdrop(c, k, t, o, arrive) {
 		const { W, H, rnd, glow, nebula, planet, flare } = k;
@@ -74,6 +143,8 @@ const LoadingScreen = (() => {
 			bar = root.querySelector(".loading-bar b"),
 			stage = root.querySelector(".loading-stage span"),
 			pct = root.querySelector(".loading-stage em"),
+			pctRoll = roll(pct, Array.from({ length: 101 }, (_, i) => i + "%"), pctRow),
+			stageRoll = roll(stage, STAGES, stageRow),
 			c = canvas.getContext("2d"),
 			start = performance.now(),
 			minTime = o.minTime ?? 1.8;
@@ -101,28 +172,33 @@ const LoadingScreen = (() => {
 			const m = getComputedStyle(bar).transform.match(/matrix\(([-\d.e]+)/);
 			return m ? Number(m[1]) : 0;
 		};
+		// The work done: the bar, the percentage and the stage are carried to the end from where they stand, all on
+		// the compositor, and the screen goes once they are there and its minimum time is out — on a timer, not on the
+		// animation frames (0.177.5: after loading a save the page was busy raising the world, frames hardly came,
+		// and the screen was closed by its safety timer at about half the bar, over the pause screen).
 		let completing = false;
+		const complete = () => {
+			if (completing) return;
+			completing = true;
+			const p = shown();
+			bar.style.animation = "none";
+			bar.style.transform = `scaleX(${p})`;
+			void bar.offsetWidth;
+			bar.style.transition = `transform ${FINISH}s ease-out`;
+			bar.style.transform = "scaleX(1)";
+			root.classList.add("finished");
+			pctRoll.finish(p);
+			stageRoll.finish(p);
+			const wait = Math.max(FINISH * 1000 + 80, minTime * 1000 - (performance.now() - start));
+			setTimeout(close, wait);
+		};
 		const frame = (now) => {
 			if (!root.isConnected) return;
-			const t = (now - start) / 1000;
-			// Progress: the CSS animation walks towards 85% and holds there until the work is done; then the bar is
-			// carried to the end from where it stands.
-			let p = shown();
-			if (finished && !completing) {
-				completing = true;
-				bar.style.animation = "none";
-				bar.style.transform = `scaleX(${p})`;
-				void bar.offsetWidth;
-				bar.style.transition = "transform 0.4s ease-out";
-				bar.style.transform = "scaleX(1)";
-				root.classList.add("finished");
-			}
-			if (completing && now - finishedAt > 420) p = 1;
-			pct.textContent = Math.round(p * 100) + "%";
-			stage.textContent = STAGES[Math.min(STAGES.length - 1, Math.floor(p * (STAGES.length - 1) + (p >= 1 ? 1 : 0)))];
+			const t = (now - start) / 1000,
+				p = completing && now - finishedAt > FINISH * 1000 ? 1 : shown();
+			root.querySelector(".loading-stage").setAttribute("aria-label", `${STAGES[stageRow(p)]} ${pctRow(p)}%`);
 			if (k) backdrop(c, k, o.reduced ? 2 : t, o, o.reduced ? 0.7 : Math.min(1, t / Math.max(minTime, 1.2)));
-			if (finished && p >= 0.999 && t >= minTime) return close();
-			requestAnimationFrame(frame);
+			if (!closing) requestAnimationFrame(frame);
 		};
 		requestAnimationFrame(frame);
 		root.addEventListener("click", () => finished && close());
@@ -132,8 +208,7 @@ const LoadingScreen = (() => {
 				if (finished) return;
 				finished = true;
 				finishedAt = performance.now();
-				// (In a background tab animation frames stop: close on a timer as well.)
-				setTimeout(close, Math.max(0, minTime * 1000 - (finishedAt - start)) + 1200);
+				complete();
 			},
 			close,
 		};

@@ -1,6 +1,6 @@
 {
 	"name": "pogranicze-galaktyki",
-	"version": "0.177.3",
+	"version": "0.177.6",
 	"private": true,
 	"description": "Samodzielny prototyp kosmicznego RTS",
 	"author": "Marcin Murawski",
@@ -15,6 +15,7 @@
 		"app": "electron .",
 		"app:check": "node tools/app-check.js",
 		"dist": "node tools/dist.js",
+		"web": "node tools/web.js",
 		"dist:dir": "node tools/dist.js --dir"
 	},
 	"devDependencies": {

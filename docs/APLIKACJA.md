@@ -37,6 +37,18 @@ Przed `npm run dist` warto przebudować bundle 3D (`npm run build:3d`) — robi 
 - Poza paczką: `tests/`, `tools/`, `docs/`, `dist/`, `build/`, pliki `.md`, strony `prototyp-*.html` i ich skrypty (`webgl3d/prototype-3d.js`), `server.js`, pliki Blendera, `.py`, `.cmd`. Zależności npm są tylko deweloperskie, więc `node_modules` nie trafia do paczki.
 - Instalator NSIS: nie jednym kliknięciem — wybór folderu, instalacja dla bieżącego użytkownika (bez uprawnień administratora), skróty na pulpicie i w menu Start, deinstalator.
 
+## Wersja przeglądarkowa: npm run web (0.177.6, 2026-10-15)
+
+- `tools/web.js`, wzorem `tools/web.js` symulatora pociągu. Na nowo tworzy `web/pogranicze/` i `web/pogranicze-<wersja>.zip` z tymi samymi plikami pod folderem `pogranicze/`; ZIP robi deflate z `zlib`, CRC-32 i nazwami UTF-8. `web/` jest w `.gitignore`.
+- Lista plików (`files()`):
+  - `index.html` i wszystko, co wymienia (`src`, `href`);
+  - graf importów od `webgl3d/three-game-renderer.js` (`moduleGraph`), w tym `vendor/three.module.js`, oraz `webgl3d/bundle-3d.js` na `file://`;
+  - `vendor/tone.min.js` i `vendor/README.md` z licencjami;
+  - obrazy z `assets/` i całe `assets/sfx`.
+- Wynik: 181 plików, 7,7 MB; ZIP 2,7 MB.
+- Poza wersją: prototypy (`prototyp-*.html`, `model-gallery.js`, `unit-showcase.js`, `prototype-3d.js`, `assets/models`, `vendor/three-addons`), `server.js` i `lobby-server.js`, testy, narzędzia i dokumentacja. Bez serwera Node nie działa gra na serwerze z poczekalnią; gra bezpośrednia na kodach połączenia działa.
+- Sprawdzenie: `.claude/launch.json` ma konfigurację „web” (`python -m http.server 4190 --directory web/pogranicze`). Bitwa w 3D, 14/14 próbek, Tone.js i ikony modeli działały bez brakujących plików. Test: `tests/web.test.js`.
+
 ## Ograniczenia i decyzje
 
 - **Bez podpisu kodu** — pliki `.exe` są niepodpisane (`NotSigned`), więc Windows SmartScreen przy pierwszym uruchomieniu pokaże ostrzeżenie „nieznany wydawca” (Więcej informacji → Uruchom mimo to). Podpis wymaga certyfikatu Code Signing (koszt roczny) — decyzja właściciela; electron-builder podpisze automatycznie po ustawieniu `CSC_LINK` / `CSC_KEY_PASSWORD`.

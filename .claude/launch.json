@@ -1,11 +1,25 @@
 {
-  "version": "0.0.1",
-  "configurations": [
-    {
-      "name": "game",
-      "runtimeExecutable": "node",
-      "runtimeArgs": ["server.js"],
-      "port": 4173
-    }
-  ]
+	"version": "0.0.1",
+	"configurations": [
+		{
+			"name": "strategy",
+			"runtimeExecutable": "node",
+			"runtimeArgs": [
+				"server.js"
+			],
+			"port": 4173
+		},
+		{
+			"name": "web",
+			"runtimeExecutable": "python",
+			"runtimeArgs": [
+				"-m",
+				"http.server",
+				"4190",
+				"--directory",
+				"web/pogranicze"
+			],
+			"port": 4190
+		}
+	]
 }
